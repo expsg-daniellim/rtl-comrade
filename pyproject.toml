@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=80.9.0", "setuptools-scm[simple]>=9.2.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rtl-comrade"
+version = "0.0.1"
+authors = [
+  { name="Example Author", email="author@example.com" },
+]
+description = "Graph-based version of rtl_buddy"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+  "Operating System :: POSIX :: Linux",
+  "Operating System :: MacOS",
+]
+
+license = "MIT"
+license-files = ["LICEN[CS]E*"]
+dependencies = [
+    "pyserde[yaml]>=0.31.2",
+    "pyventus>=0.8.0",
+]
+
+[project.scripts]
+rtl-comrade = "rtl_comrade.__main__:main"
