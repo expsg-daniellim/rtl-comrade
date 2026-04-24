@@ -1,12 +1,9 @@
 import asyncio
-from collections import deque
-from pyventus.events import AsyncIOEventEmitter, EventEmitter, EventLinker
-from inspect import signature
-from serde import serde, from_dict
-from asyncio import Queue
+from serde import serde
 
 from .graph import Graph
 
+# Test modules (TODO: replace with proper dynamic import)
 class FileReadMod:
 	@serde
 	class Config:
@@ -25,47 +22,8 @@ class StdoutMod:
 		print(a)
 
 class AddMod:
-	def run(self, a, b):
-		yield a + b
-
-class ModuleWrapper:
-	def __init__(self, Module, config, srcs, dsts):
-		# TODO: warn about config acceptance
-		init_sig = signature(Module.__init__)
-
-		if 'config' in init_sig.parameters:
-			if hasattr(Module, 'Config'):
-				config = from_dict(Module.Config, config)
-			self.module = Module(config=config)
-		else:
-			self.module = Module()
-
-		if not hasattr(self.module, 'run'):
-			raise "module is not runnable"
-
-		run_sig = signature(self.module.run)
-		self.ports = list(run_sig.parameters.keys())
-		self.running = False
-
-		self.completed_queue = Queue()
-		for _ in dsts:
-			self.completed_queue.put(True)
-
-	def accept(self, val, port=1):
-		port_name = None
-		if type(port) is str:
-			port_name = port
-		elif type(port) is int:
-			if port - 1 < len(self.ports) and port - 1 >= 0:
-				port_name = self.ports[port - 1]
-			else:
-				raise "invalid port type"
-		else:
-			raise "invalid port type"
-
-	def run(self):
-		# for val in self.module.run(*self.args):
-		pass
+	def run(self, a:int, b:int):
+		return int(a) + int(b)
 
 async def run_module():
 	pass
@@ -75,12 +33,8 @@ async def run_module():
 mappings = { 'fileread': FileReadMod, 'add': AddMod, 'stdout': StdoutMod }
 
 def main() -> int:
-	graph = Graph.from_file('graph.yaml')
-	print(graph)
-
-	modules = {}
-	for id, node in graph.nodes.items():
-		modules[id] = ModuleWrapper(mappings[node.module], node.config, node.srcs, node.dsts)
+	graph = Graph.from_file('graph.yaml', mappings)
+	asyncio.run(graph.run())
 
 	return 0
 
