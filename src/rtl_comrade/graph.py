@@ -4,6 +4,7 @@ from serde.yaml import from_yaml
 import asyncio
 
 from .node import Connection, NodeWrapper
+from .module import load_module_folders
 
 @dataclass
 class Graph:
@@ -13,7 +14,7 @@ class Graph:
 		self.nodes = {}
 
 	@staticmethod
-	def from_file(path:str, mappings:dict) -> Graph:
+	def from_file(path:str) -> Graph:
 		config = None
 		with open(path, 'r') as file:
 			config = from_yaml(GraphConfig, file.read())
@@ -22,12 +23,14 @@ class Graph:
 		if config is None:
 			raise "no config read"
 
-		return Graph.from_config(config, mappings)
+		return Graph.from_config(config)
 
 	@staticmethod
-	def from_config(config:GraphConfig, mappings:dict) -> Graph:
+	def from_config(config:GraphConfig) -> Graph:
 		graph = Graph()
 		errs = []
+
+		mappings = load_module_folders(config.modules)
 
 		for i, node in enumerate(config.nodes):
 			if node.id in graph.nodes:

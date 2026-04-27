@@ -50,6 +50,14 @@ def load_module(config:ModuleFileConfig):
 
 	return res
 
+# Merges a into b, raising an error on duplicate keys
+def merge_dict(a:dict, b:dict):
+	for (key, val) in b.items():
+		if key in a:
+			raise ValueException(f"duplicate key {key}")
+		else:
+			a[key] = val
+
 def load_module_folder(path:str):
 	folder_path = Path(path)
 	config = None
@@ -65,10 +73,13 @@ def load_module_folder(path:str):
 
 	res = {}
 	for file_config in config.files:
-		for (key, val) in load_module(file_config).items():
-			if key in res:
-				raise ModuleLoadException(f"duplicate key {key}")
-			else:
-				res[key] = val
+		merge_dict(res, load_module(file_config))
+
+	return res
+
+def load_module_folders(paths:list[str]):
+	res = {}
+	for path in paths:
+		merge_dict(res, load_module_folder(path))
 
 	return res

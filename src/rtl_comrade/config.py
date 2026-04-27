@@ -20,3 +20,4 @@ class GraphConfigEdge:
 class GraphConfig:
 	nodes: list[GraphConfigNode]
 	edges: list[GraphConfigEdge]
+	modules: list[str] = field(default_factory=list)

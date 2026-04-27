@@ -12,9 +12,7 @@ from .module import load_module_folder
 # TODO: test multi-outputs
 
 def main() -> int:
-	# TODO: default modules directory + get additional module locations from graph config
-	modules = load_module_folder('modules')
-	graph = Graph.from_file('graph.yaml', modules)
+	graph = Graph.from_file('graph.yaml')
 	asyncio.run(graph.run())
 
 	return 0
