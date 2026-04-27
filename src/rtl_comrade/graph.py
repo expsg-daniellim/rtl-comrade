@@ -53,13 +53,17 @@ class Graph:
 						raise AttributeError(f"{edge.dst.node} not found in graph")
 
 					consumption[i] = True
-					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], edge.dst.port))
+					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
+					if dst_name is None:
+						raise AttributeError(f"{edge.dst.port} is not a valid port on {edge.dst.node}")
+
+					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))
 
 			dsts.sort(key=lambda conn: conn.self_port)
 			node.set_dsts(dsts)
 
 		# TODO: Validate a src only takes one connection
-		
+
 		errs = [ f"edge {i} is not used" for (i, used) in enumerate(consumption) if not used ]
 		if len(errs) > 0:
 			# TODO: log errs

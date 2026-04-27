@@ -12,14 +12,19 @@ class GraphConfigNode:
 	ports: dict[str|int, GraphConfigNodePort] = field(default_factory=dict)
 
 @serde
-class GraphConfigPort:
+class GraphConfigSrcPort:
+	node: str
+	port: str = field(default = "default")
+
+@serde
+class GraphConfigDstPort:
 	node: str
 	port: int|str = field(default = 1)
 
 @serde
 class GraphConfigEdge:
-	src: GraphConfigPort
-	dst: GraphConfigPort
+	src: GraphConfigSrcPort
+	dst: GraphConfigDstPort
 
 @serde
 class GraphConfig:

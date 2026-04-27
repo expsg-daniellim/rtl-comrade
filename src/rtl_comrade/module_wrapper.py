@@ -12,9 +12,9 @@ from .config import GraphConfigNodePort
 
 @dataclass
 class Connection:
-	self_port: str|int
+	self_port: str
 	other_node: ModuleWrapper
-	other_port: str|int
+	other_port: str
 
 class PortError(Exception):
 	def __init__(self, id, message):
@@ -128,22 +128,27 @@ class ModuleWrapper:
 	def set_dsts(self, dsts:list[Connection]):
 		self.dsts = dsts
 
-	async def accept(self, val:typing.Any, port:str|int=1):
-		port_name = None
+	def get_canonical_port(self, port:int|str) -> str|None:
 		if type(port) is str and port in self.ports.keys():
-			port_name = port
+			return port
 		elif type(port) is int and port - 1 < len(self.ports) and port - 1 >= 0:
-			port_name = list(self.ports.keys())[port - 1]
+			return list(self.ports.keys())[port - 1]
 		else:
-			raise ModuleError(self.id, "invalid port type")
+			return None
 
-		await self.ports[port_name].queue.put(val)
+	async def accept(self, val:typing.Any, port:str):
+		await self.ports[port].queue.put(val)
 
-	async def process_result(self, res:tuple[int|str, typing.Any]|typing.Any):
-		port = res[0] if type(res) is tuple else 1
+	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
+		port = res[0] if type(res) is tuple else 'default'
 		value = res[1] if type(res) is tuple else res
 
-		for dst in filter(lambda dst: dst.self_port == port, self.dsts):
+		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
+		if len(dsts) <= 0:
+			# TODO: log-level info when logging is up
+			print(f"output port {port} has no destinations")
+
+		for dst in dsts:
 			await dst.other_node.accept(val=value, port=dst.other_port)
 
 	async def run(self):
@@ -159,7 +164,7 @@ class ModuleWrapper:
 				break
 
 			# Get special inputs
-			inputs |= { port.name: await port.get_special() for port in self.ports.values() if port.is_special() }
+			inputs |= { port.name: await port.get_special() for port in self.ports.values() if port.is_special() and not port.name in inputs }
 			# Special inputs should never return None
 
 			res = None
