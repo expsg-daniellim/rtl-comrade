@@ -1,16 +1,16 @@
-from .config import GraphConfig, GraphConfigEdge
+from .config import GraphConfig
 from dataclasses import dataclass
 from serde.yaml import from_yaml
 import asyncio
 
-from .module import Connection, ModuleWrapper
+from .node import Connection, NodeWrapper
 
 @dataclass
 class Graph:
-	modules: dict[str, ModuleWrapper]
+	nodes: dict[str, NodeWrapper]
 
 	def __init__(self):
-		self.modules = {}
+		self.nodes = {}
 
 	@staticmethod
 	def from_file(path:str, mappings:dict) -> Graph:
@@ -28,21 +28,21 @@ class Graph:
 	def from_config(config:GraphConfig, mappings:dict) -> Graph:
 		graph = Graph()
 		errs = []
-		# TODO: expand implicit ports in edges
 
 		for i, node in enumerate(config.nodes):
-			if node.id in graph.modules:
+			if node.id in graph.nodes:
 				errs.append(f"Node entry {i + 1} is a duplicate id")
 			else:
-				graph.modules[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config)
+				graph.nodes[node.id] = NodeWrapper(mappings[node.module], node.id, node.config)
 
 		if len(errs) > 0:
 			raise errs
 
-		for id, module in graph.modules.items():
-			dsts = list(map(lambda edge: Connection(edge.src.port, graph.modules[edge.dst.node], edge.dst.port), filter(lambda edge: edge.src.node == id, config.edges)))
+		for id, node in graph.nodes.items():
+			# TODO: make sure graph.nodes[edge.dst.node] exists
+			dsts = list(map(lambda edge: Connection(edge.src.port, graph.nodes[edge.dst.node], edge.dst.port), filter(lambda edge: edge.src.node == id, config.edges)))
 			dsts.sort(key=lambda conn: conn.self_port)
-			module.set_dsts(dsts)
+			node.set_dsts(dsts)
 		
 		# TODO: Verify that all edges are used
 		#consumption = [(False, False) for _ in config.edges]
@@ -51,5 +51,5 @@ class Graph:
 		return graph
 
 	async def run(self):
-		runs = [ module.run() for module in self.modules.values() ]
+		runs = [ node.run() for node in self.nodes.values() ]
 		await asyncio.gather(*runs)
