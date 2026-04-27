@@ -3,8 +3,8 @@ from dataclasses import dataclass
 from serde.yaml import from_yaml
 import asyncio
 
-from .node import Connection, ModuleWrapper
 from .module import load_module_folders
+from .module_wrapper import Connection, ModuleWrapper
 
 @dataclass
 class Graph:
