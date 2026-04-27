@@ -1,10 +1,15 @@
 from serde import serde, field
 
 @serde
+class GraphConfigPort:
+	persistent: bool = field(default=False)
+
+@serde
 class GraphConfigNode:
 	id: str
 	module: str
 	config: dict | None
+	ports: dict[str|int, GraphConfigPort] = field(default_factory=dict)
 
 @serde
 class GraphConfigPort:

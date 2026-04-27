@@ -36,20 +36,31 @@ class Graph:
 			if node.id in graph.nodes:
 				errs.append(f"Node entry {i + 1} is a duplicate id")
 			else:
-				graph.nodes[node.id] = NodeWrapper(mappings[node.module], node.id, node.config)
+				graph.nodes[node.id] = NodeWrapper(mappings[node.module], node.id, node.config, node.ports)
 
 		if len(errs) > 0:
 			raise errs
 
+		consumption = [ False for _ in config.edges ]
 		for id, node in graph.nodes.items():
-			# TODO: make sure graph.nodes[edge.dst.node] exists
-			dsts = list(map(lambda edge: Connection(edge.src.port, graph.nodes[edge.dst.node], edge.dst.port), filter(lambda edge: edge.src.node == id, config.edges)))
+			dsts = []
+			for (i, edge) in enumerate(config.edges):
+				if edge.src.node == id:
+					consumption[i] = True
+					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], edge.dst.port))
+
+			for dst in dsts:
+				if dst.other_node.id not in graph.nodes:
+					raise f"{dst.other_node.id} not found in graph"
+
 			dsts.sort(key=lambda conn: conn.self_port)
 			node.set_dsts(dsts)
+
+		# TODO: Validate a src only takes one connection
 		
-		# TODO: Verify that all edges are used
-		#consumption = [(False, False) for _ in config.edges]
-		#for i, edges in enumerate(config.edges):
+		errs = [ f"edge {i} is not used" for (i, used) in enumerate(consumption) if not used ]
+		if len(errs) > 0:
+			raise errs
 
 		return graph
 

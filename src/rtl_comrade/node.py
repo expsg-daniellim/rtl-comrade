@@ -2,8 +2,11 @@ from asyncio import Queue
 from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
-from inspect import signature
+from inspect import signature, Parameter
 from serde import serde, from_dict
+import typing
+
+from .config import GraphConfigPort
 
 @dataclass
 class Connection:
@@ -11,8 +14,52 @@ class Connection:
 	other_node: NodeWrapper
 	other_port: int
 
+@dataclass
+class Port:
+	name: str
+	queue: Queue
+	persistent: bool
+	has_default: bool
+	default: typing.Any
+
+	@staticmethod
+	def from_param(param:Parameter, i:int, ports:dict[str|int, GraphConfigPort]):
+		persistent = False
+		if (i + 1) in ports:
+			persistent = ports[i + 1].persistent
+		elif param.name in ports:
+			persistent = ports[param.name].persistent
+
+		has_default = param.default is not Parameter.empty
+		default = param.default if param.default is not Parameter.empty else None
+		return Port(param.name, Queue(), persistent, has_default, default)
+
+	async def get(self):
+		val = await self.queue.get()
+
+		if val is not None:
+			self.last_value = val
+		return val
+
+	# Unravel special cases after normal ones come in
+	async def get_special(self):
+		if self.queue.empty():
+			await self.queue.put(None)
+
+		if self.persistent:
+			return self.last_value
+		elif self.has_default:
+			return self.default
+		else:
+			return None
+
+	def is_special(self):
+		return self.persistent or self.has_default
+
+# TODO: proper error handling (include info about originating node id)
+# TODO: explicitly declare class members
 class NodeWrapper:
-	def __init__(self, Node, id:str, config:dict):
+	def __init__(self, Node, id:str, config:dict, ports:dict[str|int, GraphConfigPort]):
 		self.id = id
 		# TODO: warn about config acceptance
 		init_sig = signature(Node.__init__)
@@ -28,8 +75,7 @@ class NodeWrapper:
 			raise "node is not runnable"
 
 		run_sig = signature(self.node.run)
-		# self.ports = list(map(lambda port:run_sig.parameters.keys())
-		self.ports = OrderedDict({ param: Queue() for param in run_sig.parameters.keys() })
+		self.ports = OrderedDict({ name: Port.from_param(param, i, ports) for (i, (name, param)) in enumerate(run_sig.parameters.items()) })
 
 	def set_dsts(self, dsts:list[Connection]):
 		self.dsts = dsts
@@ -44,7 +90,7 @@ class NodeWrapper:
 		else:
 			raise "invalid port type"
 
-		await self.ports[port_name].put(val)
+		await self.ports[port_name].queue.put(val)
 
 	# TODO: type this function
 	async def process_result(self, res):
@@ -57,14 +103,17 @@ class NodeWrapper:
 	async def run(self):
 		inputs = [0] # Dummy value to bootstrap loop
 		while len(inputs) > 0:
-			# TODO: option for persistent inputs (persistent until refresh)
-			inputs = [ await queue.get() for queue in self.ports.values() ]
-			if any(map(lambda i: i == None, inputs)):
+			inputs = [ await port.get() for port in self.ports.values() ]
+			inputs = [ await port.get_special() if inputs[i] is None else inputs[i] for (i, port) in enumerate(self.ports.values()) ]
+
+			if any(i == None and not port.is_special() for (i, port) in zip(inputs, self.ports.values())):
+				if not all(i == None or port.is_special() for (i, port) in zip(inputs, self.ports.values())):
+					raise "mismatched end of inputs"
 				break
 
 			res = None
 			if inspect.iscoroutinefunction(self.node.run):
-				# TODO: dictionary spread
+				# TODO: dictionary spread (ties into named ports)
 				res = await self.node.run(*inputs)
 			else:
 				res = self.node.run(*inputs)
@@ -76,5 +125,8 @@ class NodeWrapper:
 				else:
 					await self.process_result(res)
 		
+		if self.dsts is None:
+			raise f"dsts of {self.id} have not been initialised"
+
 		for dst in self.dsts:
 			await dst.other_node.accept(val=None, port=dst.other_port)
