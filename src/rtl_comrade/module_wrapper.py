@@ -48,7 +48,12 @@ class Port:
 		return Port(param.name, Queue(), persistent, has_default, default)
 
 	async def get(self) -> typing.Any | None:
-		return await self.queue.get()
+		val =  await self.queue.get()
+		if val is not None:
+			self.last_value_initialised = True
+			self.last_value = val
+
+		return val
 
 	# Unravel special cases after normal ones come in
 	async def get_special(self):
@@ -57,10 +62,7 @@ class Port:
 
 		val = None
 		try:
-			if self.persistent and not self.last_value_initialised:
-				val = await self.queue.get()
-			else:
-				val = self.queue.get_nowait()
+			val = self.queue.get_nowait()
 			
 			if val is not None:
 				self.last_value_initialised = True
@@ -73,14 +75,17 @@ class Port:
 		if val is not None:
 			return val
 		elif self.persistent:
-			return self.last_value
+			if self.last_value_initialised:
+				return self.last_value
+			else:
+				raise PortError(self.name, "persistent port has no last value")
 		elif self.has_default:
 			return self.default
 		else:
 			raise PortError(self.name, "unsupported special case")
 
 	def is_special(self):
-		return self.persistent or self.has_default
+		return (self.persistent and self.last_value_initialised) or self.has_default
 
 class ModuleError(Exception):
 	def __init__(self, id, message):
