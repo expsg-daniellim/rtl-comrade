@@ -57,7 +57,15 @@ class Port:
 		return self.persistent or self.has_default
 
 # TODO: proper error handling (include info about originating module id)
-# TODO: explicitly declare class members
+class ModuleError(Exception):
+	def __init__(self, id, message):
+		super().__init__(self, message)
+		self.message = message
+		self.id = id
+
+	def __str__(self):
+		return f"{self.id}: {self.message}"
+
 class ModuleWrapper:
 	def __init__(self, Module, id:str, config:dict, ports:dict[str|int, GraphConfigPort]):
 		self.id = id
@@ -72,7 +80,7 @@ class ModuleWrapper:
 			self.module = Module()
 
 		if not hasattr(self.module, 'run'):
-			raise "module is not runnable"
+			raise ModuleError(self.id, "module is not runnable")
 
 		run_sig = signature(self.module.run)
 		self.ports = OrderedDict({ name: Port.from_param(param, i, ports) for (i, (name, param)) in enumerate(run_sig.parameters.items()) })
@@ -87,7 +95,7 @@ class ModuleWrapper:
 		elif type(port) is int and port - 1 < len(self.ports) and port - 1 >= 0:
 			port_name = list(self.ports.keys())[port - 1]
 		else:
-			raise "invalid port type"
+			raise ModuleError(self.id, "invalid port type")
 
 		await self.ports[port_name].queue.put(val)
 
@@ -106,7 +114,7 @@ class ModuleWrapper:
 
 			if any(i == None and not port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
 				if not all(i == None or port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
-					raise "mismatched end of inputs"
+					raise ModuleError(self.id, "mismatched end of inputs")
 				break
 
 			res = None
@@ -123,7 +131,7 @@ class ModuleWrapper:
 					await self.process_result(res)
 		
 		if self.dsts is None:
-			raise f"dsts of {self.id} have not been initialised"
+			raise ModuleError(self.id, "dsts have not been initialised")
 
 		for dst in self.dsts:
 			await dst.other_node.accept(val=None, port=dst.other_port)
