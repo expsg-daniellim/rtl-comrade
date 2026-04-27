@@ -1,39 +1,20 @@
 import asyncio
 from serde import serde
+import importlib.util
+import importlib
+import inspect
 
 from .graph import Graph
+from .module import load_module_folder
 
-# Test modules (TODO: replace with proper dynamic import)
-class FileReadMod:
-	@serde
-	class Config:
-		file: str
-
-	def __init__(self, config):
-		self.file = config.file
-
-	def run(self):
-		with open(self.file, 'r') as file:
-			for line in file:
-				yield line
-
-class StdoutMod:
-	def run(self, a):
-		print(a)
-
-class AddMod:
-	def run(self, a:int, b:int):
-		return int(a) + int(b)
-
-async def run_module():
-	pass
-
-# TODO: async
+# TODO: pydoc strings (for the benefit of ChatGPT)
+# TODO: pydantic
 # TODO: test multi-outputs
-mappings = { 'fileread': FileReadMod, 'add': AddMod, 'stdout': StdoutMod }
 
 def main() -> int:
-	graph = Graph.from_file('graph.yaml', mappings)
+	# TODO: default modules directory + get additional module locations from graph config
+	modules = load_module_folder('modules')
+	graph = Graph.from_file('graph.yaml', modules)
 	asyncio.run(graph.run())
 
 	return 0

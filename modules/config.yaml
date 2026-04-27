@@ -1,0 +1,13 @@
+files:
+- file: io.py
+  modules:
+  - name: fileread
+    class_name: FileReadMod
+  - name: stdout
+    class_name: StdoutMod
+- file: funcs.py
+  modules:
+  - name: add
+    class_name: AddMod
+  - name: alu
+    class_name: ALUMod

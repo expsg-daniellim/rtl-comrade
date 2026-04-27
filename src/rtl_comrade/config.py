@@ -1,4 +1,4 @@
-from serde import serde
+from serde import serde, field
 
 @serde
 class GraphConfigNode:
@@ -9,7 +9,7 @@ class GraphConfigNode:
 @serde
 class GraphConfigPort:
 	node: str
-	port: int
+	port: int|str = field(default = 1)
 
 @serde
 class GraphConfigEdge:
