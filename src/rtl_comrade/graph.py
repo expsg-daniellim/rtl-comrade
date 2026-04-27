@@ -5,6 +5,7 @@ import asyncio
 
 from .module import load_module_folders
 from .module_wrapper import Connection, ModuleWrapper
+from .validation import validate_acyclic
 
 @dataclass
 class Graph:
@@ -68,6 +69,9 @@ class Graph:
 		if len(errs) > 0:
 			# TODO: log errs
 			raise Exception(errs[-1])
+
+		if not validate_acyclic(config):
+			raise Exception("graph is not acyclic")
 
 		return graph
 

@@ -174,7 +174,10 @@ class ModuleWrapper:
 				res = self.module.run(**inputs)
 
 			if res is not None:
-				if inspect.isgenerator(res):
+				if inspect.isasyncgen(res):
+					async for r in res:
+						await self.process_result(r)
+				elif inspect.isgenerator(res):
 					for r in res:
 						await self.process_result(r)
 				else:
