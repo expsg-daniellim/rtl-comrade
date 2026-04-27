@@ -38,7 +38,8 @@ class Graph:
 			else:
 				if not node.module in mappings:
 					errs.append(f"Node entry {i + 1} has invalid module name {node.module}")
-				graph.nodes[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config, node.ports)
+				else:
+					graph.nodes[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config, node.ports)
 
 		if len(errs) > 0:
 			# TODO: log errs
