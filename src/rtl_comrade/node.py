@@ -11,7 +11,7 @@ from .config import GraphConfigPort
 @dataclass
 class Connection:
 	self_port: int
-	other_node: NodeWrapper
+	other_node: ModuleWrapper
 	other_port: int
 
 @dataclass
@@ -56,25 +56,25 @@ class Port:
 	def is_special(self):
 		return self.persistent or self.has_default
 
-# TODO: proper error handling (include info about originating node id)
+# TODO: proper error handling (include info about originating module id)
 # TODO: explicitly declare class members
-class NodeWrapper:
-	def __init__(self, Node, id:str, config:dict, ports:dict[str|int, GraphConfigPort]):
+class ModuleWrapper:
+	def __init__(self, Module, id:str, config:dict, ports:dict[str|int, GraphConfigPort]):
 		self.id = id
 		# TODO: warn about config acceptance
-		init_sig = signature(Node.__init__)
+		init_sig = signature(Module.__init__)
 
 		if 'config' in init_sig.parameters:
-			if hasattr(Node, 'Config'):
-				config = from_dict(Node.Config, config)
-			self.node = Node(config=config)
+			if hasattr(Module, 'Config'):
+				config = from_dict(Module.Config, config)
+			self.module = Module(config=config)
 		else:
-			self.node = Node()
+			self.module = Module()
 
-		if not hasattr(self.node, 'run'):
-			raise "node is not runnable"
+		if not hasattr(self.module, 'run'):
+			raise "module is not runnable"
 
-		run_sig = signature(self.node.run)
+		run_sig = signature(self.module.run)
 		self.ports = OrderedDict({ name: Port.from_param(param, i, ports) for (i, (name, param)) in enumerate(run_sig.parameters.items()) })
 
 	def set_dsts(self, dsts:list[Connection]):
@@ -110,10 +110,10 @@ class NodeWrapper:
 				break
 
 			res = None
-			if inspect.iscoroutinefunction(self.node.run):
-				res = await self.node.run(**inputs)
+			if inspect.iscoroutinefunction(self.module.run):
+				res = await self.module.run(**inputs)
 			else:
-				res = self.node.run(**inputs)
+				res = self.module.run(**inputs)
 
 			if res is not None:
 				if inspect.isgenerator(res):

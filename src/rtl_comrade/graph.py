@@ -3,12 +3,12 @@ from dataclasses import dataclass
 from serde.yaml import from_yaml
 import asyncio
 
-from .node import Connection, NodeWrapper
+from .node import Connection, ModuleWrapper
 from .module import load_module_folders
 
 @dataclass
 class Graph:
-	nodes: dict[str, NodeWrapper]
+	nodes: dict[str, ModuleWrapper]
 
 	def __init__(self):
 		self.nodes = {}
@@ -36,7 +36,7 @@ class Graph:
 			if node.id in graph.nodes:
 				errs.append(f"Node entry {i + 1} is a duplicate id")
 			else:
-				graph.nodes[node.id] = NodeWrapper(mappings[node.module], node.id, node.config, node.ports)
+				graph.nodes[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config, node.ports)
 
 		if len(errs) > 0:
 			raise errs
