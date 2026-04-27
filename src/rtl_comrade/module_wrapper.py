@@ -1,3 +1,4 @@
+from __future__ import annotations # Obsolete after 3.14
 import asyncio
 from asyncio import Queue
 from collections import OrderedDict
@@ -11,9 +12,9 @@ from .config import GraphConfigNodePort
 
 @dataclass
 class Connection:
-	self_port: int
+	self_port: str|int
 	other_node: ModuleWrapper
-	other_port: int
+	other_port: str|int
 
 class PortError(Exception):
 	def __init__(self, id, message):
@@ -32,11 +33,12 @@ class Port:
 	persistent: bool
 	has_default: bool
 	default: typing.Any
+	ended: bool = False
 	last_value_initialised: bool = False
 	last_value: typing.Any = None
 
 	@staticmethod
-	def from_param(param:Parameter, i:int, ports:dict[str|int, GraphConfigNodePort]):
+	def from_param(param:Parameter, i:int, ports:dict[str|int, GraphConfigNodePort]) -> Port:
 		persistent = False
 		if (i + 1) in ports:
 			persistent = ports[i + 1].persistent
@@ -52,6 +54,8 @@ class Port:
 		if val is not None:
 			self.last_value_initialised = True
 			self.last_value = val
+		else:
+			self.ended = True
 
 		return val
 
@@ -62,13 +66,14 @@ class Port:
 
 		val = None
 		try:
-			val = self.queue.get_nowait()
-			
-			if val is not None:
-				self.last_value_initialised = True
-				self.last_value = val
-			else:
-				await self.queue.put(val)
+			if not self.ended:
+				val = self.queue.get_nowait()
+
+				if val is not None:
+					self.last_value_initialised = True
+					self.last_value = val
+				else:
+					self.ended = True
 		except asyncio.QueueEmpty:
 			pass
 
@@ -118,6 +123,7 @@ class ModuleWrapper:
 
 		run_sig = signature(self.module.run)
 		self.ports = OrderedDict({ name: Port.from_param(param, i, ports) for (i, (name, param)) in enumerate(run_sig.parameters.items()) })
+		self.dsts = None
 
 	def set_dsts(self, dsts:list[Connection]):
 		self.dsts = dsts
@@ -146,13 +152,15 @@ class ModuleWrapper:
 			# Order of precedence: required (non-special)/persistent (first run) > persistent (cached) > persistent (default) > default
 			# Get required inputs
 			inputs = { port.name: await port.get() for port in self.ports.values() if not port.is_special() }
-			# Get special inputs
-			inputs |= { port.name: await port.get_special() for port in self.ports.values() if port.is_special() }
-
-			if any(i == None and not port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
-				if not all(i == None or port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
+			# Evaluate required end sentinels first
+			if any(port.ended for port in self.ports.values() if not port.is_special()):
+				if not all(port.ended for port in self.ports.values() if not port.is_special()):
 					raise ModuleError(self.id, "mismatched end of inputs")
 				break
+
+			# Get special inputs
+			inputs |= { port.name: await port.get_special() for port in self.ports.values() if port.is_special() }
+			# Special inputs should never return None
 
 			res = None
 			if inspect.iscoroutinefunction(self.module.run):

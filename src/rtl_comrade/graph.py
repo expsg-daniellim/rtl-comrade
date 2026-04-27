@@ -35,6 +35,8 @@ class Graph:
 			if node.id in graph.nodes:
 				errs.append(f"Node entry {i + 1} is a duplicate id")
 			else:
+				if not node.module in mappings:
+					errs.append(f"Node entry {i + 1} has invalid module name {node.module}")
 				graph.nodes[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config, node.ports)
 
 		if len(errs) > 0:
