@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "rtl-comrade"
 version = "0.0.1"
 authors = [
-  { name="Example Author", email="author@example.com" },
+  { name = "Daniel Lim" },
 ]
 description = "Graph-based version of rtl_buddy"
 readme = "README.md"
@@ -31,3 +31,4 @@ dependencies = [
 
 [project.scripts]
 rtl-comrade = "rtl_comrade.__main__:main"
+rtl_comrade = "rtl_comrade.__main__:main"

@@ -6,7 +6,7 @@ from inspect import signature, Parameter
 from serde import serde, from_dict
 import typing
 
-from .config import GraphConfigPort
+from .config import GraphConfigNodePort
 
 @dataclass
 class Connection:
@@ -14,6 +14,16 @@ class Connection:
 	other_node: ModuleWrapper
 	other_port: int
 
+class PortError(Exception):
+	def __init__(self, id, message):
+		super().__init__(self, message)
+		self.message = message
+		self.id = id
+
+	def __str__(self):
+		return f"{self.id}: {self.message}"
+
+# TODO: clean up typing with generics
 @dataclass
 class Port:
 	name: str
@@ -21,9 +31,10 @@ class Port:
 	persistent: bool
 	has_default: bool
 	default: typing.Any
+	last_value: typing.Any = None
 
 	@staticmethod
-	def from_param(param:Parameter, i:int, ports:dict[str|int, GraphConfigPort]):
+	def from_param(param:Parameter, i:int, ports:dict[str|int, GraphConfigNodePort]):
 		persistent = False
 		if (i + 1) in ports:
 			persistent = ports[i + 1].persistent
@@ -34,29 +45,36 @@ class Port:
 		default = param.default if param.default is not Parameter.empty else None
 		return Port(param.name, Queue(), persistent, has_default, default)
 
-	async def get(self):
-		val = await self.queue.get()
-
-		if val is not None:
-			self.last_value = val
-		return val
+	async def get(self) -> typing.Any | None:
+		return await self.queue.get()
 
 	# Unravel special cases after normal ones come in
 	async def get_special(self):
-		if self.queue.empty():
-			await self.queue.put(None)
+		if not self.is_special():
+			raise PortError(self.name, "get_special on non-special")
 
-		if self.persistent:
+		val = None
+		try:
+			val = self.queue.get_nowait()
+			if val is not None:
+				self.last_value = val
+			else:
+				await self.queue.put(val)
+		except asyncio.QueueEmpty:
+			pass
+
+		if val is not None:
+			return val
+		elif self.persistent:
 			return self.last_value
 		elif self.has_default:
 			return self.default
 		else:
-			return None
+			raise PortError(self.name, "unsupported special case")
 
 	def is_special(self):
 		return self.persistent or self.has_default
 
-# TODO: proper error handling (include info about originating module id)
 class ModuleError(Exception):
 	def __init__(self, id, message):
 		super().__init__(self, message)
@@ -67,7 +85,7 @@ class ModuleError(Exception):
 		return f"{self.id}: {self.message}"
 
 class ModuleWrapper:
-	def __init__(self, Module, id:str, config:dict, ports:dict[str|int, GraphConfigPort]):
+	def __init__(self, Module, id:str, config:dict, ports:dict[str|int, GraphConfigNodePort]):
 		self.id = id
 		# TODO: warn about config acceptance
 		init_sig = signature(Module.__init__)
@@ -107,10 +125,12 @@ class ModuleWrapper:
 			await dst.other_node.accept(val=value, port=dst.other_port)
 
 	async def run(self):
-		inputs = [0] # Dummy value to bootstrap loop
-		while len(inputs) > 0:
-			inputs = { port.name: await port.get() for port in self.ports.values() }
-			inputs = { port.name: await port.get_special() if inputs[port.name] is None else inputs[port.name] for port in self.ports.values() }
+		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
+		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
+			# Get required inputs
+			inputs = { port.name: await port.get() for port in self.ports.values() if not port.is_special() }
+			# Get special inputs
+			inputs |= { port.name: await port.get_special() for port in self.ports.values() if port.is_special() }
 
 			if any(i == None and not port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
 				if not all(i == None or port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):

@@ -24,7 +24,11 @@ class ModuleConfig:
 	files: list[ModuleFileConfig]
 
 class ModuleLoadException(Exception):
-	pass
+	def __init__(self, name, message):
+		super.__init__(message)
+
+	def __str__(self):
+		return f"{self.name}: {self.message}"
 
 def to_module_config(class_name:str) -> ModuleModuleConfig:
 	name = CAMEL_CASE_RE.sub('_', class_name).lower()
@@ -33,20 +37,28 @@ def to_module_config(class_name:str) -> ModuleModuleConfig:
 
 def load_module(config:ModuleFileConfig):
 	module_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
+	if not config.file.is_file():
+		raise ModuleLoadException(module_name, f"{config.file} not found")
+
 	spec = importlib.util.spec_from_file_location(module_name, config.file)
 	module = importlib.util.module_from_spec(spec)
-	spec.loader.exec_module(module)
 
+	if spec is None:
+		raise ModuleLoadException(module_name, "spec could not be created")
+	if spec.loader is None:
+		raise ModuleLoadException(module_name, "spec has no loader")
+
+	spec.loader.exec_module(module)
 	available_mods = dict(inspect.getmembers(module, inspect.isclass))
 	to_get = [ to_module_config(class_name) for class_name in available_mods ] if config.modules is None else config.modules
 	res = {}
 	for mod in to_get:
 		if mod.class_name in available_mods:
 			if mod.name in res:
-				raise ModuleLoadException(f"duplicate module definition {mod.name}")
+				raise ModuleLoadException(module_name, f"duplicate module definition {mod.name}")
 			res[mod.name] = available_mods[mod.class_name]
 		else:
-			raise ModuleLoadException(f"module {mod.name} class {mod.class_name} not found in {config.file}")
+			raise ModuleLoadException(module_name, f"module {mod.name} class {mod.class_name} not found in {config.file}")
 
 	return res
 
@@ -54,7 +66,7 @@ def load_module(config:ModuleFileConfig):
 def merge_dict(a:dict, b:dict):
 	for (key, val) in b.items():
 		if key in a:
-			raise ValueException(f"duplicate key {key}")
+			raise ValueError(f"duplicate key {key}")
 		else:
 			a[key] = val
 

@@ -19,9 +19,8 @@ class Graph:
 		with open(path, 'r') as file:
 			config = from_yaml(GraphConfig, file.read())
 
-		# TODO: proper error handling
 		if config is None:
-			raise "no config read"
+			raise ValueError("no config read")
 
 		return Graph.from_config(config)
 
@@ -39,19 +38,20 @@ class Graph:
 				graph.nodes[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config, node.ports)
 
 		if len(errs) > 0:
-			raise errs
+			# TODO: log errs
+			print("\n".join(errs))
+			raise AttributeError(errs[-1])
 
 		consumption = [ False for _ in config.edges ]
 		for id, node in graph.nodes.items():
 			dsts = []
 			for (i, edge) in enumerate(config.edges):
 				if edge.src.node == id:
+					if edge.dst.node not in graph.nodes:
+						raise AttributeError(f"{dst.other_node.id} not found in graph")
+
 					consumption[i] = True
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], edge.dst.port))
-
-			for dst in dsts:
-				if dst.other_node.id not in graph.nodes:
-					raise f"{dst.other_node.id} not found in graph"
 
 			dsts.sort(key=lambda conn: conn.self_port)
 			node.set_dsts(dsts)
@@ -60,7 +60,8 @@ class Graph:
 		
 		errs = [ f"edge {i} is not used" for (i, used) in enumerate(consumption) if not used ]
 		if len(errs) > 0:
-			raise errs
+			# TODO: log errs
+			raise Exception(errs[-1])
 
 		return graph
 
