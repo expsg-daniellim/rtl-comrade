@@ -77,6 +77,10 @@ class Port:
 		elif self.persistent:
 			if self.last_value_initialised:
 				return self.last_value
+			elif self.has_default:
+				self.last_value_initialised = True
+				self.last_value = self.default
+				return self.last_value
 			else:
 				raise PortError(self.name, "persistent port has no last value")
 		elif self.has_default:
@@ -139,6 +143,7 @@ class ModuleWrapper:
 	async def run(self):
 		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
 		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
+			# Order of precedence: required (non-special)/persistent (first run) > persistent (cached) > persistent (default) > default
 			# Get required inputs
 			inputs = { port.name: await port.get() for port in self.ports.values() if not port.is_special() }
 			# Get special inputs
