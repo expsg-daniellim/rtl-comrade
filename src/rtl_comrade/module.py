@@ -2,8 +2,11 @@ import importlib.util
 import inspect
 import os
 from pathlib import Path
+import re
 from serde import serde
 from serde.yaml import from_yaml
+
+CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 @serde
 class ModuleModuleConfig:
@@ -13,7 +16,7 @@ class ModuleModuleConfig:
 @serde
 class ModuleFileConfig:
 	name: str | None
-	file: str
+	file: Path
 	modules: list[ModuleModuleConfig] | None
 
 @serde
@@ -24,14 +27,13 @@ class ModuleLoadException(Exception):
 	pass
 
 def to_module_config(class_name:str) -> ModuleModuleConfig:
-	name = class_name # TODO: fancy CamelCase to snake_case conversion
+	name = CAMEL_CASE_RE.sub('_', class_name).lower()
 	config = ModuleModuleConfig(class_name, name)
 	return config
 
-def load_module(folder:Path, config:ModuleFileConfig):
-	# TODO: include full path as module name
-	module_name = Path(config.file).stem if config.name is None else config.name
-	spec = importlib.util.spec_from_file_location(module_name, folder / config.file)
+def load_module(config:ModuleFileConfig):
+	module_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
+	spec = importlib.util.spec_from_file_location(module_name, config.file)
 	module = importlib.util.module_from_spec(spec)
 	spec.loader.exec_module(module)
 
@@ -52,17 +54,21 @@ def load_module_folder(path:str):
 	folder_path = Path(path)
 	config = None
 
-	# TODO: expand folder_path into module paths
 	if os.path.isfile(folder_path / "config.yaml"):
 		with open(folder_path / "config.yaml", 'r') as file:
 			config = from_yaml(ModuleConfig, file.read())
+			for file in config.files:
+				file.file = folder_path / file.file
 	else:
-		files = [ ModuleFileConfig(None, file, None) for file in filter(lambda p: Path(p).suffix == '.py', filter(lambda p: os.path.isfile(folder_path / p), os.listdir(folder_path)))]
+		files = [ ModuleFileConfig(None, file, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: folder_path / p, os.listdir(folder_path))) ]
 		config = ModuleConfig(files)
 
 	res = {}
 	for file_config in config.files:
-		# TODO: check for duplicates in res
-		res |= load_module(folder_path, file_config)
+		for (key, val) in load_module(file_config).items():
+			if key in res:
+				raise ModuleLoadException(f"duplicate key {key}")
+			else:
+				res[key] = val
 
 	return res
