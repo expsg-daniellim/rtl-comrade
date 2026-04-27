@@ -57,7 +57,11 @@ class Port:
 
 		val = None
 		try:
-			val = self.queue.get_nowait()
+			if self.persistent and not self.last_value_initialised:
+				val = await self.queue.get()
+			else:
+				val = self.queue.get_nowait()
+			
 			if val is not None:
 				self.last_value_initialised = True
 				self.last_value = val
@@ -69,10 +73,7 @@ class Port:
 		if val is not None:
 			return val
 		elif self.persistent:
-			if self.last_value_initialised:
-				return self.last_value
-			else
-				return await self.queue.get()
+			return self.last_value
 		elif self.has_default:
 			return self.default
 		else:
