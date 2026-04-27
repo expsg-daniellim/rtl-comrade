@@ -1,3 +1,4 @@
+import asyncio
 from asyncio import Queue
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ class Port:
 	persistent: bool
 	has_default: bool
 	default: typing.Any
+	last_value_initialised: bool = False
 	last_value: typing.Any = None
 
 	@staticmethod
@@ -57,6 +59,7 @@ class Port:
 		try:
 			val = self.queue.get_nowait()
 			if val is not None:
+				self.last_value_initialised = True
 				self.last_value = val
 			else:
 				await self.queue.put(val)
@@ -66,7 +69,10 @@ class Port:
 		if val is not None:
 			return val
 		elif self.persistent:
-			return self.last_value
+			if self.last_value_initialised:
+				return self.last_value
+			else
+				return await self.queue.get()
 		elif self.has_default:
 			return self.default
 		else:

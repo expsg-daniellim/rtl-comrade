@@ -25,7 +25,9 @@ class ModuleConfig:
 
 class ModuleLoadException(Exception):
 	def __init__(self, name, message):
-		super.__init__(message)
+		super().__init__(message)
+		self.name = name
+		self.message = message
 
 	def __str__(self):
 		return f"{self.name}: {self.message}"
@@ -41,10 +43,10 @@ def load_module(config:ModuleFileConfig):
 		raise ModuleLoadException(module_name, f"{config.file} not found")
 
 	spec = importlib.util.spec_from_file_location(module_name, config.file)
-	module = importlib.util.module_from_spec(spec)
-
 	if spec is None:
 		raise ModuleLoadException(module_name, "spec could not be created")
+
+	module = importlib.util.module_from_spec(spec)
 	if spec.loader is None:
 		raise ModuleLoadException(module_name, "spec has no loader")
 

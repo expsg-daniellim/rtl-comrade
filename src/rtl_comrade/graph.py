@@ -48,7 +48,7 @@ class Graph:
 			for (i, edge) in enumerate(config.edges):
 				if edge.src.node == id:
 					if edge.dst.node not in graph.nodes:
-						raise AttributeError(f"{dst.other_node.id} not found in graph")
+						raise AttributeError(f"{edge.dst.node} not found in graph")
 
 					consumption[i] = True
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], edge.dst.port))
