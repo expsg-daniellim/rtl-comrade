@@ -5,7 +5,7 @@ import asyncio
 
 from .module import load_module_folders
 from .module_wrapper import Connection, ModuleWrapper
-from .validation import validate_acyclic
+from .validation import validate_acyclic, validate_no_static_deadlock
 
 @dataclass
 class Graph:
@@ -73,6 +73,9 @@ class Graph:
 
 		if not validate_acyclic(config):
 			raise Exception("graph is not acyclic")
+
+		if not validate_no_static_deadlock(graph):
+			raise Exception("graph has deadlock")
 
 		return graph
 
