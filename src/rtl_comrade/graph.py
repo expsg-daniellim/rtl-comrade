@@ -46,6 +46,7 @@ class Graph:
 			print("\n".join(errs))
 			raise AttributeError(errs[-1])
 
+		source_tracker = {} # Verify each dst only has one source
 		consumption = [ False for _ in config.edges ]
 		for id, node in graph.nodes.items():
 			dsts = []
@@ -61,10 +62,19 @@ class Graph:
 
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))
 
+					# Source tracking
+					key = (edge.dst.node, dst_name)
+					if not key in source_tracker:
+						source_tracker[key] = 1
+					else:
+						source_tracker[key] += 1
+
 			dsts.sort(key=lambda conn: conn.self_port)
 			node.set_dsts(dsts)
 
-		# TODO: Validate a src only takes one connection
+		errs = [ f"node {node} port {port} accepts more than one connection" for ((node, port), n) in source_tracker.items() if n > 1 ]
+		if len(errs) > 0:
+			raise Exception(errs[-1])
 
 		errs = [ f"edge {i} is not used" for (i, used) in enumerate(consumption) if not used ]
 		if len(errs) > 0:
