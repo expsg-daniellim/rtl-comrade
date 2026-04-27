@@ -80,8 +80,7 @@ class NodeWrapper:
 	def set_dsts(self, dsts:list[Connection]):
 		self.dsts = dsts
 
-	# TODO: named ports
-	async def accept(self, val, port:str|int=1):
+	async def accept(self, val:typing.Any, port:str|int=1):
 		port_name = None
 		if type(port) is str and port in self.ports.keys():
 			port_name = port
@@ -92,8 +91,7 @@ class NodeWrapper:
 
 		await self.ports[port_name].queue.put(val)
 
-	# TODO: type this function
-	async def process_result(self, res):
+	async def process_result(self, res:tuple[int|str, typing.Any]|typing.Any):
 		port = res[0] if type(res) is tuple else 1
 		value = res[1] if type(res) is tuple else res
 
@@ -103,20 +101,19 @@ class NodeWrapper:
 	async def run(self):
 		inputs = [0] # Dummy value to bootstrap loop
 		while len(inputs) > 0:
-			inputs = [ await port.get() for port in self.ports.values() ]
-			inputs = [ await port.get_special() if inputs[i] is None else inputs[i] for (i, port) in enumerate(self.ports.values()) ]
+			inputs = { port.name: await port.get() for port in self.ports.values() }
+			inputs = { port.name: await port.get_special() if inputs[port.name] is None else inputs[port.name] for port in self.ports.values() }
 
-			if any(i == None and not port.is_special() for (i, port) in zip(inputs, self.ports.values())):
-				if not all(i == None or port.is_special() for (i, port) in zip(inputs, self.ports.values())):
+			if any(i == None and not port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
+				if not all(i == None or port.is_special() for (i, port) in zip(inputs.values(), self.ports.values())):
 					raise "mismatched end of inputs"
 				break
 
 			res = None
 			if inspect.iscoroutinefunction(self.node.run):
-				# TODO: dictionary spread (ties into named ports)
-				res = await self.node.run(*inputs)
+				res = await self.node.run(**inputs)
 			else:
-				res = self.node.run(*inputs)
+				res = self.node.run(**inputs)
 
 			if res is not None:
 				if inspect.isgenerator(res):
