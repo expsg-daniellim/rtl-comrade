@@ -89,7 +89,7 @@ class Port:
 		if not isinstance(val, EndSentinel) and val is not None:
 			return val
 		elif self.persistent:
-			if not isinstance(self.last_value, EndSentinel):
+			if self.last_value is not None:
 				return self.last_value
 			elif self.has_default:
 				self.last_value = Payload("_default", self.default_n, self.default)
@@ -186,20 +186,20 @@ class ModuleWrapper:
 			inputs = { name: i.payload for (name, i) in inputs.items() }
 
 			res = None
-			if inspect.iscoroutinefunction(self.module.run):
+			if inspect.iscoroutinefunction(self.module.run): # async return
 				res = await self.module.run(**inputs)
-			else:
+			else: # regular return
 				res = self.module.run(**inputs)
 
-			if res is not None:
-				if inspect.isasyncgen(res):
-					async for r in res:
-						await self.process_result(r)
-				elif inspect.isgenerator(res):
-					for r in res:
-						await self.process_result(r)
-				else:
-					await self.process_result(res)
+			# Unravel all possible forms of output return
+			if inspect.isasyncgen(res): # async yield
+				async for r in res:
+					await self.process_result(r)
+			elif inspect.isgenerator(res): # regular yield
+				for r in res:
+					await self.process_result(r)
+			else: # return (async/regular)
+				await self.process_result(res)
 		
 		if self.dsts is None:
 			raise ModuleError(self.id, "dsts have not been initialised")
