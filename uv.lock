@@ -191,18 +191,6 @@ yaml = [
 ]
 
 [[package]]
-name = "pyventus"
-version = "0.8.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "typing-extensions" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/3c/21/4b916c0fd47bee51153c49d5cd77cdad168ea26a7306c3e75f75979de2e1/pyventus-0.8.0.tar.gz", hash = "sha256:cc6c87b0d6a25e0fbd791cd77fa6fee6df0710fffd6c86dfb447731727224e47", size = 101882, upload-time = "2026-03-01T16:05:56.714Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/c1/f3/f7a3412fdb695aa1e1f412d759d0fe63b4c33f3cd7c432b7772010dd3173/pyventus-0.8.0-py3-none-any.whl", hash = "sha256:aafbd6a2199a56cab098dcb7334a3062c2be2f1a03ecc31278a19d625fe5f78f", size = 78997, upload-time = "2026-03-01T16:05:54.92Z" },
-]
-
-[[package]]
 name = "pyyaml"
 version = "6.0.3"
 source = { registry = "https://pypi.org/simple" }
@@ -276,14 +264,10 @@ version = "0.0.1"
 source = { editable = "." }
 dependencies = [
     { name = "pyserde", extra = ["yaml"] },
-    { name = "pyventus" },
 ]
 
 [package.metadata]
-requires-dist = [
-    { name = "pyserde", extras = ["yaml"], specifier = ">=0.31.2" },
-    { name = "pyventus", specifier = ">=0.8.0" },
-]
+requires-dist = [{ name = "pyserde", extras = ["yaml"], specifier = ">=0.31.2" }]
 
 [[package]]
 name = "typing-extensions"

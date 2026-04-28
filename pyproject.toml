@@ -26,7 +26,6 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 dependencies = [
     "pyserde[yaml]>=0.31.2",
-    "pyventus>=0.8.0",
 ]
 
 [project.scripts]

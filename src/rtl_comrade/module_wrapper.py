@@ -10,7 +10,18 @@ import typing
 
 from .config import GraphConfigNodePort
 
-@dataclass
+# TODO: clean up typing with generics
+@dataclass(frozen=True, slots=True)
+class Payload:
+	source: str
+	n: int
+	payload: typing.Any
+
+@dataclass(frozen=True, slots=True)
+class EndSentinel:
+	source: str
+
+@dataclass(frozen=True, slots=True)
 class Connection:
 	self_port: str
 	other_node: ModuleWrapper
@@ -29,13 +40,13 @@ class PortError(Exception):
 @dataclass
 class Port:
 	name: str
-	queue: Queue
+	queue: Queue[Payload|EndSentinel]
 	persistent: bool
 	has_default: bool
 	default: typing.Any
+	default_n: int = 0
 	ended: bool = False
-	last_value_initialised: bool = False
-	last_value: typing.Any = None
+	last_value: Payload|None = None
 
 	@staticmethod
 	def from_param(param:Parameter, i:int, ports:dict[str|int, GraphConfigNodePort]) -> Port:
@@ -49,10 +60,9 @@ class Port:
 		default = param.default if param.default is not Parameter.empty else None
 		return Port(param.name, Queue(), persistent, has_default, default)
 
-	async def get(self) -> typing.Any | None:
+	async def get(self) -> Payload|EndSentinel:
 		val =  await self.queue.get()
-		if val is not None:
-			self.last_value_initialised = True
+		if not isinstance(val, EndSentinel):
 			self.last_value = val
 		else:
 			self.ended = True
@@ -60,7 +70,7 @@ class Port:
 		return val
 
 	# Unravel special cases after normal ones come in
-	async def get_special(self):
+	async def get_special(self) -> Payload:
 		if not self.is_special():
 			raise PortError(self.name, "get_special on non-special")
 
@@ -69,32 +79,33 @@ class Port:
 			if not self.ended:
 				val = self.queue.get_nowait()
 
-				if val is not None:
-					self.last_value_initialised = True
+				if not isinstance(val, EndSentinel):
 					self.last_value = val
 				else:
 					self.ended = True
 		except asyncio.QueueEmpty:
 			pass
 
-		if val is not None:
+		if not isinstance(val, EndSentinel) and val is not None:
 			return val
 		elif self.persistent:
-			if self.last_value_initialised:
+			if not isinstance(self.last_value, EndSentinel):
 				return self.last_value
 			elif self.has_default:
-				self.last_value_initialised = True
-				self.last_value = self.default
+				self.last_value = Payload("_default", self.default_n, self.default)
+				self.default_n += 1
 				return self.last_value
 			else:
 				raise PortError(self.name, "persistent port has no last value")
 		elif self.has_default:
-			return self.default
+			payload = Payload("_default", self.default_n, self.default)
+			self.default_n += 1
+			return payload
 		else:
 			raise PortError(self.name, "unsupported special case")
 
 	def is_special(self):
-		return (self.persistent and self.last_value_initialised) or self.has_default
+		return (self.persistent and self.last_value is not None) or self.has_default
 
 class ModuleError(Exception):
 	def __init__(self, id, message):
@@ -124,6 +135,7 @@ class ModuleWrapper:
 		run_sig = signature(self.module.run)
 		self.ports = OrderedDict({ name: Port.from_param(param, i, ports) for (i, (name, param)) in enumerate(run_sig.parameters.items()) })
 		self.dsts = None
+		self.dst_counts = {}
 
 	def set_dsts(self, dsts:list[Connection]):
 		self.dsts = dsts
@@ -136,7 +148,7 @@ class ModuleWrapper:
 		else:
 			return None
 
-	async def accept(self, val:typing.Any, port:str):
+	async def accept(self, val:Payload|EndSentinel, port:str):
 		await self.ports[port].queue.put(val)
 
 	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
@@ -149,7 +161,10 @@ class ModuleWrapper:
 			print(f"output port {port} has no destinations")
 
 		for dst in dsts:
-			await dst.other_node.accept(val=value, port=dst.other_port)
+			key = (dst.other_node.id, dst.other_port)
+			self.dst_counts[key] = self.dst_counts.get(key, -1) + 1
+			payload = Payload(self.id, self.dst_counts[key], value)
+			await dst.other_node.accept(val=payload, port=dst.other_port)
 
 	async def run(self):
 		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
@@ -166,6 +181,9 @@ class ModuleWrapper:
 			# Get special inputs
 			inputs |= { port.name: await port.get_special() for port in self.ports.values() if port.is_special() and not port.name in inputs }
 			# Special inputs should never return None
+
+			# Unravel payload
+			inputs = { name: i.payload for (name, i) in inputs.items() }
 
 			res = None
 			if inspect.iscoroutinefunction(self.module.run):
@@ -187,4 +205,4 @@ class ModuleWrapper:
 			raise ModuleError(self.id, "dsts have not been initialised")
 
 		for dst in self.dsts:
-			await dst.other_node.accept(val=None, port=dst.other_port)
+			await dst.other_node.accept(val=EndSentinel(self.id), port=dst.other_port)
