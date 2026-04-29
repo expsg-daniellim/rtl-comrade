@@ -1,99 +1,111 @@
-import importlib.util
+from collections import OrderedDict
+from dataclasses import dataclass
 import inspect
-import os
-from pathlib import Path
-import re
-from serde import serde
-from serde.yaml import from_yaml
+from inspect import signature, Parameter
+from serde import from_dict
+import typing
 
-CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+from .contract import ContractWrapper
+from .port import Payload, EndSentinel, Port
 
-@serde
-class ModuleModuleConfig:
-	class_name: str
-	name: str | None
+@dataclass(frozen=True, slots=True)
+class Connection:
+	self_port: str
+	other_node: ModuleWrapper
+	other_port: str
 
-@serde
-class ModuleFileConfig:
-	name: str | None
-	file: Path
-	modules: list[ModuleModuleConfig] | None
-
-@serde
-class ModuleConfig:
-	files: list[ModuleFileConfig]
-
-class ModuleLoadException(Exception):
-	def __init__(self, name, message):
-		super().__init__(message)
-		self.name = name
+class ModuleError(Exception):
+	def __init__(self, id, message):
+		super().__init__(self, message)
 		self.message = message
+		self.id = id
 
 	def __str__(self):
-		return f"{self.name}: {self.message}"
+		return f"{self.id}: {self.message}"
 
-def to_module_config(class_name:str) -> ModuleModuleConfig:
-	name = CAMEL_CASE_RE.sub('_', class_name).lower()
-	config = ModuleModuleConfig(class_name, name)
-	return config
+class ModuleWrapper:
+	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict={}):
+		self.id = id
 
-def load_module(config:ModuleFileConfig):
-	module_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
-	if not config.file.is_file():
-		raise ModuleLoadException(module_name, f"{config.file} not found")
+		# Check Module is valid
+		# TODO: warn about config acceptance
+		init_sig = signature(Module.__init__)
 
-	spec = importlib.util.spec_from_file_location(module_name, config.file)
-	if spec is None:
-		raise ModuleLoadException(module_name, "spec could not be created")
-
-	module = importlib.util.module_from_spec(spec)
-	if spec.loader is None:
-		raise ModuleLoadException(module_name, "spec has no loader")
-
-	spec.loader.exec_module(module)
-	available_mods = dict(inspect.getmembers(module, inspect.isclass))
-	to_get = [ to_module_config(class_name) for class_name in available_mods ] if config.modules is None else config.modules
-	res = {}
-	for mod in to_get:
-		if mod.class_name in available_mods:
-			if mod.name in res:
-				raise ModuleLoadException(module_name, f"duplicate module definition {mod.name}")
-			res[mod.name] = available_mods[mod.class_name]
+		if 'config' in init_sig.parameters:
+			if hasattr(Module, 'Config'):
+				config = from_dict(Module.Config, config)
+			self.module = Module(config=config)
 		else:
-			raise ModuleLoadException(module_name, f"module {mod.name} class {mod.class_name} not found in {config.file}")
+			self.module = Module()
 
-	return res
+		if not hasattr(self.module, 'run') or not inspect.isroutine(self.module.run):
+			raise ModuleError(self.id, "module is not runnable")
 
-# Merges a into b, raising an error on duplicate keys
-def merge_dict(a:dict, b:dict):
-	for (key, val) in b.items():
-		if key in a:
-			raise ValueError(f"duplicate key {key}")
+		# Init inputs (via ContractWrapper)
+		run_sig = signature(self.module.run)
+		self.ports = OrderedDict({ name: Port.from_param(param) for (name, param) in run_sig.parameters.items() })
+		self.contract = ContractWrapper(Contract, self.id, self.ports, contract_config)
+
+		# Init outputs (f/ future setting)
+		self.dsts = None
+		self.dst_counts = {}
+
+	def set_dsts(self, dsts:list[Connection]):
+		self.dsts = dsts
+
+	def get_canonical_port(self, port:int|str) -> str|None:
+		if type(port) is str and port in self.ports.keys():
+			return port
+		elif type(port) is int and port - 1 < len(self.ports) and port - 1 >= 0:
+			return list(self.ports.keys())[port - 1]
 		else:
-			a[key] = val
+			return None
 
-def load_module_folder(path:str):
-	folder_path = Path(path)
-	config = None
+	async def accept(self, val:Payload|EndSentinel, port:str):
+		await self.ports[port].queue.put(val)
 
-	if os.path.isfile(folder_path / "config.yaml"):
-		with open(folder_path / "config.yaml", 'r') as file:
-			config = from_yaml(ModuleConfig, file.read())
-			for file in config.files:
-				file.file = folder_path / file.file
-	else:
-		files = [ ModuleFileConfig(None, file, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: folder_path / p, os.listdir(folder_path))) ]
-		config = ModuleConfig(files)
+	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
+		port = res[0] if type(res) is tuple else 'default'
+		value = res[1] if type(res) is tuple else res
 
-	res = {}
-	for file_config in config.files:
-		merge_dict(res, load_module(file_config))
+		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
+		if len(dsts) <= 0 and len(self.dsts) > 0:
+			# TODO: log-level info when logging is up
+			print(f"{self.id}: output port {port} has no destinations")
 
-	return res
+		for dst in dsts:
+			key = (dst.other_node.id, dst.other_port)
+			self.dst_counts[key] = self.dst_counts.get(key, -1) + 1
+			payload = Payload(self.id, self.dst_counts[key], value)
+			await dst.other_node.accept(val=payload, port=dst.other_port)
 
-def load_module_folders(paths:list[str]):
-	res = {}
-	for path in paths:
-		merge_dict(res, load_module_folder(path))
+	async def run(self):
+		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
+		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
+			inputs = await self.contract.get_inputs()
+			if isinstance(inputs, EndSentinel):
+				break
 
-	return res
+			inputs = { name: i.payload for (name, i) in inputs.items() }
+
+			res = None
+			if inspect.iscoroutinefunction(self.module.run): # async return
+				res = await self.module.run(**inputs)
+			else: # regular return
+				res = self.module.run(**inputs)
+
+			# Unravel all possible forms of output return
+			if inspect.isasyncgen(res): # async yield
+				async for r in res:
+					await self.process_result(r)
+			elif inspect.isgenerator(res): # regular yield
+				for r in res:
+					await self.process_result(r)
+			else: # return (async/regular)
+				await self.process_result(res)
+
+		if self.dsts is None:
+			raise ModuleError(self.id, "dsts have not been initialised")
+
+		for dst in self.dsts:
+			await dst.other_node.accept(val=EndSentinel(self.id), port=dst.other_port)

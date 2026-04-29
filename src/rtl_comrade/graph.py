@@ -3,8 +3,9 @@ from dataclasses import dataclass
 from serde.yaml import from_yaml
 import asyncio
 
-from .module import load_module_folders
-from .module_wrapper import Connection, ModuleWrapper
+from .contract_default import DefaultContract
+from .loader import load_folders
+from .module import Connection, ModuleWrapper
 from .validation import validate_acyclic, validate_no_static_deadlock
 
 @dataclass
@@ -30,16 +31,25 @@ class Graph:
 		graph = Graph()
 		errs = []
 
-		mappings = load_module_folders(config.modules)
+		module_mappings = load_folders(config.modules)
+		contract_mappings = load_folders(config.contracts)
 
 		for i, node in enumerate(config.nodes):
 			if node.id in graph.nodes:
 				errs.append(f"Node entry {i + 1} is a duplicate id")
 			else:
-				if not node.module in mappings:
+				has_error = False
+				if not node.module in module_mappings:
 					errs.append(f"Node entry {i + 1} has invalid module name {node.module}")
-				else:
-					graph.nodes[node.id] = ModuleWrapper(mappings[node.module], node.id, node.config, contract_config=node.contract_config)
+					has_error = True
+
+				if node.contract != '' and not node.contract in contract_mappings:
+					errs.append(f"Node entry {i+ 1 } has invalid contract name {node.contract}")
+					has_error = True
+
+				if not has_error:
+					contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
+					graph.nodes[node.id] = ModuleWrapper(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config)
 
 		if len(errs) > 0:
 			# TODO: log errs

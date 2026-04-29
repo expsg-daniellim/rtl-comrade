@@ -5,6 +5,7 @@ class GraphConfigNode:
 	id: str
 	module: str
 	config: dict = field(default_factory=dict)
+	contract: str = field(default="")
 	contract_config: dict = field(default_factory=dict)
 
 @serde
