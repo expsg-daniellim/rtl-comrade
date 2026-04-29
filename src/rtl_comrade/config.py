@@ -8,7 +8,8 @@ class GraphConfigNodePort:
 class GraphConfigNode:
 	id: str
 	module: str
-	config: dict | None
+	config: dict = field(default_factory=dict)
+	contract_config: dict = field(default_factory=dict)
 	ports: dict[str|int, GraphConfigNodePort] = field(default_factory=dict)
 
 @serde
