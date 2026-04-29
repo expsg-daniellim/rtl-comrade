@@ -33,7 +33,7 @@ class ContractWrapper:
 
 		self.ports = ports
 
-	async def get_inputs(self) -> dict[str, Payload|EndSentinel]:
+	async def get_inputs(self) -> dict[str, Payload]|EndSentinel:
 		if inspect.iscoroutinefunction(self.contract.get_inputs):
 			return await self.contract.get_inputs()
 		else:

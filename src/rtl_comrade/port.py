@@ -74,7 +74,7 @@ class Port:
 class ContractPort:
 	get: Callable[[], Awaitable[Payload|EndSentinel]]
 	try_get: Callable[[], Payload|EndSentinel|None]
-	has_ended: Callable([], bool)
+	has_ended: Callable[[], bool]
 	has_default: bool = False
 	default: typing.Any = None
 	default_n: int = 0
