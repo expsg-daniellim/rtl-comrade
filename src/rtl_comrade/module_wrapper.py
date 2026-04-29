@@ -5,7 +5,6 @@ from inspect import signature, Parameter
 from serde import from_dict
 import typing
 
-from .config import GraphConfigNodePort
 from .contract import ContractWrapper
 from .contract_default import DefaultContract
 from .port import Payload, EndSentinel, Port
@@ -26,7 +25,7 @@ class ModuleError(Exception):
 		return f"{self.id}: {self.message}"
 
 class ModuleWrapper:
-	def __init__(self, Module, id:str, config:dict, ports:dict[str|int, GraphConfigNodePort], Contract=DefaultContract, contract_config:dict={}):
+	def __init__(self, Module, id:str, config:dict, Contract=DefaultContract, contract_config:dict={}):
 		self.id = id
 
 		# Check Module is valid

@@ -6,8 +6,6 @@ from dataclasses import dataclass
 from inspect import Parameter
 import typing
 
-from .config import GraphConfigNodePort
-
 # TODO: clean up typing with generics
 @dataclass(frozen=True, slots=True)
 class Payload:
@@ -68,11 +66,15 @@ class Port:
 			raise PortError(self.name, f"invalid enqueued type {type(val).__name__}")
 		return val
 
+	def has_ended(self) -> bool:
+		return self.ended
+
 # Don't freeze this because contracts might want to tack things on
 @dataclass
 class ContractPort:
-	get: Callable[[str], Awaitable[Payload|EndSentinel]]
-	try_get: Callable[[str], Payload|EndSentinel|None]
+	get: Callable[[], Awaitable[Payload|EndSentinel]]
+	try_get: Callable[[], Payload|EndSentinel|None]
+	has_ended: Callable([], bool)
 	has_default: bool = False
 	default: typing.Any = None
 	default_n: int = 0

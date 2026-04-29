@@ -5,7 +5,7 @@ import typing
 
 from .port import Payload, EndSentinel, Port, ContractPort
 
-class ContractError(BaseException):
+class ContractError(Exception):
 	pass
 
 class ContractWrapper:
@@ -19,7 +19,7 @@ class ContractWrapper:
 		if len(missing_params) > 0:
 			raise ContractError(self.id, f"contract {Contract.__name__} does not have a valid init signature: {', '.join(missing_params)}")
 
-		contract_ports = { name: ContractPort(get=port.get, try_get=port.try_get, has_default=port.has_default, default=port.default) for (name, port) in ports.items() }
+		contract_ports = { name: ContractPort(get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, default=port.default) for (name, port) in ports.items() }
 
 		if 'config' in init_sig.parameters:
 			if hasattr(Contract, 'Config'):
@@ -32,19 +32,6 @@ class ContractWrapper:
 			raise ContractError(self.id, f"contract {Contract.__name__} is not runnable")
 
 		self.ports = ports
-
-	# Wrapper functions for get and get_nowait for now in case we want to add fancier stuff like observability
-	async def get(self, port:str) -> Payload|EndSentinel:
-		if not port in self.ports:
-			raise AttributeError(f"{self.id}: unavailable port {port} requested")
-		else:
-			return await self.ports[port].queue.get()
-
-	def try_get(self, port:str) -> Payload|EndSentinel|None:
-		if not port in self.ports:
-			raise AttributeError(f"{self.id}: unavailable port {port} requested")
-		else:
-			return self.ports[port].queue.get_nowait()
 
 	async def get_inputs(self) -> dict[str, Payload|EndSentinel]:
 		if inspect.iscoroutinefunction(self.contract.get_inputs):

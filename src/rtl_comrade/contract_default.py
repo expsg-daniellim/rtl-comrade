@@ -20,7 +20,7 @@ class DefaultContract:
 	def __init__(self, id:str, config:Config, ports:dict[str, ContractPort]):
 		unknown_ports = [ i for i in config.persistent_inputs if not i in ports ]
 		if len(unknown_ports) > 0:
-			raise ValueError(f"{id}: unknown persistent ports: {", ".join(unknown_ports)}")
+			raise ValueError(f"{id}: unknown persistent ports: {', '.join(unknown_ports)}")
 
 		self.id = id
 		for port in ports.values():
@@ -60,10 +60,12 @@ class DefaultContract:
 				if port.last_value is not None:
 					special_inputs[name] = port.last_value
 				elif port.has_default:
-					special_inputs[name] = port.get_default_payload()
+					default = port.get_default_payload()
+					port.last_value = default
+					special_inputs[name] = default
 				else:
-					raise ValueError(f"{self.id}: persistent port {port.name} has no last value")
-			elif port.has_default:
+					raise ValueError(f"{self.id}: persistent port {name} has no last value")
+			elif port.has_default and not port.has_ended():
 				special_inputs[name] = port.get_default_payload()
 			else:
 				raise Exception(f"{self.id}: unsupported special case")
