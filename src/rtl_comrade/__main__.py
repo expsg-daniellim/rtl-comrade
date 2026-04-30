@@ -1,4 +1,5 @@
 import asyncio
+import sys
 
 from .graph import Graph
 
@@ -7,7 +8,9 @@ from .graph import Graph
 # TODO: test multi-outputs
 
 def main() -> int:
-	graph = Graph.from_file('graph.yaml')
+	graph_file = sys.argv[1] if len(sys.argv) >= 2 else 'graph.yaml'
+
+	graph = Graph.from_file(graph_file)
 	asyncio.run(graph.run())
 
 	return 0

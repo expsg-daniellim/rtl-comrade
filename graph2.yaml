@@ -1,0 +1,33 @@
+contracts:
+- "contracts"
+modules:
+- "modules"
+nodes:
+- id: file-1
+  module: fileread
+  contract: "zip"
+  config:
+    file: "file1.txt"
+- id: file-2
+  module: fileread
+  contract: "zip"
+  config:
+    file: "file2.txt"
+- id: add
+  module: add
+- id: output
+  module: stdout
+edges:
+- src:
+    node: file-1
+  dst:
+    node: add
+- src:
+    node: file-2
+  dst:
+    node: add
+    port: 2
+- src:
+    node: add
+  dst:
+    node: output

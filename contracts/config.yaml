@@ -1,0 +1,5 @@
+files:
+- file: contracts.py
+  plugins:
+  - name: zip
+    class_name: ZipContract
