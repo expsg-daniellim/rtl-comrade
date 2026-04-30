@@ -1,12 +1,12 @@
 files:
 - file: io.py
-  modules:
+  plugins:
   - name: fileread
     class_name: FileReadMod
   - name: stdout
     class_name: StdoutMod
 - file: funcs.py
-  modules:
+  plugins:
   - name: add
     class_name: AddMod
   - name: alu

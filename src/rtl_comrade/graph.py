@@ -44,7 +44,7 @@ class Graph:
 					has_error = True
 
 				if node.contract != '' and not node.contract in contract_mappings:
-					errs.append(f"Node entry {i+ 1 } has invalid contract name {node.contract}")
+					errs.append(f"Node entry {i + 1} has invalid contract name {node.contract}")
 					has_error = True
 
 				if not has_error:
