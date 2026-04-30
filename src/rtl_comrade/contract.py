@@ -3,7 +3,8 @@ from inspect import signature
 from serde import serde, from_dict
 import typing
 
-from .port import Payload, EndSentinel, Port, ContractPort
+from .api import Payload, EndSentinel, ContractPort
+from .port import Port
 
 class ContractError(Exception):
 	pass

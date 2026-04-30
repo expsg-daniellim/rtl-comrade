@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from rtl_comrade.port import Payload, EndSentinel, ContractPort
+from rtl_comrade.api import Payload, EndSentinel, ContractPort
 
 @dataclass
 class ZipContract:

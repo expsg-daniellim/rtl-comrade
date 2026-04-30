@@ -1,21 +1,11 @@
 from __future__ import annotations # Obsolete after 3.14
 import asyncio
 from asyncio import Queue
-from collections.abc import Callable, Awaitable
 from dataclasses import dataclass
 from inspect import Parameter
 import typing
 
-# TODO: clean up typing with generics
-@dataclass(frozen=True, slots=True)
-class Payload:
-	source: str
-	n: int
-	payload: typing.Any
-
-@dataclass(frozen=True, slots=True)
-class EndSentinel:
-	source: str
+from .api import Payload, EndSentinel
 
 class PortError(Exception):
 	def __init__(self, id, message):
@@ -68,21 +58,3 @@ class Port:
 
 	def has_ended(self) -> bool:
 		return self.ended
-
-# Don't freeze this because contracts might want to tack things on
-@dataclass
-class ContractPort:
-	get: Callable[[], Awaitable[Payload|EndSentinel]]
-	try_get: Callable[[], Payload|EndSentinel|None]
-	has_ended: Callable[[], bool]
-	has_default: bool = False
-	default: typing.Any = None
-	default_n: int = 0
-
-	def get_default_payload(self) -> Payload:
-		if not self.has_default:
-			raise AttributeError("no default available")
-
-		payload = Payload("_default", self.default_n, self.default)
-		self.default_n += 1
-		return payload

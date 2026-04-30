@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Any
 from serde import serde, field
 
-from .port import Payload, EndSentinel, ContractPort
+from .api import Payload, EndSentinel, ContractPort
 
 def is_special(port):
 	return (port.persistent and port.last_value is not None) or port.has_default
