@@ -15,8 +15,10 @@ nodes:
     file: "file2.txt"
 - id: add
   module: add
+  contact: "zip"
 - id: output
   module: stdout
+  contract: "zip"
 edges:
 - src:
     node: file-1

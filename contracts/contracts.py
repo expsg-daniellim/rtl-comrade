@@ -7,7 +7,7 @@ class ZipContract:
 	ports: dict[str, ContractPort]
 
 	async def get_inputs(self) -> dict[str, Payload]|EndSentinel:
-		res = { name: await port.get() for (name, port) in self.ports }
+		res = { name: await port.get() for (name, port) in self.ports.items() }
 		if any(isinstance(val, EndSentinel) for val in res.values()):
 			if not all(isinstance(val, EndSentinel) for val in res.values()):
 				raise AttributeError(f"{self.id}: mismatched end queues")
