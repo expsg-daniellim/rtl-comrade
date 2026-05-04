@@ -70,8 +70,11 @@ class ModuleWrapper:
 		port = res[0] if type(res) is tuple and len(res) == 2 else 'default'
 		value = res[1] if type(res) is tuple and len(res) == 2 else res
 
-		if port == 'default' and value == None:
+		if port == 'default' and value is None:
 			return
+
+		if type(port) is not str:
+			raise ModuleError(self.id, f"invalid non-string port name '{port}' received")
 
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
 		if len(dsts) <= 0 and len(self.dsts) > 0:
