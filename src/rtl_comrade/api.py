@@ -13,7 +13,7 @@ class Payload:
 class EndSentinel:
 	source: str
 
-# Don't freeze this because contracts might want to tack things on
+# ContractPort is not a frozen dataclass so contracts can use it to carry their own mutable state
 @dataclass
 class ContractPort:
 	get: Callable[[], Awaitable[Payload|EndSentinel]]
