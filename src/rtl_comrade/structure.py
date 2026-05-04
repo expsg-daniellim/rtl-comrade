@@ -59,13 +59,13 @@ class ModuleStructure:
 
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
-					if isinstance(node.value.elts[0], str):
+					if isinstance(node.value.elts[0].value, str):
 						self.emits.append(str(node.value.elts[0].value))
 					else:
 						raise StructureError(Module.__name__, "non-str return port name")
 				else: # Dynamic output port names present
 					self.definite_emits = False
-			else:
+			elif not (isinstance(node.value, ast.Constant) and node.value.value is not None):
 				default = True
 
 		if default:
