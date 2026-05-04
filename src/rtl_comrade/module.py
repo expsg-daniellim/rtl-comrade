@@ -67,17 +67,21 @@ class ModuleWrapper:
 		await self.ports[port].queue.put(val)
 
 	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
-		port = res[0] if type(res) is tuple else 'default'
-		value = res[1] if type(res) is tuple else res
+		port, value = None, None
 
-		if port == 'default' and value is None:
+		if type(res) is tuple:
+			if len(res) != 2:
+				raise ModuleError(self.id, f"malformed output {res}")
+
+			if type(res[0]) is not str:
+				raise ModuleError(self.id, f"invalid non-string port name '{port}' received")
+
+			port, value = res
+		elif res is not None:
+			port = 'default'
+			value = res
+		else:
 			return
-
-		if type(res) is tuple and len(res) != 2:
-			raise ModuleError(self.id, f"malformed output {res}")
-
-		if type(port) is not str:
-			raise ModuleError(self.id, f"invalid non-string port name '{port}' received")
 
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
 		if len(dsts) <= 0 and len(self.dsts) > 0:
