@@ -50,6 +50,7 @@ class ModuleStructure:
 
 		self.emits = []
 		default = False
+		has_none = False
 		self.definite_emits = True
 		for node in filter(lambda node: isinstance(node, ast.Return) or isinstance(node, ast.Yield), walk_ast(ast.parse(textwrap.dedent(inspect.getsource(Module.run))))):
 			if isinstance(node.value, ast.Tuple):
@@ -65,8 +66,10 @@ class ModuleStructure:
 						raise StructureError(Module.__name__, "non-str return port name")
 				else: # Dynamic output port names present
 					self.definite_emits = False
-			elif not (isinstance(node.value, ast.Constant) and node.value.value is not None):
+			elif isinstance(node.value, ast.Constant) and node.value.value is None:
+				has_none = True
+			else:
 				default = True
 
-		if default:
+		if default or (has_none and len(self.emits) > 0):
 			self.emits.insert(0, 'default')
