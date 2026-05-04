@@ -70,6 +70,9 @@ class ModuleWrapper:
 		port = res[0] if type(res) is tuple and len(res) == 2 else 'default'
 		value = res[1] if type(res) is tuple and len(res) == 2 else res
 
+		if port == 'default' and value == None:
+			return
+
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
 		if len(dsts) <= 0 and len(self.dsts) > 0:
 			# TODO: log-level info when logging is up
