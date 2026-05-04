@@ -67,7 +67,7 @@ class ModuleWrapper:
 		await self.ports[port].queue.put(val)
 
 	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
-		port = str(res[0]) if type(res) is tuple and len(res) == 2 else 'default'
+		port = res[0] if type(res) is tuple and len(res) == 2 else 'default'
 		value = res[1] if type(res) is tuple and len(res) == 2 else res
 
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
