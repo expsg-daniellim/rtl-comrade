@@ -74,6 +74,7 @@ class Graph:
 						raise AttributeError(f"{edge.dst.port} is not a valid port on {edge.dst.node}")
 
 					if edge.src.port not in node.structure.emits and node.structure.definite_emits:
+						# TODO: Warn about permissive definite_emits when a proper logging system exists
 						raise AttributeError(f"node {node.id} has no valid src port {edge.src.port}")
 
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))

@@ -2,6 +2,7 @@ import ast
 from dataclasses import dataclass
 import inspect
 from inspect import Parameter
+import textwrap
 import typing
 
 class StructureError(Exception):
@@ -36,7 +37,7 @@ class ModuleStructure:
 		self.emits = []
 		default = False
 		self.definite_emits = True
-		for node in filter(lambda node: isinstance(node, ast.Return) or isinstance(node, ast.Yield), ast.walk(ast.parse(inspect.getsource(Module)))):
+		for node in filter(lambda node: isinstance(node, ast.Return) or isinstance(node, ast.Yield), ast.walk(ast.parse(textwrap.dedent(inspect.getsource(Module.run))))):
 			if isinstance(node.value, ast.Tuple) and len(node.value.elts) == 2:
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
