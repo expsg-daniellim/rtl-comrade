@@ -6,6 +6,7 @@ from inspect import Parameter
 import typing
 
 from .api import Payload, EndSentinel
+from .structure import ModuleStructureArg
 
 class PortError(Exception):
 	def __init__(self, id, message):
@@ -26,10 +27,8 @@ class Port:
 	ended: bool = False
 
 	@staticmethod
-	def from_param(param:Parameter) -> Port:
-		has_default = param.default is not Parameter.empty
-		default = param.default if param.default is not Parameter.empty else None
-		return Port(name=param.name, queue=Queue(), has_default=has_default, default=default)
+	def from_structure(arg:ModuleStructureArg) -> Port:
+		return Port(name=arg.name, queue=Queue(), has_default=arg.has_default, default=arg.default)
 
 	async def get(self) -> Payload|EndSentinel:
 		val =  await self.queue.get()

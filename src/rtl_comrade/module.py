@@ -8,6 +8,7 @@ import typing
 
 from .contract import ContractWrapper
 from .port import Payload, EndSentinel, Port
+from .structure import ModuleStructure
 
 @dataclass(frozen=True, slots=True)
 class Connection:
@@ -43,8 +44,8 @@ class ModuleWrapper:
 			raise ModuleError(self.id, "module is not runnable")
 
 		# Init inputs (via ContractWrapper)
-		run_sig = signature(self.module.run)
-		self.ports = OrderedDict({ name: Port.from_param(param) for (name, param) in run_sig.parameters.items() })
+		self.structure = ModuleStructure(Module)
+		self.ports = OrderedDict({ arg.name: Port.from_structure(arg) for arg in self.structure.args })
 		self.contract = ContractWrapper(Contract, self.id, self.ports, contract_config)
 
 		# Init outputs (f/ future setting)

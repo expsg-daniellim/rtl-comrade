@@ -1,12 +1,13 @@
 from .config import GraphConfig
 
+# TODO: better more granular error reporting for each validation function. Type 'ValidationError'; also use in structure.py
 # Validators written by ChatGPT because I got lazy
 
 # Solely for the purpose of verifying graph acyclicity - ignores other graph invalidities such as dangling edges
 def validate_acyclic(config:GraphConfig) -> bool:
 	# DFS-colours algorithm
 	adjacency = { node.id: [] for node in config.nodes }
-	
+
 	for edge in config.edges:
 		if edge.src.node in adjacency and edge.dst.node in adjacency:
 			adjacency[edge.src.node].append(edge.dst.node)
@@ -18,6 +19,7 @@ def validate_acyclic(config:GraphConfig) -> bool:
 		if state[node] == GREY:
 			return False
 		if state[node] == BLACK:
+			# TODO: report exact node where cyclicity is detected
 			return True
 
 		state[node] = GREY
@@ -45,13 +47,13 @@ def validate_no_static_deadlock(graph) -> bool:
 	for node_id, node in graph.nodes.items():
 		for port_name, port in node.ports.items():
 			if not port.has_default and port_name not in incoming[node_id]:
-				return False
+				return False # TODO: collect list of nodes
 
 	# 2. At least one node must be source-capable.
 	# A source-capable node has no first-run-required inputs.
 	sources = { node_id for node_id, node in graph.nodes.items() if all(port.has_default for port in node.ports.values()) }
 	if not sources:
-		return False
+		return False # TODO: exact error message
 
 	# 3. Every node must be reachable from some source-capable node.
 	seen = set()
@@ -65,4 +67,5 @@ def validate_no_static_deadlock(graph) -> bool:
 		seen.add(node_id)
 		stack.extend(adjacency[node_id])
 
+	# TODO: return !union set/seen
 	return seen == set(graph.nodes)

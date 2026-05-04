@@ -5,6 +5,7 @@ from pathlib import Path
 import re
 from serde import serde
 from serde.yaml import from_yaml
+import sys
 
 CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
@@ -51,6 +52,7 @@ def load_plugin(config:PluginFileConfig):
 	if spec.loader is None:
 		raise LoadException(plugin_name, "spec has no loader")
 
+	sys.modules[plugin_name] = module
 	spec.loader.exec_module(module)
 	available_mods = dict(inspect.getmembers(module, inspect.isclass))
 	to_get = [ PluginModuleConfig.from_class_name(class_name) for class_name in available_mods ] if config.plugins is None else config.plugins

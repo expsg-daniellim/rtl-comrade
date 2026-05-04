@@ -38,6 +38,7 @@ class Graph:
 			if node.id in graph.nodes:
 				errs.append(f"Node entry {i + 1} is a duplicate id")
 			else:
+				# TODO: move this validator to validation
 				has_error = False
 				if not node.module in module_mappings:
 					errs.append(f"Node entry {i + 1} has invalid module name {node.module}")
@@ -62,13 +63,18 @@ class Graph:
 			dsts = []
 			for (i, edge) in enumerate(config.edges):
 				if edge.src.node == id:
+					# TODO: move this validator into validation.py
 					if edge.dst.node not in graph.nodes:
 						raise AttributeError(f"{edge.dst.node} not found in graph")
 
+					# Validate src/dst ports
 					consumption[i] = True
 					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
 					if dst_name is None:
 						raise AttributeError(f"{edge.dst.port} is not a valid port on {edge.dst.node}")
+
+					if edge.src.port not in node.structure.emits and node.structure.definite_emits:
+						raise AttributeError(f"node {node.id} has no valid src port {edge.src.port}")
 
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))
 
