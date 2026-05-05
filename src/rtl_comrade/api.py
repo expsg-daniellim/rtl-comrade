@@ -1,13 +1,14 @@
 from collections.abc import Callable, Awaitable
 from dataclasses import dataclass
-import typing
+from typing import Generic, TypeVar
 
-# TODO: clean up typing with generics
+T = TypeVar('T')
+
 @dataclass(frozen=True, slots=True)
-class Payload:
+class Payload(Generic[T]):
 	source: str
 	n: int
-	payload: typing.Any
+	payload: T
 
 @dataclass(frozen=True, slots=True)
 class EndSentinel:
@@ -15,15 +16,15 @@ class EndSentinel:
 
 # ContractPort is not a frozen dataclass so contracts can use it to carry their own mutable state
 @dataclass
-class ContractPort:
-	get: Callable[[], Awaitable[Payload|EndSentinel]]
-	try_get: Callable[[], Payload|EndSentinel|None]
+class ContractPort(Generic[T]):
+	get: Callable[[], Awaitable[Payload[T]|EndSentinel]]
+	try_get: Callable[[], Payload[T]|EndSentinel|None]
 	has_ended: Callable[[], bool]
 	has_default: bool = False
-	default: typing.Any = None
+	default: T | None = None
 	default_n: int = 0
 
-	def get_default_payload(self) -> Payload:
+	def get_default_payload(self) -> Payload[T]:
 		if not self.has_default:
 			raise AttributeError("no default available")
 
