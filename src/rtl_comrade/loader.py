@@ -75,18 +75,20 @@ def merge_dict(a:dict, b:dict):
 		else:
 			a[key] = val
 
-# TODO: load file directly if file
 def load_folder(path:str) -> dict:
 	folder_path = Path(path)
 	config = None
 
-	if os.path.isfile(folder_path / "config.yaml"):
+	if os.path.isfile(folder_path):
+		files = [PluginFileConfig(None, folder_path, None, None)]
+		config = PluginConfig(files)
+	elif os.path.isfile(folder_path / "config.yaml"):
 		with open(folder_path / "config.yaml", 'r') as file:
 			config = from_yaml(PluginConfig, file.read())
 			for file in config.files:
 				file.file = folder_path / file.file
 	else:
-		files = [ PluginFileConfig(None, file, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: folder_path / p, os.listdir(folder_path))) ]
+		files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: folder_path / p, os.listdir(folder_path))) ]
 		config = PluginConfig(files)
 
 	res = {}
