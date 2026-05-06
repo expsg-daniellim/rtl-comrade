@@ -2,13 +2,17 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
-from inspect import signature, Parameter
+from inspect import Parameter
 from serde import from_dict
+import structlog
 import typing
 
-from .contract import ContractWrapper
-from .port import Payload, EndSentinel, Port
+from .api import Payload, EndSentinel, ContractPort, NoDefaultError
+from .port import Port
 from .structure import ModuleStructure
+from .structure import StructureInvalidTupleError, StructureNonStrPortNameError
+
+log = structlog.get_logger()
 
 @dataclass(frozen=True, slots=True)
 class Connection:
@@ -16,39 +20,60 @@ class Connection:
 	other_node: ModuleWrapper
 	other_port: str
 
-class ModuleError(Exception):
-	def __init__(self, id, message):
-		super().__init__(self, message)
-		self.message = message
-		self.id = id
-
-	def __str__(self):
-		return f"{self.id}: {self.message}"
-
 class ModuleWrapper:
 	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict={}):
 		self.id = id
 
-		# Check Module is valid
-		# TODO: warn about config acceptance
-		init_sig = signature(Module.__init__)
-
-		if 'config' in init_sig.parameters:
+		# Initialise Module (with config/id if available/supported)
+		module_init_sig = inspect.signature(Module.__init__)
+		module_init_args = {}
+		if 'config' in module_init_sig.parameters:
 			if hasattr(Module, 'Config'):
 				config = from_dict(Module.Config, config)
-			self.module = Module(config=config)
-		else:
-			self.module = Module()
+			else:
+				log.warn('harness.node.module.config_mismatch', node=self.id, module=Module.__name__)
 
-		if not hasattr(self.module, 'run') or not inspect.isroutine(self.module.run):
-			raise ModuleError(self.id, "module is not runnable")
+			module_init_args['config'] = config
 
-		# Init inputs (via ContractWrapper)
-		self.structure = ModuleStructure(Module)
+		if 'id' in module_init_sig.parameters:
+			module_init_args['id'] = self.id + '.module'
+
+		self.module = Module(**module_init_args)
+
+		# Initialise ports
+		try:
+			self.structure = ModuleStructure(Module)
+		except StructureInvalidTupleError as e:
+			log.fatal('harness.node.module.emits.invalid_tuple', node=self.id, module=Module.__name__, tuple_=e.tuple_)
+		except StructureNonStrPortNameError as e:
+			log.fatal('harness.node.module.emits.invalid_port_name', node=self.id, module=Module.__name__, port=e.port_name)
+
 		self.ports = OrderedDict({ arg.name: Port.from_structure(arg) for arg in self.structure.args })
-		self.contract = ContractWrapper(Contract, self.id, self.ports, contract_config)
 
-		# Init outputs (f/ future setting)
+		# Initialise Contract with available init params
+		contract_init_sig = inspect.signature(Contract.__init__)
+		contract_init_args = {}
+
+		if 'config' in contract_init_sig.parameters:
+			if hasattr(Contract, 'Config'):
+				contract_config = from_dict(Contract.Config, contract_config)
+			else:
+				log.warn('harness.node.contract.config_mismatch', node=self.id, contract=Contract.__name__)
+
+			contract_init_args['config'] = contract_config
+
+		if 'id' in contract_init_sig.parameters:
+			contract_init_args['id'] = self.id + '.contract'
+
+		if 'ports' in contract_init_sig.parameters:
+			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, default=port.default) for (name, port) in self.ports.items() }
+		else:
+			# Warn for this one because it's a pretty pointless contract that has no input ports
+			log.warn('harness.node.contract.no_init_ports', node=self.id, contract=Contract.__name__)
+
+		self.contract = Contract(**contract_init_args)
+
+		# Initialise output targets (for future setting in set_dsts after edges are validated (which requires Node)
 		self.dsts = None
 		self.dst_counts = {}
 
@@ -64,17 +89,24 @@ class ModuleWrapper:
 			return None
 
 	async def accept(self, val:Payload|EndSentinel, port:str):
+		if port not in self.ports:
+			log.warn('harness.module.accept.no_port', node=self.id, port=port)
+			return
+
 		await self.ports[port].queue.put(val)
 
 	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
 		port, value = None, None
 
+		# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>)
 		if type(res) is tuple:
 			if len(res) != 2:
-				raise ModuleError(self.id, f"malformed output {res}")
+				log.warn('harness.module.res.malformed_output', node=self.id, port=res[0] if len(res) > 0 else None, data=res)
+				return
 
 			if type(res[0]) is not str:
-				raise ModuleError(self.id, f"invalid non-string port name '{port}' received")
+				log.warn('harness.module.res.non_string_port', node=self.id, port=res[0])
+				return
 
 			port, value = res
 		elif res is not None:
@@ -83,10 +115,13 @@ class ModuleWrapper:
 		else:
 			return
 
+		if self.dsts is None:
+			log.error('harness.module.dst_no_init', node=self.id)
+			return
+
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
 		if len(dsts) <= 0 and len(self.dsts) > 0:
-			# TODO: log-level info when logging is up
-			print(f"{self.id}: output port {port} has no destinations")
+			log.info('harness.module.res.no_destination', node=self.id, port=port, data=value)
 
 		for dst in dsts:
 			key = (dst.other_node.id, dst.other_port)
@@ -97,17 +132,31 @@ class ModuleWrapper:
 	async def run(self):
 		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
 		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
-			inputs = await self.contract.get_inputs()
+			# Get inputs according to contract
+			try:
+				if inspect.iscoroutinefunction(self.contract.get_inputs):
+					inputs = await self.contract.get_inputs()
+				else:
+					inputs = self.contract.get_inputs()
+			except Exception as e:
+				log.fatal('harness.node.contract.exception', node=self.id, contract=type(self.contract).__name__, exception=e)
+
+			# End upon receiving EndSentinel
 			if isinstance(inputs, EndSentinel):
 				break
 
+			# Break out input Payloads into straight kwargs
 			inputs = { name: i.payload for (name, i) in inputs.items() }
 
+			# Run module based on async/non-async
 			res = None
-			if inspect.iscoroutinefunction(self.module.run): # async return
-				res = await self.module.run(**inputs)
-			else: # regular return
-				res = self.module.run(**inputs)
+			try:
+				if inspect.iscoroutinefunction(self.module.run): # async return
+					res = await self.module.run(**inputs)
+				else: # regular return
+					res = self.module.run(**inputs)
+			except Exception as e:
+				log.fatal('harness.node.module.exception', node=self.id, module=type(self.module).__name__, exception=e)
 
 			# Unravel all possible forms of output return
 			if inspect.isasyncgen(res): # async yield
@@ -120,7 +169,9 @@ class ModuleWrapper:
 				await self.process_result(res)
 
 		if self.dsts is None:
-			raise ModuleError(self.id, "dsts have not been initialised")
+			log.error('harness.module.dst_no_init', node=self.id)
+			return
 
+		# Propogate EndSentinel
 		for dst in self.dsts:
 			await dst.other_node.accept(val=EndSentinel(self.id), port=dst.other_port)

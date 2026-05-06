@@ -1,5 +1,8 @@
 from dataclasses import dataclass
 from rtl_comrade.api import Payload, EndSentinel, ContractPort
+import structlog
+
+log = structlog.get_logger()
 
 @dataclass
 class ZipContract:
@@ -10,7 +13,7 @@ class ZipContract:
 		res = { name: await port.get() for (name, port) in self.ports.items() }
 		if any(isinstance(val, EndSentinel) for val in res.values()):
 			if not all(isinstance(val, EndSentinel) for val in res.values()):
-				raise AttributeError(f"{self.id}: mismatched end queues")
+				log.error('%s.mismatched_ends', self.id)
 			return EndSentinel(self.id)
 
 		return res

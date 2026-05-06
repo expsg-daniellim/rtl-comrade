@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import importlib.util
 import inspect
 import os
@@ -7,8 +8,35 @@ from serde import serde
 from serde.yaml import from_yaml
 import sys
 
+# Camel case to snake case
 CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
+# Define individual error types
+@dataclass
+class LoadError(Exception):
+	plugin: str|None
+	file: str
+
+@dataclass
+class LoadFileNotFoundError(LoadError):
+	pass
+
+class LoadInvalidSpecError(LoadError):
+	pass
+
+class LoadSpecNoLoaderError(LoadError):
+	pass
+
+@dataclass
+class LoadDuplicateDefinitionError(LoadError):
+	key: str
+
+@dataclass
+class LoadMissingClassError(LoadError):
+	module_name: str
+	class_name: str
+
+# Config file types
 @serde
 class PluginModuleConfig:
 	class_name: str
@@ -30,40 +58,42 @@ class PluginFileConfig:
 class PluginConfig:
 	files: list[PluginFileConfig]
 
-class LoadException(Exception):
-	def __init__(self, name, message):
-		super().__init__(message)
-		self.name = name
-		self.message = message
-
-	def __str__(self):
-		return f"{self.name}: {self.message}"
-
+# Actual load functions. Hierarchy: load_files -> load_file -> load_plugin
 def load_plugin(config:PluginFileConfig):
+	# Name plugin file based on file path without extension
 	plugin_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
-	if not config.file.is_file():
-		raise LoadException(plugin_name, f"{config.file} not found")
 
+	# Validate plugin file existence
+	if not config.file.is_file():
+		raise LoadFileNotFoundError(plugin_name, config.file)
+
+	# Do dynamic import of plugin file
 	spec = importlib.util.spec_from_file_location(plugin_name, config.file)
 	if spec is None:
-		raise LoadException(plugin_name, "spec could not be created")
+		raise LoadInvalidSpecError(plugin_name, config.file)
 
 	module = importlib.util.module_from_spec(spec)
 	if spec.loader is None:
-		raise LoadException(plugin_name, "spec has no loader")
+		raise LoadSpecNoLoaderError(plugin_name, config.file)
 
+	# Add module to sys.modules so its source can be inspected later
 	sys.modules[plugin_name] = module
+	# Load module
 	spec.loader.exec_module(module)
+
+	# Available classes in file
 	available_mods = dict(inspect.getmembers(module, inspect.isclass))
+	# Assume all classes are intended to be loaded in absence of config file
 	to_get = [ PluginModuleConfig.from_class_name(class_name) for class_name in available_mods ] if config.plugins is None else config.plugins
 	res = {}
 	for mod in to_get:
 		if mod.class_name in available_mods:
+			# Don't silently overwrite available mappings
 			if mod.name in res:
-				raise LoadException(plugin_name, f"duplicate module definition {mod.name}")
+				raise LoadDuplicateDefinitionError(plugin_name, config.file, mod.name)
 			res[mod.name] = available_mods[mod.class_name]
 		else:
-			raise LoadException(plugin_name, f"module {mod.name} class {mod.class_name} not found in {config.file}")
+			raise LoadMissingClassError(plugin_name, config.file, mod.name, mod.class_name)
 
 	return res
 
@@ -75,31 +105,43 @@ def merge_dict(a:dict, b:dict):
 		else:
 			a[key] = val
 
-def load_folder(path:str) -> dict:
-	folder_path = Path(path)
+def load_path(path:str) -> dict:
+	path = Path(path)
 	config = None
 
-	if os.path.isfile(folder_path):
-		files = [PluginFileConfig(None, folder_path, None, None)]
+	if os.path.isfile(path): # Load directly if path is a file and not a dir
+		files = [PluginFileConfig(None, path, None, None)]
 		config = PluginConfig(files)
-	elif os.path.isfile(folder_path / "config.yaml"):
-		with open(folder_path / "config.yaml", 'r') as file:
+	elif os.path.isfile(path / "config.yaml"): # Check for a config.yaml in dir
+		with open(path / "config.yaml", 'r') as file:
 			config = from_yaml(PluginConfig, file.read())
 			for file in config.files:
-				file.file = folder_path / file.file
+				file.file = path / file.file # Make path relative to script
 	else:
-		files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: folder_path / p, os.listdir(folder_path))) ]
+		# Recreate a dummy PluginFileConfig without any of the specifics
+		files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
 		config = PluginConfig(files)
 
+	# Load each file and then merge into a single map
 	res = {}
 	for file_config in config.files:
-		merge_dict(res, load_plugin(file_config))
+		file_plugins = load_plugin(file_config)
+		for (name, plugin) in file_plugins.items():
+			if name in res:
+				raise LoadDuplicateDefinitionError(config.name, file_config.file, name)
+			else:
+				res[name] = plugin
 
 	return res
 
-def load_folders(paths:list[str]) -> dict:
+def load_paths(paths:list[str]) -> dict:
 	res = {}
 	for path in paths:
-		merge_dict(res, load_folder(path))
+		file_plugins = load_path(path)
+		for (name, plugin) in file_plugins.items():
+			if name in res:
+				raise LoadDuplicateDefinitionError(None, path, name)
+			else:
+				res[name] = plugin
 
 	return res

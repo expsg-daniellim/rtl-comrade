@@ -6,9 +6,10 @@ from inspect import Parameter
 import textwrap
 import typing
 
+# BFS of the AST filtering out nested function nodes
 def walk_ast(node):
 	queue = deque([node])
-	passedTop = False
+	passedTop = False # Keep tracking of passing the top-level function node
 	while queue:
 		n = queue.popleft()
 		if not (isinstance(n, ast.FunctionDef) or isinstance(n, ast.Lambda) or isinstance(n, ast.AsyncFunctionDef)):
@@ -19,16 +20,17 @@ def walk_ast(node):
 
 		yield n
 
-class StructureError(Exception):
-	def __init__(self, name, message):
-		super().__init__(message)
-		self.name = name
-		self.message = message
+@dataclass(frozen=True, slots=True)
+class StructureInvalidTupleError(Exception):
+	name: str
+	tuple_: tuple
 
-	def __str__(self):
-		return f"{self.name}: {self.message}"
+@dataclass(frozen=True, slots=True)
+class StructureNonStrPortNameError(Exception):
+	name: str
+	port_name: typing.Any
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class ModuleStructureArg:
 	name: str
 	type_: str | None = None
@@ -42,27 +44,28 @@ class ModuleStructure:
 	definite_emits: bool
 
 	def __init__(self, Module):
-		if not hasattr(Module, 'run'):
-			raise StructureError(Module.__name__, "no function 'run' available")
+		# Assume that Module has been pre-validated to have run
 
+		# Populate args from the function signature
 		sig = inspect.signature(Module.run)
 		self.args = [ ModuleStructureArg(name=name, type_=param.annotation.__name__ if param.annotation != Parameter.empty else None, has_default=param.default != Parameter.empty, default=param.default if param.default != Parameter.empty else None) for (name, param) in sig.parameters.items() if name != 'self' ]
 
+		# Populate emits by walking through source code and inferring likely behaviour from yields/returns
 		self.emits = []
 		default = False
 		self.definite_emits = True
 		for node in filter(lambda node: isinstance(node, ast.Return) or isinstance(node, ast.Yield), walk_ast(ast.parse(textwrap.dedent(inspect.getsource(Module.run))))):
+			# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>). All other formats of tuple are invalid.
 			if isinstance(node.value, ast.Tuple):
 				if len(node.value.elts) != 2:
-					# TODO: better error handling
-					raise StructureError(Module.__name__, "invalid return tuple")
+					raise StructureInvalidTupleError(Module.__name__, node.value.elts)
 
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
 					if isinstance(node.value.elts[0].value, str):
 						self.emits.append(str(node.value.elts[0].value))
 					else:
-						raise StructureError(Module.__name__, "non-str return port name")
+						raise StructureNonStrPortNameError(Module.__name__, node.values.elts[0].value)
 				else: # Dynamic output port names present
 					self.definite_emits = False
 			elif not (isinstance(node.value, ast.Constant) and node.value.value is None):

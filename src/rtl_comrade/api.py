@@ -1,9 +1,10 @@
 from collections.abc import Callable, Awaitable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
 T = TypeVar('T')
 
+# Edges between nodes can hold one of two data types - a Payload wrapping the actual data or an EndSentinel
 @dataclass(frozen=True, slots=True)
 class Payload(Generic[T]):
 	source: str
@@ -14,9 +15,15 @@ class Payload(Generic[T]):
 class EndSentinel:
 	source: str
 
+@dataclass
+class NoDefaultError(Exception):
+	name: str
+
+# ContractPort holds the data relating to one port for the use of the contract
 # ContractPort is not a frozen dataclass so contracts can use it to carry their own mutable state
 @dataclass
 class ContractPort(Generic[T]):
+	name: str
 	get: Callable[[], Awaitable[Payload[T]|EndSentinel]]
 	try_get: Callable[[], Payload[T]|EndSentinel|None]
 	has_ended: Callable[[], bool]
@@ -26,7 +33,7 @@ class ContractPort(Generic[T]):
 
 	def get_default_payload(self) -> Payload[T]:
 		if not self.has_default:
-			raise AttributeError("no default available")
+			raise NoDefaultError(self.name)
 
 		payload = Payload("_default", self.default_n, self.default)
 		self.default_n += 1

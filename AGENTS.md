@@ -11,7 +11,8 @@ The codebase already contains a minimal runnable graph engine, dynamic module/co
 - [src/rtl_comrade](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade): core package.
 - [src/rtl_comrade/__main__.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/__main__.py): CLI entrypoint. Loads `graph.yaml` by default or a path from `argv[1]`.
 - [src/rtl_comrade/graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/graph.py): builds a `Graph` from YAML config, loads plugin folders, wires edges, and runs all nodes concurrently.
-- [src/rtl_comrade/module.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/module.py): wraps module classes, reflects `run(...)` parameters into ports, dispatches outputs, and propagates end sentinels.
+- [src/rtl_comrade/module.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/module.py): wraps module classes, instantiates their analyzed structure, dispatches outputs, and propagates end sentinels.
+- [src/rtl_comrade/structure.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/structure.py): inspects module `run(...)` signatures and ASTs to derive input arguments plus statically known emitted output ports.
 - [src/rtl_comrade/contract.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract.py): wraps contract classes and normalizes access to `get_inputs()`.
 - [src/rtl_comrade/contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py): default scheduling/input contract, including persistent-input support.
 - [src/rtl_comrade/loader.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/loader.py): plugin/module discovery from folders and `config.yaml` manifests.
@@ -21,7 +22,7 @@ The codebase already contains a minimal runnable graph engine, dynamic module/co
 - [src/rtl_comrade/validation.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/validation.py): acyclicity and static deadlock checks.
 - [modules](/Users/daniellim/Documents/random/rtl-comrade/modules): example module plugins and manifest.
 - [contracts](/Users/daniellim/Documents/random/rtl-comrade/contracts): example contract plugins and manifest.
-- [graph.yaml](/Users/daniellim/Documents/random/rtl-comrade/graph.yaml), [graph2.yaml](/Users/daniellim/Documents/random/rtl-comrade/graph2.yaml): sample graphs.
+- [graph2.yaml](/Users/daniellim/Documents/random/rtl-comrade/graph2.yaml): checked-in sample graph.
 - [contracts-to-implement.md](/Users/daniellim/Documents/random/rtl-comrade/contracts-to-implement.md): design backlog for additional contract strategies.
 - [README.md](/Users/daniellim/Documents/random/rtl-comrade/README.md): currently minimal and not the source of truth.
 
@@ -33,10 +34,11 @@ The current runtime is small but coherent:
 2. `Graph.from_file()` deserializes YAML into `GraphConfig`.
 3. `load_folders()` loads module and contract classes from configured folders.
 4. Each graph node becomes a `ModuleWrapper`.
-5. `ModuleWrapper` infers input ports from the module `run(...)` signature.
-6. A `ContractWrapper` decides when enough inputs are ready to invoke that module.
-7. Module outputs are pushed to downstream queues as `Payload` objects.
-8. `EndSentinel` values propagate through downstream ports to terminate the graph.
+5. `ModuleStructure` inspects the module `run(...)` signature and return/yield AST to infer input ports and known output ports.
+6. `ModuleWrapper` turns those inferred inputs into `Port` objects.
+7. A `ContractWrapper` decides when enough inputs are ready to invoke that module.
+8. Module outputs are pushed to downstream queues as `Payload` objects.
+9. `EndSentinel` values propagate through downstream ports to terminate the graph.
 
 This means the repository is already beyond “design only”, but still clearly in prototype stage.
 
@@ -50,10 +52,12 @@ Module classes are normal Python classes discovered from plugin files.
 - `run(...)` parameters define input ports in declaration order.
 - If `__init__` accepts `config`, the loader passes node config into it.
 - If the class defines `Config`, it is deserialized via `serde.from_dict`.
+- Output ports are analyzed from the `run(...)` AST. Static string port names in returned/yielded `(port_name, value)` tuples are tracked and used for graph validation.
 - Outputs may be returned as:
   - a single value for the default output port
   - a `(port_name, value)` tuple
   - a generator / async generator yielding either of the above
+- Returning `None` emits nothing. This is now treated as a no-op rather than as a default-port payload.
 
 Examples live in [modules/io.py](/Users/daniellim/Documents/random/rtl-comrade/modules/io.py) and [modules/funcs.py](/Users/daniellim/Documents/random/rtl-comrade/modules/funcs.py).
 
@@ -91,7 +95,7 @@ Port handling today is mixed:
 - source ports default to the string port name `"default"`
 - destination ports may be a string or a 1-based positional index
 
-Preserve that behavior unless you are intentionally refactoring the graph config API.
+The runtime now also validates `src.port` names against statically known emitted ports when the module structure analysis can determine them definitively. Preserve the current mixed source/destination port behavior unless you are intentionally refactoring the graph config API.
 
 ## What Is Stable vs. In Flux
 
@@ -99,7 +103,7 @@ Treat these as the current stable seams:
 
 - YAML graph loading through `GraphConfig`
 - plugin discovery through folder manifests
-- module input inference from `run(...)`
+- module input and output inference through `ModuleStructure`
 - contract-driven scheduling
 - queue-based payload passing
 
@@ -118,6 +122,7 @@ Treat these as active prototype areas:
 - Preserve the distinction between module behavior and contract behavior. Scheduling logic belongs in contracts, not modules.
 - Prefer adding example graphs/modules/contracts when introducing a runtime feature; this repo currently relies heavily on executable examples.
 - Be careful with end-sentinel behavior. Termination is part of the core design, and subtle changes can deadlock or prematurely stop graphs.
+- Be careful when editing `structure.py`. The output-port analysis is intentionally conservative; dynamic port names are allowed, but they weaken what the graph validator can prove.
 - When changing config shape or loader behavior, update both sample graphs and plugin manifests.
 - Do not rely on `README.md` alone for architecture context; use the code as the primary source of truth.
 
@@ -132,9 +137,10 @@ Treat these as active prototype areas:
 Typical local entrypoints:
 
 ```bash
-uv run rtl-comrade
-uv run rtl-comrade graph.yaml
-uv run python -m rtl_comrade graph.yaml
+uv run rtl-comrade graph2.yaml
+uv run python -m rtl_comrade graph2.yaml
 ```
+
+The CLI still defaults to `graph.yaml` when no path is provided, but that file is not currently checked in, so pass an explicit graph path.
 
 Python requirement is `>=3.11`, and the only declared runtime dependency today is `pyserde[yaml]`.

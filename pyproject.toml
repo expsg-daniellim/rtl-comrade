@@ -26,6 +26,7 @@ license = "MIT"
 license-files = ["LICEN[CS]E*"]
 dependencies = [
     "pyserde[yaml]>=0.31.2",
+    "structlog>=25.5.0",
 ]
 
 [project.scripts]
