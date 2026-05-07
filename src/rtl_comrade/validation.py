@@ -37,9 +37,9 @@ def validate_acyclic(config:GraphConfig) -> list[str|None]:
 # Holder class to return validation results
 @dataclass(slots=True)
 class StaticDeadlockValidationResults:
-	edgeless_inputs: list[ModuleWrapper] = field(default_factory=list)
+	edgeless_inputs: list[str] = field(default_factory=list)
 	has_source_capable: bool = True # Condition 2
-	non_reachable_nodes: list[ModuleWrapper] = field(default_factory=list)	# Condition 3
+	non_reachable_nodes: list[str] = field(default_factory=list)	# Condition 3
 
 	def has_error(self) -> bool:
 		return (len(self.edgeless_inputs) > 0) or (not self.has_source_capable) or (len(self.non_reachable_nodes) > 0)
@@ -61,7 +61,7 @@ def validate_no_static_deadlock(graph) -> StaticDeadlockValidationResults:
 	for node_id, node in graph.nodes.items():
 		for port_name, port in node.ports.items():
 			if not port.has_default and port_name not in incoming[node_id]:
-				res.edgeless_inputs.append(node)
+				res.edgeless_inputs.append(node_id)
 
 	# 2. At least one node must be source-capable.
 	# A source-capable node has no first-run-required inputs.
@@ -80,6 +80,6 @@ def validate_no_static_deadlock(graph) -> StaticDeadlockValidationResults:
 		seen.add(node_id)
 		stack.extend(adjacency[node_id])
 
-	res.non_reachable_nodes = [ node for (node_id, node) in graph.nodes.items() if node_id not in seen ]
+	res.non_reachable_nodes = [ node_id for node_id in graph.nodes if node_id not in seen ]
 
 	return res

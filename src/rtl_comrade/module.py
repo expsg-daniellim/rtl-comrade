@@ -21,8 +21,11 @@ class Connection:
 	other_port: str
 
 class ModuleWrapper:
-	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict={}):
+	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None):
 		self.id = id
+
+		if contract_config is None:
+			contract_config = {}
 
 		# Initialise Module (with config/id if available/supported)
 		module_init_sig = inspect.signature(Module.__init__)
@@ -90,7 +93,7 @@ class ModuleWrapper:
 
 	async def accept(self, val:Payload|EndSentinel, port:str):
 		if port not in self.ports:
-			log.warn('harness.module.accept.no_port', node=self.id, port=port)
+			log.error('harness.module.accept.no_port', node=self.id, port=port)
 			return
 
 		await self.ports[port].queue.put(val)
@@ -101,11 +104,11 @@ class ModuleWrapper:
 		# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>)
 		if type(res) is tuple:
 			if len(res) != 2:
-				log.warn('harness.module.res.malformed_output', node=self.id, port=res[0] if len(res) > 0 else None, data=res)
+				log.error('harness.module.res.malformed_output', node=self.id, port=res[0] if len(res) > 0 else None, data=res)
 				return
 
 			if type(res[0]) is not str:
-				log.warn('harness.module.res.non_string_port', node=self.id, port=res[0])
+				log.error('harness.module.res.non_string_port', node=self.id, port=res[0])
 				return
 
 			port, value = res
