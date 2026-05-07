@@ -109,6 +109,9 @@ def load_path(path:str) -> dict:
 	path = Path(path)
 	config = None
 
+	if not path.exists():
+		raise LoadFileNotFoundError(None, path)
+
 	if os.path.isfile(path): # Load directly if path is a file and not a dir
 		files = [PluginFileConfig(None, path, None, None)]
 		config = PluginConfig(files)
@@ -128,7 +131,7 @@ def load_path(path:str) -> dict:
 		file_plugins = load_plugin(file_config)
 		for (name, plugin) in file_plugins.items():
 			if name in res:
-				raise LoadDuplicateDefinitionError(config.name, file_config.file, name)
+				raise LoadDuplicateDefinitionError(str(path), file_config.file, name)
 			else:
 				res[name] = plugin
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from .config import GraphConfig
 from dataclasses import dataclass
 from serde.yaml import from_yaml
@@ -97,13 +99,15 @@ class Graph:
 			dsts = []
 			for (i, edge) in enumerate(config.edges):
 				if edge.src.node == id:
-					has_error = False
 					if edge.dst.node not in graph.nodes:
-						has_error = True
 						log.error('harness.graph.edge.invalid_dst', edge=edge)
+						consumption[i] = True
+						errors = True
+						continue
 
 					# Validate src/dst ports
 					consumption[i] = True
+					has_error = False
 					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
 					if dst_name is None:
 						has_error = True
@@ -118,7 +122,7 @@ class Graph:
 						continue
 
 					if not node.structure.definite_emits:
-						log.error.warn('harness.graph.node.non_definite_emits', node=node)
+						log.warn('harness.graph.node.non_definite_emits', node=node)
 
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))
 
@@ -159,8 +163,8 @@ class Graph:
 		if not static_validation_res.has_source_capable:
 			log.error('harness.graph.no_source')
 		# 3. Every node must be reachable from some source-capable node.
-		if len(static_validation_res.non_reachable_ports) > 0:
-			log.error('harness.graph.non_reachable_ports', nodes=static_validation_res.non_reachable_ports)
+		if len(static_validation_res.non_reachable_nodes) > 0:
+			log.error('harness.graph.non_reachable_nodes', nodes=static_validation_res.non_reachable_nodes)
 
 		if static_validation_res.has_error():
 			log.fatal('harness.graph.has_deadlock')

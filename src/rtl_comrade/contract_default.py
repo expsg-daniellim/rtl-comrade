@@ -4,7 +4,7 @@ from typing import Any
 from serde import serde, field
 import structlog
 
-from .api import Payload, EndSentinel, ContractPort
+from .api import Payload, EndSentinel, ContractPort, NoDefaultError
 
 log = structlog.get_logger()
 

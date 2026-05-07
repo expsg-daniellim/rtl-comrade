@@ -48,7 +48,7 @@ class ModuleStructure:
 
 		# Populate args from the function signature
 		sig = inspect.signature(Module.run)
-		self.args = [ ModuleStructureArg(name=name, type_=param.annotation.__name__ if param.annotation != Parameter.empty else None, has_default=param.default != Parameter.empty, default=param.default if param.default != Parameter.empty else None) for (name, param) in sig.parameters.items() if name != 'self' ]
+		self.args = [ ModuleStructureArg(name=name, type_=str(param.annotation) if param.annotation != Parameter.empty else None, has_default=param.default != Parameter.empty, default=param.default if param.default != Parameter.empty else None) for (name, param) in sig.parameters.items() if name != 'self' ]
 
 		# Populate emits by walking through source code and inferring likely behaviour from yields/returns
 		self.emits = []
@@ -65,7 +65,7 @@ class ModuleStructure:
 					if isinstance(node.value.elts[0].value, str):
 						self.emits.append(str(node.value.elts[0].value))
 					else:
-						raise StructureNonStrPortNameError(Module.__name__, node.values.elts[0].value)
+						raise StructureNonStrPortNameError(Module.__name__, node.value.elts[0].value)
 				else: # Dynamic output port names present
 					self.definite_emits = False
 			elif not (isinstance(node.value, ast.Constant) and node.value.value is None):

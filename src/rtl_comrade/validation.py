@@ -35,7 +35,7 @@ def validate_acyclic(config:GraphConfig) -> list[str|None]:
 	return [visit(node) for node in adjacency]
 
 # Holder class to return validation results
-@dataclass
+@dataclass(slots=True)
 class StaticDeadlockValidationResults:
 	edgeless_inputs: list[ModuleWrapper] = field(default_factory=list)
 	has_source_capable: bool = True # Condition 2
@@ -80,6 +80,6 @@ def validate_no_static_deadlock(graph) -> StaticDeadlockValidationResults:
 		seen.add(node_id)
 		stack.extend(adjacency[node_id])
 
-	res.non_reachable_ports = [ node for (node_id, node) in graph.nodes.items() if node_id not in seen ]
+	res.non_reachable_nodes = [ node for (node_id, node) in graph.nodes.items() if node_id not in seen ]
 
 	return res
