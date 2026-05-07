@@ -8,7 +8,7 @@ import structlog
 import typing
 
 from .api import Payload, EndSentinel, ContractPort, NoDefaultError
-from .port import Port
+from .port import Port, InvalidEnqueuedError
 from .structure import ModuleStructure
 from .structure import StructureInvalidTupleError, StructureNonStrPortNameError
 
@@ -141,6 +141,8 @@ class ModuleWrapper:
 					inputs = await self.contract.get_inputs()
 				else:
 					inputs = self.contract.get_inputs()
+			except InvalidEnqueuedError as e:
+				log.fatal('harness.node.contract.invalid_enqueued', node=self.id, contract=type(self.contract).__name__, port=e.name, type_=e.type_)
 			except Exception as e:
 				log.fatal('harness.node.contract.exception', node=self.id, contract=type(self.contract).__name__, exception=e)
 
