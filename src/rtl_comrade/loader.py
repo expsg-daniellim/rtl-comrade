@@ -32,7 +32,7 @@ def load_config_file(Config, path:Path):
 	except PermissionError as e:
 		log.fatal('permission_denied')
 	except OSError as e:
-		log.fatal('os_error', err=e.strerr, errno=e.errno)
+		log.fatal('os_error', err=e.strerror, errno=e.errno)
 	except SerdeError as e:
 		log.fatal('serde_error', message=str(e))
 	except MarkedYAMLError as e:
@@ -99,7 +99,7 @@ def load_plugin(config:PluginFileConfig):
 		except PermissionError as e:
 			log.fatal('permission_denied')
 		except OSError as e:
-			log.fatal('os_error', err=e.strerr, errno=e.errno)
+			log.fatal('os_error', err=e.strerror, errno=e.errno)
 		except SyntaxError as e:
 			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
 		except ValueError as e:
@@ -160,7 +160,7 @@ def load_path(path:str) -> dict:
 	except PermissionError as e:
 		log.fatal('permission_denied', file=str(path))
 	except OSError as e:
-		log.fatal('os_error', file=str(path), err=e.strerr, errno=e.errno)
+		log.fatal('os_error', file=str(path), err=e.strerror, errno=e.errno)
 	finally:
 		unbind_contextvars('file')
 

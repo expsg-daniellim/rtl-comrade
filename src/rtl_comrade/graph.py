@@ -29,7 +29,7 @@ class Graph:
 		try:
 			config = load_config_file(GraphConfig, Path(path))
 		finally:
-			unbind_contextvars('context', 'path')
+			unbind_contextvars('context', 'file')
 
 		return Graph.from_config(config)
 
