@@ -11,10 +11,12 @@ class LoggingFatalHandler(logging.StreamHandler):
 
 	def emit(self, record:logging.LogRecord):
 		super().emit(record)
+
+		if record.levelno >= logging.ERROR:
+			self.failure = True
+
 		if record.levelno >= logging.CRITICAL:
 			raise SystemExit(1)
-		elif record.levelno >= logging.ERROR:
-			self.failure = True
 
 def initialise_logging(level:int = logging.INFO) -> LoggingFatalHandler:
 	preprocessors = [ structlog.stdlib.add_log_level, structlog.stdlib.add_logger_name ]

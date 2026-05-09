@@ -25,8 +25,12 @@ class Graph:
 	@staticmethod
 	def from_file(path:str) -> Graph:
 		bind_contextvars(context='harness.config', path=path)
-		config = load_config_file(GraphConfig, Path(path))
-		clear_contextvars()
+
+		try:
+			config = load_config_file(GraphConfig, Path(path))
+		finally:
+			unbind_contextvars('context', 'path')
+
 		return Graph.from_config(config)
 
 	@staticmethod
@@ -35,12 +39,16 @@ class Graph:
 
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
-		module_mappings = load_paths(config.modules)
-		clear_contextvars()
+		try:
+			module_mappings = load_paths(config.modules)
+		finally:
+			unbind_contextvars('context')
 
 		bind_contextvars(context='harness.load.contract')
-		contract_mappings = load_paths(config.contracts)
-		clear_contextvars()
+		try:
+			contract_mappings = load_paths(config.contracts)
+		finally:
+			unbind_contextvars('context')
 
 		# Validate modules have run functions
 		missing_runs = [ name for (name, mod) in module_mappings.items() if not hasattr(mod, 'run') ]

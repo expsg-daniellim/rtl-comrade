@@ -7,8 +7,7 @@ class FileReadMod:
 	class Config:
 		file: str
 
-	def __init__(self, id, config):
-		self.id = id
+	def __init__(self, config):
 		self.file = config.file
 
 	def run(self):
@@ -17,9 +16,9 @@ class FileReadMod:
 				for line in file:
 					yield line
 		except OSError as e:
-			log.fatal('%s.file.not_found', self.id)
+			log.fatal('not_found')
 		except UnicodeDecodeError as e:
-			log.fatal('%s.file.invalid_unicode', self.id, reason=e.reason, invalid_slice=e.object[e.start:e.end])
+			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
 
 class StdoutMod:
 	def run(self, a):

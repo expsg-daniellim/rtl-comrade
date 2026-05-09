@@ -6,7 +6,7 @@ from inspect import Parameter
 from serde import from_dict, SerdeError
 from serde.compat import UserError
 import structlog
-from structlog.contextvars import clear_contextvars, bind_contextvars, unbind_contextvars
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 import typing
 
 from .api import Payload, EndSentinel, ContractPort, NoDefaultError
@@ -48,7 +48,10 @@ class ModuleWrapper:
 		if 'id' in module_init_sig.parameters:
 			module_init_args['id'] = self.id + '.module'
 
-		self.module = Module(**module_init_args)
+		try:
+			self.module = Module(**module_init_args)
+		except Exception as e:
+			log.fatal('init', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
 
 		# Initialise ports
 		bind_contextvars(context='harness.node.module.source', node=self.id, module=Module.__name__)
@@ -60,7 +63,8 @@ class ModuleWrapper:
 		except StructureNonStrPortNameError as e:
 			unbind_contextvars('context')
 			log.fatal('invalid_port_name', context='harness.node.module.emits', port=e.port_name)
-		clear_contextvars()
+		finally:
+			unbind_contextvars('context', 'node', 'module')
 
 		self.ports = OrderedDict({ arg.name: Port.from_structure(arg) for arg in self.structure.args })
 
@@ -90,7 +94,10 @@ class ModuleWrapper:
 			# Warn for this one because it's a pretty pointless contract that has no input ports
 			log.warn('init.no_ports', context='harness.node.contract', node=self.id, contract=Contract.__name__)
 
-		self.contract = Contract(**contract_init_args)
+		try:
+			self.contract = Contract(**contract_init_args)
+		except Exception as e:
+			log.fatal('init', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 
 		# Initialise output targets (for future setting in set_dsts after edges are validated (which requires Node)
 		self.dsts = None
@@ -120,11 +127,11 @@ class ModuleWrapper:
 		# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>)
 		if type(res) is tuple:
 			if len(res) != 2:
-				log.error('malformed_output', context='harness.module.res', node=self.id, port=res[0] if len(res) > 0 else None, data=res)
+				log.error('malformed_output', context='harness.module.res', port=res[0] if len(res) > 0 else None, data=res)
 				return
 
 			if type(res[0]) is not str:
-				log.error('non_string_port', context='harness.module.res', node=self.id, port=res[0])
+				log.error('non_string_port', context='harness.module.res', port=res[0])
 				return
 
 			port, value = res
@@ -135,12 +142,12 @@ class ModuleWrapper:
 			return
 
 		if self.dsts is None:
-			log.error('dsts.not_initialised', context='harness.module.res', node=self.id)
+			log.error('dsts.not_initialised', context='harness.module.res')
 			return
 
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
 		if len(dsts) <= 0 and len(self.dsts) > 0:
-			log.info('no_destination', context='harness.module.res', node=self.id, port=port, data=value)
+			log.info('no_destination', context='harness.module.res', port=port, data=value)
 
 		for dst in dsts:
 			key = (dst.other_node.id, dst.other_port)
@@ -152,16 +159,19 @@ class ModuleWrapper:
 		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
 		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
 			# Get inputs according to contract
+			bind_contextvars(context='harness.node.contract', node=self.id, contract=type(self.contract).__name__)
 			try:
 				if inspect.iscoroutinefunction(self.contract.get_inputs):
 					inputs = await self.contract.get_inputs()
 				else:
 					inputs = self.contract.get_inputs()
 			except InvalidEnqueuedError as e:
-				log.fatal('invalid_enqueued', context='harness.node.port', node=self.id, contract=type(self.contract).__name__, port=e.name, type_=e.type_)
+				log.fatal('invalid_enqueued', context='harness.node.port', port=e.name, type_=e.type_)
 			except Exception as e:
 				# exc_info to make use of structlog's native exception handling
-				log.fatal('exception', context='harness.node.contract', node=self.id, contract=type(self.contract).__name__, exc_info=e)
+				log.fatal('exception', exc_info=e)
+			finally:
+				unbind_contextvars('context', 'node', 'contract')
 
 			# End upon receiving EndSentinel
 			if isinstance(inputs, EndSentinel):
@@ -171,26 +181,27 @@ class ModuleWrapper:
 			inputs = { name: i.payload for (name, i) in inputs.items() }
 
 			# Run module based on async/non-async
-			# TODO: bind logging context
+			bind_contextvars(context='harness.node.module', node=self.id, module=type(self.module).__name__)
 			res = None
 			try:
 				if inspect.iscoroutinefunction(self.module.run): # async return
 					res = await self.module.run(**inputs)
 				else: # regular return
 					res = self.module.run(**inputs)
-			except Exception as e:
-				log.fatal('exception', context='harness.node.module', node=self.id, module=type(self.module).__name__, exc_info=e)
-			# TODO: unbind logging context
 
-			# Unravel all possible forms of output return
-			if inspect.isasyncgen(res): # async yield
-				async for r in res:
-					await self.process_result(r)
-			elif inspect.isgenerator(res): # regular yield
-				for r in res:
-					await self.process_result(r)
-			else: # return (async/regular)
-				await self.process_result(res)
+				# Unravel all possible forms of output return
+				if inspect.isasyncgen(res): # async yield
+					async for r in res:
+						await self.process_result(r)
+				elif inspect.isgenerator(res): # regular yield
+					for r in res:
+						await self.process_result(r)
+				else: # return (async/regular)
+					await self.process_result(res)
+			except Exception as e:
+				log.fatal('exception', exc_info=e)
+			finally:
+				unbind_contextvars('context', 'node', 'module')
 
 		if self.dsts is None:
 			log.error('dsts.not_initialised', context='harness.module.res', node=self.id)

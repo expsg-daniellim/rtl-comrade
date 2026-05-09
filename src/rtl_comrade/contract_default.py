@@ -24,7 +24,7 @@ class DefaultContract:
 	def __init__(self, id:str, config:Config, ports:dict[str, ContractPort]):
 		unknown_ports = [ input_ for input_ in config.persistent_inputs if input_ not in ports ]
 		if len(unknown_ports) > 0:
-			log.fatal('%s.unknown_persistent_ports', id, port=unknown_ports)
+			log.fatal('unknown_persistent_ports', port=unknown_ports)
 
 		self.id = id
 		for port in ports.values():
@@ -49,7 +49,7 @@ class DefaultContract:
 		# Evaluate end sentinels of required ports first
 		if any(isinstance(i, EndSentinel) for i in inputs.values()):
 			if not all(isinstance(i, EndSentinel) for i in inputs.values()):
-				log.error('%s.mismatched_end', self.id)
+				log.error('mismatched_end')
 			return EndSentinel(self.id)
 
 		# Get special inputs

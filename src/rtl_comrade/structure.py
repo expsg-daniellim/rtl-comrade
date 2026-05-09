@@ -57,7 +57,7 @@ class ModuleStructure:
 		try:
 			src = textwrap.dedent(inspect.getsource(Module.run))
 		except OSError as e:
-			log.fatal('file_unavailable', errno=e.errno) 
+			log.fatal('file_unavailable', errno=e.errno)
 		except TypeError as e:
 			log.fatal('unloadable', message=str(e))
 		except ValueError as e:
@@ -66,7 +66,7 @@ class ModuleStructure:
 		try:
 			ast_tree = ast.parse(src)
 		except SyntaxError as e:
-			log.fatal('syntax_error', **e)
+			log.fatal('syntax_error', filename=e.filename, lineno=e.errno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
 		except ValueError as e:
 			log.fatal('value_error', message=str(e))
 		except TypeError as e:

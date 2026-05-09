@@ -101,7 +101,7 @@ def load_plugin(config:PluginFileConfig):
 	except OSError as e:
 		log.fatal('os_error', errno=e.errno)
 	except SyntaxError as e:
-		log.fatal('syntax_error', **e)
+		log.fatal('syntax_error', filename=e.filename, lineno=e.errno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
 	except ValueError as e:
 		log.fatal('value_error', message=str(e))
 	except TypeError as e:
