@@ -16,17 +16,15 @@ class FileReadMod:
 				for line in file:
 					yield line
 		except UnicodeDecodeError as e:
-			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
+			log.fatal('invalid_unicode', file=self.file, reason=e.reason, invalid_slice=e.object[e.start:e.end])
 		except FileNotFoundError as e:
-			log.fatal('not_found')
+			log.fatal('not_found', file=self.file)
 		except IsADirectoryError as e:
-			log.fatal('is_directory')
+			log.fatal('is_directory', file=self.file)
 		except PermissionError as e:
-			log.fatal('permission_denied')
+			log.fatal('permission_denied', file=self.file)
 		except OSError as e:
-			log.fatal('os_error', errno=e.errno)
-		except SyntaxError as e:
-			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
+			log.fatal('os_error', file=self.file, err=e.strerror, errno=e.errno)
 
 class StdoutMod:
 	def run(self, a):

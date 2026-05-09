@@ -24,7 +24,7 @@ class Graph:
 
 	@staticmethod
 	def from_file(path:str) -> Graph:
-		bind_contextvars(context='harness.config', path=path)
+		bind_contextvars(context='harness.config', file=path)
 
 		try:
 			config = load_config_file(GraphConfig, Path(path))

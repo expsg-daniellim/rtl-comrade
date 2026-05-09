@@ -61,7 +61,7 @@ class ModuleStructure:
 		try:
 			src = textwrap.dedent(inspect.getsource(Module.run))
 		except OSError as e:
-			log.fatal('file_unavailable', errno=e.errno)
+			log.fatal('file_unavailable', err=e.strerr, errno=e.errno)
 		except TypeError as e:
 			log.fatal('unloadable', message=str(e))
 		except ValueError as e:
