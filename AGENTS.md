@@ -35,6 +35,7 @@ That folder contains the per-file harness documentation for:
 
 Read the module conventions below, then inspect:
 
+- [docs/module-implementation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/module-implementation.md)
 - [modules/io.py](/Users/daniellim/Documents/random/rtl-comrade/modules/io.py)
 - [modules/funcs.py](/Users/daniellim/Documents/random/rtl-comrade/modules/funcs.py)
 - [modules/config.yaml](/Users/daniellim/Documents/random/rtl-comrade/modules/config.yaml)
