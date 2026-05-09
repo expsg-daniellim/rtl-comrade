@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from .config import GraphConfig
 from dataclasses import dataclass
+from pathlib import Path
 from serde.yaml import from_yaml
 import asyncio
 import structlog
 
 from .contract_default import DefaultContract
-from .loader import load_paths
-from .loader import LoadFileNotFoundError, LoadInvalidSpecError, LoadSpecNoLoaderError, LoadDuplicateDefinitionError, LoadMissingClassError
+from .loader import load_paths, load_config_file
+from .loader import LoadFileNotFoundError, LoadInvalidSpecError, LoadMalformedSpecError, LoadSpecNoLoaderError, LoadModuleExecError, LoadDuplicateDefinitionError, LoadMissingClassError
+from .loader import ConfigLoadNotFoundError, ConfigLoadInvalidUnicodeError, ConfigLoadSerdeError, ConfigLoadYAMLReaderError, ConfigLoadYAMLMarkedError
 from .module import Connection, ModuleWrapper
 from .validation import validate_acyclic, validate_no_static_deadlock
 
@@ -22,12 +24,26 @@ def load_catch_errs(name:str, paths:list[str]):
 		log.fatal('harness.load.%s.file_not_found', name, plugin=e.plugin, file=e.file)
 	except LoadInvalidSpecError as e:
 		log.fatal('harness.load.%s.invalid_spec', name, plugin=e.plugin, file=e.file)
+	except LoadMalformedSpecError as e:
+		log.fatal('harness.load.%s.malformed_spec', name, plugin=e.plugin, file=e.file, exception=e.exception)
 	except LoadSpecNoLoaderError as e:
 		log.fatal('harness.load.%s.spec_no_loader', name, plugin=e.plugin, file=e.file)
+	except LoadModuleExecError as e:
+		log.fatal('harness.load.%s.module_exec_error', name, plugin=e.plugin, file=e.file, exception=e.exception)
 	except LoadDuplicateDefinitionError as e:
 		log.fatal('harness.load.%s.duplicate_def', name, plugin=e.plugin, file=e.file, key=e.key)
 	except LoadMissingClassError as e:
 		log.fatal('harness.load.%s.missing_class', name, plugin=e.plugin, file=e.file, mod=e.module_name, class_=e.class_name)
+	except ConfigLoadNotFoundError as e:
+		log.fatal('harness.load.config.%s.not_found', name, file=e.path)
+	except ConfigLoadInvalidUnicodeError as e:
+		log.fatal('harness.load.config.%s.invalid_unicode', name, file=e.path, reason=e.reason, invalid_slice=e.invalid_slice)
+	except ConfigLoadSerdeError as e:
+		log.fatal('harness.load.config.%s.serde', name, file=e.path)
+	except ConfigLoadYAMLReaderError as e:
+		log.fatal('harness.load.config.%s.yaml_read', name, file=e.path, error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason)
+	except ConfigLoadYAMLMarkedError as e:
+		log.fatal('harness.load.config.%s.yaml_marked', name, file=e.path, problem=e.problem, problem_mark=e.problem_mark)
 	except Exception as e:
 		log.fatal('harness.load.%s.exception', name, exception=e)
 
@@ -40,13 +56,21 @@ class Graph:
 
 	@staticmethod
 	def from_file(path:str) -> Graph:
-		config = None
-		with open(path, 'r') as file:
-			config = from_yaml(GraphConfig, file.read())
-
-		# TODO: catch file/parsing exceptions
-
-		return Graph.from_config(config)
+		try:
+			config = load_config_file(GraphConfig, Path(path))
+			return Graph.from_config(config)
+		except ConfigLoadNotFoundError as e:
+			log.fatal('harness.config.not_found', file=e.path)
+		except ConfigLoadInvalidUnicodeError as e:
+			log.fatal('harness.config.invalid_unicode', file=e.path, reason=e.reason, invalid_slice=e.invalid_slice)
+		except ConfigLoadSerdeError as e:
+			log.fatal('harness.config.serde', file=e.path)
+		except ConfigLoadYAMLReaderError as e:
+			log.fatal('harness.config.yaml_read', file=e.path, error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason)
+		except ConfigLoadYAMLMarkedError as e:
+			log.fatal('harness.config.yaml_marked', file=e.path, problem=e.problem, problem_mark=e.problem_mark)
+		except Exception as e:
+			log.fatal('harness.config.exception', exception=e)
 
 	@staticmethod
 	def from_config(config:GraphConfig) -> Graph:

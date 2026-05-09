@@ -4,12 +4,61 @@ import inspect
 import os
 from pathlib import Path
 import re
-from serde import serde
+from serde import serde, SerdeError
 from serde.yaml import from_yaml
+from yaml.error import Mark, MarkedYAMLError
+from yaml.reader import ReaderError
+import structlog
 import sys
 
+log = structlog.get_logger()
 # Camel case to snake case
 CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
+
+@dataclass
+class ConfigLoadError(Exception):
+	path: str
+
+class ConfigLoadNotFoundError(ConfigLoadError):
+	pass
+
+@dataclass
+class ConfigLoadInvalidUnicodeError(ConfigLoadError):
+	reason: str
+	invalid_slice: list
+
+class ConfigLoadSerdeError(ConfigLoadError):
+	pass
+
+@dataclass
+class ConfigLoadYAMLReaderError(ConfigLoadError):
+	name: str | None
+	position: int
+	character: str
+	encoding: str
+	reason: str
+
+@dataclass
+class ConfigLoadYAMLMarkedError(ConfigLoadError):
+	problem: str
+	problem_mark: Mark
+
+# Helper to have a common place to catch/log config file errors
+def load_config_file(Config, path:Path):
+	try:
+		with open(path, 'r') as file:
+			config = from_yaml(Config, file.read())
+			return config
+	except OSError as e:
+		raise ConfigLoadNotFoundError(str(path))
+	except UnicodeDecodeError as e:
+		raise ConfigLoadInvalidUnicodeError(str(path), e.reason, e.object[e.start:e.end])
+	except SerdeError: # Empty
+		raise ConfigLoadSerdeError(str(path))
+	except MarkedYAMLError as e:
+		raise ConfigLoadYAMLMarkedError(str(path), e.problem, e.problem_mark)
+	except ReaderError as e:
+		raise ConfigLoadYAMLError.from_yaml_error(str(path), e.name, e.position, e.character, e.encoding, e.reason)
 
 # Define individual error types
 @dataclass
@@ -24,8 +73,16 @@ class LoadFileNotFoundError(LoadError):
 class LoadInvalidSpecError(LoadError):
 	pass
 
+@dataclass
+class LoadMalformedSpecError(LoadError):
+	exception: Exception
+
 class LoadSpecNoLoaderError(LoadError):
 	pass
+
+@dataclass
+class LoadModuleExecError(LoadError):
+	exception: Exception
 
 @dataclass
 class LoadDuplicateDefinitionError(LoadError):
@@ -72,14 +129,21 @@ def load_plugin(config:PluginFileConfig):
 	if spec is None:
 		raise LoadInvalidSpecError(plugin_name, config.file)
 
-	module = importlib.util.module_from_spec(spec)
+	try:
+		module = importlib.util.module_from_spec(spec)
+	except Exception as e:
+		raise LoadMalformedSpecError(plugin_name, config.file, e)
+
 	if spec.loader is None:
 		raise LoadSpecNoLoaderError(plugin_name, config.file)
 
 	# Add module to sys.modules so its source can be inspected later
 	sys.modules[plugin_name] = module
 	# Load module
-	spec.loader.exec_module(module)
+	try:
+		spec.loader.exec_module(module)
+	except Exception as e:
+		raise LoadModuleExecError(plugin_name, config.file, e)
 
 	# Available classes in file
 	available_mods = dict(inspect.getmembers(module, inspect.isclass))
@@ -97,14 +161,6 @@ def load_plugin(config:PluginFileConfig):
 
 	return res
 
-# Merges a into b, raising an error on duplicate keys
-def merge_dict(a:dict, b:dict):
-	for (key, val) in b.items():
-		if key in a:
-			raise ValueError(f"duplicate key {key}")
-		else:
-			a[key] = val
-
 def load_path(path:str) -> dict:
 	path = Path(path)
 	config = None
@@ -112,18 +168,20 @@ def load_path(path:str) -> dict:
 	if not path.exists():
 		raise LoadFileNotFoundError(None, path)
 
-	if os.path.isfile(path): # Load directly if path is a file and not a dir
-		files = [PluginFileConfig(None, path, None, None)]
-		config = PluginConfig(files)
-	elif os.path.isfile(path / "config.yaml"): # Check for a config.yaml in dir
-		with open(path / "config.yaml", 'r') as file:
-			config = from_yaml(PluginConfig, file.read())
+	try:
+		if os.path.isfile(path): # Load directly if path is a file and not a dir
+			files = [PluginFileConfig(None, path, None, None)]
+			config = PluginConfig(files)
+		elif os.path.isfile(path / "config.yaml"): # Check for a config.yaml in dir
+			config = load_config_file(PluginConfig, path / 'config.yaml') # Let exceptions bubble up
 			for file in config.files:
 				file.file = path / file.file # Make path relative to script
-	else:
-		# Recreate a dummy PluginFileConfig without any of the specifics
-		files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
-		config = PluginConfig(files)
+		else:
+			# Recreate a dummy PluginFileConfig without any of the specifics
+			files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
+			config = PluginConfig(files)
+	except OSError as e:
+		raise LoadNotFoundError(None, str(path))
 
 	# Load each file and then merge into a single map
 	res = {}

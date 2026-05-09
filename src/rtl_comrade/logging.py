@@ -3,9 +3,10 @@ import logging
 import structlog
 from structlog.stdlib import ProcessorFormatter, LoggerFactory, BoundLogger
 
-@dataclass
 class LoggingFatalHandler(logging.StreamHandler):
-	failure:bool = False
+	def __init__(self, stream=None):
+		super().__init__(stream)
+		self.failure = False
 
 	def emit(self, record:logging.LogRecord):
 		super().emit(record)
@@ -18,6 +19,7 @@ def initialise_logging(level:int = logging.INFO) -> LoggingFatalHandler:
 	preprocessors = [ structlog.stdlib.add_log_level, structlog.stdlib.add_logger_name ]
 
 	handler = LoggingFatalHandler()
+	handler.setLevel(level)
 	handler.setFormatter(ProcessorFormatter(processor=structlog.dev.ConsoleRenderer(), foreign_pre_chain=preprocessors))
 
 	root_logger = logging.getLogger()

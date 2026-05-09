@@ -3,7 +3,8 @@ from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
 from inspect import Parameter
-from serde import from_dict
+from serde import from_dict, SerdeError
+from serde.compat import UserError
 import structlog
 import typing
 
@@ -11,6 +12,8 @@ from .api import Payload, EndSentinel, ContractPort, NoDefaultError
 from .port import Port, InvalidEnqueuedError
 from .structure import ModuleStructure
 from .structure import StructureInvalidTupleError, StructureNonStrPortNameError
+from .structure import StructureSourceNotFoundError, StructureUnloadableSourceError, StructureWrappedCycleError
+from .structure import StructureParseSyntaxError, StructureParseTypeError, StructureParseResourceLimitError
 
 log = structlog.get_logger()
 
@@ -32,7 +35,12 @@ class ModuleWrapper:
 		module_init_args = {}
 		if 'config' in module_init_sig.parameters:
 			if hasattr(Module, 'Config'):
-				config = from_dict(Module.Config, config)
+				try:
+					config = from_dict(Module.Config, config)
+				except SerdeError as e:
+					log.fatal('harness.node.module.config_deserialise', node=self.id, module=Module.__name__)
+				except UserError as e:
+					log.fatal('harness.node.module.config_deserialise_user', node=self.id, module=Module.__name__)
 			else:
 				log.warn('harness.node.module.config_mismatch', node=self.id, module=Module.__name__)
 
@@ -50,6 +58,18 @@ class ModuleWrapper:
 			log.fatal('harness.node.module.emits.invalid_tuple', node=self.id, module=Module.__name__, tuple_=e.tuple_)
 		except StructureNonStrPortNameError as e:
 			log.fatal('harness.node.module.emits.invalid_port_name', node=self.id, module=Module.__name__, port=e.port_name)
+		except StructureSourceNotFoundError as e:
+			log.fatal('harness.node.module.source.not_found', node=self.id, module=e.name)
+		except StructureUnloadableSourceError as e:
+			log.fatal('harness.node.module.source.unloadable', node=self.id, module=e.name)
+		except StructureWrappedCycleError as e:
+			log.fatal('harness.node.module.source.wrapped_cycle', node=self.id, module=e.name)
+		except StructureParseSyntaxError as e:
+			log.fatal('harness.node.module.source.parse.syntax_error', node=self.id, module=e.name)
+		except StructureParseTypeError as e:
+			log.fatal('harness.node.module.source.parse.type_error', node=self.id, module=e.name)
+		except StructureParseResourceLimitError as e:
+			log.fatal('harness.node.module.source.parse.resource_limit_reached', node=self.id, module=e.name)
 
 		self.ports = OrderedDict({ arg.name: Port.from_structure(arg) for arg in self.structure.args })
 
@@ -59,7 +79,12 @@ class ModuleWrapper:
 
 		if 'config' in contract_init_sig.parameters:
 			if hasattr(Contract, 'Config'):
-				contract_config = from_dict(Contract.Config, contract_config)
+				try:
+					contract_config = from_dict(Contract.Config, contract_config)
+				except SerdeError as e:
+					log.fatal('harness.node.contract.config_deserialise', node=self.id, contract=Contract.__name__)
+				except UserError as e:
+					log.fatal('harness.node.contract.config_deserialise_user', node=self.id, contract=Contract.__name__)
 			else:
 				log.warn('harness.node.contract.config_mismatch', node=self.id, contract=Contract.__name__)
 
@@ -142,7 +167,7 @@ class ModuleWrapper:
 				else:
 					inputs = self.contract.get_inputs()
 			except InvalidEnqueuedError as e:
-				log.fatal('harness.node.contract.invalid_enqueued', node=self.id, contract=type(self.contract).__name__, port=e.name, type_=e.type_)
+				log.fatal('harness.node.port.invalid_enqueued', node=self.id, contract=type(self.contract).__name__, port=e.name, type_=e.type_)
 			except Exception as e:
 				log.fatal('harness.node.contract.exception', node=self.id, contract=type(self.contract).__name__, exception=e)
 
