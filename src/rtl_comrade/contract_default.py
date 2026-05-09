@@ -12,7 +12,11 @@ log = structlog.get_logger()
 
 # A special port is either default or a persistent port not on its first run.
 def is_special(port):
-	"""Return whether a port is satisfied without blocking on a fresh input.
+	"""Return whether a port is eligible to be satisfied without blocking.
+
+	A port is special when it has a default value, or when it is persistent and
+	already has a cached last value. Special ports may still consume a queued
+	real payload via try_get() before falling back to cached/default behavior.
 
 	Args:
 		port: Contract-owned port object carrying default/persistent state.
@@ -74,6 +78,13 @@ class DefaultContract:
 
 	async def get_inputs(self) -> dict[str, Payload]|EndSentinel:
 		"""Assemble the next module invocation according to default-contract rules.
+
+		Precedence is:
+		1. required non-special inputs, including persistent inputs on first run
+		2. queued updates for special inputs via non-blocking reads
+		3. cached persistent values
+		4. default-derived persistent values
+		5. ordinary default-derived values
 
 		Returns:
 			A mapping from input-port name to Payload for the next invocation, or an
