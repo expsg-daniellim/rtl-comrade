@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 import logging
 import structlog
+from structlog.contextvars import merge_contextvars
 from structlog.stdlib import ProcessorFormatter, LoggerFactory, BoundLogger
 
 class LoggingFatalHandler(logging.StreamHandler):
@@ -27,5 +28,5 @@ def initialise_logging(level:int = logging.INFO) -> LoggingFatalHandler:
 	root_logger.addHandler(handler)
 	root_logger.setLevel(level)
 
-	structlog.configure(processors=[*preprocessors, ProcessorFormatter.wrap_for_formatter], logger_factory=LoggerFactory(), wrapper_class=BoundLogger, cache_logger_on_first_use=True)
+	structlog.configure(processors=[*preprocessors, merge_contextvars, ProcessorFormatter.wrap_for_formatter], logger_factory=LoggerFactory(), wrapper_class=BoundLogger, cache_logger_on_first_use=True)
 	return handler

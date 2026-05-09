@@ -9,39 +9,13 @@ from serde.yaml import from_yaml
 from yaml.error import Mark, MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 import sys
 
 log = structlog.get_logger()
+
 # Camel case to snake case
 CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
-
-@dataclass
-class ConfigLoadError(Exception):
-	path: str
-
-class ConfigLoadNotFoundError(ConfigLoadError):
-	pass
-
-@dataclass
-class ConfigLoadInvalidUnicodeError(ConfigLoadError):
-	reason: str
-	invalid_slice: list
-
-class ConfigLoadSerdeError(ConfigLoadError):
-	pass
-
-@dataclass
-class ConfigLoadYAMLReaderError(ConfigLoadError):
-	name: str | None
-	position: int
-	character: str
-	encoding: str
-	reason: str
-
-@dataclass
-class ConfigLoadYAMLMarkedError(ConfigLoadError):
-	problem: str
-	problem_mark: Mark
 
 # Helper to have a common place to catch/log config file errors
 def load_config_file(Config, path:Path):
@@ -49,49 +23,22 @@ def load_config_file(Config, path:Path):
 		with open(path, 'r') as file:
 			config = from_yaml(Config, file.read())
 			return config
-	except OSError as e:
-		raise ConfigLoadNotFoundError(str(path))
 	except UnicodeDecodeError as e:
-		raise ConfigLoadInvalidUnicodeError(str(path), e.reason, e.object[e.start:e.end])
-	except SerdeError: # Empty
-		raise ConfigLoadSerdeError(str(path))
+		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
+	except FileNotFoundError as e:
+		log.fatal('not_found')
+	except IsADirectoryError as e:
+		log.fatal('is_directory')
+	except PermissionError as e:
+		log.fatal('permission_denied')
+	except OSError as e:
+		log.fatal('os_error', errno=e.errno)
+	except SerdeError as e:
+		log.fatal('serde_error', message=str(e))
 	except MarkedYAMLError as e:
-		raise ConfigLoadYAMLMarkedError(str(path), e.problem, e.problem_mark)
+		log.fatal('yaml.marked', problem=e.problem, problem_mark=e.problem_mark)
 	except ReaderError as e:
-		raise ConfigLoadYAMLError.from_yaml_error(str(path), e.name, e.position, e.character, e.encoding, e.reason)
-
-# Define individual error types
-@dataclass
-class LoadError(Exception):
-	plugin: str|None
-	file: str
-
-@dataclass
-class LoadFileNotFoundError(LoadError):
-	pass
-
-class LoadInvalidSpecError(LoadError):
-	pass
-
-@dataclass
-class LoadMalformedSpecError(LoadError):
-	exception: Exception
-
-class LoadSpecNoLoaderError(LoadError):
-	pass
-
-@dataclass
-class LoadModuleExecError(LoadError):
-	exception: Exception
-
-@dataclass
-class LoadDuplicateDefinitionError(LoadError):
-	key: str
-
-@dataclass
-class LoadMissingClassError(LoadError):
-	module_name: str
-	class_name: str
+		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason)
 
 # Config file types
 @serde
@@ -120,30 +67,51 @@ def load_plugin(config:PluginFileConfig):
 	# Name plugin file based on file path without extension
 	plugin_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
 
+	# Bind some logging context
+	bind_contextvars(plugin=plugin_name, file=config.file)
+
 	# Validate plugin file existence
 	if not config.file.is_file():
-		raise LoadFileNotFoundError(plugin_name, config.file)
+		log.fatal('not_found')
 
 	# Do dynamic import of plugin file
 	spec = importlib.util.spec_from_file_location(plugin_name, config.file)
 	if spec is None:
-		raise LoadInvalidSpecError(plugin_name, config.file)
-
-	try:
-		module = importlib.util.module_from_spec(spec)
-	except Exception as e:
-		raise LoadMalformedSpecError(plugin_name, config.file, e)
-
+		log.fatal('spec.invalid')
+	
 	if spec.loader is None:
-		raise LoadSpecNoLoaderError(plugin_name, config.file)
+		log.fatal('spec.no_loader')
+
+	# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
+	module = importlib.util.module_from_spec(spec)
 
 	# Add module to sys.modules so its source can be inspected later
 	sys.modules[plugin_name] = module
 	# Load module
 	try:
 		spec.loader.exec_module(module)
+	except UnicodeDecodeError as e:
+		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
+	except FileNotFoundError as e:
+		log.fatal('not_found')
+	except IsADirectoryError as e:
+		log.fatal('is_directory')
+	except PermissionError as e:
+		log.fatal('permission_denied')
+	except OSError as e:
+		log.fatal('os_error', errno=e.errno)
+	except SyntaxError as e:
+		log.fatal('syntax_error', **e)
+	except ValueError as e:
+		log.fatal('value_error', message=str(e))
+	except TypeError as e:
+		log.fatal('type_error', message=str(e))
+	except ModuleNotFoundError as e:
+		log.fatal('module_not_found')
+	except ImportError as e:
+		log.fatal('import_error', module_name=e.name, module_path=e.path)
 	except Exception as e:
-		raise LoadModuleExecError(plugin_name, config.file, e)
+		log.fatal('exception', exc_info=e)
 
 	# Available classes in file
 	available_mods = dict(inspect.getmembers(module, inspect.isclass))
@@ -154,11 +122,12 @@ def load_plugin(config:PluginFileConfig):
 		if mod.class_name in available_mods:
 			# Don't silently overwrite available mappings
 			if mod.name in res:
-				raise LoadDuplicateDefinitionError(plugin_name, config.file, mod.name)
+				log.fatal('duplicate_key', key=mod.name)
 			res[mod.name] = available_mods[mod.class_name]
 		else:
-			raise LoadMissingClassError(plugin_name, config.file, mod.name, mod.class_name)
+			log.fatal('missing_class', module=mod.name, class_name=mod.class_name)
 
+	unbind_contextvars('plugin', 'file')
 	return res
 
 def load_path(path:str) -> dict:
@@ -166,7 +135,7 @@ def load_path(path:str) -> dict:
 	config = None
 
 	if not path.exists():
-		raise LoadFileNotFoundError(None, path)
+		log.fatal('not_found', file=str(path))
 
 	try:
 		if os.path.isfile(path): # Load directly if path is a file and not a dir
@@ -180,8 +149,16 @@ def load_path(path:str) -> dict:
 			# Recreate a dummy PluginFileConfig without any of the specifics
 			files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
 			config = PluginConfig(files)
+	except UnicodeDecodeError as e:
+		log.fatal('invalid_unicode', file=str(path), reason=e.reason, invalid_slice=e.object[e.start:e.end])
+	except FileNotFoundError as e:
+		log.fatal('not_found', file=str(path))
+	except IsADirectoryError as e:
+		log.fatal('is_directory', file=str(path))
+	except PermissionError as e:
+		log.fatal('permission_denied', file=str(path))
 	except OSError as e:
-		raise LoadNotFoundError(None, str(path))
+		log.fatal('os_error', file=str(path), errno=e.errno)
 
 	# Load each file and then merge into a single map
 	res = {}
@@ -189,7 +166,7 @@ def load_path(path:str) -> dict:
 		file_plugins = load_plugin(file_config)
 		for (name, plugin) in file_plugins.items():
 			if name in res:
-				raise LoadDuplicateDefinitionError(str(path), file_config.file, name)
+				log.fatal('duplicate_definition', file=file_config.file, key=name)
 			else:
 				res[name] = plugin
 
@@ -201,7 +178,7 @@ def load_paths(paths:list[str]) -> dict:
 		file_plugins = load_path(path)
 		for (name, plugin) in file_plugins.items():
 			if name in res:
-				raise LoadDuplicateDefinitionError(None, path, name)
+				log.fatal('duplicate_definition', file=path, key=name)
 			else:
 				res[name] = plugin
 

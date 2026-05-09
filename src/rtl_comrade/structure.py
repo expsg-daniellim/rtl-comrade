@@ -3,8 +3,11 @@ from collections import deque
 from dataclasses import dataclass
 import inspect
 from inspect import Parameter
+import structlog
 import textwrap
 import typing
+
+log = structlog.get_logger()
 
 # BFS of the AST filtering out nested function nodes
 def walk_ast(node):
@@ -31,30 +34,6 @@ class StructureNonStrPortNameError(Exception):
 	port_name: typing.Any
 
 @dataclass(frozen=True, slots=True)
-class StructureSourceNotFoundError(Exception):
-	name: str
-
-@dataclass(frozen=True, slots=True)
-class StructureUnloadableSourceError(Exception):
-	name: str
-
-@dataclass(frozen=True, slots=True)
-class StructureWrappedCycleError(Exception):
-	name: str
-
-@dataclass(frozen=True, slots=True)
-class StructureParseSyntaxError(Exception):
-	name: str
-
-@dataclass(frozen=True, slots=True)
-class StructureParseTypeError(Exception):
-	name: str
-
-@dataclass(frozen=True, slots=True)
-class StructureParseResourceLimitError(Exception):
-	name: str
-
-@dataclass(frozen=True, slots=True)
 class ModuleStructureArg:
 	name: str
 	type_: str | None = None
@@ -78,20 +57,24 @@ class ModuleStructure:
 		try:
 			src = textwrap.dedent(inspect.getsource(Module.run))
 		except OSError as e:
-			raise StructureSourceNotFoundError(Module.__name__)
+			log.fatal('file_unavailable', errno=e.errno) 
 		except TypeError as e:
-			raise StructureUnloadableSourceError(Module.__name__)
+			log.fatal('unloadable', message=str(e))
 		except ValueError as e:
-			raise StructureWrappedCycleError(Module.__name__)
+			log.fatal('wrapped_cycle')
 
 		try:
 			ast_tree = ast.parse(src)
-		except (SyntaxError, ValueError) as e:
-			raise StructureParseSyntaxError(Module.__name__)
+		except SyntaxError as e:
+			log.fatal('syntax_error', **e)
+		except ValueError as e:
+			log.fatal('value_error', message=str(e))
 		except TypeError as e:
-			raise StructureParseTypeError(Module__name__)
-		except (MemoryError, RecursionError) as e:
-			raise StructureParseResourceLimitError(Module.__name__)
+			log.fatal('type_error', message=str(e))
+		except MemoryError as e:
+			log.fatal('memory_error', message=str(e))
+		except RecursionError as e:
+			log.fatal('recursion_err', message=str(e))
 
 		# Populate emits by walking through source code and inferring likely behaviour from yields/returns
 		self.emits = []
