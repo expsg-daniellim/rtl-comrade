@@ -50,7 +50,11 @@ class ModuleStructure:
 		# Assume that Module has been pre-validated to have run
 
 		# Populate args from the function signature
-		sig = inspect.signature(Module.run)
+		try:
+			sig = inspect.signature(Module.run)
+		except (TypeError, ValueError) as e:
+			log.fatal('unavailable_signature', exc_info=e)
+
 		self.args = [ ModuleStructureArg(name=name, type_=str(param.annotation) if param.annotation != Parameter.empty else None, has_default=param.default != Parameter.empty, default=param.default if param.default != Parameter.empty else None) for (name, param) in sig.parameters.items() if name != 'self' ]
 
 		# Parse AST in steps to catch individual Exceptions from each step
@@ -66,7 +70,7 @@ class ModuleStructure:
 		try:
 			ast_tree = ast.parse(src)
 		except SyntaxError as e:
-			log.fatal('syntax_error', filename=e.filename, lineno=e.errno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
+			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
 		except ValueError as e:
 			log.fatal('value_error', message=str(e))
 		except TypeError as e:

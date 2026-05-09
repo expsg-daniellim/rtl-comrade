@@ -47,9 +47,17 @@ class DefaultContract:
 			inputs[name] = val
 
 		# Evaluate end sentinels of required ports first
-		if any(isinstance(i, EndSentinel) for i in inputs.values()):
-			if not all(isinstance(i, EndSentinel) for i in inputs.values()):
-				log.error('mismatched_end')
+		has_end_sentinels = []
+		has_data = []
+		for (name, i) in inputs.items():
+			if isinstance(i, EndSentinel):
+				has_end_sentinels.append(name)
+			else:
+				has_data.append(name)
+
+		if len(has_end_sentinels) > 0:
+			if len(has_data) > 0:
+				log.error('mismatched_end', has_data=has_data, has_end_sentinels=has_end_sentinels)
 			return EndSentinel(self.id)
 
 		# Get special inputs
@@ -69,16 +77,16 @@ class DefaultContract:
 						port.last_value = default
 						special_inputs[name] = default
 					except NoDefaultError as e:
-						log.fatal('%s.invalid_default_access', port=e.name)
+						log.fatal('invalid_default_access', port=e.name)
 				else:
-					log.fatal('%s.no_last_value', self.id, port=name)
+					log.fatal('no_last_value', port=name)
 			elif port.has_default and not port.has_ended():
 				try:
 					special_inputs[name] = port.get_default_payload()
 				except NoDefaultError as e:
-					log.fatal('%s.invalid_default_access', port=e.name)
+					log.fatal('invalid_default_access', port=e.name)
 			else:
-				log.fatal('%s.unsupported_case', self.id)
+				log.fatal('unsupported_case')
 		# Special inputs should never have an EndSentinel, so no checking is done
 
 		return inputs | special_inputs

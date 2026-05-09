@@ -30,7 +30,11 @@ class ModuleWrapper:
 			contract_config = {}
 
 		# Initialise Module (with config/id if available/supported)
-		module_init_sig = inspect.signature(Module.__init__)
+		try:
+			module_init_sig = inspect.signature(Module.__init__)
+		except (TypeError, ValueError) as e:
+			log.fatal('unavailable_signature', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
+
 		module_init_args = {}
 		if 'config' in module_init_sig.parameters:
 			if hasattr(Module, 'Config'):
@@ -58,10 +62,8 @@ class ModuleWrapper:
 		try:
 			self.structure = ModuleStructure(Module)
 		except StructureInvalidTupleError as e:
-			unbind_contextvars('context')
 			log.fatal('invalid_tuple', context='harness.node.module.emits', tuple_=e.tuple_)
 		except StructureNonStrPortNameError as e:
-			unbind_contextvars('context')
 			log.fatal('invalid_port_name', context='harness.node.module.emits', port=e.port_name)
 		finally:
 			unbind_contextvars('context', 'node', 'module')
@@ -69,7 +71,11 @@ class ModuleWrapper:
 		self.ports = OrderedDict({ arg.name: Port.from_structure(arg) for arg in self.structure.args })
 
 		# Initialise Contract with available init params
-		contract_init_sig = inspect.signature(Contract.__init__)
+		try:
+			contract_init_sig = inspect.signature(Contract.__init__)
+		except (TypeError, ValueError) as e:
+			log.fatal('unavailable_signature', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
+
 		contract_init_args = {}
 
 		if 'config' in contract_init_sig.parameters:

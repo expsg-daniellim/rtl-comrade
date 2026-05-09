@@ -69,65 +69,66 @@ def load_plugin(config:PluginFileConfig):
 
 	# Bind some logging context
 	bind_contextvars(plugin=plugin_name, file=config.file)
-
-	# Validate plugin file existence
-	if not config.file.is_file():
-		log.fatal('not_found')
-
-	# Do dynamic import of plugin file
-	spec = importlib.util.spec_from_file_location(plugin_name, config.file)
-	if spec is None:
-		log.fatal('spec.invalid')
-	
-	if spec.loader is None:
-		log.fatal('spec.no_loader')
-
-	# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
-	module = importlib.util.module_from_spec(spec)
-
-	# Add module to sys.modules so its source can be inspected later
-	sys.modules[plugin_name] = module
-	# Load module
 	try:
-		spec.loader.exec_module(module)
-	except UnicodeDecodeError as e:
-		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
-	except FileNotFoundError as e:
-		log.fatal('not_found')
-	except IsADirectoryError as e:
-		log.fatal('is_directory')
-	except PermissionError as e:
-		log.fatal('permission_denied')
-	except OSError as e:
-		log.fatal('os_error', errno=e.errno)
-	except SyntaxError as e:
-		log.fatal('syntax_error', filename=e.filename, lineno=e.errno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
-	except ValueError as e:
-		log.fatal('value_error', message=str(e))
-	except TypeError as e:
-		log.fatal('type_error', message=str(e))
-	except ModuleNotFoundError as e:
-		log.fatal('module_not_found')
-	except ImportError as e:
-		log.fatal('import_error', module_name=e.name, module_path=e.path)
-	except Exception as e:
-		log.fatal('exception', exc_info=e)
+		# Validate plugin file existence
+		if not config.file.is_file():
+			log.fatal('not_found')
 
-	# Available classes in file
-	available_mods = dict(inspect.getmembers(module, inspect.isclass))
-	# Assume all classes are intended to be loaded in absence of config file
-	to_get = [ PluginModuleConfig.from_class_name(class_name) for class_name in available_mods ] if config.plugins is None else config.plugins
-	res = {}
-	for mod in to_get:
-		if mod.class_name in available_mods:
-			# Don't silently overwrite available mappings
-			if mod.name in res:
-				log.fatal('duplicate_key', key=mod.name)
-			res[mod.name] = available_mods[mod.class_name]
-		else:
-			log.fatal('missing_class', module=mod.name, class_name=mod.class_name)
+		# Do dynamic import of plugin file
+		spec = importlib.util.spec_from_file_location(plugin_name, config.file)
+		if spec is None:
+			log.fatal('spec.invalid')
+		
+		if spec.loader is None:
+			log.fatal('spec.no_loader')
 
-	unbind_contextvars('plugin', 'file')
+		# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
+		module = importlib.util.module_from_spec(spec)
+
+		# Add module to sys.modules so its source can be inspected later
+		sys.modules[plugin_name] = module
+		# Load module
+		try:
+			spec.loader.exec_module(module)
+		except UnicodeDecodeError as e:
+			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
+		except FileNotFoundError as e:
+			log.fatal('not_found')
+		except IsADirectoryError as e:
+			log.fatal('is_directory')
+		except PermissionError as e:
+			log.fatal('permission_denied')
+		except OSError as e:
+			log.fatal('os_error', errno=e.errno)
+		except SyntaxError as e:
+			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
+		except ValueError as e:
+			log.fatal('value_error', message=str(e))
+		except TypeError as e:
+			log.fatal('type_error', message=str(e))
+		except ModuleNotFoundError as e:
+			log.fatal('module_not_found')
+		except ImportError as e:
+			log.fatal('import_error', module_name=e.name, module_path=e.path)
+		except Exception as e:
+			log.fatal('exception', exc_info=e)
+
+		# Available classes in file
+		available_mods = dict(inspect.getmembers(module, inspect.isclass))
+		# Assume all classes are intended to be loaded in absence of config file
+		to_get = [ PluginModuleConfig.from_class_name(class_name) for class_name in available_mods ] if config.plugins is None else config.plugins
+		res = {}
+		for mod in to_get:
+			if mod.class_name in available_mods:
+				# Don't silently overwrite available mappings
+				if mod.name in res:
+					log.fatal('duplicate_key', key=mod.name)
+				res[mod.name] = available_mods[mod.class_name]
+			else:
+				log.fatal('missing_class', module=mod.name, class_name=mod.class_name)
+	finally:
+		unbind_contextvars('plugin', 'file')
+
 	return res
 
 def load_path(path:str) -> dict:
