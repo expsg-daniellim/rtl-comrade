@@ -1,3 +1,7 @@
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+	from .graph import Graph
+
 from dataclasses import dataclass, field
 
 from .config import GraphConfig
@@ -44,7 +48,7 @@ class StaticDeadlockValidationResults:
 	def has_error(self) -> bool:
 		return (len(self.edgeless_inputs) > 0) or (not self.has_source_capable) or (len(self.non_reachable_nodes) > 0)
 
-def validate_no_static_deadlock(graph) -> StaticDeadlockValidationResults:
+def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 	# Build incoming-port and adjacency maps once.
 	incoming = {node_id: set() for node_id in graph.nodes}
 	adjacency = {node_id: [] for node_id in graph.nodes}
