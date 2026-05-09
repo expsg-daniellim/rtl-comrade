@@ -1,0 +1,42 @@
+contracts:
+- "contracts"
+modules:
+- "modules"
+nodes:
+- id: file-1
+  module: fileread
+  config:
+    file: "file1.txt"
+- id: file-2
+  module: fileread
+  config:
+    file: "file2.txt"
+- id: config
+  module: fileread
+  config:
+    file: "config.txt"
+- id: alu
+  module: alu
+  contract_config:
+    persistent_inputs: [ "op" ]
+- id: output
+  module: stdout
+edges:
+- src:
+    node: file-1
+  dst:
+    node: alu
+- src:
+    node: file-2
+  dst:
+    node: alu
+    port: 2
+- src:
+    node: config
+  dst:
+    node: alu
+    port: 3
+- src:
+    node: alu
+  dst:
+    node: output
