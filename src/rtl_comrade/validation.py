@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 
 from .config import GraphConfig
-from .module import ModuleWrapper
+from .node import Node
 
 # Validators written by ChatGPT because I got lazy
 

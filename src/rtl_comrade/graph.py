@@ -10,14 +10,14 @@ from structlog.contextvars import clear_contextvars, bind_contextvars, unbind_co
 from .config import GraphConfig
 from .contract_default import DefaultContract
 from .loader import load_paths, load_config_file
-from .module import Connection, ModuleWrapper
+from .node import Connection, Node
 from .validation import validate_acyclic, validate_no_static_deadlock
 
 log = structlog.get_logger()
 
 @dataclass
 class Graph:
-	nodes: dict[str, ModuleWrapper]
+	nodes: dict[str, Node]
 
 	def __init__(self):
 		self.nodes = {}
@@ -78,7 +78,7 @@ class Graph:
 
 				if not has_error:
 					contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-					graph.nodes[node.id] = ModuleWrapper(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config)
+					graph.nodes[node.id] = Node(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config)
 				else:
 					errors = True
 

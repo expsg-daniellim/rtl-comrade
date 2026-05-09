@@ -19,10 +19,10 @@ log = structlog.get_logger()
 @dataclass(frozen=True, slots=True)
 class Connection:
 	self_port: str
-	other_node: ModuleWrapper
+	other_node: Node
 	other_port: str
 
-class ModuleWrapper:
+class Node:
 	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None):
 		self.id = id
 
