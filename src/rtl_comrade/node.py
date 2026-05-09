@@ -1,3 +1,5 @@
+"""Runtime node execution, contract invocation, and downstream dispatch."""
+
 from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
@@ -18,12 +20,35 @@ log = structlog.get_logger()
 
 @dataclass(frozen=True, slots=True)
 class Connection:
+	"""One outgoing connection from a source output port to a destination input.
+
+	Attributes:
+		self_port: The source output port name on the emitting node.
+		other_node: The downstream destination node instance.
+		other_port: The destination input port name on the downstream node.
+	"""
+
 	self_port: str
 	other_node: Node
 	other_port: str
 
 class Node:
+	"""A live runtime node binding together a module, contract, and input ports."""
+
 	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None):
+		"""Instantiate one runtime node from module and contract classes.
+
+		Args:
+			id: Runtime node id from graph configuration.
+			Module: Module plugin class to instantiate for this node.
+			config: Module-specific configuration dictionary.
+			Contract: Contract plugin class controlling this node's scheduling.
+			contract_config: Optional contract-specific configuration dictionary.
+
+		Returns:
+			None.
+		"""
+
 		self.id = id
 
 		if contract_config is None:
@@ -110,9 +135,27 @@ class Node:
 		self.dst_counts = {}
 
 	def set_dsts(self, dsts:list[Connection]):
+		"""Assign this node's validated downstream connections.
+
+		Args:
+			dsts: Validated outgoing connections from this node.
+
+		Returns:
+			None.
+		"""
+
 		self.dsts = dsts
 
 	def get_canonical_port(self, port:int|str) -> str|None:
+		"""Resolve a destination port reference to its canonical string name.
+
+		Args:
+			port: Destination port addressed by name or 1-based position.
+
+		Returns:
+			The canonical destination input-port name, or ``None`` if invalid.
+		"""
+
 		if type(port) is str and port in self.ports.keys():
 			return port
 		elif type(port) is int and port - 1 < len(self.ports) and port - 1 >= 0:
@@ -121,6 +164,16 @@ class Node:
 			return None
 
 	async def accept(self, val:Payload|EndSentinel, port:str):
+		"""Enqueue an inbound runtime message onto one input port.
+
+		Args:
+			val: Incoming runtime message for this node.
+			port: Canonical destination input-port name.
+
+		Returns:
+			None.
+		"""
+
 		if port not in self.ports:
 			log.error('no_port', context='harness.module.accept', node=self.id, port=port)
 			return
@@ -128,6 +181,15 @@ class Node:
 		await self.ports[port].queue.put(val)
 
 	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
+		"""Normalize one module output and forward it to matching downstream edges.
+
+		Args:
+			res: One module return or yielded value in any supported output form.
+
+		Returns:
+			None.
+		"""
+
 		port, value = None, None
 
 		# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>)
@@ -162,6 +224,12 @@ class Node:
 			await dst.other_node.accept(val=payload, port=dst.other_port)
 
 	async def run(self):
+		"""Execute this node until its contract indicates termination.
+
+		Returns:
+			None.
+		"""
+
 		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
 		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
 			# Get inputs according to contract

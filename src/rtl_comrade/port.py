@@ -1,3 +1,5 @@
+"""Queue-backed input ports used by runtime nodes and contracts."""
+
 from __future__ import annotations # Obsolete after 3.14
 import asyncio
 from asyncio import Queue
@@ -9,14 +11,31 @@ from .structure import ModuleStructureArg
 
 T = TypeVar('T')
 
-# Error when item in queue is not a Payload or EndSentinel
+# Error when an item in the queue is not a Payload or EndSentinel.
 @dataclass(frozen=True, slots=True)
 class InvalidEnqueuedError(Exception):
+	"""Raised when a port queue contains an unsupported runtime message type.
+
+	Attributes:
+		name: The affected port name.
+		type_: The unexpected type name encountered in the queue.
+	"""
+
 	name: str
 	type_ : str
 
 @dataclass
 class Port(Generic[T]):
+	"""One queue-backed runtime input port owned by a node.
+
+	Attributes:
+		name: Canonical input-port name.
+		queue: Async queue carrying Payload and EndSentinel messages.
+		has_default: Whether this port can synthesize a value from a Python default.
+		default: Raw Python default value for this input, if any.
+		ended: Whether this port has already observed an EndSentinel.
+	"""
+
 	name: str
 	queue: Queue[Payload[T]|EndSentinel] = field(default_factory=Queue)
 	has_default: bool = False
@@ -25,9 +44,24 @@ class Port(Generic[T]):
 
 	@staticmethod
 	def from_structure(arg:ModuleStructureArg) -> Port:
+		"""Construct a Port from one inferred module input argument.
+
+		Args:
+			arg: Inferred module input argument metadata.
+
+		Returns:
+			A Port initialized from that argument description.
+		"""
+
 		return Port(name=arg.name, has_default=arg.has_default, default=arg.default)
 
 	async def get(self) -> Payload[T]|EndSentinel:
+		"""Wait for and return the next runtime message for this port.
+
+		Returns:
+			The next Payload or EndSentinel queued for this port.
+		"""
+
 		val =  await self.queue.get()
 		if not (isinstance(val, Payload) or isinstance(val, EndSentinel)):
 			raise InvalidEnqueuedError(self.name, type(val).__name__)
@@ -38,6 +72,12 @@ class Port(Generic[T]):
 		return val
 
 	def try_get(self) -> Payload[T]|EndSentinel|None:
+		"""Attempt a non-blocking read of the next runtime message for this port.
+
+		Returns:
+			The next queued Payload or EndSentinel, or ``None`` if the queue is empty.
+		"""
+
 		val = None
 		try:
 			if not self.ended:
@@ -54,4 +94,10 @@ class Port(Generic[T]):
 		return val
 
 	def has_ended(self) -> bool:
+		"""Return whether this port has already seen an EndSentinel.
+
+		Returns:
+			``True`` if this port has ended, otherwise ``False``.
+		"""
+
 		return self.ended

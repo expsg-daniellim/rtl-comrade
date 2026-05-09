@@ -1,3 +1,5 @@
+"""Current CLI entrypoint for running a graph from the command line."""
+
 import asyncio
 import logging
 import sys
@@ -5,12 +7,17 @@ import sys
 from .graph import Graph
 from .logging import initialise_logging
 
-# TODO: pydoc strings (for the benefit of ChatGPT)
 # TODO: pydantic
 # TODO: test multi-outputs
 # TODO: debug logging
 
 def main() -> int:
+	"""Run the configured graph and return a process exit code.
+
+	Returns:
+		``0`` if no error-level logs were emitted during the run, otherwise ``1``.
+	"""
+
 	# TODO: read log level from env/cli arg
 	handler = initialise_logging(logging.INFO)
 

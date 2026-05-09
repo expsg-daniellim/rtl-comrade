@@ -1,3 +1,5 @@
+"""Static graph validation helpers used before runtime execution begins."""
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
 	from .graph import Graph
@@ -7,10 +9,19 @@ from dataclasses import dataclass, field
 from .config import GraphConfig
 from .node import Node
 
-# Validators written by ChatGPT because I got lazy
-
-# Solely for the purpose of verifying graph acyclicity - ignores other graph invalidities such as dangling edges
+# Solely for the purpose of verifying graph acyclicity - ignores other graph
+# invalidities such as dangling edges.
 def validate_acyclic(config:GraphConfig) -> list[str|None]:
+	"""Check whether the configured graph contains a cycle.
+
+	Args:
+		config: Parsed graph configuration to validate.
+
+		Returns:
+			A list of node names participating in detected cycles, or ``None`` entries
+			for traversal roots that did not reveal cyclicity.
+	"""
+
 	# DFS-colours algorithm
 	adjacency = { node.id: [] for node in config.nodes }
 
@@ -38,17 +49,39 @@ def validate_acyclic(config:GraphConfig) -> list[str|None]:
 
 	return [visit(node) for node in adjacency]
 
-# Holder class to return validation results
 @dataclass(slots=True)
 class StaticDeadlockValidationResults:
+	"""Results from the conservative static deadlock screening pass.
+
+	Attributes:
+		edgeless_inputs: Nodes with first-run-required inputs lacking incoming edges.
+		has_source_capable: Whether at least one node can run without upstream input.
+		non_reachable_nodes: Nodes unreachable from any source-capable node.
+	"""
+
 	edgeless_inputs: list[str] = field(default_factory=list)
 	has_source_capable: bool = True # Condition 2
 	non_reachable_nodes: list[str] = field(default_factory=list)	# Condition 3
 
 	def has_error(self) -> bool:
+		"""Return whether any static deadlock condition was detected.
+
+		Returns:
+			``True`` if any deadlock-prone condition was found, otherwise ``False``.
+		"""
+
 		return (len(self.edgeless_inputs) > 0) or (not self.has_source_capable) or (len(self.non_reachable_nodes) > 0)
 
 def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
+	"""Perform conservative first-run deadlock screening on a constructed graph.
+
+	Args:
+		graph: Constructed runtime graph with nodes and validated edges.
+
+		Returns:
+			Structured results describing detected deadlock-prone conditions.
+	"""
+
 	# Build incoming-port and adjacency maps once.
 	incoming = {node_id: set() for node_id in graph.nodes}
 	adjacency = {node_id: [] for node_id in graph.nodes}

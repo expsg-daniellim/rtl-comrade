@@ -1,3 +1,5 @@
+"""Graph-config loading plus plugin discovery and dynamic import."""
+
 from dataclasses import dataclass
 import importlib.util
 import inspect
@@ -14,11 +16,21 @@ import sys
 
 log = structlog.get_logger()
 
-# Camel case to snake case
+# Camel case to snake case.
 CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
-# Helper to have a common place to catch/log config file errors
+# Helper to have a common place to catch/log config file errors.
 def load_config_file(Config, path:Path):
+	"""Load one YAML config file into a serde-backed type.
+
+	Args:
+		Config: Target serde type to deserialize into.
+		path: Filesystem path to the YAML file.
+
+		Returns:
+			The deserialized config object.
+	"""
+
 	try:
 		with open(path, 'r') as file:
 			config = from_yaml(Config, file.read())
@@ -40,19 +52,43 @@ def load_config_file(Config, path:Path):
 	except ReaderError as e:
 		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason)
 
-# Config file types
 @serde
 class PluginModuleConfig:
+	"""One exported class mapping within a plugin file manifest.
+
+	Attributes:
+		class_name: Python class name to load from the module file.
+		name: Public plugin name exposed to graph configuration.
+	"""
+
 	class_name: str
 	name: str | None
 
 	@staticmethod
 	def from_class_name(class_name:str) -> PluginModuleConfig:
+		"""Create a default exported plugin mapping from a class name.
+
+		Args:
+			class_name: Python class name to convert into a default plugin name.
+
+		Returns:
+			A PluginModuleConfig with a snake_case exported plugin name.
+		"""
+
 		name = CAMEL_CASE_RE.sub('_', class_name).lower()
 		return PluginModuleConfig(class_name, name)
 
 @serde
 class PluginFileConfig:
+	"""One plugin-file entry inside a plugin folder manifest.
+
+	Attributes:
+		name: Optional module-import name override for the file.
+		file: Relative or absolute path to the plugin Python file.
+		type_: Reserved manifest field currently carried through unchanged.
+		plugins: Optional exported class mappings for this file.
+	"""
+
 	name: str | None
 	file: Path
 	type_: str | None
@@ -60,10 +96,25 @@ class PluginFileConfig:
 
 @serde
 class PluginConfig:
+	"""Top-level manifest describing one plugin file collection.
+
+	Attributes:
+		files: Plugin-file entries to load from this manifest.
+	"""
+
 	files: list[PluginFileConfig]
 
-# Actual load functions. Hierarchy: load_files -> load_file -> load_plugin
+# Actual load functions. Hierarchy: load_paths -> load_path -> load_plugin.
 def load_plugin(config:PluginFileConfig):
+	"""Load one plugin file and return its exported class mappings.
+
+	Args:
+		config: Manifest entry describing the plugin file and exported classes.
+
+		Returns:
+			Mapping from exported plugin name to loaded Python class.
+	"""
+
 	# Name plugin file based on file path without extension
 	plugin_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
 
@@ -132,6 +183,15 @@ def load_plugin(config:PluginFileConfig):
 	return res
 
 def load_path(path:str) -> dict:
+	"""Load every plugin exported from one configured path.
+
+	Args:
+		path: Path to a Python file or plugin directory.
+
+		Returns:
+			Mapping from exported plugin name to loaded Python class.
+	"""
+
 	path = Path(path)
 	config = None
 
@@ -177,6 +237,15 @@ def load_path(path:str) -> dict:
 	return res
 
 def load_paths(paths:list[str]) -> dict:
+	"""Load and merge plugins from multiple configured paths.
+
+	Args:
+		paths: Plugin file or directory paths to load.
+
+	Returns:
+		Merged mapping from exported plugin name to loaded Python class.
+	"""
+
 	res = {}
 	for path in paths:
 		file_plugins = load_path(path)

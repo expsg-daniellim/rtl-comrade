@@ -1,3 +1,5 @@
+"""Static analysis of module signatures and emitted output-port names."""
+
 import ast
 from collections import deque
 from dataclasses import dataclass
@@ -9,8 +11,17 @@ import typing
 
 log = structlog.get_logger()
 
-# BFS of the AST filtering out nested function nodes
+# BFS of the AST filtering out nested function nodes.
 def walk_ast(node):
+	"""Breadth-first AST walk that skips nested function bodies.
+
+	Args:
+		node: Root AST node to traverse.
+
+	Yields:
+		AST nodes reachable from the root while excluding nested function scopes.
+	"""
+
 	queue = deque([node])
 	passedTop = False # Keep tracking of passing the top-level function node
 	while queue:
@@ -25,16 +36,39 @@ def walk_ast(node):
 
 @dataclass(frozen=True, slots=True)
 class StructureInvalidTupleError(Exception):
+	"""Raised when a returned or yielded tuple has an invalid shape.
+
+	Attributes:
+		name: The module class name being analyzed.
+		tuple_: The invalid tuple elements found in the AST.
+	"""
+
 	name: str
 	tuple_: tuple
 
 @dataclass(frozen=True, slots=True)
 class StructureNonStrPortNameError(Exception):
+	"""Raised when a static emitted port name is not a string.
+
+	Attributes:
+		name: The module class name being analyzed.
+		port_name: The invalid non-string port-name value encountered in the AST.
+	"""
+
 	name: str
 	port_name: typing.Any
 
 @dataclass(frozen=True, slots=True)
 class ModuleStructureArg:
+	"""One inferred module input argument from a module ``run(...)`` signature.
+
+	Attributes:
+		name: Input-port name inferred from the parameter name.
+		type_: Stringified annotation, if present on the parameter.
+		has_default: Whether the parameter has a Python default value.
+		default: The raw default value, if present.
+	"""
+
 	name: str
 	type_: str | None = None
 	has_default: bool = False
@@ -42,12 +76,29 @@ class ModuleStructureArg:
 
 @dataclass
 class ModuleStructure:
+	"""Statically inferred view of one module's input and output surface.
+
+	Attributes:
+		args: Ordered input arguments inferred from ``run(...)``.
+		emits: Statically known output-port names.
+		definite_emits: Whether ``emits`` is believed to be complete.
+	"""
+
 	args: list[ModuleStructureArg]
 	emits: list[str]
 	definite_emits: bool
 
 	def __init__(self, Module):
-		# Assume that Module has been pre-validated to have run
+		"""Analyze one module class and infer its runtime structure.
+
+		Args:
+			Module: Module plugin class whose ``run(...)`` method should be inspected.
+
+		Returns:
+			None.
+		"""
+
+		# Assume that Module has been pre-validated to have run.
 
 		# Populate args from the function signature
 		try:

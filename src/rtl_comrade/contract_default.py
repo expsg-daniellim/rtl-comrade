@@ -1,3 +1,5 @@
+"""Built-in default scheduling contract for runtime nodes."""
+
 from collections.abc import Callable, Awaitable
 from dataclasses import dataclass
 from typing import Any
@@ -8,20 +10,54 @@ from .api import Payload, EndSentinel, ContractPort, NoDefaultError
 
 log = structlog.get_logger()
 
-# A special port is either default or a persistent port not on its first run
+# A special port is either default or a persistent port not on its first run.
 def is_special(port):
+	"""Return whether a port is satisfied without blocking on a fresh input.
+
+	Args:
+		port: Contract-owned port object carrying default/persistent state.
+
+	Returns:
+		``True`` if the port is currently special, otherwise ``False``.
+	"""
+
 	return (port.persistent and port.last_value is not None) or port.has_default
 
 @dataclass
 class DefaultContract:
+	"""Default contract providing basic required/default/persistent input handling.
+
+	Attributes:
+		id: Runtime id of the contract instance.
+		ports: Contract-facing port adapters used to gather one invocation's inputs.
+	"""
+
 	id: str
 	ports: dict[str, ContractPort]
 
 	@serde
 	class Config:
+		"""Configuration for the built-in default contract.
+
+		Attributes:
+			persistent_inputs: Input-port names whose latest values should be reused
+				across later invocations.
+		"""
+
 		persistent_inputs: list[str] = field(default_factory=list)
 
 	def __init__(self, id:str, config:Config, ports:dict[str, ContractPort]):
+		"""Configure persistent-input behavior for this contract instance.
+
+		Args:
+			id: Runtime id of the contract instance.
+			config: Parsed default-contract configuration.
+			ports: Contract-facing port adapters available to this contract.
+
+		Returns:
+			None.
+		"""
+
 		unknown_ports = [ input_ for input_ in config.persistent_inputs if input_ not in ports ]
 		if len(unknown_ports) > 0:
 			log.fatal('unknown_persistent_ports', port=unknown_ports)
@@ -37,6 +73,13 @@ class DefaultContract:
 		self.ports = ports
 
 	async def get_inputs(self) -> dict[str, Payload]|EndSentinel:
+		"""Assemble the next module invocation according to default-contract rules.
+
+		Returns:
+			A mapping from input-port name to Payload for the next invocation, or an
+			EndSentinel when the node should terminate.
+		"""
+
 		# Order of precedence: required (non-special)/persistent (first run) > persistent (cached) > persistent (default) > default
 		# Get required inputs
 		inputs = {}

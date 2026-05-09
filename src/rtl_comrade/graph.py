@@ -1,3 +1,5 @@
+"""Graph assembly and top-level runtime orchestration."""
+
 from __future__ import annotations
 
 import asyncio
@@ -17,13 +19,34 @@ log = structlog.get_logger()
 
 @dataclass
 class Graph:
+	"""A runnable graph composed of instantiated nodes.
+
+	Attributes:
+		nodes: Mapping from node id to the instantiated runtime Node.
+	"""
+
 	nodes: dict[str, Node]
 
 	def __init__(self):
+		"""Create an empty graph to be populated during loading.
+
+		Returns:
+			None.
+		"""
+
 		self.nodes = {}
 
 	@staticmethod
 	def from_file(path:str) -> Graph:
+		"""Load a graph YAML file and construct a runnable Graph.
+
+		Args:
+			path: Filesystem path to the graph YAML file.
+
+		Returns:
+			The constructed Graph instance.
+		"""
+
 		bind_contextvars(context='harness.config', file=path)
 
 		try:
@@ -35,6 +58,15 @@ class Graph:
 
 	@staticmethod
 	def from_config(config:GraphConfig) -> Graph:
+		"""Construct a runnable graph from an already-parsed GraphConfig.
+
+		Args:
+			config: Parsed top-level graph configuration.
+
+		Returns:
+			The constructed Graph instance.
+		"""
+
 		graph = Graph()
 
 		# Dynamically load plugins
@@ -165,7 +197,12 @@ class Graph:
 
 		return graph
 
-	# Run graph
 	async def run(self):
+		"""Run every node in the graph concurrently until completion.
+
+		Returns:
+			None.
+		"""
+
 		runs = [ node.run() for node in self.nodes.values() ]
 		await asyncio.gather(*runs)
