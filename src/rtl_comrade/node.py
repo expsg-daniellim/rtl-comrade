@@ -66,9 +66,9 @@ class Node:
 				try:
 					config = from_dict(Module.Config, config)
 				except SerdeError as e:
-					log.fatal('config.deserialise.serde_error', context='harness.node.module', node=self.id, module=Module.__name__)
+					log.fatal('config.deserialise.serde_error', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
 				except UserError as e:
-					log.fatal('config.deserialise.user_error', context='harness.node.module', node=self.id, module=Module.__name__)
+					log.fatal('config.deserialise.user_error', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
 			else:
 				log.warn('config.mismatch', context='harness.node.module', node=self.id, module=Module.__name__)
 
@@ -108,7 +108,7 @@ class Node:
 				try:
 					contract_config = from_dict(Contract.Config, contract_config)
 				except SerdeError as e:
-					log.fatal('config.deserialise.serde_error', context='harness.node.contract', node=self.id, contract=Contract.__name__)
+					log.fatal('config.deserialise.serde_error', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 				except UserError as e:
 					log.fatal('config.deserialise.user_error', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 			else:

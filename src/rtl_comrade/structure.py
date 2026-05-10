@@ -112,24 +112,24 @@ class ModuleStructure:
 		try:
 			src = textwrap.dedent(inspect.getsource(Module.run))
 		except OSError as e:
-			log.fatal('file_unavailable', err=e.strerror, errno=e.errno)
+			log.fatal('file_unavailable', err=e.strerror, errno=e.errno, exc_info=e)
 		except TypeError as e:
-			log.fatal('unloadable', message=str(e))
+			log.fatal('unloadable', message=str(e), exc_info=e)
 		except ValueError as e:
-			log.fatal('wrapped_cycle')
+			log.fatal('wrapped_cycle', exc_info=e)
 
 		try:
 			ast_tree = ast.parse(src)
 		except SyntaxError as e:
-			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
+			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
 		except ValueError as e:
-			log.fatal('value_error', message=str(e))
+			log.fatal('value_error', message=str(e), exc_info=e)
 		except TypeError as e:
-			log.fatal('type_error', message=str(e))
+			log.fatal('type_error', message=str(e), exc_info=e)
 		except MemoryError as e:
-			log.fatal('memory_error', message=str(e))
+			log.fatal('memory_error', message=str(e), exc_info=e)
 		except RecursionError as e:
-			log.fatal('recursion_err', message=str(e))
+			log.fatal('recursion_err', message=str(e), exc_info=e)
 
 		# Populate emits by walking through source code and inferring likely behaviour from yields/returns
 		self.emits = []

@@ -36,21 +36,21 @@ def load_config_file(Config, path:Path):
 			config = from_yaml(Config, file.read())
 			return config
 	except UnicodeDecodeError as e:
-		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
+		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end], exc_info=e)
 	except FileNotFoundError as e:
-		log.fatal('not_found')
+		log.fatal('not_found', exc_info=e)
 	except IsADirectoryError as e:
-		log.fatal('is_directory')
+		log.fatal('is_directory', exc_info=e)
 	except PermissionError as e:
-		log.fatal('permission_denied')
+		log.fatal('permission_denied', exc_info=e)
 	except OSError as e:
-		log.fatal('os_error', err=e.strerror, errno=e.errno)
+		log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
 	except SerdeError as e:
-		log.fatal('serde_error', message=str(e))
+		log.fatal('serde_error', message=str(e), exc_info=e)
 	except MarkedYAMLError as e:
-		log.fatal('yaml.marked', problem=e.problem, problem_mark=e.problem_mark)
+		log.fatal('yaml.marked', problem=e.problem, problem_mark=e.problem_mark, exc_info=e)
 	except ReaderError as e:
-		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason)
+		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
 @serde
 class PluginModuleConfig:
@@ -142,25 +142,25 @@ def load_plugin(config:PluginFileConfig):
 		try:
 			spec.loader.exec_module(module)
 		except UnicodeDecodeError as e:
-			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end])
+			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end], exc_info=e)
 		except FileNotFoundError as e:
-			log.fatal('not_found')
+			log.fatal('not_found', exc_info=e)
 		except IsADirectoryError as e:
-			log.fatal('is_directory')
+			log.fatal('is_directory', exc_info=e)
 		except PermissionError as e:
-			log.fatal('permission_denied')
+			log.fatal('permission_denied', exc_info=e)
 		except OSError as e:
-			log.fatal('os_error', err=e.strerror, errno=e.errno)
+			log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
 		except SyntaxError as e:
-			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset)
+			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
 		except ValueError as e:
-			log.fatal('value_error', message=str(e))
+			log.fatal('value_error', message=str(e), exc_info=e)
 		except TypeError as e:
-			log.fatal('type_error', message=str(e))
+			log.fatal('type_error', message=str(e), exc_info=e)
 		except ModuleNotFoundError as e:
-			log.fatal('module_not_found')
+			log.fatal('module_not_found', exc_info=e)
 		except ImportError as e:
-			log.fatal('import_error', module_name=e.name, module_path=e.path)
+			log.fatal('import_error', module_name=e.name, module_path=e.path, exc_info=e)
 		except Exception as e:
 			log.fatal('exception', exc_info=e)
 
@@ -212,15 +212,15 @@ def load_path(path:str) -> dict:
 			files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
 			config = PluginConfig(files)
 	except UnicodeDecodeError as e:
-		log.fatal('invalid_unicode', file=str(path), reason=e.reason, invalid_slice=e.object[e.start:e.end])
+		log.fatal('invalid_unicode', file=str(path), reason=e.reason, invalid_slice=e.object[e.start:e.end], exc_info=e)
 	except FileNotFoundError as e:
-		log.fatal('not_found', file=str(path))
+		log.fatal('not_found', file=str(path), exc_info=e)
 	except IsADirectoryError as e:
-		log.fatal('is_directory', file=str(path))
+		log.fatal('is_directory', file=str(path), exc_info=e)
 	except PermissionError as e:
-		log.fatal('permission_denied', file=str(path))
+		log.fatal('permission_denied', file=str(path), exc_info=e)
 	except OSError as e:
-		log.fatal('os_error', file=str(path), err=e.strerror, errno=e.errno)
+		log.fatal('os_error', file=str(path), err=e.strerror, errno=e.errno, exc_info=e)
 	finally:
 		unbind_contextvars('file')
 
