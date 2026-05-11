@@ -40,7 +40,7 @@ class StructureInvalidTupleError(Exception):
 
 	Attributes:
 		name: The module class name being analyzed.
-		linenno: The line number where the invalid tuples are found.
+		lineno: The line number where the invalid tuples are found.
 		tuple_: The invalid tuple elements found in the AST.
 	"""
 
@@ -143,14 +143,14 @@ class ModuleStructure:
 			# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>). All other formats of tuple are invalid.
 			if isinstance(node.value, ast.Tuple):
 				if len(node.value.elts) != 2:
-					raise StructureInvalidTupleError(Module.__name__, node.linenno, tuple(str(elt) for elt in node.value.elts))
+					raise StructureInvalidTupleError(Module.__name__, node.lineno, tuple(str(elt) for elt in node.value.elts))
 
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
 					if isinstance(node.value.elts[0].value, str):
 						self.emits.append(str(node.value.elts[0].value))
 					else:
-						raise StructureNonStrPortNameError(Module.__name__, node.linenno, node.value.elts[0].value)
+						raise StructureNonStrPortNameError(Module.__name__, node.lineno, node.value.elts[0].value)
 				else: # Dynamic output port names present
 					self.definite_emits = False
 			elif not (isinstance(node.value, ast.Constant) and node.value.value is None):
