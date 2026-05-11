@@ -87,9 +87,9 @@ class Node:
 		try:
 			self.structure = ModuleStructure(Module)
 		except StructureInvalidTupleError as e:
-			log.fatal('invalid_tuple', context='harness.node.module.emits', tuple_=e.tuple_)
+			log.fatal('invalid_tuple', context='harness.node.module.emits', lineno=e.lineno, tuple_=e.tuple_)
 		except StructureNonStrPortNameError as e:
-			log.fatal('invalid_port_name', context='harness.node.module.emits', port=e.port_name)
+			log.fatal('invalid_port_name', context='harness.node.module.emits', lineno=e.lineno, port=str(e.port_name))
 		finally:
 			unbind_contextvars('context', 'node', 'module')
 
@@ -195,11 +195,11 @@ class Node:
 		# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>)
 		if type(res) is tuple:
 			if len(res) != 2:
-				log.error('malformed_output', context='harness.module.res', port=res[0] if len(res) > 0 else None, data=res)
+				log.error('malformed_output', context='harness.module.res', port=str(res[0]) if len(res) > 0 else None, data_type=type(res).__name__, data_repr=repr(res))
 				return
 
 			if type(res[0]) is not str:
-				log.error('non_string_port', context='harness.module.res', port=res[0])
+				log.error('non_string_port', context='harness.module.res', port=str(res[0]))
 				return
 
 			port, value = res
@@ -215,7 +215,7 @@ class Node:
 
 		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
 		if len(dsts) <= 0 and len(self.dsts) > 0:
-			log.info('no_destination', context='harness.module.res', port=port, data=value)
+			log.info('no_destination', context='harness.module.res', port=port, data_type=type(value).__name__, data_repr=repr(value))
 
 		for dst in dsts:
 			key = (dst.other_node.id, dst.other_port)

@@ -36,7 +36,7 @@ def load_config_file(Config, path:Path):
 			config = from_yaml(Config, file.read())
 			return config
 	except UnicodeDecodeError as e:
-		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end], exc_info=e)
+		log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(errors='replace'), exc_info=e)
 	except FileNotFoundError as e:
 		log.fatal('not_found', exc_info=e)
 	except IsADirectoryError as e:
@@ -48,7 +48,7 @@ def load_config_file(Config, path:Path):
 	except SerdeError as e:
 		log.fatal('serde_error', message=str(e), exc_info=e)
 	except MarkedYAMLError as e:
-		log.fatal('yaml.marked', problem=e.problem, problem_mark=e.problem_mark, exc_info=e)
+		log.fatal('yaml.marked', problem=e.problem, problem_name=e.problem_mark.name, index=e.problem_mark.index, line=e.problem_mark.line, column=e.problem_mark.column, pointer=e.problem_mark.pointer, exc_info=e)
 	except ReaderError as e:
 		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
@@ -119,7 +119,7 @@ def load_plugin(config:PluginFileConfig):
 	plugin_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
 
 	# Bind some logging context
-	bind_contextvars(plugin=plugin_name, file=config.file)
+	bind_contextvars(plugin=plugin_name, file=str(config.file))
 	try:
 		# Validate plugin file existence
 		if not config.file.is_file():
@@ -142,7 +142,7 @@ def load_plugin(config:PluginFileConfig):
 		try:
 			spec.loader.exec_module(module)
 		except UnicodeDecodeError as e:
-			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end], exc_info=e)
+			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(errors='replace'), exc_info=e)
 		except FileNotFoundError as e:
 			log.fatal('not_found', exc_info=e)
 		except IsADirectoryError as e:
@@ -212,7 +212,7 @@ def load_path(path:str) -> dict:
 			files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
 			config = PluginConfig(files)
 	except UnicodeDecodeError as e:
-		log.fatal('invalid_unicode', file=str(path), reason=e.reason, invalid_slice=e.object[e.start:e.end], exc_info=e)
+		log.fatal('invalid_unicode', file=str(path), reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(errors='replace'), exc_info=e)
 	except FileNotFoundError as e:
 		log.fatal('not_found', file=str(path), exc_info=e)
 	except IsADirectoryError as e:
@@ -230,7 +230,7 @@ def load_path(path:str) -> dict:
 		file_plugins = load_plugin(file_config)
 		for (name, plugin) in file_plugins.items():
 			if name in res:
-				log.fatal('duplicate_definition', file=file_config.file, key=name)
+				log.fatal('duplicate_definition', file=str(file_config.file), key=name)
 			else:
 				res[name] = plugin
 

@@ -50,3 +50,4 @@ A manifest can:
 - without a manifest, all classes in a module are exposed, which can accidentally include helper or imported classes
 - because `structure.py` later uses `inspect.getsource(...)`, this loader intentionally inserts imported modules into `sys.modules`
 - many failures here log at fatal level by design, so import and parse errors block execution instead of letting the harness attempt to limp into runtime
+- when the loader catches non-`rtl_comrade` exceptions during YAML reads, filesystem access, or dynamic imports, it logs them with `exc_info=e` so traceback context is preserved

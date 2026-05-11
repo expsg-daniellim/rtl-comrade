@@ -4,7 +4,7 @@ This module defines the typed boundary between user-authored graph YAML and
 the harness graph-construction logic.
 """
 
-from serde import serde, field
+from serde import serde, field, to_dict
 
 @serde
 class GraphConfigNode:
@@ -59,6 +59,9 @@ class GraphConfigEdge:
 
 	src: GraphConfigSrcPort
 	dst: GraphConfigDstPort
+
+	def __structlog__(self):
+		return to_dict(self)
 
 @serde
 class GraphConfig:

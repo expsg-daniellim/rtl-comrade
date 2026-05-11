@@ -111,6 +111,7 @@ When the node exits, it sends `EndSentinel(self.id)` to every downstream edge.
 - destination ports can be resolved by name or by 1-based position
 - output tuples must be exactly `(port_name, value)`
 - `None` is treated as "emit nothing"
+- non-`rtl_comrade` exceptions caught during module/contract reflection, config deserialization, construction, and runtime execution are logged with `exc_info=e`
 - error-level and critical-level logs during node execution intentionally participate in the harness failure model: `ERROR` allows best-effort continued execution, while `CRITICAL` aborts immediately
 
 ## Caveats

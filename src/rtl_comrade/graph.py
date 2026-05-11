@@ -148,7 +148,7 @@ class Graph:
 						continue
 
 					if not node.structure.definite_emits:
-						log.warn('non_definite_emits', context='harness.graph.node', node=node)
+						log.warn('non_definite_emits', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
 
 					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))
 

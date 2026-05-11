@@ -41,4 +41,5 @@ This is the harness reflection layer for modules. `node.py` depends on it to con
 - the analysis is intentionally conservative
 - only top-level `return` and `yield` forms are inspected; nested helper functions are excluded
 - dynamic port names reduce what the graph validator can prove
+- non-`rtl_comrade` failures during signature inspection, source retrieval, or AST parsing are logged with `exc_info=e` so tracebacks remain available
 - changes here can silently alter both runtime behavior and config-validation behavior
