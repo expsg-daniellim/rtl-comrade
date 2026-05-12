@@ -5,10 +5,10 @@ from collections import deque
 from dataclasses import dataclass
 import inspect
 from inspect import Parameter
-import structlog
 import textwrap
 import typing
 
+import structlog
 log = structlog.get_logger()
 
 # BFS of the AST filtering out nested function nodes.
@@ -23,13 +23,13 @@ def walk_ast(node):
 	"""
 
 	queue = deque([node])
-	passedTop = False # Keep tracking of passing the top-level function node
+	passed_top = False # Keep tracking of passing the top-level function node
 	while queue:
 		n = queue.popleft()
-		if not (isinstance(n, ast.FunctionDef) or isinstance(n, ast.Lambda) or isinstance(n, ast.AsyncFunctionDef)):
+		if not isinstance(n, (ast.FunctionDef, ast.Lambda, ast.AsyncFunctionDef)):
 			queue.extend(ast.iter_child_nodes(n))
-		elif not passedTop:
-			passedTop = True
+		elif not passed_top:
+			passed_top = True
 			queue.extend(ast.iter_child_nodes(n))
 
 		yield n
@@ -110,7 +110,12 @@ class ModuleStructure:
 		except (TypeError, ValueError) as e:
 			log.fatal('unavailable_signature', exc_info=e)
 
-		self.args = [ ModuleStructureArg(name=name, type_=str(param.annotation) if param.annotation != Parameter.empty else None, has_default=param.default != Parameter.empty, default=param.default if param.default != Parameter.empty else None) for (name, param) in sig.parameters.items() if name != 'self' ]
+		self.args = [ ModuleStructureArg(
+			name=name,
+			type_=str(param.annotation) if param.annotation != Parameter.empty else None,
+			has_default=param.default != Parameter.empty,
+			default=param.default if param.default != Parameter.empty else None
+		) for (name, param) in sig.parameters.items() if name != 'self' ]
 
 		# Parse AST in steps to catch individual Exceptions from each step
 		try:
@@ -139,7 +144,7 @@ class ModuleStructure:
 		self.emits = []
 		default = False
 		self.definite_emits = True
-		for node in filter(lambda node: isinstance(node, ast.Return) or isinstance(node, ast.Yield), walk_ast(ast_tree)):
+		for node in filter(lambda node: isinstance(node, (ast.Return, ast.Yield)), walk_ast(ast_tree)):
 			# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>). All other formats of tuple are invalid.
 			if isinstance(node.value, ast.Tuple):
 				if len(node.value.elts) != 2:

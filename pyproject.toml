@@ -27,8 +27,15 @@ license-files = ["LICEN[CS]E*"]
 dependencies = [
     "pyserde[yaml]>=0.31.2",
     "structlog>=25.5.0",
+    "types-pyyaml>=6.0.12.20260510",
 ]
 
 [project.scripts]
 rtl-comrade = "rtl_comrade.__main__:main"
 rtl_comrade = "rtl_comrade.__main__:main"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+    "ty>=0.0.35",
+]

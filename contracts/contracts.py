@@ -16,4 +16,5 @@ class ZipContract:
 				log.error('%s.mismatched_ends', self.id)
 			return EndSentinel(self.id)
 
-		return res
+		# Above filter should have gotten rid of EndSentinel in return
+		return res # ty: ignore[invalid-return-type]

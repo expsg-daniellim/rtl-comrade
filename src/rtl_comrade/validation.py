@@ -1,13 +1,13 @@
 """Static graph validation helpers used before runtime execution begins."""
 
+from dataclasses import dataclass, field
+
+from .config import GraphConfig
+
 from typing import TYPE_CHECKING
 if TYPE_CHECKING:
 	from .graph import Graph
 
-from dataclasses import dataclass, field
-
-from .config import GraphConfig
-from .node import Node
 
 # Solely for the purpose of verifying graph acyclicity - ignores other graph
 # invalidities such as dangling edges.
@@ -23,7 +23,7 @@ def validate_acyclic(config:GraphConfig) -> list[str|None]:
 	"""
 
 	# DFS-colours algorithm
-	adjacency = { node.id: [] for node in config.nodes }
+	adjacency:dict[str, list[str]] = { node.id: [] for node in config.nodes }
 
 	for edge in config.edges:
 		if edge.src.node in adjacency and edge.dst.node in adjacency:
@@ -83,8 +83,8 @@ def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 	"""
 
 	# Build incoming-port and adjacency maps once.
-	incoming = {node_id: set() for node_id in graph.nodes}
-	adjacency = {node_id: [] for node_id in graph.nodes}
+	incoming:dict[str, set[str]] = {node_id: set() for node_id in graph.nodes}
+	adjacency:dict[str, list[str]] = {node_id: [] for node_id in graph.nodes}
 
 	for node_id, node in graph.nodes.items():
 		for conn in node.dsts or []:
@@ -112,7 +112,7 @@ def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 	while stack:
 		node_id = stack.pop()
 		if node_id in seen:
-				continue
+			continue
 
 		seen.add(node_id)
 		stack.extend(adjacency[node_id])

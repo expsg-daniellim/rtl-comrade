@@ -16,12 +16,12 @@ class FileReadMod:
 				for line in file:
 					yield line
 		except UnicodeDecodeError as e:
-			log.fatal('invalid_unicode', file=self.file, reason=e.reason, invalid_slice=e.object[e.start:e.end])
-		except FileNotFoundError as e:
+			log.fatal('invalid_unicode', file=self.file, reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='restrict'))
+		except FileNotFoundError:
 			log.fatal('not_found', file=self.file)
-		except IsADirectoryError as e:
+		except IsADirectoryError:
 			log.fatal('is_directory', file=self.file)
-		except PermissionError as e:
+		except PermissionError:
 			log.fatal('permission_denied', file=self.file)
 		except OSError as e:
 			log.fatal('os_error', file=self.file, err=e.strerror, errno=e.errno)

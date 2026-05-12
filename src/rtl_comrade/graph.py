@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
-from serde.yaml import from_yaml
 import structlog
-from structlog.contextvars import clear_contextvars, bind_contextvars, unbind_contextvars
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config import GraphConfig
 from .contract_default import DefaultContract
@@ -72,13 +71,13 @@ class Graph:
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
 		try:
-			module_mappings = load_paths(config.modules)
+			module_mappings = load_paths([ Path(path) for path in config.modules ])
 		finally:
 			unbind_contextvars('context')
 
 		bind_contextvars(context='harness.load.contract')
 		try:
-			contract_mappings = load_paths(config.contracts)
+			contract_mappings = load_paths([ Path(path) for path in config.contracts ])
 		finally:
 			unbind_contextvars('context')
 
@@ -100,11 +99,11 @@ class Graph:
 				errors = True
 			else:
 				has_error = False
-				if not node.module in module_mappings:
+				if node.module not in module_mappings:
 					log.error('invalid_module', context='harness.graph.node', index=i, id=node.id, mod=node.module)
 					has_error = True
 
-				if node.contract != '' and not node.contract in contract_mappings:
+				if node.contract != '' and node.contract not in contract_mappings:
 					log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, contract=node.contract)
 					has_error = True
 
@@ -121,10 +120,10 @@ class Graph:
 		errors = False
 		source_tracker = {} # Verify each dst only has one source
 		consumption = [ False for _ in config.edges ] # Keep track of edge usage
-		for id, node in graph.nodes.items():
+		for node in graph.nodes.values():
 			dsts = []
 			for (i, edge) in enumerate(config.edges):
-				if edge.src.node == id:
+				if edge.src.node == node.id:
 					if edge.dst.node not in graph.nodes:
 						log.error('invalid_dst', context='harness.graph.edge', edge=edge)
 						consumption[i] = True
@@ -150,11 +149,11 @@ class Graph:
 					if not node.structure.definite_emits:
 						log.warn('non_definite_emits', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
 
-					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))
+					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))	# ty: ignore[invalid-argument-type] ty cannot determine the None case cannot reach here)
 
 					# Source tracking
 					key = (edge.dst.node, dst_name)
-					if not key in source_tracker:
+					if key not in source_tracker:
 						source_tracker[key] = 1
 					else:
 						source_tracker[key] += 1

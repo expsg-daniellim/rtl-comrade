@@ -1,8 +1,6 @@
 """Built-in default scheduling contract for runtime nodes."""
 
-from collections.abc import Callable, Awaitable
 from dataclasses import dataclass
-from typing import Any
 from serde import serde, field
 import structlog
 
@@ -11,7 +9,7 @@ from .api import Payload, EndSentinel, ContractPort, NoDefaultError
 log = structlog.get_logger()
 
 # A special port is either default or a persistent port not on its first run.
-def is_special(port):
+def is_special(port:ContractPort) -> bool:
 	"""Return whether a port is eligible to be satisfied without blocking.
 
 	A port is special when it has a default value, or when it is persistent and
@@ -25,7 +23,7 @@ def is_special(port):
 		``True`` if the port is currently special, otherwise ``False``.
 	"""
 
-	return (port.persistent and port.last_value is not None) or port.has_default
+	return (port.state['persistent'] and port.state['last_value'] is not None) or port.has_default
 
 @dataclass
 class DefaultContract:
@@ -68,11 +66,11 @@ class DefaultContract:
 
 		self.id = id
 		for port in ports.values():
-			port.persistent = False
-			port.last_value = None
+			port.state['persistent'] = False
+			port.state['last_value'] = None
 
-		for port in config.persistent_inputs:
-			ports[port].persistent = True
+		for port_name in config.persistent_inputs:
+			ports[port_name].state['persistent'] = True
 
 		self.ports = ports
 
@@ -97,7 +95,7 @@ class DefaultContract:
 		for (name, port) in filter(lambda p: not is_special(p[1]), self.ports.items()):
 			val = await port.get()
 			if not isinstance(val, EndSentinel):
-				port.last_value = val
+				port.state['last_value'] = val
 			inputs[name] = val
 
 		# Evaluate end sentinels of required ports first
@@ -116,19 +114,19 @@ class DefaultContract:
 
 		# Get special inputs
 		special_inputs = {}
-		for (name, port) in filter(lambda p: is_special(p[1]) and not p[0] in inputs, self.ports.items()):
+		for (name, port) in filter(lambda p: is_special(p[1]) and p[0] not in inputs, self.ports.items()):
 			val = port.try_get()
-			
+
 			if not isinstance(val, EndSentinel) and val is not None:
-				port.last_value = val
+				port.state['last_value'] = val
 				special_inputs[name] = val
-			elif port.persistent:
-				if port.last_value is not None:
-					special_inputs[name] = port.last_value
+			elif port.state['persistent']:
+				if port.state['last_value'] is not None:
+					special_inputs[name] = port.state['last_value']
 				elif port.has_default:
 					try:
 						default = port.get_default_payload()
-						port.last_value = default
+						port.state['last_value'] = default
 						special_inputs[name] = default
 					except NoDefaultError as e:
 						log.fatal('invalid_default_access', port=e.name)

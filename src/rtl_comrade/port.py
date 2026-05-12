@@ -62,8 +62,8 @@ class Port(Generic[T]):
 			The next Payload or EndSentinel queued for this port.
 		"""
 
-		val =  await self.queue.get()
-		if not (isinstance(val, Payload) or isinstance(val, EndSentinel)):
+		val = await self.queue.get()
+		if not isinstance(val, (Payload, EndSentinel)):
 			raise InvalidEnqueuedError(self.name, type(val).__name__)
 
 		if isinstance(val, EndSentinel):
@@ -88,7 +88,7 @@ class Port(Generic[T]):
 		except asyncio.QueueEmpty: # An empty queue is a valid case
 			pass
 
-		if not (isinstance(val, Payload) or isinstance(val, EndSentinel) or val is None):
+		if not (isinstance(val, (Payload, EndSentinel)) or val is None):
 			raise InvalidEnqueuedError(self.name, type(val).__name__)
 
 		return val

@@ -8,7 +8,7 @@ Edges between nodes carry exactly two runtime message types:
 
 from collections.abc import Callable, Awaitable
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
+from typing import Any, Generic, TypeVar
 
 T = TypeVar('T')
 
@@ -36,7 +36,7 @@ class EndSentinel:
 
 	source: str
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class NoDefaultError(Exception):
 	"""Raised when a contract asks for a default payload from a non-default port.
 
@@ -46,7 +46,7 @@ class NoDefaultError(Exception):
 
 	name: str
 
-@dataclass
+@dataclass(slots=True)
 class ContractPort(Generic[T]):
 	"""A contract-facing adapter around one node input port.
 
@@ -67,6 +67,7 @@ class ContractPort(Generic[T]):
 	has_default: bool = False
 	default: T | None = None
 	default_n: int = 0
+	state: dict[str, Any] = field(default_factory=dict)
 
 	def get_default_payload(self) -> Payload[T]:
 		"""Return the next synthetic payload derived from this port's default value.
@@ -78,7 +79,7 @@ class ContractPort(Generic[T]):
 			NoDefaultError: If this port does not have a default value.
 		"""
 
-		if not self.has_default:
+		if not self.has_default or (self.default is None and T is not None):
 			raise NoDefaultError(self.name)
 
 		payload = Payload("_default", self.default_n, self.default)

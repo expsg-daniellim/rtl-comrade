@@ -1,18 +1,20 @@
 """Graph-config loading plus plugin discovery and dynamic import."""
 
-from dataclasses import dataclass
+from __future__ import annotations 
 import importlib.util
 import inspect
 import os
 from pathlib import Path
 import re
+import sys
+from typing import Any
+
 from serde import serde, SerdeError
 from serde.yaml import from_yaml
-from yaml.error import Mark, MarkedYAMLError
+from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
-import sys
 
 log = structlog.get_logger()
 
@@ -32,7 +34,7 @@ def load_config_file(Config, path:Path):
 	"""
 
 	try:
-		with open(path, 'r') as file:
+		with open(path, 'r', encoding='utf-8') as file:
 			config = from_yaml(Config, file.read())
 			return config
 	except UnicodeDecodeError as e:
@@ -48,7 +50,7 @@ def load_config_file(Config, path:Path):
 	except SerdeError as e:
 		log.fatal('serde_error', message=str(e), exc_info=e)
 	except MarkedYAMLError as e:
-		mark_fields = {}
+		mark_fields:dict[str, Any] = {}
 		if e.problem_mark is not None:
 			mark_fields['problem_name'] = e.problem_mark.name
 			mark_fields['index'] = e.problem_mark.index
@@ -137,18 +139,18 @@ def load_plugin(config:PluginFileConfig):
 		spec = importlib.util.spec_from_file_location(plugin_name, config.file)
 		if spec is None:
 			log.fatal('spec.invalid')
-		
-		if spec.loader is None:
+
+		if spec.loader is None: # ty: ignore[unresolved-attribute] ty is unable to recognise log.fatal never returns
 			log.fatal('spec.no_loader')
 
 		# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
-		module = importlib.util.module_from_spec(spec)
+		module = importlib.util.module_from_spec(spec) # ty: ignore[invalid-argument-type]
 
 		# Add module to sys.modules so its source can be inspected later
 		sys.modules[plugin_name] = module
 		# Load module
 		try:
-			spec.loader.exec_module(module)
+			spec.loader.exec_module(module) # ty: ignore[unresolved-attribute]
 		except UnicodeDecodeError as e:
 			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
 		except FileNotFoundError as e:
@@ -190,7 +192,7 @@ def load_plugin(config:PluginFileConfig):
 
 	return res
 
-def load_path(path:str) -> dict:
+def load_path(path:Path) -> dict:
 	"""Load every plugin exported from one configured path.
 
 	Args:
@@ -199,9 +201,6 @@ def load_path(path:str) -> dict:
 		Returns:
 			Mapping from exported plugin name to loaded Python class.
 	"""
-
-	path = Path(path)
-	config = None
 
 	bind_contextvars(file=str(path))
 	if not path.exists():
@@ -244,7 +243,7 @@ def load_path(path:str) -> dict:
 
 	return res
 
-def load_paths(paths:list[str]) -> dict:
+def load_paths(paths:list[Path]) -> dict:
 	"""Load and merge plugins from multiple configured paths.
 
 	Args:

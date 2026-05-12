@@ -4,14 +4,14 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
-from inspect import Parameter
+from typing import Any
+
 from serde import from_dict, SerdeError
 from serde.compat import UserError
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
-import typing
 
-from .api import Payload, EndSentinel, ContractPort, NoDefaultError
+from .api import Payload, EndSentinel, ContractPort
 from .port import Port, InvalidEnqueuedError
 from .structure import ModuleStructure
 from .structure import StructureInvalidTupleError, StructureNonStrPortNameError
@@ -60,7 +60,7 @@ class Node:
 		except (TypeError, ValueError) as e:
 			log.fatal('unavailable_signature', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
 
-		module_init_args = {}
+		module_init_args:dict[str, Any] = {}
 		if 'config' in module_init_sig.parameters:
 			if hasattr(Module, 'Config'):
 				try:
@@ -131,8 +131,8 @@ class Node:
 			log.fatal('init', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 
 		# Initialise output targets (for future setting in set_dsts after edges are validated (which requires Node)
-		self.dsts = None
-		self.dst_counts = {}
+		self.dsts:list[Connection]|None = None
+		self.dst_counts:dict[tuple[str, str], int] = {}
 
 	def set_dsts(self, dsts:list[Connection]):
 		"""Assign this node's validated downstream connections.
@@ -156,12 +156,13 @@ class Node:
 			The canonical destination input-port name, or ``None`` if invalid.
 		"""
 
-		if type(port) is str and port in self.ports.keys():
+		if isinstance(port, str) and port in self.ports.keys():
 			return port
-		elif type(port) is int and port - 1 < len(self.ports) and port - 1 >= 0:
+
+		if isinstance(port, int) and port - 1 < len(self.ports) and port - 1 >= 0:
 			return list(self.ports.keys())[port - 1]
-		else:
-			return None
+
+		return None
 
 	async def accept(self, val:Payload|EndSentinel, port:str):
 		"""Enqueue an inbound runtime message onto one input port.
@@ -180,7 +181,7 @@ class Node:
 
 		await self.ports[port].queue.put(val)
 
-	async def process_result(self, res:tuple[str, typing.Any]|typing.Any):
+	async def process_result(self, res:tuple[str, Any]|Any):
 		"""Normalize one module output and forward it to matching downstream edges.
 
 		Args:
@@ -193,12 +194,12 @@ class Node:
 		port, value = None, None
 
 		# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>)
-		if type(res) is tuple:
+		if isinstance(res, tuple):
 			if len(res) != 2:
 				log.error('malformed_output', context='harness.module.res', port=str(res[0]) if len(res) > 0 else None, data_type=type(res).__name__, data_repr=repr(res))
 				return
 
-			if type(res[0]) is not str:
+			if not isinstance(res[0], str):
 				log.error('non_string_port', context='harness.module.res', port=str(res[0]))
 				return
 
@@ -230,8 +231,7 @@ class Node:
 			None.
 		"""
 
-		inputs = {0} # Python has no do...while; dummy value to bootstrap loop
-		while len(inputs) > 0: # Fancy method to ensure that nodes with no inputs only run once
+		while True: # Fancy method to ensure that nodes with no inputs only run once
 			# Get inputs according to contract
 			bind_contextvars(context='harness.node.contract', node=self.id, contract=type(self.contract).__name__)
 			try:
@@ -276,6 +276,10 @@ class Node:
 				log.fatal('exception', exc_info=e)
 			finally:
 				unbind_contextvars('context', 'node', 'module')
+
+			# 0-len inputs indicate there is nothing to wait for
+			if len(inputs) == 0:
+				break
 
 		if self.dsts is None:
 			log.error('dsts.not_initialised', context='harness.module.res', node=self.id)

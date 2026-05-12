@@ -28,8 +28,8 @@ def main() -> int:
 
 	if handler.failure:
 		return 1
-	else:
-		return 0
+
+	return 0
 
 if __name__ == '__main__':
 	raise SystemExit(main())

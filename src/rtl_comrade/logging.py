@@ -1,6 +1,5 @@
 """Logging setup and failure semantics for the harness runtime."""
 
-from dataclasses import dataclass
 import logging
 import structlog
 from structlog.contextvars import merge_contextvars
