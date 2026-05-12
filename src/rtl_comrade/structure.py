@@ -78,7 +78,7 @@ class ModuleStructureArg:
 	has_default: bool = False
 	default: typing.Any = None
 
-@dataclass
+@dataclass(slots=True)
 class ModuleStructure:
 	"""Statically inferred view of one module's input and output surface.
 

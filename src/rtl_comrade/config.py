@@ -4,9 +4,11 @@ This module defines the typed boundary between user-authored graph YAML and
 the harness graph-construction logic.
 """
 
+from dataclasses import dataclass
 from serde import serde, field, to_dict
 
 @serde
+@dataclass(slots=True, frozen=True)
 class GraphConfigNode:
 	"""One node definition from a graph YAML file.
 
@@ -25,6 +27,7 @@ class GraphConfigNode:
 	contract_config: dict = field(default_factory=dict)
 
 @serde
+@dataclass(slots=True, frozen=True)
 class GraphConfigSrcPort:
 	"""The source side of a graph edge.
 
@@ -37,6 +40,7 @@ class GraphConfigSrcPort:
 	port: str = field(default = "default")
 
 @serde
+@dataclass(slots=True, frozen=True)
 class GraphConfigDstPort:
 	"""The destination side of a graph edge.
 
@@ -49,6 +53,7 @@ class GraphConfigDstPort:
 	port: int|str = field(default = 1)
 
 @serde
+@dataclass(slots=True, frozen=True)
 class GraphConfigEdge:
 	"""A directed connection between two node ports.
 
@@ -64,6 +69,7 @@ class GraphConfigEdge:
 		return to_dict(self)
 
 @serde
+@dataclass(slots=True, frozen=True)
 class GraphConfig:
 	"""The top-level graph configuration schema loaded from YAML.
 

@@ -24,7 +24,7 @@ class InvalidEnqueuedError(Exception):
 	name: str
 	type_ : str
 
-@dataclass
+@dataclass(slots=True)
 class Port(Generic[T]):
 	"""One queue-backed runtime input port owned by a node.
 

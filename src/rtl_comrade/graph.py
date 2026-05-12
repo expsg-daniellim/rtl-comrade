@@ -16,7 +16,7 @@ from .validation import validate_acyclic, validate_no_static_deadlock
 
 log = structlog.get_logger()
 
-@dataclass
+@dataclass(slots=True)
 class Graph:
 	"""A runnable graph composed of instantiated nodes.
 

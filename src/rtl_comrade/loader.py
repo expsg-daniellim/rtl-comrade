@@ -1,6 +1,7 @@
 """Graph-config loading plus plugin discovery and dynamic import."""
 
-from __future__ import annotations 
+from __future__ import annotations
+from dataclasses import dataclass
 import importlib.util
 import inspect
 import os
@@ -63,6 +64,7 @@ def load_config_file(Config, path:Path):
 		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
 @serde
+@dataclass(slots=True, frozen=True)
 class PluginModuleConfig:
 	"""One exported class mapping within a plugin file manifest.
 
@@ -89,6 +91,7 @@ class PluginModuleConfig:
 		return PluginModuleConfig(class_name, name)
 
 @serde
+@dataclass(slots=True)
 class PluginFileConfig:
 	"""One plugin-file entry inside a plugin folder manifest.
 
