@@ -58,6 +58,7 @@ class ContractPort(Generic[T]):
 		has_default: Whether the corresponding module input has a Python default value.
 		default: The raw default value from the module signature, if any.
 		default_n: The next synthetic sequence number to use for default-derived payloads.
+		state: Contract-owned mutable state associated with this port.
 	"""
 
 	name: str

@@ -73,6 +73,7 @@ Each `ContractPort` exposes:
 - non-blocking `try_get()`
 - `has_ended()`
 - default metadata
+- a `state` dict for contract-owned per-port bookkeeping
 
 This is the main boundary between harness-owned transport and contract-owned scheduling policy.
 

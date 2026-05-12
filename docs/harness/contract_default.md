@@ -33,8 +33,9 @@ This is the harness’s baseline scheduling policy. It is not part of the generi
 - default-valued ports can self-satisfy
 - persistent ports with defaults can bootstrap from the default before upstream data arrives
 - if any required port returns `EndSentinel`, the contract returns `EndSentinel` for the whole node
+- port-local persistent state is stored in each `ContractPort.state` dict
 
 ## Caveats
 
 - the static deadlock validator is only loosely aligned with contract-specific behavior
-- this contract mutates `ContractPort` instances by attaching persistent state, so changes here affect scheduling semantics directly
+- this contract relies on `ContractPort.state` for persistent-input bookkeeping, so changes here affect scheduling semantics directly

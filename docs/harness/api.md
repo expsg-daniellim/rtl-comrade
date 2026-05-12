@@ -29,9 +29,9 @@ This is the harness boundary API for data movement and contract interaction. `no
 - `Payload` records `source`, `n`, and `payload`
 - `ContractPort` exposes both blocking `get()` and non-blocking `try_get()`
 - `ContractPort.get_default_payload()` synthesizes payloads sourced from `"_default"`
-- `ContractPort` is intentionally mutable so contracts can attach scheduling state
+- `ContractPort.state` is the intended place for contract-owned per-port mutable state
 
 ## Caveats
 
-- contracts can and do mutate `ContractPort` instances, so these objects are part API surface and part scheduling state carrier
+- contracts can and do use `ContractPort.state`, so these objects are part API surface and part scheduling state carrier
 - the exact meaning of `Payload.n` is currently "per-destination dispatch count", not a global sequence number

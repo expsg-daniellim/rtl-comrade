@@ -87,17 +87,16 @@ Each `ContractPort` provides:
 - `has_default`
 - `default`
 - `get_default_payload()`
+- `state`: a dict for contract-owned per-port state
 
 Important details:
 
 - `get()` waits until an item is available
 - `try_get()` treats an empty queue as normal and returns `None`
 - `get_default_payload()` synthesizes a `Payload` with source `"_default"`
-- `ContractPort` is mutable by design, so contracts may attach their own state to it
+- contracts should store per-port state inside `port.state`, not by attaching ad hoc attributes directly to the `ContractPort` object
 
-The built-in default contract uses that last property to add fields such as `persistent` and `last_value`.
-
-That is not just a theoretical possibility; it is an existing pattern in the codebase.
+The built-in default contract uses `port.state` keys such as `persistent` and `last_value`.
 
 ## What `get_inputs()` Should Return
 
@@ -244,11 +243,11 @@ Common patterns include:
 You can store state:
 
 - on `self`
-- on individual `ContractPort` objects
+- in individual `ContractPort.state` dicts
 
-Prefer `self` for most policy state. Use port mutation only when the state is conceptually owned by that port.
+Prefer `self` for most policy state. Use `port.state` when the state is conceptually owned by that port.
 
-In the current codebase, `DefaultContract` stores persistent-input state directly on each `ContractPort`, so contracts are already expected to be comfortable with port-local mutable state when it fits the policy.
+In the current codebase, `DefaultContract` stores persistent-input state in each port's `state` dict, so contracts are already expected to be comfortable with port-local mutable state when it fits the policy.
 
 ## Logging Guidance
 
