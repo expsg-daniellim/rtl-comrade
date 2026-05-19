@@ -56,6 +56,12 @@ class _BasicContract:
         return EndSentinel(self.id)
 
 
+class _CycleModule:
+    """Module with one input and one output, needed for valid cycle/no-source graphs."""
+    def run(self, a):
+        return a
+
+
 # Mapping helpers
 _MODULE_MAP = {
     "source_mod": _SourceModule,
@@ -285,3 +291,75 @@ def test_non_definite_emits_warns(logging_handler):
     graph = _from_config(config)
     assert "src" in graph.nodes
     assert logging_handler.failure is False
+
+
+# --- Plugin validation ---
+
+def test_module_plugin_missing_run_fatal(logging_handler):
+    class _NoRunModule:
+        pass
+
+    call_count = [0]
+    def side_effect(paths):
+        call_count[0] += 1
+        return {"no_run_mod": _NoRunModule} if call_count[0] == 1 else {}
+
+    config = _make_config([_node("n1", "no_run_mod")], [])
+    with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+        with pytest.raises(SystemExit):
+            Graph.from_config(config)
+
+
+def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
+    class _NoGetInputsContract:
+        def __init__(self, id, ports):
+            pass
+
+    call_count = [0]
+    def side_effect(paths):
+        call_count[0] += 1
+        return _MODULE_MAP if call_count[0] == 1 else {"bad_contract": _NoGetInputsContract}
+
+    config = _make_config([_node("n1", "source_mod", contract="bad_contract")], [])
+    with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+        with pytest.raises(SystemExit):
+            Graph.from_config(config)
+
+
+# --- Graph-level structural validation (using _CycleModule for valid edges) ---
+
+def test_cyclic_graph_detected_fatal(logging_handler):
+    # _CycleModule emits on "default" and accepts "a", so edge validation passes.
+    # The cycle is then caught by validate_acyclic.
+    cycle_map = {**_MODULE_MAP, "cycle_mod": _CycleModule}
+    call_count = [0]
+    def side_effect(paths):
+        call_count[0] += 1
+        return cycle_map if call_count[0] == 1 else {}
+
+    config = _make_config(
+        [_node("a", "cycle_mod"), _node("b", "cycle_mod")],
+        [_edge("a", "default", "b", 1), _edge("b", "default", "a", 1)],
+    )
+    with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+        with pytest.raises(SystemExit):
+            Graph.from_config(config)
+
+
+def test_no_source_capable_node_detected(logging_handler):
+    # Both nodes require input "a"; neither is source-capable.
+    # a → b: edge validation passes (cycle_mod emits on default).
+    # Static validation detects no_source and has_deadlock.
+    cycle_map = {**_MODULE_MAP, "cycle_mod": _CycleModule}
+    call_count = [0]
+    def side_effect(paths):
+        call_count[0] += 1
+        return cycle_map if call_count[0] == 1 else {}
+
+    config = _make_config(
+        [_node("a", "cycle_mod"), _node("b", "cycle_mod")],
+        [_edge("a", "default", "b", 1)],
+    )
+    with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+        with pytest.raises(SystemExit):
+            Graph.from_config(config)

@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from serde import serde, field
 import structlog
 
-from .api import Payload, EndSentinel, ContractPort, NoDefaultError
+from .api import Payload, EndSentinel, ContractPort
 
 log = structlog.get_logger()
 
@@ -124,19 +124,11 @@ class DefaultContract:
 				if port.state['last_value'] is not None:
 					special_inputs[name] = port.state['last_value']
 				elif port.has_default:
-					try:
-						default = port.get_default_payload()
-						port.state['last_value'] = default
-						special_inputs[name] = default
-					except NoDefaultError as e:
-						log.fatal('invalid_default_access', port=e.name)
-				else:
-					log.fatal('no_last_value', port=name)
+					default = port.get_default_payload()
+					port.state['last_value'] = default
+					special_inputs[name] = default
 			elif port.has_default and not port.has_ended():
-				try:
-					special_inputs[name] = port.get_default_payload()
-				except NoDefaultError as e:
-					log.fatal('invalid_default_access', port=e.name)
+				special_inputs[name] = port.get_default_payload()
 			else:
 				log.fatal('unsupported_case')
 		# Special inputs should never have an EndSentinel, so no checking is done

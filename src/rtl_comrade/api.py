@@ -80,7 +80,7 @@ class ContractPort(Generic[T]):
 			NoDefaultError: If this port does not have a default value.
 		"""
 
-		if not self.has_default or (self.default is None and T is not None):
+		if not self.has_default:
 			raise NoDefaultError(self.name)
 
 		payload = Payload("_default", self.default_n, self.default)

@@ -5,13 +5,22 @@ logic in isolation from the full graph runtime.
 
 Usage::
 
-    from rtl_comrade.testing import run_contract_scenario
+    from rtl_comrade.testing import run_contract_scenario, PortTestInput
     from rtl_comrade.api import EndSentinel
 
+    # All items pre-enqueued (default, delay=0):
     await run_contract_scenario(
         MyContract,
         port_inputs={"a": [1, 2, EndSentinel("src")]},
         expected_outputs=[{"a": 1}, {"a": 2}, EndSentinel],
+        config=MyContract.Config(),
+    )
+
+    # Item delivered asynchronously after the contract has started running:
+    await run_contract_scenario(
+        MyContract,
+        port_inputs={"a": [PortTestInput(1, delay=1), PortTestInput(EndSentinel("src"), delay=2)]},
+        expected_outputs=[{"a": 1}, EndSentinel],
         config=MyContract.Config(),
     )
 """
@@ -59,6 +68,24 @@ class PortMeta:
     default: Any = None
 
 
+@dataclass
+class PortTestInput:
+    """A single item in a port's input list, with an optional delivery delay.
+
+    Attributes:
+        value: The value to deliver — raw Python value, Payload, or EndSentinel.
+            Raw values are wrapped in Payload(source="test", ...) exactly as
+            bare list items are.
+        delay: Number of asyncio.sleep(0) yields to wait before delivering this
+            item. delay=0 (default) pre-enqueues the item before get_inputs() is
+            called. delay=N delivers the item after N yields while the contract is
+            already running, allowing tests to exercise blocking-await paths.
+    """
+
+    value: Any
+    delay: int = 0
+
+
 async def run_contract_scenario(
     contract_cls: type,
     port_inputs: dict[str, list[Any]],
@@ -71,15 +98,18 @@ async def run_contract_scenario(
 ) -> None:
     """Test a contract by feeding it port data and asserting get_inputs() outputs.
 
-    The harness creates one Port per key in port_inputs, pre-enqueues all data,
-    instantiates the contract, then calls get_inputs() once per entry in
-    expected_outputs and asserts the result matches.
+    The harness creates one Port per key in port_inputs, enqueues items according
+    to their delay, instantiates the contract, then calls get_inputs() once per
+    entry in expected_outputs and asserts the result matches.
 
     Args:
         contract_cls: The contract class to test.
-        port_inputs: Maps each port name to a list of values to enqueue.
-            Raw Python values are wrapped in Payload(source="test", n=<index>,
-            payload=val). Pass Payload or EndSentinel instances to override.
+        port_inputs: Maps each port name to a list of values to deliver. Each
+            item may be a raw Python value, a Payload, an EndSentinel, or a
+            PortTestInput. Raw values and Payload/EndSentinel instances are treated
+            as PortTestInput(value, delay=0). delay=0 items are pre-enqueued before
+            get_inputs() is called; delay=N items are delivered after N
+            asyncio.sleep(0) yields while the contract is already running.
         expected_outputs: One entry per get_inputs() call. Each entry is either:
             - dict[str, Any]: maps port name to the expected .payload value
             - EndSentinel class or instance: asserts the call returns an EndSentinel
@@ -94,8 +124,8 @@ async def run_contract_scenario(
         asyncio.TimeoutError: When a get_inputs() call exceeds timeout.
     """
     meta = port_meta or {}
-
     _default_meta = PortMeta()
+
     ports: dict[str, Port] = {
         name: Port(
             name=name,
@@ -105,11 +135,18 @@ async def run_contract_scenario(
         for name in port_inputs
     }
 
+    # Normalise every item and split by delay.
+    n_counters: dict[str, int] = {name: 0 for name in port_inputs}
+    deferred: list[tuple[str, int, Payload | EndSentinel]] = []
+
     for name, values in port_inputs.items():
-        port = ports[name]
-        for i, val in enumerate(values):
-            item = val if isinstance(val, (Payload, EndSentinel)) else Payload(source="test", n=i, payload=val)
-            port.queue.put_nowait(item)
+        for val in values:
+            pti = val if isinstance(val, PortTestInput) else PortTestInput(val)
+            item = _wrap_item(pti.value, name, n_counters)
+            if pti.delay == 0:
+                ports[name].queue.put_nowait(item)
+            else:
+                deferred.append((name, pti.delay, item))
 
     contract_ports: dict[str, ContractPort] = {
         name: ContractPort(
@@ -133,12 +170,46 @@ async def run_contract_scenario(
         kwargs["config"] = config
     contract = contract_cls(**kwargs)
 
+    if deferred:
+        await asyncio.gather(
+            _contract_loop(contract, expected_outputs, timeout),
+            _feeder(ports, deferred),
+        )
+    else:
+        await _contract_loop(contract, expected_outputs, timeout)
+
+
+def _wrap_item(val: Any, name: str, n_counters: dict[str, int]) -> Payload | EndSentinel:
+    if isinstance(val, (Payload, EndSentinel)):
+        return val
+    item = Payload(source="test", n=n_counters[name], payload=val)
+    n_counters[name] += 1
+    return item
+
+
+async def _contract_loop(
+    contract: Any,
+    expected_outputs: list[Any],
+    timeout: float,
+) -> None:
     for step, expected in enumerate(expected_outputs):
         if inspect.iscoroutinefunction(contract.get_inputs):
             actual = await asyncio.wait_for(contract.get_inputs(), timeout=timeout)
         else:
             actual = contract.get_inputs()
         _assert_step(step, actual, expected)
+
+
+async def _feeder(
+    ports: dict[str, Port],
+    deferred: list[tuple[str, int, Payload | EndSentinel]],
+) -> None:
+    max_delay = max(delay for _, delay, _ in deferred)
+    for tick in range(1, max_delay + 1):
+        await asyncio.sleep(0)
+        for name, delay, item in deferred:
+            if delay == tick:
+                ports[name].queue.put_nowait(item)
 
 
 def _validate_contract(contract_cls: type) -> inspect.Signature:

@@ -1,6 +1,9 @@
 """Unit tests for structure.py — walk_ast and ModuleStructure."""
 
 import ast
+import inspect
+from unittest.mock import patch
+
 import pytest
 
 from rtl_comrade.structure import (
@@ -213,3 +216,65 @@ def test_non_str_port_name_raises():
     with pytest.raises(StructureNonStrPortNameError) as exc_info:
         ModuleStructure(_NonStrPortName)
     assert exc_info.value.port_name == 42
+
+
+# --- Fatal paths — getsource / ast.parse / signature failures ---
+
+def test_run_signature_type_error_fatal(logging_handler):
+    with patch.object(inspect, "signature", side_effect=TypeError("uninspectable")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_run_signature_value_error_fatal(logging_handler):
+    with patch.object(inspect, "signature", side_effect=ValueError("wrapped")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_getsource_os_error_fatal(logging_handler):
+    with patch.object(inspect, "getsource", side_effect=OSError(13, "Permission denied")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_getsource_type_error_fatal(logging_handler):
+    with patch.object(inspect, "getsource", side_effect=TypeError("unloadable")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_getsource_value_error_fatal(logging_handler):
+    with patch.object(inspect, "getsource", side_effect=ValueError("wrapped cycle")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_ast_parse_syntax_error_fatal(logging_handler):
+    with patch.object(ast, "parse", side_effect=SyntaxError("bad syntax")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_ast_parse_value_error_fatal(logging_handler):
+    with patch.object(ast, "parse", side_effect=ValueError("value error")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_ast_parse_type_error_fatal(logging_handler):
+    with patch.object(ast, "parse", side_effect=TypeError("type error")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_ast_parse_memory_error_fatal(logging_handler):
+    with patch.object(ast, "parse", side_effect=MemoryError("out of memory")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)
+
+
+def test_ast_parse_recursion_error_fatal(logging_handler):
+    with patch.object(ast, "parse", side_effect=RecursionError("max recursion depth")):
+        with pytest.raises(SystemExit):
+            ModuleStructure(_NoArgs)

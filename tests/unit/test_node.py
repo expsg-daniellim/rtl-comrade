@@ -1,7 +1,12 @@
 """Unit tests for node.py — Node construction, get_canonical_port, accept, process_result, run."""
 
+import inspect
 import pytest
 from collections import OrderedDict
+from unittest.mock import patch
+
+from serde import SerdeError
+from serde.compat import UserError
 
 from rtl_comrade.api import Payload, EndSentinel
 from rtl_comrade.contract_default import DefaultContract
@@ -102,6 +107,45 @@ class _NoPortsContract:
 
     async def get_inputs(self):
         return EndSentinel(self.id)
+
+
+# Module-scope: ModuleStructure calls inspect.getsource, so these must be top-level.
+class _InvalidTupleModule:
+    def run(self):
+        return (1, 2, 3)  # three-element tuple → StructureInvalidTupleError
+
+
+class _NonStrPortNameModule:
+    def run(self):
+        return (42, "value")  # non-string port name → StructureNonStrPortNameError
+
+
+# Contract helpers for construction-error tests (no getsource needed).
+class _ContractConfigNoClass:
+    """Accepts config but has no Config inner class — triggers config.mismatch warning."""
+    def __init__(self, id, ports, config):
+        self.id = id
+        self.ports = ports
+
+    async def get_inputs(self):
+        return EndSentinel(self.id)
+
+
+class _ContractInitCrash:
+    def __init__(self, id, ports):
+        raise RuntimeError("deliberate contract init crash")
+
+    async def get_inputs(self):
+        return EndSentinel("x")
+
+
+class _CrashGetInputsContract:
+    def __init__(self, id, ports):
+        self.id = id
+        self.ports = ports
+
+    async def get_inputs(self):
+        raise RuntimeError("deliberate crash in get_inputs")
 
 
 def _make_node(Module, config=None, Contract=None, contract_config=None):
@@ -350,3 +394,172 @@ async def test_run_no_input_runs_once(logging_handler):
 async def test_run_module_exception_fatal(logging_handler):
     with pytest.raises(SystemExit):
         await _run_node_with_input(_CrashModule, {})
+
+
+# --- Initialization — fatal paths ---
+
+def test_module_unavailable_signature_fatal(logging_handler):
+    with patch.object(inspect, "signature", side_effect=TypeError("uninspectable")):
+        with pytest.raises(SystemExit):
+            _make_node(_MinimalModule)
+
+
+def test_module_config_serde_error_fatal(logging_handler):
+    with patch("rtl_comrade.node.from_dict", side_effect=SerdeError("bad config")):
+        with pytest.raises(SystemExit):
+            _make_node(_ModuleWithConfigClass, config={"value": "wrong_type"})
+
+
+def test_module_config_user_error_fatal(logging_handler):
+    with patch("rtl_comrade.node.from_dict", side_effect=UserError("user error")):
+        with pytest.raises(SystemExit):
+            _make_node(_ModuleWithConfigClass, config={"value": 0})
+
+
+def test_module_init_exception_fatal(logging_handler):
+    class _InitCrashModule:
+        def __init__(self):
+            raise RuntimeError("deliberate module init crash")
+        def run(self): return None
+
+    with pytest.raises(SystemExit):
+        _make_node(_InitCrashModule)
+
+
+def test_module_invalid_tuple_structure_fatal(logging_handler):
+    with pytest.raises(SystemExit):
+        _make_node(_InvalidTupleModule)
+
+
+def test_module_non_str_port_name_structure_fatal(logging_handler):
+    with pytest.raises(SystemExit):
+        _make_node(_NonStrPortNameModule)
+
+
+def test_contract_unavailable_signature_fatal(logging_handler):
+    # inspect.signature is called three times before Node init completes:
+    #   1. Module.__init__ (node.py)
+    #   2. Module.run    (structure.py, inside ModuleStructure)
+    #   3. Contract.__init__ (node.py) ← want this to raise
+    _orig = inspect.signature
+    call_count = [0]
+    def _patched(obj):
+        call_count[0] += 1
+        if call_count[0] == 3:
+            raise TypeError("uninspectable contract")
+        return _orig(obj)
+    with patch.object(inspect, "signature", side_effect=_patched):
+        with pytest.raises(SystemExit):
+            _make_node(_MinimalModule)
+
+
+def test_contract_config_serde_error_fatal(logging_handler):
+    # _MinimalModule has no 'config' param → from_dict not called for module.
+    # _ContractConfigNoClass accepts config but has no Config class → only warn, no from_dict.
+    # Use a contract WITH Config to trigger from_dict for contract.
+    from serde import serde as _serde
+    from dataclasses import dataclass as _dc
+
+    @_serde
+    @_dc
+    class _ContractWithConfig:
+        class Config:
+            pass
+        def __init__(self, id, ports, config): # type: ignore[override]
+            self.id = id
+            self.ports = ports
+        async def get_inputs(self):
+            return EndSentinel(self.id)
+        _ContractWithConfig = None  # placeholder (overridden below)
+
+    class _ContractWithSerdeCfg:
+        @_serde
+        class Config:
+            x: int = 0
+        def __init__(self, id, ports, config):
+            self.id = id
+            self.ports = ports
+        async def get_inputs(self):
+            return EndSentinel(self.id)
+
+    with patch("rtl_comrade.node.from_dict", side_effect=SerdeError("contract serde error")):
+        with pytest.raises(SystemExit):
+            _make_node(_MinimalModule, Contract=_ContractWithSerdeCfg)
+
+
+def test_contract_config_user_error_fatal(logging_handler):
+    from serde import serde as _serde
+
+    class _ContractWithSerdeCfg:
+        @_serde
+        class Config:
+            x: int = 0
+        def __init__(self, id, ports, config):
+            self.id = id
+            self.ports = ports
+        async def get_inputs(self):
+            return EndSentinel(self.id)
+
+    with patch("rtl_comrade.node.from_dict", side_effect=UserError("contract user error")):
+        with pytest.raises(SystemExit):
+            _make_node(_MinimalModule, Contract=_ContractWithSerdeCfg)
+
+
+def test_contract_no_config_class_warns(logging_handler):
+    node = _make_node(_MinimalModule, Contract=_ContractConfigNoClass, contract_config={"x": 1})
+    assert logging_handler.failure is False  # warn, not error
+
+
+def test_contract_init_exception_fatal(logging_handler):
+    with pytest.raises(SystemExit):
+        _make_node(_MinimalModule, Contract=_ContractInitCrash)
+
+
+# --- process_result — dsts not initialised ---
+
+async def test_process_result_dsts_not_initialised_logs_error(logging_handler):
+    node = _make_node(_MinimalModule)
+    # Intentionally skip set_dsts — self.dsts remains None.
+    await node.process_result(42)
+    assert logging_handler.failure is True
+
+
+# --- run — fatal paths ---
+
+async def test_run_invalid_enqueued_error_fatal(logging_handler):
+    node = _make_node(_ModuleOneInput)
+    node.set_dsts([])
+    # Put a non-Payload/EndSentinel value directly into the port queue.
+    node.ports["a"].queue.put_nowait(42)
+    with pytest.raises(SystemExit):
+        await node.run()
+
+
+async def test_run_get_inputs_exception_fatal(logging_handler):
+    node = Node(id="test", Module=_MinimalModule, config={}, Contract=_CrashGetInputsContract)
+    node.set_dsts([])
+    with pytest.raises(SystemExit):
+        await node.run()
+
+
+async def test_run_dsts_not_initialised_at_end_logs_error(logging_handler):
+    # _MinimalModule has no inputs → len(inputs)==0 breaks the loop immediately.
+    # Without set_dsts, the post-loop sentinel check logs an error.
+    node = _make_node(_MinimalModule)
+    await node.run()
+    assert logging_handler.failure is True
+
+
+async def test_run_sync_contract_get_inputs(logging_handler):
+    # Covers the sync `inputs = self.contract.get_inputs()` branch in Node.run().
+    class _SyncTerminateContract:
+        def __init__(self, id, ports):
+            self.id = id
+            self.ports = ports
+
+        def get_inputs(self):  # intentionally sync
+            return EndSentinel(self.id)
+
+    node = Node(id="test", Module=_MinimalModule, config={}, Contract=_SyncTerminateContract)
+    node.set_dsts([])
+    await node.run()  # should terminate cleanly via the sync EndSentinel

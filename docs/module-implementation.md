@@ -453,6 +453,45 @@ async def test_file_not_found_is_fatal(logging_handler):
 
 The `logging_handler` fixture is required for both cases; without it, the structlog calls are not intercepted.
 
+### Coverage Target
+
+Run coverage against a single module file:
+
+```bash
+uv run pytest modules/tests/test_mymodule.py --cov=modules/mymodule.py --cov-report=term-missing
+```
+
+The missing-lines report shows exactly which branches remain uncovered. Aim for 100% on every module file before merging.
+
+Key branches to cover:
+
+**Output ports**
+
+- Every named port your module can emit on — one test per port.
+- The `None`-returning path if your module ever returns `None` (emits nothing).
+
+**Conditional logic**
+
+- Each branch of any `if`/`elif`/`else` inside `run(...)`. For a module like `CompareMod` that routes to `"gt"`, `"lt"`, or `"eq"`, each branch needs at least one test.
+
+**Generator behavior**
+
+- At least one test that exercises the full sequence a generator emits in a single invocation.
+- If the generator has early-exit conditions, test them too.
+
+**Stateful modules**
+
+- Multi-step sequences via `input_sequence` to drive the module through each state transition. A module that accumulates state across calls needs tests that verify both early-call and late-call behavior.
+
+**Error and fatal paths**
+
+- If your module logs `ERROR` for a bad input or unsupported operation, include a test that passes that input and asserts `logging_handler.failure is True`.
+- If your module calls `log.fatal` / `log.critical`, include a test with `pytest.raises(SystemExit)`.
+
+**Config validation**
+
+- If `__init__` validates config fields, include at least one test for a valid config and one that triggers each validation failure.
+
 ## Design Advice
 
 - Keep scheduling logic in contracts, not in modules.

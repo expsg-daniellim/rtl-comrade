@@ -243,6 +243,40 @@ async def test_default_port_real_value_then_synthesized():
     )
 
 
+async def test_persistent_port_with_default_falls_back_to_get_default_when_no_last_value():
+    # Persistent port that also has a default but has never received a real value:
+    # is_special() is True (has_default), try_get() returns None, last_value is None,
+    # so the contract calls get_default_payload() and caches the result as last_value.
+    port_req = _make_port("a")
+    port_mul = _make_port("multiplier", has_default=True, default=5)
+    contract, _ = _make_contract(
+        {"a": port_req, "multiplier": port_mul},
+        persistent_inputs=["multiplier"],
+    )
+    await port_req.queue.put(Payload("src", 0, 1))
+    result = await contract.get_inputs()
+    assert result["multiplier"].payload == 5
+    assert result["multiplier"].source == "_default"
+    assert contract.ports["multiplier"].state["last_value"].payload == 5
+
+
+async def test_default_port_ended_hits_unsupported_case_fatal(logging_handler):
+    # A default-only port that has ended leaves the contract with no valid fallback:
+    # is_special() is True (has_default), try_get() returns None (ended port short-circuits),
+    # not persistent, has_default=True but has_ended()=True → else: log.fatal('unsupported_case').
+    port_req = _make_port("a")
+    port_def = _make_port("b", has_default=True, default=5)
+    contract, _ = _make_contract({"a": port_req, "b": port_def})
+
+    await port_def.queue.put(EndSentinel("upstream"))
+    port_def.try_get()  # consume sentinel → ended=True
+    assert port_def.has_ended() is True
+
+    await port_req.queue.put(Payload("src", 0, 1))
+    with pytest.raises(SystemExit):
+        await contract.get_inputs()
+
+
 async def test_persistent_port_updates_eagerly_then_reuses():
     # "scale" is consumed as a required input on call 1, updated eagerly on call 2
     # when a new value is already queued, then reused from cache on call 3.
