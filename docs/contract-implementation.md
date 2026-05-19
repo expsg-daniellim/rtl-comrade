@@ -298,6 +298,85 @@ nodes:
   contract: zip
 ```
 
+## Testing Contracts
+
+`rtl_comrade.testing` provides `run_contract_scenario()` for testing contract scheduling logic in isolation — no graph, no module, no runtime required.
+
+```python
+from rtl_comrade.api import EndSentinel
+from rtl_comrade.testing import run_contract_scenario, PortMeta
+```
+
+### Basic usage
+
+```python
+await run_contract_scenario(
+    MyContract,
+    port_inputs={
+        "a": [1, 2, EndSentinel("src")],
+        "b": [10, 20, EndSentinel("src")],
+    },
+    expected_outputs=[
+        {"a": 1, "b": 10},
+        {"a": 2, "b": 20},
+        EndSentinel,
+    ],
+    config=MyContract.Config(),
+)
+```
+
+The harness creates one `Port` per key in `port_inputs`, pre-enqueues all data, instantiates the contract, then calls `get_inputs()` once per entry in `expected_outputs` and asserts the result matches.
+
+### `port_inputs`
+
+Maps each port name to a list of values to feed that port in order.
+
+- Raw Python values are auto-wrapped: `Payload(source="test", n=<index>, payload=val)`
+- Pass `Payload` or `EndSentinel` instances directly when you need to control `source` or `n`
+
+### `expected_outputs`
+
+One entry per `get_inputs()` call.
+
+| Entry type | Assertion |
+|---|---|
+| `dict[str, Any]` | Each key's `.payload` equals the given value; `source`/`n` are ignored |
+| `EndSentinel` (class or instance) | Result must be an `EndSentinel` |
+
+### Ports with defaults
+
+Use `port_meta` to configure `has_default` and `default` on individual ports, matching what the harness derives from the module signature:
+
+```python
+await run_contract_scenario(
+    MyContract,
+    port_inputs={"a": [1, EndSentinel("src")], "b": []},
+    expected_outputs=[{"a": 1, "b": 0}, EndSentinel],
+    port_meta={"b": PortMeta(has_default=True, default=0)},
+    config=MyContract.Config(),
+)
+```
+
+Ports not listed in `port_meta` default to `has_default=False, default=None`.
+
+### Optional kwargs
+
+| Kwarg | Default | Purpose |
+|---|---|---|
+| `config` | `None` | Passed to `__init__` only when the contract declares `config` |
+| `contract_id` | `"test.contract"` | The `id` string passed to the contract |
+| `timeout` | `5.0` | Maximum seconds to wait for each `get_inputs()` call |
+
+### Validation
+
+`run_contract_scenario` asserts the same structural rules the harness enforces:
+
+- the contract exposes `get_inputs` (mirrors `graph.py` load-time check)
+- `__init__` is inspectable (mirrors `node.py` instantiation guard)
+- `__init__` declares `ports` (mirrors `node.py` no-ports warning, promoted to an assertion)
+
+These fire as `AssertionError` before any `get_inputs()` calls, so a mis-wired contract class fails at test collection time rather than silently at runtime.
+
 ## Design Advice
 
 - Keep scheduling policy in the contract, not in the module.

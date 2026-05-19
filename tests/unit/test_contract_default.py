@@ -6,6 +6,7 @@ import pytest
 from rtl_comrade.api import Payload, EndSentinel, ContractPort
 from rtl_comrade.contract_default import DefaultContract, is_special
 from rtl_comrade.port import Port
+from rtl_comrade.testing import PortMeta, run_contract_scenario
 
 
 def _make_port(name, has_default=False, default=None):
@@ -204,3 +205,58 @@ def test_persistent_input_unknown_port_fatal(logging_handler):
     port = _make_port("value")
     with pytest.raises(SystemExit):
         _make_contract({"value": port}, persistent_inputs=["nonexistent"])
+
+
+# --- multi-call scenarios via harness ---
+
+async def test_two_required_ports_full_sequence():
+    await run_contract_scenario(
+        DefaultContract,
+        port_inputs={
+            "x": [1, 2, EndSentinel("src")],
+            "y": [10, 20, EndSentinel("src")],
+        },
+        expected_outputs=[
+            {"x": 1, "y": 10},
+            {"x": 2, "y": 20},
+            EndSentinel,
+        ],
+        config=DefaultContract.Config(),
+    )
+
+
+async def test_default_port_real_value_then_synthesized():
+    # "b" supplies one real value then runs dry; subsequent calls synthesize from default.
+    await run_contract_scenario(
+        DefaultContract,
+        port_inputs={
+            "a": [1, 2, EndSentinel("src")],
+            "b": [99],
+        },
+        expected_outputs=[
+            {"a": 1, "b": 99},
+            {"a": 2, "b": 0},
+            EndSentinel,
+        ],
+        port_meta={"b": PortMeta(has_default=True, default=0)},
+        config=DefaultContract.Config(),
+    )
+
+
+async def test_persistent_port_updates_eagerly_then_reuses():
+    # "scale" is consumed as a required input on call 1, updated eagerly on call 2
+    # when a new value is already queued, then reused from cache on call 3.
+    await run_contract_scenario(
+        DefaultContract,
+        port_inputs={
+            "value": [1, 2, 3, EndSentinel("src")],
+            "scale": [10, 30],
+        },
+        expected_outputs=[
+            {"value": 1, "scale": 10},
+            {"value": 2, "scale": 30},
+            {"value": 3, "scale": 30},
+            EndSentinel,
+        ],
+        config=DefaultContract.Config(persistent_inputs=["scale"]),
+    )

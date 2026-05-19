@@ -1,10 +1,8 @@
 """Shared fixtures for harness test suite."""
 
-import logging
 import pytest
-import structlog
 
-from rtl_comrade.logging import initialise_logging
+from rtl_comrade.testing import logging_handler  # noqa: F401
 from rtl_comrade.config import (
     GraphConfig,
     GraphConfigNode,
@@ -12,16 +10,6 @@ from rtl_comrade.config import (
     GraphConfigSrcPort,
     GraphConfigDstPort,
 )
-
-
-@pytest.fixture
-def logging_handler():
-    structlog.reset_defaults()
-    handler = initialise_logging(logging.DEBUG)
-    yield handler
-    root = logging.getLogger()
-    root.handlers.clear()
-    structlog.reset_defaults()
 
 
 @pytest.fixture
