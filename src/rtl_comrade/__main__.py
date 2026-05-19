@@ -7,15 +7,13 @@ import sys
 from .graph import Graph
 from .logging import initialise_logging
 
-# TODO: pydantic
-# TODO: test multi-outputs
 # TODO: debug logging
 
 def main() -> int:
 	"""Run the configured graph and return a process exit code.
 
 	Returns:
-		``0`` if no error-level logs were emitted during the run, otherwise ``1``.
+		``0`` if no errors were encountered during the run, otherwise ``1``.
 	"""
 
 	# TODO: read log level from env/cli arg

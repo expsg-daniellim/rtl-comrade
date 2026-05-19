@@ -153,7 +153,9 @@ class ModuleStructure:
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
 					if isinstance(node.value.elts[0].value, str):
-						self.emits.append(str(node.value.elts[0].value))
+						port_name = node.value.elts[0].value
+						if port_name not in self.emits:
+							self.emits.append(port_name)
 					else:
 						raise StructureNonStrPortNameError(Module.__name__, node.lineno, node.value.elts[0].value)
 				else: # Dynamic output port names present
