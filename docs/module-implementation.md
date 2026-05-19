@@ -309,6 +309,150 @@ nodes:
   module: add
 ```
 
+## Testing
+
+Modules can be tested in isolation using `run_module_scenario` from `rtl_comrade.testing`.
+
+The harness drives the module's `run(...)` method directly, without a graph or contract. You supply a sequence of input dicts (one per invocation) and the expected emissions per port.
+
+### Loading module classes
+
+The `modules/` directory is a plugin directory, not a Python package. Load module classes with `importlib.util` to avoid name conflicts with the standard library (notably `io`):
+
+```python
+import importlib.util
+from pathlib import Path
+
+_spec = importlib.util.spec_from_file_location("modules_funcs", Path(__file__).parent.parent / "funcs.py")
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+AddMod = _mod.AddMod
+```
+
+### conftest setup
+
+Place a `conftest.py` next to your test files to make the `logging_handler` fixture available:
+
+```python
+# modules/tests/conftest.py
+from rtl_comrade.testing import logging_handler  # noqa: F401
+```
+
+### Basic example
+
+```python
+from rtl_comrade.testing import run_module_scenario
+
+async def test_add_integers():
+    await run_module_scenario(
+        AddMod,
+        input_sequence=[{"a": 3, "b": 4}],
+        expected_emissions={"default": [7]},
+    )
+```
+
+`input_sequence` is a list of dicts — one per `run(...)` invocation. Each dict maps parameter name to raw value (the same values the module sees after the harness unwraps payloads).
+
+`expected_emissions` maps port name to an ordered list of expected values. A port absent from the dict is expected to produce no emissions.
+
+### Generator module
+
+Emissions from a single invocation are collected in order alongside emissions from subsequent invocations:
+
+```python
+async def test_fileread_yields_lines(tmp_path):
+    f = tmp_path / "data.txt"
+    f.write_text("hello\nworld\n")
+    await run_module_scenario(
+        FileReadMod,
+        input_sequence=[{}],
+        expected_emissions={"default": ["hello\n", "world\n"]},
+        config=FileReadMod.Config(file=str(f)),
+    )
+```
+
+### Named-port module
+
+```python
+async def test_router_positive():
+    await run_module_scenario(
+        SplitMod,
+        input_sequence=[{"a": 5}],
+        expected_emissions={"positive": [5]},
+    )
+```
+
+### Multi-step sequence
+
+Pass multiple dicts to drive several invocations. Emissions are accumulated across all steps in call order:
+
+```python
+async def test_add_multi_step():
+    await run_module_scenario(
+        AddMod,
+        input_sequence=[{"a": 1, "b": 2}, {"a": 10, "b": 20}],
+        expected_emissions={"default": [3, 30]},
+    )
+```
+
+### Source modules
+
+A module with no `run(...)` parameters is a source node. Pass a single empty dict. The harness runs it once and stops, matching the graph runtime:
+
+```python
+async def test_source_emits_once():
+    await run_module_scenario(
+        SourceMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [99]},
+    )
+```
+
+### Config-bearing modules
+
+Pass a `Config` instance directly as the `config` keyword argument. The harness passes it as-is, without serde deserialization:
+
+```python
+async def test_fileread_lines(tmp_path):
+    f = tmp_path / "data.txt"
+    f.write_text("line one\n")
+    await run_module_scenario(
+        FileReadMod,
+        input_sequence=[{}],
+        expected_emissions={"default": ["line one\n"]},
+        config=FileReadMod.Config(file=str(f)),
+    )
+```
+
+### Testing error paths
+
+`ERROR` log calls set `logging_handler.failure = True` without raising. Assert on that after the scenario:
+
+```python
+async def test_invalid_op_logs_error(logging_handler):
+    await run_module_scenario(
+        ALUMod,
+        input_sequence=[{"a": 10, "b": 3, "op": 2}],
+        expected_emissions={},
+    )
+    assert logging_handler.failure is True
+```
+
+`CRITICAL` (and `fatal`) log calls raise `SystemExit(1)`. Use `pytest.raises`:
+
+```python
+async def test_file_not_found_is_fatal(logging_handler):
+    with pytest.raises(SystemExit):
+        await run_module_scenario(
+            FileReadMod,
+            input_sequence=[{}],
+            expected_emissions={},
+            config=FileReadMod.Config(file="/nonexistent.txt"),
+        )
+```
+
+The `logging_handler` fixture is required for both cases; without it, the structlog calls are not intercepted.
+
 ## Design Advice
 
 - Keep scheduling logic in contracts, not in modules.
@@ -323,5 +467,3 @@ nodes:
 - dynamic port names are allowed, but they weaken static validation
 - modules have no direct access to payload metadata such as source node id or sequence number
 - modules receive plain values after contract selection, not transport-layer objects
-
-If you want, I can also add a direct pointer to [docs/module-implementation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/module-implementation.md) from [AGENTS.md](/Users/daniellim/Documents/random/rtl-comrade/AGENTS.md) to make the module-work routing symmetric with the contract guide.

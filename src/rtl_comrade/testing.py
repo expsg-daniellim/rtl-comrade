@@ -178,3 +178,125 @@ def _assert_step(step: int, actual: Any, expected: Any) -> None:
         assert actual_payload.payload == exp_val, (
             f"step {step}, port '{port_name}': expected .payload={exp_val!r}, got .payload={actual_payload.payload!r}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Module testing harness
+# ---------------------------------------------------------------------------
+
+def _collect_module_result(res: Any, collected: dict[str, list[Any]]) -> None:
+    """Normalize one module output and append it to the collected emissions dict.
+
+    Mirrors Node.process_result() but raises AssertionError on malformed output
+    instead of logging, making test failures explicit.
+    """
+    if res is None:
+        return
+    if isinstance(res, tuple):
+        assert len(res) == 2, (
+            f"module emitted a malformed tuple of length {len(res)}: {res!r} "
+            f"(expected (str, value))"
+        )
+        port, value = res
+        assert isinstance(port, str), (
+            f"module emitted a tuple with non-string port name {port!r} "
+            f"(type {type(port).__name__})"
+        )
+    else:
+        port, value = "default", res
+    collected.setdefault(port, []).append(value)
+
+
+def _validate_module(module_cls: type) -> inspect.Signature:
+    assert hasattr(module_cls, "run"), (
+        f"{module_cls.__name__} must expose run"
+    )
+    try:
+        sig = inspect.signature(module_cls.__init__)
+    except (TypeError, ValueError) as e:
+        raise AssertionError(
+            f"{module_cls.__name__}.__init__ signature is not inspectable: {e}"
+        ) from e
+    return sig
+
+
+def _assert_module_emissions(
+    collected: dict[str, list[Any]],
+    expected: dict[str, list[Any]],
+) -> None:
+    unexpected = set(collected.keys()) - set(expected.keys())
+    assert not unexpected, (
+        f"unexpected emissions on port(s) {sorted(unexpected)!r}: "
+        + ", ".join(f"{p!r}: {collected[p]!r}" for p in sorted(unexpected))
+    )
+    for port_name, exp_values in expected.items():
+        actual_values = collected.get(port_name, [])
+        assert len(actual_values) == len(exp_values), (
+            f"port {port_name!r}: expected {len(exp_values)} emission(s), "
+            f"got {len(actual_values)}: {actual_values!r}"
+        )
+        for i, (actual_val, exp_val) in enumerate(zip(actual_values, exp_values)):
+            assert actual_val == exp_val, (
+                f"port {port_name!r}, emission[{i}]: expected {exp_val!r}, got {actual_val!r}"
+            )
+
+
+async def run_module_scenario(
+    module_cls: type,
+    input_sequence: list[dict[str, Any]],
+    expected_emissions: dict[str, list[Any]],
+    *,
+    config: Any = None,
+    module_id: str = "test.module",
+    timeout: float = 5.0,
+) -> None:
+    """Test a module by driving its run() with a sequence of input dicts and
+    asserting the collected emissions match expected_emissions.
+
+    Args:
+        module_cls: The module class to test.
+        input_sequence: One dict per run() invocation; keys are port/parameter
+            names, values are raw Python values (not Payload-wrapped).
+        expected_emissions: Maps port name to an ordered list of expected emitted
+            values. Ports absent from this dict are expected to produce zero
+            emissions.
+        config: Passed to module __init__ only when the parameter is declared.
+            Passed as-is (not deserialized via serde).
+        module_id: The id string passed to the module when its __init__ accepts one.
+        timeout: Maximum seconds to wait for each async run() call.
+
+    Raises:
+        AssertionError: When emissions do not match expected_emissions, or when
+            the module emits a malformed tuple.
+        asyncio.TimeoutError: When an async run() call exceeds timeout.
+    """
+    sig = _validate_module(module_cls)
+
+    kwargs: dict[str, Any] = {}
+    if "id" in sig.parameters:
+        kwargs["id"] = module_id
+    if "config" in sig.parameters and config is not None:
+        kwargs["config"] = config
+    module = module_cls(**kwargs)
+
+    collected: dict[str, list[Any]] = {}
+
+    for inputs in input_sequence:
+        if inspect.iscoroutinefunction(module.run):
+            res = await asyncio.wait_for(module.run(**inputs), timeout=timeout)
+        else:
+            res = module.run(**inputs)
+
+        if inspect.isasyncgen(res):
+            async for r in res:
+                _collect_module_result(r, collected)
+        elif inspect.isgenerator(res):
+            for r in res:
+                _collect_module_result(r, collected)
+        else:
+            _collect_module_result(res, collected)
+
+        if len(inputs) == 0:
+            break
+
+    _assert_module_emissions(collected, expected_emissions)
