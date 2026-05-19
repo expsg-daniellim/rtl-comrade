@@ -2,16 +2,15 @@
 
 import asyncio
 import textwrap
-from pathlib import Path
 
 import pytest
 
 from rtl_comrade.config import (
-    GraphConfig,
-    GraphConfigDstPort,
-    GraphConfigEdge,
-    GraphConfigNode,
-    GraphConfigSrcPort,
+	GraphConfig,
+	GraphConfigDstPort,
+	GraphConfigEdge,
+	GraphConfigNode,
+	GraphConfigSrcPort,
 )
 from rtl_comrade.graph import Graph
 
@@ -24,46 +23,50 @@ SIDE_CHANNEL: list = []
 
 
 def _node(id_, module, config=None, contract="", contract_config=None):
-    return GraphConfigNode(
-        id=id_,
-        module=module,
-        config=config or {},
-        contract=contract,
-        contract_config=contract_config or {},
-    )
+	return GraphConfigNode(
+		id=id_,
+		module=module,
+		config=config or {},
+		contract=contract,
+		contract_config=contract_config or {},
+	)
 
 
 def _edge(src_node, dst_node, src_port="default", dst_port=1):
-    return GraphConfigEdge(
-        src=GraphConfigSrcPort(node=src_node, port=src_port),
-        dst=GraphConfigDstPort(node=dst_node, port=dst_port),
-    )
+	return GraphConfigEdge(
+		src=GraphConfigSrcPort(node=src_node, port=src_port),
+		dst=GraphConfigDstPort(node=dst_node, port=dst_port),
+	)
 
 
 def _write_plugin(tmp_path, name, src):
-    f = tmp_path / name
-    f.write_text(textwrap.dedent(src))
-    return f
+	f = tmp_path / name
+	f.write_text(textwrap.dedent(src))
+	return f
 
 
 def _run_graph(config):
-    graph = Graph.from_config(config)
-    asyncio.run(graph.run())
+	graph = Graph.from_config(config)
+	asyncio.run(graph.run())
 
 
 @pytest.fixture(autouse=True)
 def reset_side_channel():
-    SIDE_CHANNEL.clear()
-    yield
-    SIDE_CHANNEL.clear()
+	SIDE_CHANNEL.clear()
+	yield
+	SIDE_CHANNEL.clear()
 
 
 # ---------------------------------------------------------------------------
 # IT-1: Linear source → transform → sink
 # ---------------------------------------------------------------------------
 
+
 def test_it1_linear(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         SIDE_CHANNEL = None  # injected at runtime
 
         class Gen:
@@ -81,32 +84,37 @@ def test_it1_linear(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("gen", "gen"),
-            _node("double", "double"),
-            _node("collect", "collect"),
-        ],
-        edges=[
-            _edge("gen", "double"),
-            _edge("double", "collect"),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == [2, 4, 6]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("gen", "gen"),
+			_node("double", "double"),
+			_node("collect", "collect"),
+		],
+		edges=[
+			_edge("gen", "double"),
+			_edge("double", "collect"),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [2, 4, 6]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-2: Fan-in (zip contract)
 # ---------------------------------------------------------------------------
 
+
 def test_it2_fan_in(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class SrcA:
             def run(self):
                 yield 1
@@ -126,8 +134,12 @@ def test_it2_fan_in(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
-    _write_plugin(tmp_path, "contracts.py", """\
+    """,
+	)
+	_write_plugin(
+		tmp_path,
+		"contracts.py",
+		"""\
         from dataclasses import dataclass
 
         @dataclass
@@ -141,34 +153,39 @@ def test_it2_fan_in(logging_handler, tmp_path):
                 if any(isinstance(v, EndSentinel) for v in res.values()):
                     return EndSentinel(self.id)
                 return res
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("src_a", "src_a"),
-            _node("src_b", "src_b"),
-            _node("add", "add", contract="zip"),
-            _node("collect", "collect"),
-        ],
-        edges=[
-            _edge("src_a", "add", dst_port=1),
-            _edge("src_b", "add", dst_port=2),
-            _edge("add", "collect"),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[str(tmp_path / "contracts.py")],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == [11, 22]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("src_a", "src_a"),
+			_node("src_b", "src_b"),
+			_node("add", "add", contract="zip"),
+			_node("collect", "collect"),
+		],
+		edges=[
+			_edge("src_a", "add", dst_port=1),
+			_edge("src_b", "add", dst_port=2),
+			_edge("add", "collect"),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[str(tmp_path / "contracts.py")],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [11, 22]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-3: EndSentinel propagation across two hops
 # ---------------------------------------------------------------------------
 
+
 def test_it3_sentinel_propagation(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Gen:
             def run(self):
                 yield 'a'
@@ -184,32 +201,37 @@ def test_it3_sentinel_propagation(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("gen", "gen"),
-            _node("pt", "passthrough"),
-            _node("collect", "collect"),
-        ],
-        edges=[
-            _edge("gen", "pt"),
-            _edge("pt", "collect"),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == ["a", "b", "c"]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("gen", "gen"),
+			_node("pt", "passthrough"),
+			_node("collect", "collect"),
+		],
+		edges=[
+			_edge("gen", "pt"),
+			_edge("pt", "collect"),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == ["a", "b", "c"]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-4: Source-only node (no inputs) runs once
 # ---------------------------------------------------------------------------
 
+
 def test_it4_source_only_runs_once(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Counter:
             def run(self):
                 return 'once'
@@ -219,29 +241,34 @@ def test_it4_source_only_runs_once(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("counter", "counter"),
-            _node("collect", "collect"),
-        ],
-        edges=[_edge("counter", "collect")],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert len(SIDE_CHANNEL) == 1
-    assert SIDE_CHANNEL[0] == "once"
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("counter", "counter"),
+			_node("collect", "collect"),
+		],
+		edges=[_edge("counter", "collect")],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert len(SIDE_CHANNEL) == 1
+	assert SIDE_CHANNEL[0] == "once"
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-5: Default input port
 # ---------------------------------------------------------------------------
 
+
 def test_it5_default_input(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Src:
             def run(self):
                 return 5
@@ -255,32 +282,37 @@ def test_it5_default_input(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("src", "src"),
-            _node("adder", "adder"),
-            _node("collect", "collect"),
-        ],
-        edges=[
-            _edge("src", "adder", dst_port=1),
-            _edge("adder", "collect"),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == [15]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("src", "src"),
+			_node("adder", "adder"),
+			_node("collect", "collect"),
+		],
+		edges=[
+			_edge("src", "adder", dst_port=1),
+			_edge("adder", "collect"),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [15]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-6: Persistent input
 # ---------------------------------------------------------------------------
 
+
 def test_it6_persistent_input(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Src:
             def run(self):
                 yield 1
@@ -300,34 +332,43 @@ def test_it6_persistent_input(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("src", "src"),
-            _node("mul_src", "mul_src"),
-            _node("accumulate", "accumulate", contract_config={"persistent_inputs": ["multiplier"]}),
-            _node("collect", "collect"),
-        ],
-        edges=[
-            _edge("src", "accumulate", dst_port=1),
-            _edge("mul_src", "accumulate", dst_port=2),
-            _edge("accumulate", "collect"),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == [5, 10, 15]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("src", "src"),
+			_node("mul_src", "mul_src"),
+			_node(
+				"accumulate",
+				"accumulate",
+				contract_config={"persistent_inputs": ["multiplier"]},
+			),
+			_node("collect", "collect"),
+		],
+		edges=[
+			_edge("src", "accumulate", dst_port=1),
+			_edge("mul_src", "accumulate", dst_port=2),
+			_edge("accumulate", "collect"),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [5, 10, 15]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-7: Named output port routing
 # ---------------------------------------------------------------------------
 
+
 def test_it7_named_port_routing(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Router:
             def run(self):
                 yield ('odd', 1)
@@ -346,35 +387,40 @@ def test_it7_named_port_routing(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(('even', x))
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("router", "router"),
-            _node("collect_odd", "collect_odd"),
-            _node("collect_even", "collect_even"),
-        ],
-        edges=[
-            _edge("router", "collect_odd", src_port="odd"),
-            _edge("router", "collect_even", src_port="even"),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    odd_vals = [v for tag, v in SIDE_CHANNEL if tag == "odd"]
-    even_vals = [v for tag, v in SIDE_CHANNEL if tag == "even"]
-    assert odd_vals == [1, 3]
-    assert even_vals == [2, 4]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("router", "router"),
+			_node("collect_odd", "collect_odd"),
+			_node("collect_even", "collect_even"),
+		],
+		edges=[
+			_edge("router", "collect_odd", src_port="odd"),
+			_edge("router", "collect_even", src_port="even"),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	odd_vals = [v for tag, v in SIDE_CHANNEL if tag == "odd"]
+	even_vals = [v for tag, v in SIDE_CHANNEL if tag == "even"]
+	assert odd_vals == [1, 3]
+	assert even_vals == [2, 4]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-8: Async module
 # ---------------------------------------------------------------------------
 
+
 def test_it8_async_module(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class AsyncGen:
             async def run(self):
                 yield 10
@@ -386,28 +432,33 @@ def test_it8_async_module(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("async_gen", "async_gen"),
-            _node("collect", "collect"),
-        ],
-        edges=[_edge("async_gen", "collect")],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == [10, 20, 30]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("async_gen", "async_gen"),
+			_node("collect", "collect"),
+		],
+		edges=[_edge("async_gen", "collect")],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [10, 20, 30]
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-9: Module raises exception
 # ---------------------------------------------------------------------------
 
+
 def test_it9_module_exception(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Crasher:
             def run(self):
                 raise ValueError('boom')
@@ -415,27 +466,32 @@ def test_it9_module_exception(logging_handler, tmp_path):
         class Collect:
             def run(self, x):
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("crasher", "crasher"),
-            _node("collect", "collect"),
-        ],
-        edges=[_edge("crasher", "collect")],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    with pytest.raises(SystemExit):
-        _run_graph(config)
+	config = GraphConfig(
+		nodes=[
+			_node("crasher", "crasher"),
+			_node("collect", "collect"),
+		],
+		edges=[_edge("crasher", "collect")],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	with pytest.raises(SystemExit):
+		_run_graph(config)
 
 
 # ---------------------------------------------------------------------------
 # IT-10: Module logs ERROR (deferred failure)
 # ---------------------------------------------------------------------------
 
+
 def test_it10_module_error_deferred(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         import structlog
         log = structlog.get_logger()
 
@@ -449,66 +505,72 @@ def test_it10_module_error_deferred(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("errorer", "errorer"),
-            _node("collect", "collect"),
-        ],
-        edges=[_edge("errorer", "collect")],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == ["still_here"]
-    assert logging_handler.failure is True
+	config = GraphConfig(
+		nodes=[
+			_node("errorer", "errorer"),
+			_node("collect", "collect"),
+		],
+		edges=[_edge("errorer", "collect")],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == ["still_here"]
+	assert logging_handler.failure is True
 
 
 # ---------------------------------------------------------------------------
 # IT-11: Graph.from_file — valid YAML
 # ---------------------------------------------------------------------------
 
+
 def test_it11_from_file_valid(logging_handler, tmp_path):
-    module_file = tmp_path / "mods.py"
-    module_file.write_text("class Src:\n    def run(self):\n        return 1\n")
+	module_file = tmp_path / "mods.py"
+	module_file.write_text("class Src:\n    def run(self):\n        return 1\n")
 
-    graph_yaml = tmp_path / "graph.yaml"
-    graph_yaml.write_text(
-        f"modules:\n- {module_file}\nnodes:\n- id: src\n  module: src\nedges: []\n"
-    )
+	graph_yaml = tmp_path / "graph.yaml"
+	graph_yaml.write_text(f"modules:\n- {module_file}\nnodes:\n- id: src\n  module: src\nedges: []\n")
 
-    graph = Graph.from_file(str(graph_yaml))
-    assert isinstance(graph, Graph)
-    assert "src" in graph.nodes
+	graph = Graph.from_file(str(graph_yaml))
+	assert isinstance(graph, Graph)
+	assert "src" in graph.nodes
 
 
 # ---------------------------------------------------------------------------
 # IT-12: Graph.from_file — file not found
 # ---------------------------------------------------------------------------
 
+
 def test_it12_from_file_not_found(logging_handler):
-    with pytest.raises(SystemExit):
-        Graph.from_file("/no/such/graph.yaml")
+	with pytest.raises(SystemExit):
+		Graph.from_file("/no/such/graph.yaml")
 
 
 # ---------------------------------------------------------------------------
 # IT-13: Graph.from_file — malformed YAML
 # ---------------------------------------------------------------------------
 
+
 def test_it13_from_file_malformed(logging_handler, tmp_path):
-    bad = tmp_path / "bad.yaml"
-    bad.write_text("nodes: [\nunclosed\n")
-    with pytest.raises(SystemExit):
-        Graph.from_file(str(bad))
+	bad = tmp_path / "bad.yaml"
+	bad.write_text("nodes: [\nunclosed\n")
+	with pytest.raises(SystemExit):
+		Graph.from_file(str(bad))
 
 
 # ---------------------------------------------------------------------------
 # IT-14: Destination port addressed by 1-based index
 # ---------------------------------------------------------------------------
 
+
 def test_it14_dst_port_by_index(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class Src:
             def run(self):
                 return 7
@@ -522,32 +584,37 @@ def test_it14_dst_port_by_index(logging_handler, tmp_path):
         class Fill:
             def run(self):
                 return 0
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("src", "src"),
-            _node("fill", "fill"),
-            _node("sink", "sink"),
-        ],
-        edges=[
-            _edge("src", "sink", dst_port=2),    # integer index
-            _edge("fill", "sink", dst_port=1),
-        ],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert 7 in SIDE_CHANNEL
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("src", "src"),
+			_node("fill", "fill"),
+			_node("sink", "sink"),
+		],
+		edges=[
+			_edge("src", "sink", dst_port=2),  # integer index
+			_edge("fill", "sink", dst_port=1),
+		],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert 7 in SIDE_CHANNEL
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
 # IT-15: non_definite_emits warning does not block execution
 # ---------------------------------------------------------------------------
 
+
 def test_it15_non_definite_emits(logging_handler, tmp_path):
-    _write_plugin(tmp_path, "mods.py", """\
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
         class DynSrc:
             def run(self):
                 port = 'default'
@@ -558,17 +625,18 @@ def test_it15_non_definite_emits(logging_handler, tmp_path):
                 import tests.integration.test_graph_run as t
                 t.SIDE_CHANNEL.append(x)
                 return None
-    """)
+    """,
+	)
 
-    config = GraphConfig(
-        nodes=[
-            _node("dyn_src", "dyn_src"),
-            _node("collect", "collect"),
-        ],
-        edges=[_edge("dyn_src", "collect")],
-        modules=[str(tmp_path / "mods.py")],
-        contracts=[],
-    )
-    _run_graph(config)
-    assert SIDE_CHANNEL == [42]
-    assert logging_handler.failure is False
+	config = GraphConfig(
+		nodes=[
+			_node("dyn_src", "dyn_src"),
+			_node("collect", "collect"),
+		],
+		edges=[_edge("dyn_src", "collect")],
+		modules=[str(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [42]
+	assert logging_handler.failure is False

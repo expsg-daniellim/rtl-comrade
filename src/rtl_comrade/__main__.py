@@ -9,6 +9,7 @@ from .logging import initialise_logging
 
 # TODO: debug logging
 
+
 def main() -> int:
 	"""Run the configured graph and return a process exit code.
 
@@ -19,7 +20,7 @@ def main() -> int:
 	# TODO: read log level from env/cli arg
 	handler = initialise_logging(logging.INFO)
 
-	graph_file = sys.argv[1] if len(sys.argv) >= 2 else 'graph.yaml'
+	graph_file = sys.argv[1] if len(sys.argv) >= 2 else "graph.yaml"
 
 	graph = Graph.from_file(graph_file)
 	asyncio.run(graph.run())
@@ -29,5 +30,6 @@ def main() -> int:
 
 	return 0
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
 	raise SystemExit(main())

@@ -1,15 +1,16 @@
 """Queue-backed input ports used by runtime nodes and contracts."""
 
-from __future__ import annotations # Obsolete after 3.14
+from __future__ import annotations  # Obsolete after 3.14
 import asyncio
 from asyncio import Queue
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
-from .api import Payload, EndSentinel
+from .api import Payload, EndSentinel, _NoDefault, _NODEFAULT
 from .structure import ModuleStructureArg
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 # Error when an item in the queue is not a Payload or EndSentinel.
 @dataclass(frozen=True, slots=True)
@@ -22,7 +23,8 @@ class InvalidEnqueuedError(Exception):
 	"""
 
 	name: str
-	type_ : str
+	type_: str
+
 
 @dataclass(slots=True)
 class Port(Generic[T]):
@@ -37,13 +39,13 @@ class Port(Generic[T]):
 	"""
 
 	name: str
-	queue: Queue[Payload[T]|EndSentinel] = field(default_factory=Queue)
+	queue: Queue[Payload[T] | EndSentinel] = field(default_factory=Queue)
 	has_default: bool = False
-	default: T | None = None
+	default: T | _NoDefault = _NODEFAULT
 	ended: bool = False
 
 	@staticmethod
-	def from_structure(arg:ModuleStructureArg) -> Port:
+	def from_structure(arg: ModuleStructureArg) -> Port:
 		"""Construct a Port from one inferred module input argument.
 
 		Args:
@@ -55,7 +57,7 @@ class Port(Generic[T]):
 
 		return Port(name=arg.name, has_default=arg.has_default, default=arg.default)
 
-	async def get(self) -> Payload[T]|EndSentinel:
+	async def get(self) -> Payload[T] | EndSentinel:
 		"""Wait for and return the next runtime message for this port.
 
 		Returns:
@@ -71,7 +73,7 @@ class Port(Generic[T]):
 
 		return val
 
-	def try_get(self) -> Payload[T]|EndSentinel|None:
+	def try_get(self) -> Payload[T] | EndSentinel | None:
 		"""Attempt a non-blocking read of the next runtime message for this port.
 
 		Returns:
@@ -85,7 +87,7 @@ class Port(Generic[T]):
 
 				if isinstance(val, EndSentinel):
 					self.ended = True
-		except asyncio.QueueEmpty: # An empty queue is a valid case
+		except asyncio.QueueEmpty:  # An empty queue is a valid case
 			pass
 
 		if not (isinstance(val, (Payload, EndSentinel)) or val is None):

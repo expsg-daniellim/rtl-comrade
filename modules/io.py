@@ -2,6 +2,8 @@ from serde import serde
 import structlog
 
 log = structlog.get_logger()
+
+
 class FileReadMod:
 	@serde
 	class Config:
@@ -12,19 +14,25 @@ class FileReadMod:
 
 	def run(self):
 		try:
-			with open(self.file, 'r') as file:
+			with open(self.file, "r") as file:
 				for line in file:
 					yield line
 		except UnicodeDecodeError as e:
-			log.fatal('invalid_unicode', file=self.file, reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='restrict'))
+			log.fatal(
+				"invalid_unicode",
+				file=self.file,
+				reason=e.reason,
+				invalid_slice=e.object[e.start : e.end].decode(encoding=e.encoding or "utf-8", errors="restrict"),
+			)
 		except FileNotFoundError:
-			log.fatal('not_found', file=self.file)
+			log.fatal("not_found", file=self.file)
 		except IsADirectoryError:
-			log.fatal('is_directory', file=self.file)
+			log.fatal("is_directory", file=self.file)
 		except PermissionError:
-			log.fatal('permission_denied', file=self.file)
+			log.fatal("permission_denied", file=self.file)
 		except OSError as e:
-			log.fatal('os_error', file=self.file, err=e.strerror, errno=e.errno)
+			log.fatal("os_error", file=self.file, err=e.strerror, errno=e.errno)
+
 
 class StdoutMod:
 	def run(self, a):

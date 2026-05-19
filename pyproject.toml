@@ -34,6 +34,15 @@ dependencies = [
 rtl-comrade = "rtl_comrade.__main__:main"
 rtl_comrade = "rtl_comrade.__main__:main"
 
+[tool.ruff]
+line-length = 300
+
+[tool.ruff.format]
+indent-style = "tab"
+
+[tool.ty.environment]
+extra-paths = ["src"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 

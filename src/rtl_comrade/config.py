@@ -7,6 +7,7 @@ the harness graph-construction logic.
 from dataclasses import dataclass
 from serde import serde, field, to_dict
 
+
 @serde
 @dataclass(slots=True, frozen=True)
 class GraphConfigNode:
@@ -26,6 +27,7 @@ class GraphConfigNode:
 	contract: str = field(default="")
 	contract_config: dict = field(default_factory=dict)
 
+
 @serde
 @dataclass(slots=True, frozen=True)
 class GraphConfigSrcPort:
@@ -37,7 +39,8 @@ class GraphConfigSrcPort:
 	"""
 
 	node: str
-	port: str = field(default = "default")
+	port: str = field(default="default")
+
 
 @serde
 @dataclass(slots=True, frozen=True)
@@ -50,7 +53,8 @@ class GraphConfigDstPort:
 	"""
 
 	node: str
-	port: int|str = field(default = 1)
+	port: int | str = field(default=1)
+
 
 @serde
 @dataclass(slots=True, frozen=True)
@@ -67,6 +71,7 @@ class GraphConfigEdge:
 
 	def __structlog__(self):
 		return to_dict(self)
+
 
 @serde
 @dataclass(slots=True, frozen=True)

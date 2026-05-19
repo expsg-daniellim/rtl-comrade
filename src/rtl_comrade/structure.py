@@ -7,9 +7,14 @@ import inspect
 from inspect import Parameter
 import textwrap
 import typing
+from typing import cast
 
 import structlog
-log = structlog.get_logger()
+
+from .logging import _HarnessLogger
+
+log: _HarnessLogger = cast(_HarnessLogger, structlog.get_logger())
+
 
 # BFS of the AST filtering out nested function nodes.
 def walk_ast(node):
@@ -23,7 +28,7 @@ def walk_ast(node):
 	"""
 
 	queue = deque([node])
-	passed_top = False # Keep tracking of passing the top-level function node
+	passed_top = False  # Keep tracking of passing the top-level function node
 	while queue:
 		n = queue.popleft()
 		if not isinstance(n, (ast.FunctionDef, ast.Lambda, ast.AsyncFunctionDef)):
@@ -33,6 +38,7 @@ def walk_ast(node):
 			queue.extend(ast.iter_child_nodes(n))
 
 		yield n
+
 
 @dataclass(frozen=True, slots=True)
 class StructureInvalidTupleError(Exception):
@@ -48,6 +54,7 @@ class StructureInvalidTupleError(Exception):
 	lineno: int
 	tuple_: tuple
 
+
 @dataclass(frozen=True, slots=True)
 class StructureNonStrPortNameError(Exception):
 	"""Raised when a static emitted port name is not a string.
@@ -61,6 +68,7 @@ class StructureNonStrPortNameError(Exception):
 	name: str
 	lineno: int
 	port_name: typing.Any
+
 
 @dataclass(frozen=True, slots=True)
 class ModuleStructureArg:
@@ -77,6 +85,7 @@ class ModuleStructureArg:
 	type_: str | None = None
 	has_default: bool = False
 	default: typing.Any = None
+
 
 @dataclass(slots=True)
 class ModuleStructure:
@@ -108,37 +117,50 @@ class ModuleStructure:
 		try:
 			sig = inspect.signature(Module.run)
 		except (TypeError, ValueError) as e:
-			log.fatal('unavailable_signature', exc_info=e)
+			log.fatal("unavailable_signature", exc_info=e)
 
-		self.args = [ ModuleStructureArg(
-			name=name,
-			type_=str(param.annotation) if param.annotation != Parameter.empty else None,
-			has_default=param.default != Parameter.empty,
-			default=param.default if param.default != Parameter.empty else None
-		) for (name, param) in sig.parameters.items() if name != 'self' ]
+		self.args = [
+			ModuleStructureArg(
+				name=name,
+				type_=str(param.annotation) if param.annotation != Parameter.empty else None,
+				has_default=param.default != Parameter.empty,
+				default=param.default if param.default != Parameter.empty else None,
+			)
+			for (name, param) in sig.parameters.items()
+			if name != "self"
+		]
 
 		# Parse AST in steps to catch individual Exceptions from each step
 		try:
 			src = textwrap.dedent(inspect.getsource(Module.run))
 		except OSError as e:
-			log.fatal('file_unavailable', err=e.strerror, errno=e.errno, exc_info=e)
+			log.fatal("file_unavailable", err=e.strerror, errno=e.errno, exc_info=e)
 		except TypeError as e:
-			log.fatal('unloadable', message=str(e), exc_info=e)
+			log.fatal("unloadable", message=str(e), exc_info=e)
 		except ValueError as e:
-			log.fatal('wrapped_cycle', exc_info=e)
+			log.fatal("wrapped_cycle", exc_info=e)
 
 		try:
 			ast_tree = ast.parse(src)
 		except SyntaxError as e:
-			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
+			log.fatal(
+				"syntax_error",
+				filename=e.filename,
+				lineno=e.lineno,
+				offset=e.offset,
+				text=e.text,
+				end_lineno=e.end_lineno,
+				end_offset=e.end_offset,
+				exc_info=e,
+			)
 		except ValueError as e:
-			log.fatal('value_error', message=str(e), exc_info=e)
+			log.fatal("value_error", message=str(e), exc_info=e)
 		except TypeError as e:
-			log.fatal('type_error', message=str(e), exc_info=e)
+			log.fatal("type_error", message=str(e), exc_info=e)
 		except MemoryError as e:
-			log.fatal('memory_error', message=str(e), exc_info=e)
+			log.fatal("memory_error", message=str(e), exc_info=e)
 		except RecursionError as e:
-			log.fatal('recursion_err', message=str(e), exc_info=e)
+			log.fatal("recursion_err", message=str(e), exc_info=e)
 
 		# Populate emits by walking through source code and inferring likely behaviour from yields/returns
 		self.emits = []
@@ -148,7 +170,11 @@ class ModuleStructure:
 			# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>). All other formats of tuple are invalid.
 			if isinstance(node.value, ast.Tuple):
 				if len(node.value.elts) != 2:
-					raise StructureInvalidTupleError(Module.__name__, node.lineno, tuple(str(elt) for elt in node.value.elts))
+					raise StructureInvalidTupleError(
+						Module.__name__,
+						node.lineno,
+						tuple(str(elt) for elt in node.value.elts),
+					)
 
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
@@ -158,10 +184,10 @@ class ModuleStructure:
 							self.emits.append(port_name)
 					else:
 						raise StructureNonStrPortNameError(Module.__name__, node.lineno, node.value.elts[0].value)
-				else: # Dynamic output port names present
+				else:  # Dynamic output port names present
 					self.definite_emits = False
 			elif not (isinstance(node.value, ast.Constant) and node.value.value is None):
 				default = True
 
 		if default:
-			self.emits.insert(0, 'default')
+			self.emits.insert(0, "default")
