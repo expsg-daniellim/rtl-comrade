@@ -1,5 +1,7 @@
 """Static graph validation helpers used before runtime execution begins."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 
 from .config import GraphConfig
