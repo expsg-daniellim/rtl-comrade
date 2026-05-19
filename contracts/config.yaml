@@ -1,5 +1,27 @@
 files:
-- file: contracts.py
+- file: zip.py
   plugins:
   - name: zip
     class_name: ZipContract
+- file: unit.py
+  plugins:
+  - name: unit
+    class_name: UnitContract
+- file: keyed_join.py
+  plugins:
+  - name: keyed_join
+    class_name: KeyedJoinContract
+  - name: required_inputs_by_key
+    class_name: KeyedJoinContract
+- file: latest.py
+  plugins:
+  - name: latest
+    class_name: LatestContract
+- file: group_until_end.py
+  plugins:
+  - name: group_until_end
+    class_name: GroupUntilEndContract
+- file: branch_aware_join.py
+  plugins:
+  - name: branch_aware_join
+    class_name: BranchAwareJoinContract

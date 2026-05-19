@@ -3,7 +3,7 @@
 from rtl_comrade.api import EndSentinel
 from rtl_comrade.testing import run_contract_scenario
 
-from contracts.contracts import ZipContract
+from contracts.zip import ZipContract
 
 
 async def test_two_ports_full_sequence():

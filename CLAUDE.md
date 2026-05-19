@@ -25,7 +25,7 @@ Python `>=3.11`. Runtime deps: `pyserde[yaml]`, `structlog`.
 |---|---|
 | Harness | `docs/harness/README.md` |
 | Modules | `docs/module-implementation.md`, `modules/io.py`, `modules/funcs.py` |
-| Contracts | `docs/contract-implementation.md`, `contracts/contracts.py` |
+| Contracts | `docs/contract-implementation.md`, `docs/available_contracts.md`, `contracts/contracts.py` |
 
 `AGENTS.md` is the routing and invariants document. This file is a distillation of it — when they conflict, trust `AGENTS.md`.
 
