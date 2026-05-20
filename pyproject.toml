@@ -39,6 +39,7 @@ extra-paths = ["src"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+testpaths = ["tests", "contracts/tests", "modules/tests"]
 
 [dependency-groups]
 dev = [
