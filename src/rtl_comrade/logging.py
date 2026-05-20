@@ -6,8 +6,7 @@ import structlog
 from structlog.contextvars import merge_contextvars
 from structlog.stdlib import ProcessorFormatter, LoggerFactory, BoundLogger
 
-
-class _HarnessLogger(BoundLogger):
+class HarnessLogger(BoundLogger):
 	"""BoundLogger subclass that declares fatal/critical as non-returning.
 
 	At runtime the LoggingFatalHandler raises SystemExit(1) on CRITICAL records,
@@ -15,14 +14,13 @@ class _HarnessLogger(BoundLogger):
 	practice but satisfies ty's control-flow analysis.
 	"""
 
-	def fatal(self, event: str | None = None, *args: Any, **kw: Any) -> NoReturn:
+	def fatal(self, event:str|None = None, *args:Any, **kw:Any) -> NoReturn:
 		super().fatal(event, *args, **kw)
-		raise AssertionError("unreachable")
+		raise AssertionError('unreachable')
 
-	def critical(self, event: str | None = None, *args: Any, **kw: Any) -> NoReturn:
+	def critical(self, event:str|None = None, *args:Any, **kw:Any) -> NoReturn:
 		super().critical(event, *args, **kw)
-		raise AssertionError("unreachable")
-
+		raise AssertionError('unreachable')
 
 class LoggingFatalHandler(logging.StreamHandler):
 	"""Stream handler that turns error severity into harness failure semantics.
@@ -44,7 +42,7 @@ class LoggingFatalHandler(logging.StreamHandler):
 		super().__init__(stream)
 		self.failure = False
 
-	def emit(self, record: logging.LogRecord):
+	def emit(self, record:logging.LogRecord):
 		"""Emit one log record and update failure/termination state.
 
 		Args:
@@ -62,8 +60,7 @@ class LoggingFatalHandler(logging.StreamHandler):
 		if record.levelno >= logging.CRITICAL:
 			raise SystemExit(1)
 
-
-def initialise_logging(level: int = logging.INFO) -> LoggingFatalHandler:
+def initialise_logging(level:int = logging.INFO) -> LoggingFatalHandler:
 	"""Configure stdlib logging and structlog for harness execution.
 
 	Args:
@@ -73,7 +70,7 @@ def initialise_logging(level: int = logging.INFO) -> LoggingFatalHandler:
 			The installed handler used to track deferred run failure state.
 	"""
 
-	preprocessors = [structlog.stdlib.add_log_level, structlog.stdlib.add_logger_name]
+	preprocessors = [ structlog.stdlib.add_log_level, structlog.stdlib.add_logger_name ]
 
 	handler = LoggingFatalHandler()
 	handler.setLevel(level)
@@ -84,14 +81,5 @@ def initialise_logging(level: int = logging.INFO) -> LoggingFatalHandler:
 	root_logger.addHandler(handler)
 	root_logger.setLevel(level)
 
-	structlog.configure(
-		processors=[
-			*preprocessors,
-			merge_contextvars,
-			ProcessorFormatter.wrap_for_formatter,
-		],
-		logger_factory=LoggerFactory(),
-		wrapper_class=BoundLogger,
-		cache_logger_on_first_use=True,
-	)
+	structlog.configure(processors=[*preprocessors, merge_contextvars, ProcessorFormatter.wrap_for_formatter], logger_factory=LoggerFactory(), wrapper_class=BoundLogger, cache_logger_on_first_use=True)
 	return handler

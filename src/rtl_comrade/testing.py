@@ -5,24 +5,24 @@ logic in isolation from the full graph runtime.
 
 Usage::
 
-    from rtl_comrade.testing import run_contract_scenario, PortTestInput
-    from rtl_comrade.api import EndSentinel
+	from rtl_comrade.testing import run_contract_scenario, PortTestInput
+	from rtl_comrade.api import EndSentinel
 
-    # All items pre-enqueued (default, delay=0):
-    await run_contract_scenario(
-        MyContract,
-        port_inputs={"a": [1, 2, EndSentinel("src")]},
-        expected_outputs=[{"a": 1}, {"a": 2}, EndSentinel("src")],
-        config=MyContract.Config(),
-    )
+	# All items pre-enqueued (default, delay=0):
+	await run_contract_scenario(
+		MyContract,
+		port_inputs={"a": [1, 2, EndSentinel("src")]},
+		expected_outputs=[{"a": 1}, {"a": 2}, EndSentinel("src")],
+		config=MyContract.Config(),
+	)
 
-    # Item delivered asynchronously after the contract has started running:
-    await run_contract_scenario(
-        MyContract,
-        port_inputs={"a": [PortTestInput(1, delay=1), PortTestInput(EndSentinel("src"), delay=2)]},
-        expected_outputs=[{"a": 1}, EndSentinel("src")],
-        config=MyContract.Config(),
-    )
+	# Item delivered asynchronously after the contract has started running:
+	await run_contract_scenario(
+		MyContract,
+		port_inputs={"a": [PortTestInput(1, delay=1), PortTestInput(EndSentinel("src"), delay=2)]},
+		expected_outputs=[{"a": 1}, EndSentinel("src")],
+		config=MyContract.Config(),
+	)
 """
 
 from __future__ import annotations
@@ -60,8 +60,8 @@ class PortMeta:
 	"""Per-port metadata applied when the harness constructs test Port objects.
 
 	Attributes:
-	    has_default: Whether the port should report a default value.
-	    default: The raw default value for the port, if any.
+		has_default: Whether the port should report a default value.
+		default: The raw default value for the port, if any.
 	"""
 
 	has_default: bool = False
@@ -73,13 +73,13 @@ class PortTestInput:
 	"""A single item in a port's input list, with an optional delivery delay.
 
 	Attributes:
-	    value: The value to deliver — raw Python value, Payload, or EndSentinel.
-	        Raw values are wrapped in Payload(source="test", ...) exactly as
-	        bare list items are.
-	    delay: Number of asyncio.sleep(0) yields to wait before delivering this
-	        item. delay=0 (default) pre-enqueues the item before get_inputs() is
-	        called. delay=N delivers the item after N yields while the contract is
-	        already running, allowing tests to exercise blocking-await paths.
+		value: The value to deliver — raw Python value, Payload, or EndSentinel.
+			Raw values are wrapped in Payload(source="test", ...) exactly as
+			bare list items are.
+		delay: Number of asyncio.sleep(0) yields to wait before delivering this
+			item. delay=0 (default) pre-enqueues the item before get_inputs() is
+			called. delay=N delivers the item after N yields while the contract is
+			already running, allowing tests to exercise blocking-await paths.
 	"""
 
 	value: Any
@@ -103,25 +103,25 @@ async def run_contract_scenario(
 	entry in expected_outputs and asserts the result matches.
 
 	Args:
-	    contract_cls: The contract class to test.
-	    port_inputs: Maps each port name to a list of values to deliver. Each
-	        item may be a raw Python value, a Payload, an EndSentinel, or a
-	        PortTestInput. Raw values and Payload/EndSentinel instances are treated
-	        as PortTestInput(value, delay=0). delay=0 items are pre-enqueued before
-	        get_inputs() is called; delay=N items are delivered after N
-	        asyncio.sleep(0) yields while the contract is already running.
-	    expected_outputs: One entry per get_inputs() call. Each entry is either:
-	        - dict[str, Any]: maps port name to the expected .payload value
-	        - EndSentinel instance: asserts the call returns an EndSentinel
-	    port_meta: Optional per-port Port constructor overrides, e.g.
-	        {"b": PortMeta(has_default=True, default=0)}.
-	    config: Passed to contract __init__ only when the parameter is declared.
-	    contract_id: The id string passed to the contract.
-	    timeout: Maximum seconds to wait for each get_inputs() call.
+		contract_cls: The contract class to test.
+		port_inputs: Maps each port name to a list of values to deliver. Each
+			item may be a raw Python value, a Payload, an EndSentinel, or a
+			PortTestInput. Raw values and Payload/EndSentinel instances are treated
+			as PortTestInput(value, delay=0). delay=0 items are pre-enqueued before
+			get_inputs() is called; delay=N items are delivered after N
+			asyncio.sleep(0) yields while the contract is already running.
+		expected_outputs: One entry per get_inputs() call. Each entry is either:
+			- dict[str, Any]: maps port name to the expected .payload value
+			- EndSentinel class or instance: asserts the call returns an EndSentinel
+		port_meta: Optional per-port Port constructor overrides, e.g.
+			{"b": PortMeta(has_default=True, default=0)}.
+		config: Passed to contract __init__ only when the parameter is declared.
+		contract_id: The id string passed to the contract.
+		timeout: Maximum seconds to wait for each get_inputs() call.
 
 	Raises:
-	    AssertionError: When an actual get_inputs() result does not match expected.
-	    asyncio.TimeoutError: When a get_inputs() call exceeds timeout.
+		AssertionError: When an actual get_inputs() result does not match expected.
+		asyncio.TimeoutError: When a get_inputs() call exceeds timeout.
 	"""
 	meta = port_meta or {}
 	_default_meta = PortMeta()
@@ -213,12 +213,18 @@ async def _feeder(
 
 
 def _validate_contract(contract_cls: type) -> inspect.Signature:
-	assert hasattr(contract_cls, "get_inputs"), f"{contract_cls.__name__} must expose get_inputs"
+	assert hasattr(contract_cls, 'get_inputs'), (
+		f"{contract_cls.__name__} must expose get_inputs"
+	)
 	try:
 		sig = inspect.signature(contract_cls.__init__)
 	except (TypeError, ValueError) as e:
-		raise AssertionError(f"{contract_cls.__name__}.__init__ signature is not inspectable: {e}") from e
-	assert "ports" in sig.parameters, f"{contract_cls.__name__}.__init__ does not declare 'ports' — contract cannot read inputs"
+		raise AssertionError(
+			f"{contract_cls.__name__}.__init__ signature is not inspectable: {e}"
+		) from e
+	assert 'ports' in sig.parameters, (
+		f"{contract_cls.__name__}.__init__ does not declare 'ports' — contract cannot read inputs"
+	)
 	return sig
 
 
@@ -226,21 +232,28 @@ def _assert_step(step: int, actual: Any, expected: Any) -> None:
 	is_sentinel_expected = isinstance(expected, EndSentinel)
 
 	if is_sentinel_expected:
-		assert isinstance(actual, EndSentinel), f"step {step}: expected EndSentinel, got {actual!r}"
+		assert isinstance(actual, EndSentinel), (
+			f"step {step}: expected EndSentinel, got {actual!r}"
+		)
 		return
 
 	assert isinstance(actual, dict), f"step {step}: expected dict, got {actual!r}"
-	assert set(actual.keys()) == set(expected.keys()), f"step {step}: port name mismatch — got {set(actual.keys())!r}, expected {set(expected.keys())!r}"
+	assert set(actual.keys()) == set(expected.keys()), (
+		f"step {step}: port name mismatch — got {set(actual.keys())!r}, expected {set(expected.keys())!r}"
+	)
 	for port_name, exp_val in expected.items():
 		actual_payload = actual[port_name]
-		assert isinstance(actual_payload, Payload), f"step {step}, port '{port_name}': expected Payload, got {actual_payload!r}"
-		assert actual_payload.payload == exp_val, f"step {step}, port '{port_name}': expected .payload={exp_val!r}, got .payload={actual_payload.payload!r}"
+		assert isinstance(actual_payload, Payload), (
+			f"step {step}, port '{port_name}': expected Payload, got {actual_payload!r}"
+		)
+		assert actual_payload.payload == exp_val, (
+			f"step {step}, port '{port_name}': expected .payload={exp_val!r}, got .payload={actual_payload.payload!r}"
+		)
 
 
 # ---------------------------------------------------------------------------
 # Module testing harness
 # ---------------------------------------------------------------------------
-
 
 def _collect_module_result(res: Any, collected: dict[str, list[Any]]) -> None:
 	"""Normalize one module output and append it to the collected emissions dict.
@@ -251,20 +264,30 @@ def _collect_module_result(res: Any, collected: dict[str, list[Any]]) -> None:
 	if res is None:
 		return
 	if isinstance(res, tuple):
-		assert len(res) == 2, f"module emitted a malformed tuple of length {len(res)}: {res!r} (expected (str, value))"
+		assert len(res) == 2, (
+			f"module emitted a malformed tuple of length {len(res)}: {res!r} "
+			f"(expected (str, value))"
+		)
 		port, value = res
-		assert isinstance(port, str), f"module emitted a tuple with non-string port name {port!r} (type {type(port).__name__})"
+		assert isinstance(port, str), (
+			f"module emitted a tuple with non-string port name {port!r} "
+			f"(type {type(port).__name__})"
+		)
 	else:
 		port, value = "default", res
 	collected.setdefault(port, []).append(value)
 
 
 def _validate_module(module_cls: type) -> inspect.Signature:
-	assert hasattr(module_cls, "run"), f"{module_cls.__name__} must expose run"
+	assert hasattr(module_cls, "run"), (
+		f"{module_cls.__name__} must expose run"
+	)
 	try:
 		sig = inspect.signature(module_cls.__init__)
 	except (TypeError, ValueError) as e:
-		raise AssertionError(f"{module_cls.__name__}.__init__ signature is not inspectable: {e}") from e
+		raise AssertionError(
+			f"{module_cls.__name__}.__init__ signature is not inspectable: {e}"
+		) from e
 	return sig
 
 
@@ -273,12 +296,20 @@ def _assert_module_emissions(
 	expected: dict[str, list[Any]],
 ) -> None:
 	unexpected = set(collected.keys()) - set(expected.keys())
-	assert not unexpected, f"unexpected emissions on port(s) {sorted(unexpected)!r}: " + ", ".join(f"{p!r}: {collected[p]!r}" for p in sorted(unexpected))
+	assert not unexpected, (
+		f"unexpected emissions on port(s) {sorted(unexpected)!r}: "
+		+ ", ".join(f"{p!r}: {collected[p]!r}" for p in sorted(unexpected))
+	)
 	for port_name, exp_values in expected.items():
 		actual_values = collected.get(port_name, [])
-		assert len(actual_values) == len(exp_values), f"port {port_name!r}: expected {len(exp_values)} emission(s), got {len(actual_values)}: {actual_values!r}"
+		assert len(actual_values) == len(exp_values), (
+			f"port {port_name!r}: expected {len(exp_values)} emission(s), "
+			f"got {len(actual_values)}: {actual_values!r}"
+		)
 		for i, (actual_val, exp_val) in enumerate(zip(actual_values, exp_values)):
-			assert actual_val == exp_val, f"port {port_name!r}, emission[{i}]: expected {exp_val!r}, got {actual_val!r}"
+			assert actual_val == exp_val, (
+				f"port {port_name!r}, emission[{i}]: expected {exp_val!r}, got {actual_val!r}"
+			)
 
 
 async def run_module_scenario(
@@ -294,21 +325,21 @@ async def run_module_scenario(
 	asserting the collected emissions match expected_emissions.
 
 	Args:
-	    module_cls: The module class to test.
-	    input_sequence: One dict per run() invocation; keys are port/parameter
-	        names, values are raw Python values (not Payload-wrapped).
-	    expected_emissions: Maps port name to an ordered list of expected emitted
-	        values. Ports absent from this dict are expected to produce zero
-	        emissions.
-	    config: Passed to module __init__ only when the parameter is declared.
-	        Passed as-is (not deserialized via serde).
-	    module_id: The id string passed to the module when its __init__ accepts one.
-	    timeout: Maximum seconds to wait for each async run() call.
+		module_cls: The module class to test.
+		input_sequence: One dict per run() invocation; keys are port/parameter
+			names, values are raw Python values (not Payload-wrapped).
+		expected_emissions: Maps port name to an ordered list of expected emitted
+			values. Ports absent from this dict are expected to produce zero
+			emissions.
+		config: Passed to module __init__ only when the parameter is declared.
+			Passed as-is (not deserialized via serde).
+		module_id: The id string passed to the module when its __init__ accepts one.
+		timeout: Maximum seconds to wait for each async run() call.
 
 	Raises:
-	    AssertionError: When emissions do not match expected_emissions, or when
-	        the module emits a malformed tuple.
-	    asyncio.TimeoutError: When an async run() call exceeds timeout.
+		AssertionError: When emissions do not match expected_emissions, or when
+			the module emits a malformed tuple.
+		asyncio.TimeoutError: When an async run() call exceeds timeout.
 	"""
 	sig = _validate_module(module_cls)
 

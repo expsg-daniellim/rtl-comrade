@@ -7,13 +7,11 @@ on:
 
 jobs:
   lint:
-    name: Lint (ruff + ty)
+    name: Lint (ty)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv run --group dev ruff check .
-      - run: uv run --group dev ruff format --check .
       - run: uv run --group dev ty check
 
   test:

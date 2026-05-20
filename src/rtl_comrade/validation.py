@@ -7,14 +7,13 @@ from dataclasses import dataclass, field
 from .config import GraphConfig
 
 from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
 	from .graph import Graph
 
 
 # Solely for the purpose of verifying graph acyclicity - ignores other graph
 # invalidities such as dangling edges.
-def validate_acyclic(config: GraphConfig) -> list[str | None]:
+def validate_acyclic(config:GraphConfig) -> list[str|None]:
 	"""Check whether the configured graph contains a cycle.
 
 	Args:
@@ -26,17 +25,17 @@ def validate_acyclic(config: GraphConfig) -> list[str | None]:
 	"""
 
 	# DFS-colours algorithm
-	adjacency: dict[str, list[str]] = {node.id: [] for node in config.nodes}
+	adjacency:dict[str, list[str]] = { node.id: [] for node in config.nodes }
 
 	for edge in config.edges:
 		if edge.src.node in adjacency and edge.dst.node in adjacency:
 			adjacency[edge.src.node].append(edge.dst.node)
 
 	WHITE, GREY, BLACK = 0, 1, 2
-	state = {node: WHITE for node in adjacency}
+	state = { node: WHITE for node in adjacency }
 
 	# Returns name of node where cyclicity is last observed, None otherwise
-	def visit(node: str) -> str | None:
+	def visit(node:str) -> str|None:
 		if state[node] == GREY:
 			return node
 		if state[node] == BLACK:
@@ -52,7 +51,6 @@ def validate_acyclic(config: GraphConfig) -> list[str | None]:
 
 	return [visit(node) for node in adjacency]
 
-
 @dataclass(slots=True)
 class StaticDeadlockValidationResults:
 	"""Results from the conservative static deadlock screening pass.
@@ -64,8 +62,8 @@ class StaticDeadlockValidationResults:
 	"""
 
 	edgeless_inputs: list[str] = field(default_factory=list)
-	has_source_capable: bool = True  # Condition 2
-	non_reachable_nodes: list[str] = field(default_factory=list)  # Condition 3
+	has_source_capable: bool = True # Condition 2
+	non_reachable_nodes: list[str] = field(default_factory=list)	# Condition 3
 
 	def has_error(self) -> bool:
 		"""Return whether any static deadlock condition was detected.
@@ -76,8 +74,7 @@ class StaticDeadlockValidationResults:
 
 		return (len(self.edgeless_inputs) > 0) or (not self.has_source_capable) or (len(self.non_reachable_nodes) > 0)
 
-
-def validate_no_static_deadlock(graph: Graph) -> StaticDeadlockValidationResults:
+def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 	"""Perform conservative first-run deadlock screening on a constructed graph.
 
 	Args:
@@ -88,8 +85,8 @@ def validate_no_static_deadlock(graph: Graph) -> StaticDeadlockValidationResults
 	"""
 
 	# Build incoming-port and adjacency maps once.
-	incoming: dict[str, set[str]] = {node_id: set() for node_id in graph.nodes}
-	adjacency: dict[str, list[str]] = {node_id: [] for node_id in graph.nodes}
+	incoming:dict[str, set[str]] = {node_id: set() for node_id in graph.nodes}
+	adjacency:dict[str, list[str]] = {node_id: [] for node_id in graph.nodes}
 
 	for node_id, node in graph.nodes.items():
 		for conn in node.dsts or []:
@@ -107,7 +104,7 @@ def validate_no_static_deadlock(graph: Graph) -> StaticDeadlockValidationResults
 
 	# 2. At least one node must be source-capable.
 	# A source-capable node has no first-run-required inputs.
-	sources = {node_id for node_id, node in graph.nodes.items() if all(port.has_default for port in node.ports.values())}
+	sources = { node_id for node_id, node in graph.nodes.items() if all(port.has_default for port in node.ports.values()) }
 	res.has_source_capable = bool(sources)
 
 	# 3. Every node must be reachable from some source-capable node.
@@ -122,6 +119,6 @@ def validate_no_static_deadlock(graph: Graph) -> StaticDeadlockValidationResults
 		seen.add(node_id)
 		stack.extend(adjacency[node_id])
 
-	res.non_reachable_nodes = [node_id for node_id in graph.nodes if node_id not in seen]
+	res.non_reachable_nodes = [ node_id for node_id in graph.nodes if node_id not in seen ]
 
 	return res

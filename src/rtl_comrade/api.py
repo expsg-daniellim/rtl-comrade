@@ -10,15 +10,12 @@ from collections.abc import Callable, Awaitable
 from dataclasses import dataclass, field
 from typing import Any, Generic, TypeVar
 
-T = TypeVar("T")
+T = TypeVar('T')
 
-
-class _NoDefault:
+class NoDefault:
 	"""Sentinel type for absent port defaults. Distinct from None so None is a valid default value."""
 
-
-_NODEFAULT = _NoDefault()
-
+NODEFAULT = NoDefault()
 
 @dataclass(frozen=True, slots=True)
 class Payload(Generic[T]):
@@ -34,7 +31,6 @@ class Payload(Generic[T]):
 	n: int
 	payload: T
 
-
 @dataclass(frozen=True, slots=True)
 class EndSentinel:
 	"""The other permitted runtime message type that may travel across an edge.
@@ -45,7 +41,6 @@ class EndSentinel:
 
 	source: str
 
-
 @dataclass(frozen=True, slots=True)
 class NoDefaultError(Exception):
 	"""Raised when a contract asks for a default payload from a non-default port.
@@ -55,7 +50,6 @@ class NoDefaultError(Exception):
 	"""
 
 	name: str
-
 
 @dataclass(slots=True)
 class ContractPort(Generic[T]):
@@ -73,11 +67,11 @@ class ContractPort(Generic[T]):
 	"""
 
 	name: str
-	get: Callable[[], Awaitable[Payload[T] | EndSentinel]]
-	try_get: Callable[[], Payload[T] | EndSentinel | None]
+	get: Callable[[], Awaitable[Payload[T]|EndSentinel]]
+	try_get: Callable[[], Payload[T]|EndSentinel|None]
 	has_ended: Callable[[], bool]
 	has_default: bool = False
-	default: T | _NoDefault = _NODEFAULT
+	default: T|NoDefault = NODEFAULT
 	default_n: int = 0
 	state: dict[str, Any] = field(default_factory=dict)
 
@@ -91,7 +85,7 @@ class ContractPort(Generic[T]):
 			NoDefaultError: If this port does not have a default value.
 		"""
 
-		if not self.has_default or isinstance(self.default, _NoDefault):
+		if not self.has_default or isinstance(self.default, NoDefault):
 			raise NoDefaultError(self.name)
 
 		payload = Payload("_default", self.default_n, self.default)
