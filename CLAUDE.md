@@ -47,6 +47,7 @@ Python `>=3.11`. Runtime deps: `pyserde[yaml]`, `structlog`.
 - `__init__` may accept `config` (raw config), `Config` class (auto-deserialized), and/or `id` (harness passes `<node-id>.module`).
 - `run(...)` may be sync, async, a generator, or async generator.
 - Return `None` → emits nothing. Return non-tuple non-`None` → emits on `"default"` port. Return/yield `(port_name, value)` → emits on named port (`port_name` must be a string).
+- May optionally expose `finalise()` (sync or async) — called once after all `run(...)` invocations, before `EndSentinel` propagates. Takes no arguments; return value is discarded.
 
 ## Contract authoring rules
 

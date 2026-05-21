@@ -101,6 +101,86 @@ class _CrashModule:
 		raise ValueError("oops")
 
 
+class _ModuleWithSyncFinalise:
+	def __init__(self):
+		self.finalise_called = False
+
+	def run(self):
+		return None
+
+	def finalise(self):
+		self.finalise_called = True
+
+
+class _ModuleWithAsyncFinalise:
+	def __init__(self):
+		self.finalise_called = False
+
+	def run(self):
+		return None
+
+	async def finalise(self):
+		self.finalise_called = True
+
+
+class _ModuleWithCrashingFinalise:
+	def run(self):
+		return None
+
+	def finalise(self):
+		raise RuntimeError("finalise crashed")
+
+
+class _ModuleWithNonCallableFinalise:
+	finalise = "not_a_function"
+
+	def run(self):
+		return None
+
+
+class _ModuleWithFinalisePlainReturn:
+	def run(self):
+		return None
+
+	def finalise(self):
+		return 99
+
+
+class _ModuleWithFinaliseNamedReturn:
+	def run(self):
+		return None
+
+	def finalise(self):
+		return ("out", 42)
+
+
+class _ModuleWithFinaliseSyncGenerator:
+	def run(self):
+		return None
+
+	def finalise(self):
+		yield 1
+		yield 2
+		yield 3
+
+
+class _ModuleWithFinaliseAsyncReturn:
+	def run(self):
+		return None
+
+	async def finalise(self):
+		return 77
+
+
+class _ModuleWithFinaliseAsyncGenerator:
+	def run(self):
+		return None
+
+	async def finalise(self):
+		yield 10
+		yield 20
+
+
 class _NoPortsContract:
 	def __init__(self, id):
 		self.id = id
@@ -592,3 +672,73 @@ async def test_run_sync_contract_get_inputs(logging_handler):
 	node = Node(id="test", Module=_MinimalModule, config={}, Contract=_SyncTerminateContract)
 	node.set_dsts([])
 	await node.run()  # should terminate cleanly via the sync EndSentinel
+
+
+# --- run — finalise ---
+
+
+async def test_run_sync_finalise_called(logging_handler):
+	node = _make_node(_ModuleWithSyncFinalise)
+	node.set_dsts([])
+	await node.run()
+	assert node.module.finalise_called is True
+
+
+async def test_run_async_finalise_called(logging_handler):
+	node = _make_node(_ModuleWithAsyncFinalise)
+	node.set_dsts([])
+	await node.run()
+	assert node.module.finalise_called is True
+
+
+async def test_run_no_finalise_runs_cleanly(logging_handler):
+	node = _make_node(_MinimalModule)
+	node.set_dsts([])
+	await node.run()
+	assert logging_handler.failure is False
+
+
+async def test_run_finalise_exception_is_fatal(logging_handler):
+	node = _make_node(_ModuleWithCrashingFinalise)
+	node.set_dsts([])
+	with pytest.raises(SystemExit):
+		await node.run()
+
+
+async def test_run_non_callable_finalise_ignored(logging_handler):
+	node = _make_node(_ModuleWithNonCallableFinalise)
+	node.set_dsts([])
+	await node.run()
+	assert logging_handler.failure is False
+
+
+async def test_run_finalise_plain_return_dispatched(logging_handler):
+	outputs = await _run_node_with_input(_ModuleWithFinalisePlainReturn, {})
+	assert outputs == [99]
+
+
+async def test_run_finalise_named_port_return_dispatched(logging_handler):
+	recv_node = _make_node(_ModuleOneInput)
+	recv_node.set_dsts([])
+	node = _make_node(_ModuleWithFinaliseNamedReturn)
+	conn = Connection(self_port="out", other_node=recv_node, other_port="a")
+	node.set_dsts([conn])
+	await node.run()
+	item = await recv_node.ports["a"].queue.get()
+	assert isinstance(item, Payload)
+	assert item.payload == 42
+
+
+async def test_run_finalise_sync_generator_dispatched(logging_handler):
+	outputs = await _run_node_with_input(_ModuleWithFinaliseSyncGenerator, {})
+	assert outputs == [1, 2, 3]
+
+
+async def test_run_finalise_async_return_dispatched(logging_handler):
+	outputs = await _run_node_with_input(_ModuleWithFinaliseAsyncReturn, {})
+	assert outputs == [77]
+
+
+async def test_run_finalise_async_generator_dispatched(logging_handler):
+	outputs = await _run_node_with_input(_ModuleWithFinaliseAsyncGenerator, {})
+	assert outputs == [10, 20]

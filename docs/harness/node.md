@@ -31,6 +31,7 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 - accept inbound payloads and sentinels
 - run the contract/module loop
 - dispatch outputs downstream
+- call `module.finalise()` if present after the loop exits
 - propagate `EndSentinel` when the node stops
 
 ## Instantiation Model
@@ -103,7 +104,12 @@ Each node repeatedly:
 5. normalizes outputs through `process_result(...)`
 6. forwards results to every matching downstream connection
 
-When the node exits, it sends `EndSentinel(self.id)` to every downstream edge.
+After the loop exits:
+
+7. if `module.finalise` exists and is callable, the node calls it (sync or async) with no arguments, with structlog context bound as `harness.node.module`
+8. the node sends `EndSentinel(self.id)` to every downstream edge
+
+`finalise` exceptions are treated as fatal — same path as unhandled exceptions in `run(...)`. It supports the same output dispatch as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator — all normalized through `process_result(...)`.
 
 ## Important Details
 
@@ -114,6 +120,8 @@ When the node exits, it sends `EndSentinel(self.id)` to every downstream edge.
 - `None` is treated as "emit nothing"
 - non-`rtl_comrade` exceptions caught during module/contract reflection, config deserialization, construction, and runtime execution are logged with `exc_info=e`
 - error-level and critical-level logs during node execution intentionally participate in the harness failure model: `ERROR` allows best-effort continued execution, while `CRITICAL` aborts immediately
+- `module.finalise` is detected with `hasattr` + `callable`; a non-callable attribute named `finalise` is silently ignored
+- `EndSentinel` is only propagated after `finalise` completes — if `finalise` raises fatally, downstream nodes do not receive a sentinel and will block indefinitely
 
 ## Caveats
 

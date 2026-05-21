@@ -286,6 +286,29 @@ class Node:
 			log.error('dsts.not_initialised', context='harness.module.res', node=self.id)
 			return
 
-		# Propogate EndSentinel
+		# Run module.finalise (if present)
+		if hasattr(self.module, "finalise") and callable(self.module.finalise):
+			bind_contextvars(context="harness.node.module", node=self.id, module=type(self.module).__name__)
+			try:
+				if inspect.iscoroutinefunction(self.module.finalise):
+					res = await self.module.finalise()
+				else:
+					res = self.module.finalise()
+				
+				# Unravel all possible forms of output return
+				if inspect.isasyncgen(res): # async yield
+					async for r in res:
+						await self.process_result(r)
+				elif inspect.isgenerator(res): # regular yield
+					for r in res:
+						await self.process_result(r)
+				else: # return (async/regular)
+					await self.process_result(res)
+			except Exception as e:
+				log.fatal('exception', exc_info=e)
+			finally:
+				unbind_contextvars('context', 'node', 'module')
+
+		# Propagate EndSentinel
 		for dst in self.dsts:
 			await dst.other_node.accept(val=EndSentinel(self.id), port=dst.other_port)

@@ -32,6 +32,10 @@ At minimum:
 
 The harness infers the module input surface from the `run(...)` signature.
 
+Optionally:
+
+- it may expose `finalise()` — a teardown hook called once after all `run(...)` invocations have completed and before `EndSentinel` is propagated downstream
+
 ## How The Harness Instantiates A Module
 
 `Node` inspects the module constructor and only injects arguments that the constructor explicitly accepts.
@@ -192,6 +196,40 @@ This is allowed, but `definite_emits` becomes false.
 
 The analyzer intentionally ignores `return` and `yield` inside nested function bodies. It only treats top-level `run(...)` behavior as authoritative for output-port inference.
 
+## The `finalise()` Hook
+
+If a module defines `finalise()`, the harness calls it once after the last `run(...)` invocation and before sending `EndSentinel` downstream.
+
+Both sync and async forms are accepted:
+
+```python
+class StatefulMod:
+    def __init__(self):
+        self._results = []
+
+    def run(self, value):
+        self._results.append(value)
+
+    def finalise(self):
+        print(f"collected {len(self._results)} values")
+```
+
+```python
+class AsyncStatefulMod:
+    def __init__(self):
+        self._results = []
+
+    def run(self, value):
+        self._results.append(value)
+
+    async def finalise(self):
+        await flush_to_database(self._results)
+```
+
+`finalise()` does not receive arguments. If it raises, the harness treats it as fatal (same as an unhandled exception in `run(...)`). It supports the same output forms as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator. Return `None` to emit nothing.
+
+If the module does not define `finalise`, or if `finalise` is a non-callable attribute, the harness silently skips the step.
+
 ## Runtime Call Model
 
 For each invocation:
@@ -202,10 +240,16 @@ For each invocation:
 4. it calls `module.run(**inputs)`
 5. it forwards any emitted outputs downstream
 
-Important consequence:
+After all invocations complete:
+
+6. if `module.finalise` exists and is callable, the harness calls it once
+7. `EndSentinel` is propagated to all downstream edges
+
+Important consequences:
 
 - modules receive raw values, not `Payload` wrappers
 - modules do not directly control graph termination; contracts do
+- `finalise()` is always called after the last `run(...)`, regardless of whether termination was triggered by `EndSentinel` from a contract or by a zero-input node running once
 
 ## Logging Guidance
 
@@ -492,6 +536,11 @@ Key branches to cover:
 
 - If `__init__` validates config fields, include at least one test for a valid config and one that triggers each validation failure.
 
+**`finalise` teardown**
+
+- If your module defines `finalise()`, test that it runs after all `run(...)` invocations: check side effects (flushed state, closed resources, etc.) after `run_module_scenario` returns.
+- If `finalise()` can raise, include a test that triggers that path with `pytest.raises(SystemExit)`.
+
 ## Design Advice
 
 - Keep scheduling logic in contracts, not in modules.
@@ -499,6 +548,7 @@ Key branches to cover:
 - Treat `run(...)` parameter names and order as part of the graph-facing API.
 - Be conservative with `None`; it means "emit nothing", not "emit a default-port null payload".
 - If you change module input shape or output-port semantics, update any sample graph that depends on it.
+- Use `finalise()` for work that must happen after all inputs are consumed — closing files, flushing buffers, emitting summary or aggregate outputs.
 
 ## Current Limitations To Keep In Mind
 
