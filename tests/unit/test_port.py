@@ -12,11 +12,10 @@ from rtl_comrade.structure import ModuleStructureArg
 
 
 def test_from_structure_copies_fields():
-	arg = ModuleStructureArg(name="val", has_default=True, default=99)
+	arg = ModuleStructureArg(name="val", has_default=True)
 	p = Port.from_structure(arg)
 	assert p.name == "val"
 	assert p.has_default is True
-	assert p.default == 99
 	assert p.queue.empty()
 
 
@@ -24,7 +23,6 @@ def test_from_structure_no_default():
 	arg = ModuleStructureArg(name="a")
 	p = Port.from_structure(arg)
 	assert p.has_default is False
-	assert p.default is None
 
 
 # --- Port.get ---

@@ -18,7 +18,7 @@ This file implements the queue-backed input ports owned by each runtime node.
 - hold inbound `Payload` and `EndSentinel` objects
 - expose blocking and non-blocking reads
 - track whether a port has ended
-- capture default metadata inferred from module signatures
+- record whether the corresponding module parameter has a Python default (`has_default`)
 
 ## Place In The System
 

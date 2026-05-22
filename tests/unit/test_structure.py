@@ -95,7 +95,6 @@ def test_args_typed_with_default():
 	assert s.args[0].has_default is False
 	assert s.args[0].type_ == str(int)
 	assert s.args[1].has_default is True
-	assert s.args[1].default == 0
 	assert s.args[1].type_ == str(int)
 
 

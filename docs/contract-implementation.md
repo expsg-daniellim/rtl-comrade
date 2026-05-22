@@ -84,16 +84,13 @@ Each `ContractPort` provides:
 - `get()`: async blocking read, returns `Payload` or `EndSentinel`
 - `try_get()`: non-blocking read, returns `Payload`, `EndSentinel`, or `None`
 - `has_ended()`: whether the port has already seen an end sentinel
-- `has_default`
-- `default`
-- `get_default_payload()`
+- `has_default`: whether the corresponding module parameter has a Python default value
 - `state`: a dict for contract-owned per-port state
 
 Important details:
 
 - `get()` waits until an item is available
 - `try_get()` treats an empty queue as normal and returns `None`
-- `get_default_payload()` synthesizes a `Payload` with source `"_default"`
 - contracts should store per-port state inside `port.state`, not by attaching ad hoc attributes directly to the `ContractPort` object
 
 The built-in default contract uses `port.state` keys such as `persistent` and `last_value`.
@@ -112,15 +109,13 @@ The normal return type is:
 dict[str, Payload]
 ```
 
-The keys must match the module input names for that node.
-
-The harness will then unwrap the payload objects and call the module with:
+The harness unwraps the payload objects and calls the module with:
 
 ```python
 module.run(**{name: payload.payload for name, payload in inputs.items()})
 ```
 
-That means the contract is responsible for selecting the right payload object for each port, but the module only sees the underlying `.payload` values.
+The contract is responsible for selecting which ports to include. **Ports whose key is absent from the returned dict are not passed as keyword arguments at all**, so Python's own default value for that parameter activates naturally. A contract should omit a port from the dict only when `has_default` is `True` for that port.
 
 ### `EndSentinel`
 
@@ -203,29 +198,20 @@ class TriggerOnContract:
 
 ## Using Default Values
 
-If a module input has a Python default value in its `run(...)` signature, the corresponding `ContractPort` will have:
+If a module input has a Python default value in its `run(...)` signature, `has_default` on the corresponding `ContractPort` is `True`.
 
-- `has_default = True`
-- `default = <that value>`
-
-If your contract wants to use that default as a synthetic payload, call:
-
-```python
-port.get_default_payload()
-```
-
-This returns a `Payload`, not a raw value.
+The contract signals that a default-valued port should use its Python default by **leaving that port's key out of the returned dict**. The harness then calls `module.run()` without that keyword argument, and Python's own default mechanism applies.
 
 The built-in default contract shows the intended pattern.
 
 ### Actual precedence in `DefaultContract`
 
-The current built-in default contract uses this precedence order when assembling one invocation:
+The built-in default contract uses this precedence order when assembling one invocation:
 
-1. required non-special inputs
-2. cached persistent values
-3. default-derived persistent values
-4. ordinary default-derived values
+1. required ports — block until a real value arrives
+2. special ports with a queued payload — consume it eagerly via `try_get()`
+3. persistent ports with a cached last value — reuse it
+4. default-valued ports with nothing queued — omit the key; Python default activates
 
 That ordering matters if you are trying to implement a contract with similar persistent/default behavior.
 
@@ -268,7 +254,7 @@ In the current codebase, many unexpected exceptions during `get_inputs()` are ca
 The two shipped contracts illustrate a useful split:
 
 - [contracts/contracts.py](/Users/daniellim/Documents/random/rtl-comrade/contracts/contracts.py) uses `ERROR` for a runtime mismatch in stream endings, then returns `EndSentinel`
-- [src/rtl_comrade/contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py) uses fatal logging for broken invariants such as impossible default access or invalid persistent-port configuration
+- [src/rtl_comrade/contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py) uses fatal logging for broken invariants such as invalid persistent-port configuration
 
 ## Manifest Registration
 
@@ -365,19 +351,19 @@ One entry per `get_inputs()` call.
 
 ### Ports with defaults
 
-Use `port_meta` to configure `has_default` and `default` on individual ports, matching what the harness derives from the module signature:
+Use `port_meta` to mark individual ports as `has_default=True`, matching what the harness derives from the module signature:
 
 ```python
 await run_contract_scenario(
     MyContract,
     port_inputs={"a": [1, EndSentinel("src")], "b": []},
-    expected_outputs=[{"a": 1, "b": 0}, EndSentinel],
-    port_meta={"b": PortMeta(has_default=True, default=0)},
+    expected_outputs=[{"a": 1}, EndSentinel],
+    port_meta={"b": PortMeta(has_default=True)},
     config=MyContract.Config(),
 )
 ```
 
-Ports not listed in `port_meta` default to `has_default=False, default=None`.
+When a default-valued port has nothing queued the contract omits its key from the returned dict, so `"b"` does not appear in `expected_outputs` for that step. Ports not listed in `port_meta` default to `has_default=False`.
 
 ### Optional kwargs
 
@@ -432,7 +418,7 @@ Pre-loading all items before `get_inputs()` is called means queues are never emp
 
 **State edge cases**
 
-Cover every distinct state a port can be in at call time — no-last-value persistent port, a default port that has already ended, a port that transitions from live to ended mid-sequence.
+Cover every distinct state a port can be in at call time — no-last-value persistent port, a default port whose upstream has ended (key is omitted from the result), a port that transitions from live to ended mid-sequence.
 
 ## Design Advice
 

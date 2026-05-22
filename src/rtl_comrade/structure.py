@@ -74,13 +74,11 @@ class ModuleStructureArg:
 		name: Input-port name inferred from the parameter name.
 		type_: Stringified annotation, if present on the parameter.
 		has_default: Whether the parameter has a Python default value.
-		default: The raw default value, if present.
 	"""
 
 	name: str
 	type_: str | None = None
 	has_default: bool = False
-	default: typing.Any = None
 
 @dataclass(slots=True)
 class ModuleStructure:
@@ -118,7 +116,6 @@ class ModuleStructure:
 			name=name,
 			type_=str(param.annotation) if param.annotation != Parameter.empty else None,
 			has_default=param.default != Parameter.empty,
-			default=param.default if param.default != Parameter.empty else None
 		) for (name, param) in sig.parameters.items() if name != 'self' ]
 
 		# Parse AST in steps to catch individual Exceptions from each step

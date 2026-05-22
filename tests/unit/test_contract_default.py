@@ -8,9 +8,8 @@ from rtl_comrade.port import Port
 from rtl_comrade.testing import PortMeta, run_contract_scenario
 
 
-def _make_port(name, has_default=False, default=None):
-	port = Port(name=name, has_default=has_default, default=default)
-	return port
+def _make_port(name, has_default=False):
+	return Port(name=name, has_default=has_default)
 
 
 def _make_contract_port(port: Port):
@@ -20,7 +19,6 @@ def _make_contract_port(port: Port):
 		try_get=port.try_get,
 		has_ended=port.has_ended,
 		has_default=port.has_default,
-		default=port.default,
 	)
 
 
@@ -42,7 +40,7 @@ def test_is_special_required_port():
 
 
 def test_is_special_has_default():
-	p = _make_contract_port(_make_port("a", has_default=True, default=0))
+	p = _make_contract_port(_make_port("a", has_default=True))
 	p.state["persistent"] = False
 	p.state["last_value"] = None
 	assert is_special(p) is True
@@ -100,21 +98,20 @@ async def test_required_input_mixed_returns_sentinel_and_logs_error(logging_hand
 # --- DefaultContract.get_inputs — default inputs ---
 
 
-async def test_default_input_synthesized_when_empty():
+async def test_default_input_omitted_when_empty():
 	port_req = _make_port("a")
-	port_def = _make_port("b", has_default=True, default=10)
+	port_def = _make_port("b", has_default=True)
 	contract, _ = _make_contract({"a": port_req, "b": port_def})
 
 	await port_req.queue.put(Payload("src", 0, 5))
 	result = await contract.get_inputs()
 	assert isinstance(result, dict)
-	assert result["b"].payload == 10
-	assert result["b"].source == "_default"
+	assert "b" not in result
 
 
 async def test_default_input_real_payload_preferred():
 	port_req = _make_port("a")
-	port_def = _make_port("b", has_default=True, default=10)
+	port_def = _make_port("b", has_default=True)
 	contract, _ = _make_contract({"a": port_req, "b": port_def})
 
 	real_payload = Payload("upstream", 0, 99)
@@ -124,42 +121,30 @@ async def test_default_input_real_payload_preferred():
 	assert result["b"] == real_payload
 
 
-async def test_default_input_not_offered_after_ended():
+async def test_default_input_omitted_after_ended():
 	port_req = _make_port("a")
-	port_def = _make_port("b", has_default=True, default=10)
-	contract, contract_ports = _make_contract({"a": port_req, "b": port_def})
+	port_def = _make_port("b", has_default=True)
+	contract, _ = _make_contract({"a": port_req, "b": port_def})
 
-	# Drain b with a sentinel to mark it as ended
 	await port_def.queue.put(EndSentinel("up"))
 	port_def.try_get()  # consume sentinel so has_ended() returns True
 	assert port_def.has_ended() is True
 
-	# Now get_inputs: b is ended, so it should not synthesize a default.
-	# The contract checks has_ended() via try_get path — ended port is skipped.
-	# But wait, the contract_port wraps port_def's methods by reference.
-	# Actually the issue is that we need to read from port_def via the contract,
-	# not the underlying port. Let's just put a payload in 'a' and confirm
-	# the contract falls into the "else: log.fatal" path for an ended default port.
-	# But that would be a fatal. Instead just verify b is not in the result
-	# when it has ended and there's nothing queued.
 	await port_req.queue.put(Payload("src", 0, 1))
-	# b has ended, so try_get returns None (ended short-circuit), and
-	# has_default is True but has_ended() returns True → skip default.
-	# The code path: `elif port.has_default and not port.has_ended()` → False
-	# so falls to `else: log.fatal('unsupported_case')` — that would crash.
-	# This means the test verifies the *after sentinel* the default port hits fatal.
-	# Actually we need logging_handler for this, so this test is marked as such.
+	result = await contract.get_inputs()
+	assert isinstance(result, dict)
+	assert "b" not in result
 
 
-async def test_default_n_increments_across_calls():
+async def test_default_input_omitted_on_repeated_calls():
 	port_req = _make_port("a")
-	port_def = _make_port("b", has_default=True, default=5)
-	contract, contract_ports = _make_contract({"a": port_req, "b": port_def})
+	port_def = _make_port("b", has_default=True)
+	contract, _ = _make_contract({"a": port_req, "b": port_def})
 
 	for i in range(3):
 		await port_req.queue.put(Payload("src", i, i))
 		result = await contract.get_inputs()
-		assert result["b"].n == i
+		assert "b" not in result
 
 
 # --- DefaultContract.get_inputs — persistent inputs ---
@@ -229,8 +214,8 @@ async def test_two_required_ports_full_sequence():
 	)
 
 
-async def test_default_port_real_value_then_synthesized():
-	# "b" supplies one real value then runs dry; subsequent calls synthesize from default.
+async def test_default_port_real_value_then_omitted():
+	# "b" supplies one real value then runs dry; subsequent calls omit "b" from the result.
 	await run_contract_scenario(
 		DefaultContract,
 		port_inputs={
@@ -239,37 +224,34 @@ async def test_default_port_real_value_then_synthesized():
 		},
 		expected_outputs=[
 			{"a": 1, "b": 99},
-			{"a": 2, "b": 0},
+			{"a": 2},
 			EndSentinel("test"),
 		],
-		port_meta={"b": PortMeta(has_default=True, default=0)},
+		port_meta={"b": PortMeta(has_default=True)},
 		config=DefaultContract.Config(),
 	)
 
 
-async def test_persistent_port_with_default_falls_back_to_get_default_when_no_last_value():
+async def test_persistent_port_with_default_omitted_when_no_last_value():
 	# Persistent port that also has a default but has never received a real value:
 	# is_special() is True (has_default), try_get() returns None, last_value is None,
-	# so the contract calls get_default_payload() and caches the result as last_value.
+	# so the key is omitted and Python's default activates.
 	port_req = _make_port("a")
-	port_mul = _make_port("multiplier", has_default=True, default=5)
+	port_mul = _make_port("multiplier", has_default=True)
 	contract, _ = _make_contract(
 		{"a": port_req, "multiplier": port_mul},
 		persistent_inputs=["multiplier"],
 	)
 	await port_req.queue.put(Payload("src", 0, 1))
 	result = await contract.get_inputs()
-	assert result["multiplier"].payload == 5
-	assert result["multiplier"].source == "_default"
-	assert contract.ports["multiplier"].state["last_value"].payload == 5
+	assert "multiplier" not in result
+	assert contract.ports["multiplier"].state["last_value"] is None
 
 
-async def test_default_port_ended_hits_unsupported_case_fatal(logging_handler):
-	# A default-only port that has ended leaves the contract with no valid fallback:
-	# is_special() is True (has_default), try_get() returns None (ended port short-circuits),
-	# not persistent, has_default=True but has_ended()=True → else: log.fatal('unsupported_case').
+async def test_default_port_ended_omitted_from_result():
+	# A default-only port that has ended: key is omitted from the result dict.
 	port_req = _make_port("a")
-	port_def = _make_port("b", has_default=True, default=5)
+	port_def = _make_port("b", has_default=True)
 	contract, _ = _make_contract({"a": port_req, "b": port_def})
 
 	await port_def.queue.put(EndSentinel("upstream"))
@@ -277,8 +259,9 @@ async def test_default_port_ended_hits_unsupported_case_fatal(logging_handler):
 	assert port_def.has_ended() is True
 
 	await port_req.queue.put(Payload("src", 0, 1))
-	with pytest.raises(SystemExit):
-		await contract.get_inputs()
+	result = await contract.get_inputs()
+	assert isinstance(result, dict)
+	assert "b" not in result
 
 
 async def test_persistent_port_updates_eagerly_then_reuses():

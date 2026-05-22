@@ -61,11 +61,9 @@ class PortMeta:
 
 	Attributes:
 		has_default: Whether the port should report a default value.
-		default: The raw default value for the port, if any.
 	"""
 
 	has_default: bool = False
-	default: Any = None
 
 
 @dataclass
@@ -114,7 +112,7 @@ async def run_contract_scenario(
 			- dict[str, Any]: maps port name to the expected .payload value
 			- EndSentinel class or instance: asserts the call returns an EndSentinel
 		port_meta: Optional per-port Port constructor overrides, e.g.
-			{"b": PortMeta(has_default=True, default=0)}.
+			{"b": PortMeta(has_default=True)}.
 		config: Passed to contract __init__ only when the parameter is declared.
 		contract_id: The id string passed to the contract.
 		timeout: Maximum seconds to wait for each get_inputs() call.
@@ -130,7 +128,6 @@ async def run_contract_scenario(
 		name: Port(
 			name=name,
 			has_default=meta.get(name, _default_meta).has_default,
-			default=meta.get(name, _default_meta).default,
 		)
 		for name in port_inputs
 	}
@@ -155,7 +152,6 @@ async def run_contract_scenario(
 			try_get=port.try_get,
 			has_ended=port.has_ended,
 			has_default=port.has_default,
-			default=port.default,
 		)
 		for name, port in ports.items()
 	}

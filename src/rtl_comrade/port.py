@@ -6,7 +6,7 @@ from asyncio import Queue
 from dataclasses import dataclass, field
 from typing import Generic, TypeVar
 
-from .api import Payload, EndSentinel, NoDefault, NODEFAULT
+from .api import Payload, EndSentinel
 from .structure import ModuleStructureArg
 
 T = TypeVar('T')
@@ -31,15 +31,13 @@ class Port(Generic[T]):
 	Attributes:
 		name: Canonical input-port name.
 		queue: Async queue carrying Payload and EndSentinel messages.
-		has_default: Whether this port can synthesize a value from a Python default.
-		default: Raw Python default value for this input, if any.
+		has_default: Whether the corresponding module input has a default value.
 		ended: Whether this port has already observed an EndSentinel.
 	"""
 
 	name: str
 	queue: Queue[Payload[T]|EndSentinel] = field(default_factory=Queue)
 	has_default: bool = False
-	default: T|NoDefault = NODEFAULT
 	ended: bool = False
 
 	@staticmethod
@@ -53,7 +51,7 @@ class Port(Generic[T]):
 			A Port initialized from that argument description.
 		"""
 
-		return Port(name=arg.name, has_default=arg.has_default, default=arg.default)
+		return Port(name=arg.name, has_default=arg.has_default)
 
 	async def get(self) -> Payload[T]|EndSentinel:
 		"""Wait for and return the next runtime message for this port.

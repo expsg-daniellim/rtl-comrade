@@ -20,13 +20,13 @@ async def test_required_port_single_value():
 	)
 
 
-async def test_default_port_synthesized_when_queue_empty():
-	# "b" queue is empty; DefaultContract synthesizes a payload from its default value.
+async def test_default_port_omitted_when_queue_empty():
+	# "b" queue is empty; DefaultContract omits "b" from the result.
 	await run_contract_scenario(
 		DefaultContract,
 		port_inputs={"a": [1, EndSentinel("src")], "b": []},
-		expected_outputs=[{"a": 1, "b": 0}, EndSentinel("test")],
-		port_meta={"b": PortMeta(has_default=True, default=0)},
+		expected_outputs=[{"a": 1}, EndSentinel("test")],
+		port_meta={"b": PortMeta(has_default=True)},
 		config=DefaultContract.Config(),
 	)
 

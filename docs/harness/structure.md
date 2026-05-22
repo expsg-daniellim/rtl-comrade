@@ -19,7 +19,7 @@ This file performs static analysis of module `run(...)` methods so the harness c
 ## Main Responsibilities
 
 - inspect `Module.run` signatures
-- record parameter names, annotations, and default values
+- record parameter names, annotations, and whether each parameter has a default
 - parse the source of `run(...)`
 - walk the AST while avoiding nested function bodies
 - collect statically known emitted port names

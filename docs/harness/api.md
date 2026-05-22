@@ -18,7 +18,6 @@ This file defines the small set of core data types shared across the harness and
 - `Payload[T]`: wraps a value moving across an edge
 - `EndSentinel`: marks stream termination
 - `ContractPort[T]`: contract-facing access wrapper around a node input port
-- `NoDefaultError`: raised when default payload generation is requested for a port without a default
 
 ## Place In The System
 
@@ -28,7 +27,6 @@ This is the harness boundary API for data movement and contract interaction. `no
 
 - `Payload` records `source`, `n`, and `payload`
 - `ContractPort` exposes both blocking `get()` and non-blocking `try_get()`
-- `ContractPort.get_default_payload()` synthesizes payloads sourced from `"_default"`
 - `ContractPort.state` is the intended place for contract-owned per-port mutable state
 
 ## Caveats

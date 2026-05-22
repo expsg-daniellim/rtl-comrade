@@ -82,7 +82,7 @@ edges:     # graph connections
 - If harness behavior affecting plugin authoring changes → update `docs/harness/`.
 - If config shape, port semantics, or plugin loading changes → update the sample graph and manifests in the same commit.
 - Prefer executable examples when introducing runtime features.
-- Run tests with `uv run pytest tests/`. The suite covers all harness modules (unit) and the full `Graph.from_file → Graph.run` path (integration). See `docs/test-plan.md` for scope and `tests/conftest.py` for shared fixtures.
+- Run tests with `uv run pytest tests/`. The suite covers all harness modules (unit) and the full `Graph.from_file → Graph.run` path (integration). See `docs/testing.md` for the full testing procedure and `tests/conftest.py` for shared fixtures.
 - Do not treat `README.md` as the authoritative architecture document.
 
 ## Testing
@@ -107,7 +107,7 @@ Key conventions:
 - Integration tests write temporary plugin `.py` files to `tmp_path` and construct `GraphConfig` objects directly; they do not touch `graph2.yaml`.
 - `asyncio_mode = "auto"` is set in `pyproject.toml`; async tests need no extra decoration.
 
-The test plan lives in `docs/test-plan.md`.
+See `docs/testing.md` for the two-stage testing procedure and coverage commands for each section.
 
 ## Current state / known gaps
 

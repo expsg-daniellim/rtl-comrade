@@ -30,8 +30,7 @@ This is the harness’s baseline scheduling policy. It is not part of the generi
 
 - non-default, non-cached inputs are required and awaited
 - persistent inputs remember the last real payload they saw
-- default-valued ports can self-satisfy
-- persistent ports with defaults can bootstrap from the default before upstream data arrives
+- default-valued ports that have no queued payload are omitted from the returned dict; Python's own default argument activates when the module is called
 - if any required port returns `EndSentinel`, the contract returns `EndSentinel` for the whole node
 - port-local persistent state is stored in each `ContractPort.state` dict
 

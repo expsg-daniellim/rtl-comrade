@@ -1,9 +1,9 @@
-"""Unit tests for api.py — Payload, EndSentinel, ContractPort, NoDefaultError."""
+"""Unit tests for api.py — Payload, EndSentinel, ContractPort."""
 
 import pytest
 from dataclasses import FrozenInstanceError
 
-from rtl_comrade.api import Payload, EndSentinel, ContractPort, NoDefaultError
+from rtl_comrade.api import Payload, EndSentinel, ContractPort
 
 
 # --- Payload ---
@@ -41,58 +41,3 @@ def test_end_sentinel_source():
 	assert s.source == "upstream"
 
 
-# --- ContractPort.get_default_payload ---
-
-
-def _stub_contract_port(name, has_default=True, default=42):
-	def _not_called():
-		raise AssertionError("get_default_payload must not invoke port callables")
-
-	return ContractPort(
-		name=name,
-		get=_not_called,
-		try_get=_not_called,
-		has_ended=_not_called,
-		has_default=has_default,
-		default=default,
-	)
-
-
-def test_get_default_payload_first_call():
-	port = _stub_contract_port("x", has_default=True, default=42)
-	p = port.get_default_payload()
-	assert p.source == "_default"
-	assert p.n == 0
-	assert p.payload == 42
-
-
-def test_get_default_payload_increments_n():
-	port = _stub_contract_port("x", has_default=True, default=7)
-	p0 = port.get_default_payload()
-	p1 = port.get_default_payload()
-	p2 = port.get_default_payload()
-	assert p0.n == 0
-	assert p1.n == 1
-	assert p2.n == 2
-
-
-def test_get_default_payload_no_default_raises():
-	port = _stub_contract_port("myport", has_default=False, default=None)
-	with pytest.raises(NoDefaultError) as exc_info:
-		port.get_default_payload()
-	assert exc_info.value.name == "myport"
-
-
-# --- NoDefaultError ---
-
-
-def test_no_default_error_is_exception():
-	e = NoDefaultError("port_x")
-	assert isinstance(e, Exception)
-	assert e.name == "port_x"
-
-
-def test_no_default_error_frozen():
-	e = NoDefaultError("p")
-	with pytest.raises((FrozenInstanceError, AttributeError)):
-		e.name = "other"  # ty: ignore[invalid-assignment] — intentionally mutating a frozen dataclass to verify it raises

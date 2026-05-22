@@ -54,7 +54,7 @@ The node then constructs [ModuleStructure](/Users/daniellim/Documents/random/rtl
 After module structure analysis:
 
 - one [Port](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md) is created for each inferred `run(...)` parameter
-- default values from the module signature become default-valued ports
+- parameters that have a Python default are marked `has_default=True` on the corresponding port
 - input port order is preserved through an `OrderedDict`
 
 The raw `Port` objects are harness-owned runtime queues. Contracts do not receive them directly.
@@ -73,7 +73,7 @@ Each `ContractPort` exposes:
 - blocking `get()`
 - non-blocking `try_get()`
 - `has_ended()`
-- default metadata
+- `has_default` — whether the corresponding module parameter carries a Python default
 - a `state` dict for contract-owned per-port bookkeeping
 
 This is the main boundary between harness-owned transport and contract-owned scheduling policy.

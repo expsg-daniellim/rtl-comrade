@@ -121,7 +121,7 @@ class Node:
 			contract_init_args['id'] = self.id + '.contract'
 
 		if 'ports' in contract_init_sig.parameters:
-			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, default=port.default) for (name, port) in self.ports.items() }
+			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default) for (name, port) in self.ports.items() }
 		else:
 			# Warn for this one because it's a pretty pointless contract that has no input ports
 			log.warn('init.no_ports', context='harness.node.contract', node=self.id, contract=Contract.__name__)

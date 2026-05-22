@@ -31,9 +31,9 @@ Ends when any required (non-special) port ends. If some required ports have alre
 ### How invocation inputs are assembled
 
 1. **Required ports** — block until a real value arrives
-2. **Persistent ports (cached)** — use the most recently received value
-3. **Persistent ports (defaulted)** — synthesize from the module's Python default if no value has arrived yet
-4. **Default-only ports** — synthesize from the module's Python default without caching
+2. **Special ports with a queued payload** — consume it eagerly via non-blocking read
+3. **Persistent ports (cached)** — use the most recently received value
+4. **Default-valued ports with nothing queued** — omitted from the dict; Python's own default activates when the module is called
 
 ### Example use cases
 

@@ -83,15 +83,15 @@ class DefaultContract:
 		1. required non-special inputs, including persistent inputs on first run
 		2. queued updates for special inputs via non-blocking reads
 		3. cached persistent values
-		4. default-derived persistent values
-		5. ordinary default-derived values
+		4. default-valued ports with nothing queued — key omitted; the module's default value applies
 
 		Returns:
 			A mapping from input-port name to Payload for the next invocation, or an
-			EndSentinel when the node should terminate.
+			EndSentinel when the node should terminate. Default-valued ports with no
+			queued payload are absent from the dict.
 		"""
 
-		# Order of precedence: required (non-special)/persistent (first run) > persistent (cached) > persistent (default) > default
+		# Order of precedence: required > queued special > persistent cached > omit (default)
 		# Get required inputs
 		inputs = {}
 		for (name, port) in filter(lambda p: not is_special(p[1]), self.ports.items()):
@@ -122,17 +122,9 @@ class DefaultContract:
 			if not isinstance(val, EndSentinel) and val is not None:
 				port.state['last_value'] = val
 				special_inputs[name] = val
-			elif port.state['persistent']:
-				if port.state['last_value'] is not None:
-					special_inputs[name] = port.state['last_value']
-				elif port.has_default:
-					default = port.get_default_payload()
-					port.state['last_value'] = default
-					special_inputs[name] = default
-			elif port.has_default and not port.has_ended():
-				special_inputs[name] = port.get_default_payload()
-			else:
-				log.fatal('unsupported_case')
+			elif port.state['persistent'] and port.state['last_value'] is not None:
+				special_inputs[name] = port.state['last_value']
+			# otherwise the key is omitted; Python's default activates for this port
 		# Special inputs should never have an EndSentinel, so no checking is done
 
 		return inputs | special_inputs
