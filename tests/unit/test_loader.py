@@ -396,3 +396,42 @@ def test_load_path_plain_dir_cross_file_import(logging_handler, tmp_path):
 	result = load_path(mods)
 	assert "main" in result
 	assert str(mods) in _sys.path
+
+
+# --- module-cache branches in load_plugin ---
+
+
+def test_load_plugin_canonical_relative_to_error_falls_back_to_fresh_load(logging_handler, tmp_path):
+	# Package dir exists (__init__.py present) but relative_to raises ValueError →
+	# canonical_name = None → fresh load via else branch.
+	pkg = tmp_path / "pkg"
+	pkg.mkdir()
+	(pkg / "__init__.py").write_text("")
+	plugin_file = pkg / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	config = PluginFileConfig(name="pkg_mods_relative_err", file=plugin_file, type_=None, plugins=None)
+	with patch.object(Path, "relative_to", side_effect=ValueError("no common prefix")):
+		result = load_plugin(config)
+	assert "foo" in result
+
+
+def test_load_plugin_reuses_cached_module_by_plugin_name(logging_handler, tmp_path):
+	# No __init__.py → canonical_name = None; plugin_name already in sys.modules → reuse.
+	import sys as _sys
+	plugin_file = tmp_path / "cached.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	plugin_name = "rtl_comrade_test_cached_reuse"
+	fake_mod = types.ModuleType(plugin_name)
+
+	class Baz:
+		def run(self): return None
+
+	fake_mod.Baz = Baz
+	_sys.modules[plugin_name] = fake_mod
+	try:
+		plugins = [PluginModuleConfig(class_name="Baz", name="baz")]
+		config = PluginFileConfig(name=plugin_name, file=plugin_file, type_=None, plugins=plugins)
+		result = load_plugin(config)
+		assert result["baz"] is Baz
+	finally:
+		_sys.modules.pop(plugin_name, None)

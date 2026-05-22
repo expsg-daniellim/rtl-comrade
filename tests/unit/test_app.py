@@ -4,8 +4,11 @@ import logging
 import sys
 from unittest.mock import patch
 
+import click
 import pytest
 import structlog
+import typer
+from click.exceptions import NoArgsIsHelpError
 from typer.testing import CliRunner
 
 from rtl_comrade.app import (
@@ -182,3 +185,80 @@ def test_app_unknown_subcommand_exits_nonzero():
     app = _make_app()
     result = runner.invoke(app.app, ["nonexistent"])
     assert result.exit_code != 0
+
+
+# ---------------------------------------------------------------------------
+# App.main — no-subcommand branch (lines 80-81)
+# ---------------------------------------------------------------------------
+
+
+def test_app_no_subcommand_with_option_shows_help_and_exits_0():
+    app = _make_app()
+    result = runner.invoke(app.app, ["--config-file", "dummy.yaml"])
+    assert result.exit_code == 0
+
+
+# ---------------------------------------------------------------------------
+# App.run() — exception handling and exit codes (lines 84-104)
+# ---------------------------------------------------------------------------
+
+
+def test_run_returns_0_on_normal_exit():
+    app = _make_app()
+    with patch.object(app, "app", return_value=None):
+        assert app.run() == 0
+
+
+def test_run_no_args_is_help_error_returns_0():
+    app = _make_app()
+    ctx = click.Context(click.Command("_"))
+    with patch.object(app, "app", side_effect=NoArgsIsHelpError(ctx)):
+        assert app.run() == 0
+
+
+def test_run_typer_exit_returns_exit_code():
+    app = _make_app()
+    with patch.object(app, "app", side_effect=typer.Exit(code=2)):
+        assert app.run() == 2
+
+
+def test_run_typer_abort_returns_1():
+    app = _make_app()
+    with patch.object(app, "app", side_effect=typer.Abort()):
+        assert app.run() == 1
+
+
+def test_run_missing_parameter_logs_error_and_returns_exit_code():
+    app = _make_app()
+    exc = click.MissingParameter(param_hint="--foo", param_type="option")
+    with patch.object(app, "app", side_effect=exc):
+        code = app.run()
+    assert code == exc.exit_code
+    assert app.handler.failure
+
+
+def test_run_bad_parameter_logs_error_and_returns_exit_code():
+    app = _make_app()
+    exc = click.BadParameter("bad value", param_hint="--bar")
+    with patch.object(app, "app", side_effect=exc):
+        code = app.run()
+    assert code == exc.exit_code
+    assert app.handler.failure
+
+
+def test_run_bad_option_usage_logs_error_and_returns_exit_code():
+    app = _make_app()
+    exc = click.BadOptionUsage("--baz", "Unknown option: --baz")
+    with patch.object(app, "app", side_effect=exc):
+        code = app.run()
+    assert code == exc.exit_code
+    assert app.handler.failure
+
+
+def test_run_usage_error_logs_error_and_returns_exit_code():
+    app = _make_app()
+    exc = click.UsageError("Something wrong")
+    with patch.object(app, "app", side_effect=exc):
+        code = app.run()
+    assert code == exc.exit_code
+    assert app.handler.failure

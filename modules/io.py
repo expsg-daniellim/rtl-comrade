@@ -18,12 +18,7 @@ class FileReadMod:
 				for line in file:
 					yield line
 		except UnicodeDecodeError as e:
-			log.fatal(
-				"invalid_unicode",
-				file=self.file,
-				reason=e.reason,
-				invalid_slice=e.object[e.start : e.end].decode(encoding=e.encoding or "utf-8", errors="restrict"),
-			)
+			log.fatal("invalid_unicode", file=self.file, reason=e.reason, invalid_slice=e.object[e.start : e.end].decode(encoding=e.encoding or "utf-8", errors="replace"))
 		except FileNotFoundError:
 			log.fatal("not_found", file=self.file)
 		except IsADirectoryError:

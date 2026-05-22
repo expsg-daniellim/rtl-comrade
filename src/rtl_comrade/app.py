@@ -86,7 +86,7 @@ class App:
 		except NoArgsIsHelpError:
 			exit_code = 0
 		except typer.Exit as e:
-			exit_code = e.code
+			exit_code = e.exit_code
 		except typer.Abort:
 			exit_code = 1
 		except click.MissingParameter as e:
