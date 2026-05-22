@@ -28,6 +28,7 @@ Keep that split intact. Do not move scheduling logic into modules. Do not let mo
 | Config files | `docs/harness_configs/index.md` |
 | Testing procedure | `docs/testing.md` |
 | Contribution process | `docs/contributing.md` |
+| Adding / restructuring docs | `docs/creating-documentation.md` |
 
 If your task isn't covered by the table, run `find docs/ -name "*.md" | sort` to see all available docs.
 

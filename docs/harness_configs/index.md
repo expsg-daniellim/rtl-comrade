@@ -1,5 +1,7 @@
 # Harness Config Files
 
+For the expected structure of config file docs, see [doc-structure.md](doc-structure.md).
+
 | File | Purpose |
 |---|---|
 | [rtl_comrade_config.md](rtl_comrade_config.md) | CLI config — maps subcommand names to graph paths |

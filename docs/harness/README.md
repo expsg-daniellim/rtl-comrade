@@ -67,6 +67,10 @@ Before execution begins, the harness also deliberately front-loads graph loading
 
 See [docs/testing.md](/Users/daniellim/Documents/random/rtl-comrade/docs/testing.md) for the full two-stage procedure, module-to-test-file mapping, and coverage requirements.
 
+## Doc Structure
+
+See [doc-structure.md](doc-structure.md).
+
 ## Editing Guidance
 
 - Put harness-wide orchestration changes in `src/rtl_comrade`, not in plugin folders.

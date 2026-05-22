@@ -13,6 +13,8 @@ Some contracts use domain-specific sentinel values emitted as payload values (di
 | `GroupEnd` | `contracts.sentinels` | `group_until_end` — signals the end of one group while keeping the port open |
 | `BranchSkip(key=k)` | `contracts.sentinels` | `branch_aware_join` — signals that a branch was not taken for a given correlation key |
 
+For the expected structure of per-contract files, see [doc-structure.md](doc-structure.md).
+
 ## Contracts
 
 | Contract | Summary |
