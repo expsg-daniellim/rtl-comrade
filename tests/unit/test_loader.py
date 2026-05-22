@@ -353,3 +353,46 @@ def test_load_path_listdir_is_directory_error(logging_handler, tmp_path):
 	with patch("os.listdir", side_effect=IsADirectoryError("not a dir")):
 		with pytest.raises(SystemExit):
 			load_path(tmp_path)
+
+
+# --- cross-file import (dependency loading) ---
+
+
+def test_load_path_package_cross_file_import(logging_handler, tmp_path):
+	pkg = tmp_path / "mypkg"
+	pkg.mkdir()
+	(pkg / "__init__.py").write_text("")
+	(pkg / "helpers.py").write_text(
+		"_load_count = 0\n"
+		"_load_count += 1\n"
+		"class Helper:\n"
+		"    pass\n"
+	)
+	(pkg / "main.py").write_text(
+		"from mypkg.helpers import Helper\n"
+		"class Main:\n"
+		"    dep = Helper\n"
+	)
+	import sys as _sys
+	result = load_path(pkg)
+	assert "main" in result
+	assert "helper" in result
+	helpers_mod = _sys.modules["mypkg.helpers"]
+	assert helpers_mod._load_count == 1, "helpers.py executed more than once"
+	assert result["main"].dep is helpers_mod.Helper, "class identity split between importer and loader"
+	assert str(tmp_path) in _sys.path
+
+
+def test_load_path_plain_dir_cross_file_import(logging_handler, tmp_path):
+	mods = tmp_path / "mods"
+	mods.mkdir()
+	(mods / "helpers.py").write_text("class Helper:\n    pass\n")
+	(mods / "main.py").write_text(
+		"from helpers import Helper\n"
+		"class Main:\n"
+		"    dep = Helper\n"
+	)
+	import sys as _sys
+	result = load_path(mods)
+	assert "main" in result
+	assert str(mods) in _sys.path

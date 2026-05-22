@@ -45,9 +45,14 @@ A manifest can:
 - rename exported plugin names
 - map multiple classes out of one file
 
+## Cross-file imports
+
+Before loading any plugin files from a path, `load_path` inserts the appropriate directory into `sys.path` so that plugin files can import siblings via Python's normal import machinery. For a package directory (one containing `__init__.py`) the parent is inserted so that `from pkg.sibling import X` resolves; for a plain directory the directory itself is inserted.
+
 ## Caveats
 
-- without a manifest, all classes in a module are exposed, which can accidentally include helper or imported classes
+- without a manifest, auto-discovery filters to classes defined in the plugin file itself (by checking `cls.__module__ == module.__name__`); imported classes are excluded to prevent duplicate exports when multiple plugin files share a helper
+- a module already present in `sys.modules` under its canonical name is reused rather than re-executed; re-executing would produce a second distinct class object and break `isinstance` checks. The canonical name is only computed for package directories — plain-directory file stems (e.g. `io`, `re`) collide with stdlib
 - because `structure.py` later uses `inspect.getsource(...)`, this loader intentionally inserts imported modules into `sys.modules`
 - many failures here log at fatal level by design, so import and parse errors block execution instead of letting the harness attempt to limp into runtime
 - when the loader catches non-`rtl_comrade` exceptions during YAML reads, filesystem access, or dynamic imports, it logs them with `exc_info=e` so traceback context is preserved

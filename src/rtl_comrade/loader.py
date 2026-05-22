@@ -148,41 +148,54 @@ def load_plugin(config:PluginFileConfig):
 		if spec.loader is None:
 			log.fatal('spec.no_loader')
 
-		# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
-		module = importlib.util.module_from_spec(spec)
+		# Canonical name Python's machinery assigns; packages only — plain-dir stems collide with stdlib (e.g. "io").
+		plugin_file_dir = config.file.parent.resolve()
+		if (plugin_file_dir / '__init__.py').exists():
+			try:
+				canonical_name = config.file.resolve().relative_to(str(plugin_file_dir.parent)).with_suffix('').as_posix().replace('/', '.')
+			except ValueError:
+				canonical_name = None
+		else:
+			canonical_name = None
 
-		# Add module to sys.modules so its source can be inspected later
-		sys.modules[plugin_name] = module
-		# Load module
-		try:
-			spec.loader.exec_module(module)
-		except UnicodeDecodeError as e:
-			log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
-		except FileNotFoundError as e:
-			log.fatal('not_found', exc_info=e)
-		except IsADirectoryError as e:
-			log.fatal('is_directory', exc_info=e)
-		except PermissionError as e:
-			log.fatal('permission_denied', exc_info=e)
-		except OSError as e:
-			log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
-		except SyntaxError as e:
-			log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
-		except ValueError as e:
-			log.fatal('value_error', message=str(e), exc_info=e)
-		except TypeError as e:
-			log.fatal('type_error', message=str(e), exc_info=e)
-		except ModuleNotFoundError as e:
-			log.fatal('module_not_found', exc_info=e)
-		except ImportError as e:
-			log.fatal('import_error', module_name=e.name, module_path=e.path, exc_info=e)
-		except Exception as e:
-			log.fatal('exception', exc_info=e)
+		# Reuse if already loaded (e.g. as a transitive import); re-executing splits class identity.
+		if canonical_name is not None and canonical_name in sys.modules:
+			module = sys.modules[canonical_name]
+		elif plugin_name in sys.modules:
+			module = sys.modules[plugin_name]
+		else:
+			# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
+			module = importlib.util.module_from_spec(spec)
+			sys.modules[plugin_name] = module  # register before exec: needed for circular imports and inspect.getsource()
+			try:
+				spec.loader.exec_module(module)
+			except UnicodeDecodeError as e:
+				log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
+			except FileNotFoundError as e:
+				log.fatal('not_found', exc_info=e)
+			except IsADirectoryError as e:
+				log.fatal('is_directory', exc_info=e)
+			except PermissionError as e:
+				log.fatal('permission_denied', exc_info=e)
+			except OSError as e:
+				log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
+			except SyntaxError as e:
+				log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
+			except ValueError as e:
+				log.fatal('value_error', message=str(e), exc_info=e)
+			except TypeError as e:
+				log.fatal('type_error', message=str(e), exc_info=e)
+			except ModuleNotFoundError as e:
+				log.fatal('module_not_found', exc_info=e)
+			except ImportError as e:
+				log.fatal('import_error', module_name=e.name, module_path=e.path, exc_info=e)
+			except Exception as e:
+				log.fatal('exception', exc_info=e)
 
-		# Available classes in file
 		available_mods = dict(inspect.getmembers(module, inspect.isclass))
-		# Assume all classes are intended to be loaded in absence of config file
-		to_get = [ PluginModuleConfig.from_class_name(class_name) for class_name in available_mods ] if config.plugins is None else config.plugins
+
+		# Auto-discovery: exclude imported classes (foreign __module__) to avoid duplicate_definition.
+		to_get = [ PluginModuleConfig.from_class_name(n) for n, cls in available_mods.items() if cls.__module__ == module.__name__ ] if config.plugins is None else config.plugins
 		res = {}
 		for mod in to_get:
 			if mod.class_name in available_mods:
@@ -235,6 +248,12 @@ def load_path(path:Path) -> dict:
 		log.fatal('os_error', file=str(path), err=e.strerror, errno=e.errno, exc_info=e)
 	finally:
 		unbind_contextvars('file')
+
+	# Allow plugin files to import siblings via Python's normal import machinery.
+	plugin_dir = path.parent.resolve() if os.path.isfile(path) else path.resolve()
+	sys_path_entry = str(plugin_dir.parent if (plugin_dir / '__init__.py').exists() else plugin_dir)
+	if sys_path_entry not in sys.path:
+		sys.path.insert(0, sys_path_entry)
 
 	# Load each file and then merge into a single map
 	res = {}
