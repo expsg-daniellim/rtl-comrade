@@ -12,17 +12,29 @@ Keep that split intact. Do not move scheduling logic into modules. Do not let mo
 
 ## Running
 
-```bash
-uv run rtl-comrade graph2.yaml
-uv run python -m rtl_comrade graph2.yaml
+Commands are defined in `rtl_comrade_config.yaml` (searched upward from cwd to git root):
+
+```yaml
+commands:
+  add:
+    path: "graphs/graph2.yaml"
 ```
 
-Python `>=3.11`. Runtime deps: `pyserde[yaml]`, `structlog`.
+Then invoke by subcommand name:
+
+```bash
+uv run rtl-comrade add
+uv run rtl-comrade --level debug add
+uv run rtl-comrade --config-file other_config.yaml add
+```
+
+Python `>=3.11`. Runtime deps: `pyserde[yaml]`, `structlog`, `typer`.
 
 ## Before changing anything
 
 | What you're touching | Read first |
 |---|---|
+| CLI / startup | `docs/harness/app.md` |
 | Harness | `docs/harness/README.md` |
 | Modules | `docs/module-implementation.md`, `modules/io.py`, `modules/funcs.py` |
 | Contracts | `docs/contract-implementation.md`, `docs/available_contracts.md`, `contracts/contracts.py` |
@@ -99,6 +111,6 @@ The test plan lives in `docs/test-plan.md`.
 
 ## Current state / known gaps
 
-- CLI (`src/rtl_comrade/__main__.py`) is barebones. Long-term direction is `typer`, not implemented yet.
-- CLI defaults to `graph.yaml`, which is not checked in — always pass `graph2.yaml` explicitly.
+- Graph paths in `rtl_comrade_config.yaml` are resolved relative to the runner's working directory, not relative to the config file.
+- Subcommands have no options; graph configs are not introspected for dynamic CLI parameters.
 - No automated test suite.

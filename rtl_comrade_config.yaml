@@ -1,0 +1,6 @@
+commands:
+  alu:
+    path: "graphs/graph.yaml"
+  add:
+    path: "graphs/graph2.yaml"
+    help: "Adds two numbers pairwise from a file."

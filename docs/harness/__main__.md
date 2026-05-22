@@ -4,33 +4,19 @@ Source: [src/rtl_comrade/__main__.py](/Users/daniellim/Documents/random/rtl-comr
 
 ## Role
 
-This is the current process entrypoint for the harness. It is intentionally minimal and mainly supports basic testing.
+Process entrypoint. Creates an `App` instance and delegates the entire CLI lifecycle to it.
 
 ## See Also
 
+- [app.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/app.md)
 - [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
 - [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
 - [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
 
 ## What It Does
 
-- initializes logging through `initialise_logging(...)`
-- chooses a graph path from `argv[1]` or falls back to `graph.yaml`
-- builds a `Graph` with `Graph.from_file(...)`
-- runs the graph with `asyncio.run(...)`
-- converts logged failures into a process exit code
+Constructs an `App`, calls `app.run()`, and forwards the returned exit code to `SystemExit`. All argument parsing, logging setup, config discovery, and graph execution happen in `App`.
 
 ## Place In The System
 
-`__main__.py` sits at the outermost edge of the harness. It does not contain graph logic itself; it just bootstraps the rest of the runtime.
-
-## Current Limitations
-
-- argument handling is hardcoded
-- logging level selection is hardcoded
-- there is no proper subcommand structure
-- `graph.yaml` is the default even though the repository does not currently ship that file
-
-## Likely Future Direction
-
-The intended long-term direction is a proper `typer`-based CLI rather than additional ad hoc argument parsing here.
+`__main__.py` is the outermost edge of the harness. It owns nothing except the `main()` function registered as the `rtl-comrade` / `rtl_comrade` entry point in `pyproject.toml`.
