@@ -65,29 +65,7 @@ Before execution begins, the harness also deliberately front-loads graph loading
 
 ## Testing
 
-Each harness module has a corresponding unit test file under `tests/unit/`:
-
-| Module | Test file |
-|---|---|
-| `api.py` | `tests/unit/test_api.py` |
-| `port.py` | `tests/unit/test_port.py` |
-| `structure.py` | `tests/unit/test_structure.py` |
-| `config.py` | `tests/unit/test_config.py` |
-| `loader.py` | `tests/unit/test_loader.py` |
-| `validation.py` | `tests/unit/test_validation.py` |
-| `contract_default.py` | `tests/unit/test_contract_default.py` |
-| `node.py` | `tests/unit/test_node.py` |
-| `graph.py` | `tests/unit/test_graph.py` |
-
-Integration tests covering the full `Graph.from_file → Graph.run` path live in `tests/integration/test_graph_run.py`. They write temporary plugin files to `tmp_path`, build a `GraphConfig`, and call `asyncio.run(graph.run())`.
-
-The `logging_handler` fixture (defined in `tests/conftest.py`) must be used by any test that exercises a fatal or error log path. It initialises the harness logging stack, yields the `LoggingFatalHandler`, and resets both the root logger and structlog at teardown.
-
-Run the full suite with:
-
-```bash
-uv run pytest tests/
-```
+See [docs/testing.md](/Users/daniellim/Documents/random/rtl-comrade/docs/testing.md) for the full two-stage procedure, module-to-test-file mapping, and coverage requirements.
 
 ## Editing Guidance
 

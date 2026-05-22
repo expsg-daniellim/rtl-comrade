@@ -32,8 +32,8 @@ def load_config_file(Config, path:Path):
 		Config: Target serde type to deserialize into.
 		path: Filesystem path to the YAML file.
 
-		Returns:
-			The deserialized config object.
+	Returns:
+		The deserialized config object.
 	"""
 
 	try:
@@ -126,8 +126,8 @@ def load_plugin(config:PluginFileConfig):
 	Args:
 		config: Manifest entry describing the plugin file and exported classes.
 
-		Returns:
-			Mapping from exported plugin name to loaded Python class.
+	Returns:
+		Mapping from exported plugin name to loaded Python class.
 	"""
 
 	# Name plugin file based on file path without extension
@@ -216,8 +216,8 @@ def load_path(path:Path) -> dict:
 	Args:
 		path: Path to a Python file or plugin directory.
 
-		Returns:
-			Mapping from exported plugin name to loaded Python class.
+	Returns:
+		Mapping from exported plugin name to loaded Python class.
 	"""
 
 	bind_contextvars(file=str(path))

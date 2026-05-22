@@ -19,9 +19,9 @@ def validate_acyclic(config:GraphConfig) -> list[str|None]:
 	Args:
 		config: Parsed graph configuration to validate.
 
-		Returns:
-			A list of node names participating in detected cycles, or ``None`` entries
-			for traversal roots that did not reveal cyclicity.
+	Returns:
+		A list of node names participating in detected cycles, or ``None`` entries
+		for traversal roots that did not reveal cyclicity.
 	"""
 
 	# DFS-colours algorithm
@@ -80,8 +80,8 @@ def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 	Args:
 		graph: Constructed runtime graph with nodes and validated edges.
 
-		Returns:
-			Structured results describing detected deadlock-prone conditions.
+	Returns:
+		Structured results describing detected deadlock-prone conditions.
 	"""
 
 	# Build incoming-port and adjacency maps once.

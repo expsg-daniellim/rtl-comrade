@@ -22,7 +22,7 @@ class InvalidEnqueuedError(Exception):
 	"""
 
 	name: str
-	type_ : str
+	type_: str
 
 @dataclass(slots=True)
 class Port(Generic[T]):

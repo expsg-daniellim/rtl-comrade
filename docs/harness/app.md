@@ -25,7 +25,7 @@ commands:
     help: "optional help string"
 ```
 
-`App` searches for this file by ascending the directory tree from the current working directory, stopping at the git repository root (a directory containing `.git/`) or the filesystem root. The file name defaults to `rtl_comrade_config.yaml` and can be overridden with `--config-file`.
+`App` searches for this file by ascending the directory tree from the current working directory, stopping at the git repository root (a directory containing `.git/`) or the filesystem root. The file name searched for defaults to `rtl_comrade_config.yaml` and can be changed with `--config-file`. This is a filename, not a path — the directory tree search still runs from the current working directory regardless.
 
 The config is parsed into `RtlComradeConfig` and `CommandConfig` via `pyserde`.
 

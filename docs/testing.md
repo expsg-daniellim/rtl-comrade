@@ -55,7 +55,7 @@ uv run pytest contracts/tests/
 uv run pytest contracts/tests/ --cov=contracts --cov-report=term-missing
 ```
 
-Expected result: 100% on all files. When adding a new contract, add a corresponding test file under `contracts/tests/` and reach 100% before merging. The contract testing harness (`run_contract_scenario`) handles the boilerplate; see `docs/contract-implementation.md` for coverage targets and patterns.
+Expected result: 100% on all files. When adding a new contract, add a corresponding test file under `contracts/tests/` and reach 100% before merging. The contract testing harness (`run_contract_scenario`) handles the boilerplate; see `docs/contracts/testing.md` for coverage targets and patterns.
 
 Contract tests construct ports and `ContractPort` adapters directly or via `run_contract_scenario()`; they never instantiate a `Node` or `Graph`.
 
