@@ -8,7 +8,7 @@ import pytest
 
 from rtl_comrade.api import ContractPort, EndSentinel
 from rtl_comrade.contract_default import DefaultContract
-from rtl_comrade.testing import run_contract_scenario, PortMeta, run_module_scenario
+from rtl_comrade.testing import run_contract_scenario, PortMeta, PortTestInput, run_module_scenario
 
 
 async def test_required_port_single_value():
@@ -101,6 +101,26 @@ def test_validate_contract_uninspectable_init_raises():
 	with patch.object(inspect, "signature", side_effect=TypeError("uninspectable")):
 		with pytest.raises(AssertionError, match="not inspectable"):
 			asyncio.run(run_contract_scenario(_C, port_inputs={}, expected_outputs=[]))
+
+
+async def test_deferred_delivery_single_tick():
+	# All items at delay=1: covers deferred append, asyncio.gather branch, and _feeder body.
+	await run_contract_scenario(
+		DefaultContract,
+		port_inputs={"a": [PortTestInput(99, delay=1), PortTestInput(EndSentinel("src"), delay=1)]},
+		expected_outputs=[{"a": 99}, EndSentinel("test")],
+		config=DefaultContract.Config(),
+	)
+
+
+async def test_deferred_delivery_multiple_ticks():
+	# delay=1 for data, delay=2 for EndSentinel: exercises the _feeder tick loop over 2 iterations.
+	await run_contract_scenario(
+		DefaultContract,
+		port_inputs={"a": [PortTestInput(77, delay=1), PortTestInput(EndSentinel("src"), delay=2)]},
+		expected_outputs=[{"a": 77}, EndSentinel("test")],
+		config=DefaultContract.Config(),
+	)
 
 
 def test_validate_module_uninspectable_init_raises():

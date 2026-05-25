@@ -69,7 +69,12 @@ good-names = ["i", "j", "k", "n", "e", "f", "id", "Module", "Contract", "Config"
 extra-paths = ["src"]
 
 [tool.coverage.run]
-omit = ["src/rtl_comrade/__main__.py"]
+omit = [
+    "src/rtl_comrade/__main__.py",
+    "tests/*",
+    "contracts/tests/*",
+    "modules/tests/*",
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

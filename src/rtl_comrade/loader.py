@@ -65,7 +65,7 @@ def load_config_file(Config, path:Path):
 	except ReaderError as e:
 		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
-	return Never
+	return Never  # pragma: no cover
 
 @serde
 @dataclass(slots=True, frozen=True)
