@@ -145,7 +145,10 @@ class ModuleStructure:
 		self.emits = []
 		default = False
 		self.definite_emits = True
-		for node in filter(lambda node: isinstance(node, (ast.Return, ast.Yield)), walk_ast(ast_tree)):
+		for node in filter(lambda node: isinstance(node, (ast.Return, ast.Yield, ast.YieldFrom)), walk_ast(ast_tree)):
+			if isinstance(node, ast.YieldFrom): # sub-generator yields are dynamic
+				self.definite_emits = False
+				continue
 			# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>). All other formats of tuple are invalid.
 			if isinstance(node.value, ast.Tuple):
 				if len(node.value.elts) != 2:
