@@ -88,6 +88,8 @@ class Graph:
 		finally:
 			unbind_contextvars('context')
 
+		contract_mappings['default'] = DefaultContract
+
 		# Validate modules have run functions
 		missing_runs = [ name for (name, mod) in module_mappings.items() if not hasattr(mod, 'run') ]
 		if len(missing_runs) > 0:
