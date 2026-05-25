@@ -16,7 +16,7 @@ class FileReadMod:
 		try:
 			with open(self.file, "r", encoding="utf-8") as file:
 				for line in file:
-					yield line
+					yield ("default", line)
 		except UnicodeDecodeError as e:
 			log.fatal("invalid_unicode", file=self.file, reason=e.reason, invalid_slice=e.object[e.start : e.end].decode(encoding=e.encoding or "utf-8", errors="replace"))
 		except FileNotFoundError:
