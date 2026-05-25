@@ -47,12 +47,12 @@ class _DynamicEmitModule:
 
 
 class _BasicContract:
-	def __init__(self, id, ports):
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 		self.id = id
 		self.ports = ports
 
 	async def get_inputs(self):
-		from rtl_comrade.api import EndSentinel
+		from rtl_comrade.api import EndSentinel  # pylint: disable=import-outside-toplevel
 
 		return EndSentinel(self.id)
 
@@ -331,7 +331,7 @@ def test_module_plugin_missing_run_fatal(logging_handler):
 
 def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 	class _NoGetInputsContract:
-		def __init__(self, id, ports):
+		def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 			pass
 
 	call_count = [0]

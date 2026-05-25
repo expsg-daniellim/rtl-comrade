@@ -7,9 +7,9 @@ import inspect
 from inspect import Parameter
 import textwrap
 import typing
+from typing import cast
 
 import structlog
-from typing import cast
 
 from .logging import HarnessLogger
 

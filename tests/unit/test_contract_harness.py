@@ -54,8 +54,6 @@ def test_validation_rejects_missing_get_inputs():
 			pass
 
 	with pytest.raises(AssertionError, match="must expose get_inputs"):
-		import asyncio
-
 		asyncio.run(run_contract_scenario(NoGetInputs, port_inputs={}, expected_outputs=[]))
 
 

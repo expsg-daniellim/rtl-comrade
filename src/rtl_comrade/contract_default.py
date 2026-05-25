@@ -1,9 +1,10 @@
 """Built-in default scheduling contract for runtime nodes."""
 
 from dataclasses import dataclass
+from typing import cast
+
 from serde import serde, field
 import structlog
-from typing import cast
 
 from .api import Payload, EndSentinel, ContractPort
 from .logging import HarnessLogger
@@ -50,7 +51,7 @@ class DefaultContract:
 
 		persistent_inputs: list[str] = field(default_factory=list)
 
-	def __init__(self, id:str, config:Config, ports:dict[str, ContractPort]):
+	def __init__(self, id:str, config:Config, ports:dict[str, ContractPort]):  # pylint: disable=redefined-builtin
 		"""Configure persistent-input behavior for this contract instance.
 
 		Args:

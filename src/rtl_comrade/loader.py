@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import re
 import sys
-from typing import Any, cast
+from typing import cast, Any, Never
 
 from serde import serde, SerdeError
 from serde.yaml import from_yaml
@@ -64,6 +64,8 @@ def load_config_file(Config, path:Path):
 		log.fatal('yaml.marked', problem=e.problem, **mark_fields,  exc_info=e)
 	except ReaderError as e:
 		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
+
+	return Never
 
 @serde
 @dataclass(slots=True, frozen=True)

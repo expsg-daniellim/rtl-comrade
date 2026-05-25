@@ -76,7 +76,7 @@ class _TypedWithDefault:
 
 def test_args_no_params():
 	s = ModuleStructure(_NoArgs)
-	assert s.args == []
+	assert s.args == []  # pylint: disable=use-implicit-booleaness-not-comparison
 
 
 def test_args_two_plain():
@@ -141,15 +141,13 @@ class _YieldNamedPort:
 
 class _NestedDef:
 	def run(self):
-		def inner():
+		def inner():  # pylint: disable=unused-variable
 			return ("x", 1)
-
-		return None
 
 
 def test_emit_return_none():
 	s = ModuleStructure(_ReturnNone)
-	assert s.emits == []
+	assert s.emits == []  # pylint: disable=use-implicit-booleaness-not-comparison
 	assert s.definite_emits is True
 
 
@@ -167,7 +165,7 @@ def test_emit_return_named_tuple():
 
 def test_emit_return_dynamic():
 	s = ModuleStructure(_ReturnDynamic)
-	assert s.emits == []
+	assert s.emits == []  # pylint: disable=use-implicit-booleaness-not-comparison
 	assert s.definite_emits is False
 
 
@@ -192,7 +190,7 @@ def test_emit_yield_named_port():
 
 def test_emit_nested_def_ignored():
 	s = ModuleStructure(_NestedDef)
-	assert s.emits == []
+	assert s.emits == []  # pylint: disable=use-implicit-booleaness-not-comparison
 	assert s.definite_emits is True
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from rtl_comrade.testing import logging_handler  # noqa: F401
+from rtl_comrade.testing import logging_handler  # noqa: F401  # pylint: disable=unused-import
 from rtl_comrade.config import (
 	GraphConfig,
 	GraphConfigNode,

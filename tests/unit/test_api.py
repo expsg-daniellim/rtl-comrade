@@ -1,9 +1,10 @@
 """Unit tests for api.py — Payload, EndSentinel, ContractPort."""
 
-import pytest
 from dataclasses import FrozenInstanceError
 
-from rtl_comrade.api import Payload, EndSentinel, ContractPort
+import pytest
+
+from rtl_comrade.api import Payload, EndSentinel
 
 
 # --- Payload ---
@@ -39,5 +40,3 @@ def test_end_sentinel_frozen():
 def test_end_sentinel_source():
 	s = EndSentinel("upstream")
 	assert s.source == "upstream"
-
-

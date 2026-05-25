@@ -14,7 +14,7 @@ class FileReadMod:
 
 	def run(self):
 		try:
-			with open(self.file, "r") as file:
+			with open(self.file, "r", encoding="utf-8") as file:
 				for line in file:
 					yield line
 		except UnicodeDecodeError as e:

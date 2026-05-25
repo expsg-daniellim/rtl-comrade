@@ -18,3 +18,4 @@ class ALUMod:
 			return int(a) - int(b)
 		else:
 			log.error("invalid_op", op=op)
+			return None

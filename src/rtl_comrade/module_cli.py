@@ -20,7 +20,7 @@ class ModuleCLI:
 
 		cli: str
 
-	def __init__(self, id:str, config:Config):
+	def __init__(self, id:str, config:Config):  # pylint: disable=redefined-builtin
 		"""Initialise the node with its id and CLI parameter name.
 
 		Args:

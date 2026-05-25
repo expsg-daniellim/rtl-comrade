@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
-from rtl_comrade.api import Payload, EndSentinel, ContractPort
 import structlog
+
+from rtl_comrade.api import Payload, EndSentinel, ContractPort
 
 log = structlog.get_logger()
 

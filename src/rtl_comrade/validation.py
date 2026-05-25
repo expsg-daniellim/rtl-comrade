@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from .config import GraphConfig
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING  # pylint: disable=wrong-import-order
 if TYPE_CHECKING:
 	from .graph import Graph
 

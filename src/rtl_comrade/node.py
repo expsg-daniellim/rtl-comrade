@@ -36,7 +36,7 @@ class Connection:
 class Node:
 	"""A live runtime node binding together a module, contract, and input ports."""
 
-	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None):
+	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None):  # pylint: disable=redefined-builtin
 		"""Instantiate one runtime node from module and contract classes.
 
 		Args:
@@ -294,7 +294,7 @@ class Node:
 					res = await self.module.finalise()
 				else:
 					res = self.module.finalise()
-				
+
 				# Unravel all possible forms of output return
 				if inspect.isasyncgen(res): # async yield
 					async for r in res:

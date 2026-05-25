@@ -6,9 +6,10 @@ the harness graph-construction logic.
 
 from dataclasses import dataclass
 from inspect import Parameter
+from typing import Any, Annotated, Literal
+
 from serde import serde, field, to_dict, Untagged
 import typer
-from typing import Any, Annotated, Literal
 
 PRIMITIVE_TYPES = { 'int': int, 'float': float, 'str': str, 'bool': bool }
 
@@ -71,7 +72,7 @@ class GraphConfigSrcCLI:
 		"""
 
 		t = PRIMITIVE_TYPES[self.type] if self.type in PRIMITIVE_TYPES else str
-		typer_kwargs = { 'help': self.help }
+		typer_kwargs = { 'help': self.help } # Prevent code duplication
 		annotation = Annotated[t, typer.Option(**typer_kwargs) if self.option else typer.Argument(**typer_kwargs)]
 		return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
 

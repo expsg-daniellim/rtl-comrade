@@ -373,12 +373,12 @@ def test_load_path_package_cross_file_import(logging_handler, tmp_path):
 		"class Main:\n"
 		"    dep = Helper\n"
 	)
-	import sys as _sys
+	import sys as _sys  # pylint: disable=import-outside-toplevel
 	result = load_path(pkg)
 	assert "main" in result
 	assert "helper" in result
 	helpers_mod = _sys.modules["mypkg.helpers"]
-	assert helpers_mod._load_count == 1, "helpers.py executed more than once"
+	assert helpers_mod._load_count == 1, "helpers.py executed more than once"  # pylint: disable=protected-access
 	assert result["main"].dep is helpers_mod.Helper, "class identity split between importer and loader"
 	assert str(tmp_path) in _sys.path
 
@@ -392,7 +392,7 @@ def test_load_path_plain_dir_cross_file_import(logging_handler, tmp_path):
 		"class Main:\n"
 		"    dep = Helper\n"
 	)
-	import sys as _sys
+	import sys as _sys  # pylint: disable=import-outside-toplevel
 	result = load_path(mods)
 	assert "main" in result
 	assert str(mods) in _sys.path
@@ -417,14 +417,14 @@ def test_load_plugin_canonical_relative_to_error_falls_back_to_fresh_load(loggin
 
 def test_load_plugin_reuses_cached_module_by_plugin_name(logging_handler, tmp_path):
 	# No __init__.py → canonical_name = None; plugin_name already in sys.modules → reuse.
-	import sys as _sys
+	import sys as _sys  # pylint: disable=import-outside-toplevel
 	plugin_file = tmp_path / "cached.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	plugin_name = "rtl_comrade_test_cached_reuse"
 	fake_mod = types.ModuleType(plugin_name)
 
 	class Baz:
-		def run(self): return None
+		def run(self): return None  # pylint: disable=multiple-statements
 
 	fake_mod.Baz = Baz
 	_sys.modules[plugin_name] = fake_mod

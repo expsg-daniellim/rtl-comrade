@@ -1,8 +1,9 @@
 """Unit tests for node.py — Node construction, get_canonical_port, accept, process_result, run."""
 
 import inspect
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from serde import SerdeError
 from serde.compat import UserError
@@ -32,9 +33,9 @@ class _ModuleWithConfig:
 
 
 class _ModuleWithConfigClass:
-	from serde import serde as _serde
+	from serde import serde as _serde  # pylint: disable=import-outside-toplevel
 
-	@_serde
+	@_serde  # pylint: disable=undefined-variable
 	class Config:
 		value: int = 0
 
@@ -46,7 +47,7 @@ class _ModuleWithConfigClass:
 
 
 class _ModuleWithId:
-	def __init__(self, id):
+	def __init__(self, id):  # pylint: disable=redefined-builtin
 		self.given_id = id
 
 	def run(self):
@@ -182,7 +183,7 @@ class _ModuleWithFinaliseAsyncGenerator:
 
 
 class _NoPortsContract:
-	def __init__(self, id):
+	def __init__(self, id):  # pylint: disable=redefined-builtin
 		self.id = id
 
 	async def get_inputs(self):
@@ -204,7 +205,7 @@ class _NonStrPortNameModule:
 class _ContractConfigNoClass:
 	"""Accepts config but has no Config inner class — triggers config.mismatch warning."""
 
-	def __init__(self, id, ports, config):
+	def __init__(self, id, ports, config):  # pylint: disable=redefined-builtin
 		self.id = id
 		self.ports = ports
 
@@ -213,7 +214,7 @@ class _ContractConfigNoClass:
 
 
 class _ContractInitCrash:
-	def __init__(self, id, ports):
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 		raise RuntimeError("deliberate contract init crash")
 
 	async def get_inputs(self):
@@ -221,7 +222,7 @@ class _ContractInitCrash:
 
 
 class _CrashGetInputsContract:
-	def __init__(self, id, ports):
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 		self.id = id
 		self.ports = ports
 
@@ -427,7 +428,7 @@ async def _run_node_with_input(Module, inputs_dict):
 	outputs = []
 
 	class _CollectContract:
-		def __init__(self, id, ports):
+		def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 			self.id = id
 			self.ports = ports
 			self._called = False
@@ -447,7 +448,7 @@ async def _run_node_with_input(Module, inputs_dict):
 				outputs.append(val.payload)
 
 		def set_dsts(self, dsts):
-			self.dsts = dsts
+			self.dsts = dsts  # pylint: disable=attribute-defined-outside-init
 
 	collect = _CollectNode()
 	node = Node(id="runner", Module=Module, config={}, Contract=_CollectContract)
@@ -554,8 +555,8 @@ def test_contract_config_serde_error_fatal(logging_handler):
 	# _MinimalModule has no 'config' param → from_dict not called for module.
 	# _ContractConfigNoClass accepts config but has no Config class → only warn, no from_dict.
 	# Use a contract WITH Config to trigger from_dict for contract.
-	from serde import serde as _serde
-	from dataclasses import dataclass as _dc
+	from serde import serde as _serde  # pylint: disable=import-outside-toplevel
+	from dataclasses import dataclass as _dc  # pylint: disable=import-outside-toplevel
 
 	@_serde
 	@_dc
@@ -563,7 +564,7 @@ def test_contract_config_serde_error_fatal(logging_handler):
 		class Config:
 			pass
 
-		def __init__(self, id, ports, config):  # type: ignore[override]
+		def __init__(self, id, ports, config):  # type: ignore[override]  # pylint: disable=redefined-builtin
 			self.id = id
 			self.ports = ports
 
@@ -577,7 +578,7 @@ def test_contract_config_serde_error_fatal(logging_handler):
 		class Config:
 			x: int = 0
 
-		def __init__(self, id, ports, config):
+		def __init__(self, id, ports, config):  # pylint: disable=redefined-builtin
 			self.id = id
 			self.ports = ports
 
@@ -590,14 +591,14 @@ def test_contract_config_serde_error_fatal(logging_handler):
 
 
 def test_contract_config_user_error_fatal(logging_handler):
-	from serde import serde as _serde
+	from serde import serde as _serde  # pylint: disable=import-outside-toplevel
 
 	class _ContractWithSerdeCfg:
 		@_serde
 		class Config:
 			x: int = 0
 
-		def __init__(self, id, ports, config):
+		def __init__(self, id, ports, config):  # pylint: disable=redefined-builtin
 			self.id = id
 			self.ports = ports
 
@@ -662,7 +663,7 @@ async def test_run_dsts_not_initialised_at_end_logs_error(logging_handler):
 async def test_run_sync_contract_get_inputs(logging_handler):
 	# Covers the sync `inputs = self.contract.get_inputs()` branch in Node.run().
 	class _SyncTerminateContract:
-		def __init__(self, id, ports):
+		def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 			self.id = id
 			self.ports = ports
 

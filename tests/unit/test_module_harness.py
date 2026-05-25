@@ -69,7 +69,7 @@ class _ModuleWithConfig:
 
 
 class _ModuleWithId:
-	def __init__(self, id):
+	def __init__(self, id):  # pylint: disable=redefined-builtin
 		self.my_id = id
 
 	def run(self):

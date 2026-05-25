@@ -1,3 +1,9 @@
+from argparse import ArgumentParser
+import logging
+import os
+from pathlib import Path
+from typing import cast, Annotated, Literal, Any
+
 from click.exceptions import NoArgsIsHelpError
 import click
 from serde import serde, field, SerdeError
@@ -6,13 +12,6 @@ from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
 import typer
-
-from argparse import ArgumentParser
-import asyncio
-import logging
-import os
-from pathlib import Path
-from typing import cast, Annotated, Literal, Any
 
 from .graph import Graph
 from .logging import initialise_logging, HarnessLogger
@@ -98,7 +97,7 @@ class App:
 				log.fatal('yaml.marked', problem=e.problem, **mark_fields, exc_info=e)
 			except ReaderError as e:
 				log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
-			self.app.command(name, help=command.help, no_args_is_help=(len(graph.sig.parameters) > 0))(graph.construct_run(self.cleanup))
+			self.app.command(name, help=command.help, no_args_is_help=len(graph.sig.parameters) > 0)(graph.construct_run(self.cleanup))
 
 	# Dummy callback to reflect variables read by argparse into typer
 	def main(self, ctx:typer.Context, config_file:Annotated[str, typer.Option(help="File name of config file defining command/graphs.")]=DEFAULT_RTL_COMRADE_CONFIG_NAME, level:Annotated[Literal[*list(LOGGING_LEVELS.keys())], typer.Option(case_sensitive=False, help="Logging level.")]="info"):
