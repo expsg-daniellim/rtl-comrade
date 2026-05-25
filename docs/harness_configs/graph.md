@@ -32,6 +32,10 @@ nodes:
 
 ## Edge definition
 
+An edge connects a source to a destination port. The source can be either a node output port or a CLI argument.
+
+### Node source
+
 ```yaml
 edges:
 - src:
@@ -41,6 +45,23 @@ edges:
     node: <str>              # destination node id
     port: <str|int>          # optional — input port name or 1-based index; defaults to 1
 ```
+
+### CLI source
+
+```yaml
+edges:
+- src:
+    cli: <str>               # required — CLI parameter name (must be a valid Python identifier)
+    option: <bool>           # optional — true (default) for --<name> option; false for positional argument
+    type: <str>              # optional — primitive type: int, float, bool, str; defaults to str
+    default: <value>         # optional — default value; if absent the parameter is required
+    help: <str>              # optional — help text shown in --help output
+  dst:
+    node: <str>              # destination node id
+    port: <str|int>          # optional — input port name or 1-based index; defaults to 1
+```
+
+A CLI edge injects a value supplied on the command line directly into a destination node's input port. The harness creates a virtual `ModuleCLI` node for each distinct `cli` name and wires it to the declared destination. The parameter is surfaced as a subcommand option or argument depending on the `option` field. When `option: false`, the positional argument order matches the declaration order of CLI edges in the `edges` list.
 
 The destination `port` field accepts either a string name matching a `run(...)` parameter name or a 1-based integer index into the parameter list.
 

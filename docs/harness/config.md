@@ -19,6 +19,7 @@ This file defines the serde-backed graph configuration schema consumed by the ha
 - `GraphConfigNode`
 - `GraphConfigEdge`
 - `GraphConfigSrcPort`
+- `GraphConfigSrcCLI`
 - `GraphConfigDstPort`
 
 ## Place In The System
@@ -30,7 +31,11 @@ This is the harness config boundary. It is the typed shape that sits between gra
 - `modules`: list of plugin paths
 - `contracts`: list of contract plugin paths
 - `nodes`: node definitions with `id`, `module`, `config`, `contract`, and `contract_config`
-- `edges`: edges with `src.node`, `src.port`, `dst.node`, and `dst.port`
+- `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
+
+`GraphConfigEdge.src` is a union deserialized with `Untagged` serde tagging; the schema is tried as `GraphConfigSrcPort` first, then `GraphConfigSrcCLI`.
+
+`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string).
 
 ## Port Conventions
 

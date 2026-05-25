@@ -4,21 +4,23 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+import inspect
 from pathlib import Path
-from typing import cast
+from typing import cast, Any, Callable
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
-from .config import GraphConfig
+from .config import GraphConfig, GraphConfigSrcCLI, GraphConfigSrcPort, GraphConfigEdge
 from .contract_default import DefaultContract
 from .loader import load_paths, load_config_file
 from .logging import HarnessLogger
+from .module_cli import ModuleCLI
 from .node import Connection, Node
 from .validation import validate_acyclic, validate_no_static_deadlock
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
-@dataclass(slots=True)
+@dataclass
 class Graph:
 	"""A runnable graph composed of instantiated nodes.
 
@@ -27,6 +29,8 @@ class Graph:
 	"""
 
 	nodes: dict[str, Node]
+	cli_nodes: list[Node]
+	sig: inspect.Signature
 
 	def __init__(self):
 		"""Create an empty graph to be populated during loading.
@@ -36,6 +40,7 @@ class Graph:
 		"""
 
 		self.nodes = {}
+		self.cli_nodes = []
 
 	@staticmethod
 	def from_file(path:str) -> Graph:
@@ -118,6 +123,37 @@ class Graph:
 		if errors:
 			log.fatal('invalid_nodes', context='harness.graph.validation')
 
+		# Initialise the (virtual) cli nodes in the graph
+		errors = False
+		params = []
+		for (i, edge) in enumerate(filter(lambda edge: isinstance(edge.src, GraphConfigSrcCLI), config.edges)):
+			if edge.src.cli == '':
+				log.error('blank_cli', context='harness.graph.validation')
+				errors = True
+				continue
+
+			n = Node(id=f'cli-{edge.src.cli}', Module=ModuleCLI, config={ 'cli': edge.src.cli }, Contract=DefaultContract)
+			if n.id in graph.nodes:
+				log.error('duplicate_node', context='harness.graph.node', id=n.id, index=None)
+				errors = True
+			else:
+				graph.nodes[n.id] = n
+				config.edges.append(GraphConfigEdge(GraphConfigSrcPort(n.id), edge.dst))
+				graph.cli_nodes.append(n)
+
+				try:
+					# TODO: Get argument defaults from Module introspection as well
+					params.append(edge.src.as_param())
+				except ValueError:
+					log.error('cli_invalid_parameter_name', context='harness.graph.validation', name=edge.src.cli)
+					errors = True
+
+		if errors:
+			log.fatal('invalid_cli_edges', context='harness.graph.validation')
+
+		graph.sig = inspect.Signature(params)
+		config.edges = [ edge for edge in config.edges if isinstance(edge.src, GraphConfigSrcPort) ]
+
 		# Initialise the edges in the graph
 		errors = False
 		source_tracker = {} # Verify each dst only has one source
@@ -198,12 +234,42 @@ class Graph:
 
 		return graph
 
-	async def run(self):
-		"""Run every node in the graph concurrently until completion.
+	def run(self):  # pragma: no cover
+		"""Dummy place holder for the run function. Should never be called.
 
 		Returns:
 			None.
 		"""
 
-		runs = [ node.run() for node in self.nodes.values() ]
-		await asyncio.gather(*runs)
+		log.fatal("dummy_run_called", context='harness.graph.cli')
+
+	def construct_run(self, run_cleanup:Callable[[Any], None]):
+		"""Build a callable whose signature matches the graph's CLI parameters.
+
+		The returned callable injects the supplied kwargs into the graph's CLI nodes,
+		runs the graph, then calls ``run_cleanup``. Its ``__signature__`` is set to
+		``self.sig`` so that typer can read the parameter list directly.
+
+		Args:
+			run_cleanup: Called after the graph finishes; typically raises ``typer.Exit(1)`` on failure.
+
+		Returns:
+			A zero-return callable suitable for registration as a typer subcommand.
+		"""
+
+		def run(**kwargs):
+			async def async_run():
+				for cli_node in self.cli_nodes:
+					if cli_node.module.cli not in kwargs:
+						log.error('missing_option', context='harness.graph.cli', cli=cli_node.module.cli)
+					else:
+						cli_node.module.value = kwargs[cli_node.module.cli]
+
+				runs = [ node.run() for node in self.nodes.values() ]
+				await asyncio.gather(*runs)
+
+			asyncio.run(async_run())
+			run_cleanup()
+
+		run.__signature__ = self.sig # Transform kwargs signature into one readable by Typer
+		return run

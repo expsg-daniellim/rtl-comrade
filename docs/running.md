@@ -18,10 +18,12 @@ Re-run whenever `pyproject.toml` or `uv.lock` changes.
 ## Basic invocation
 
 ```bash
-uv run rtl-comrade <command>
+uv run rtl-comrade <command> [graph-options]
 ```
 
 `<command>` is a subcommand name defined in `rtl_comrade_config.yaml`. Running with no subcommand shows help.
+
+Subcommands may accept additional options or arguments defined in the graph YAML via CLI edges (see `docs/harness_configs/graph.md`). These appear in the subcommand's `--help` output and are injected directly into the graph at runtime. If a subcommand has required CLI parameters, running it with no arguments shows help automatically.
 
 ## Options
 

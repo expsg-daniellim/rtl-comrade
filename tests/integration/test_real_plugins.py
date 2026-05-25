@@ -11,7 +11,6 @@ What this covers that other tests do not:
   - double-loading guard (all contracts are discovered even when only zip is used)
 """
 
-import asyncio
 import shutil
 from pathlib import Path
 
@@ -64,5 +63,5 @@ def test_real_plugins_load_and_run(logging_handler, tmp_path):
     )
 
     graph = Graph.from_config(config)
-    asyncio.run(graph.run())
+    graph.construct_run(lambda: None)()
     assert not logging_handler.failure

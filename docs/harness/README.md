@@ -21,6 +21,7 @@ The harness is distinct from the modular building blocks:
 - [__main__.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/__main__.md): process entrypoint; delegates entirely to `App`.
 - [app.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/app.md): CLI implementation — config discovery, subcommand registration, logging setup, graph execution.
 - [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md): graph construction, wiring, and top-level validation.
+- [module_cli.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/module_cli.md): virtual module that bridges CLI arguments into the graph.
 - [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md): runtime execution unit that binds modules, contracts, ports, and downstream connections together.
 - [structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md): signature and AST analysis for module inputs and emitted output ports.
 - [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md): built-in default scheduling contract.

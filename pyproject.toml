@@ -38,6 +38,9 @@ rtl_comrade = "rtl_comrade.__main__:main"
 [tool.ty.environment]
 extra-paths = ["src"]
 
+[tool.coverage.run]
+omit = ["src/rtl_comrade/__main__.py"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests", "contracts/tests", "modules/tests"]

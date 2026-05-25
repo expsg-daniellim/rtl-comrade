@@ -96,32 +96,34 @@ uv run pytest tests/ contracts/tests/ modules/tests/
 
 ## Accepted coverage misses
 
-Two lines in the harness will always show as uncovered. Do not write tests to cover them.
+Three locations in the harness are intentionally excluded from coverage. All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
 
-### `src/rtl_comrade/__main__.py` — entire file (0%)
-
-```
-Missing: 3-18
-```
+### `src/rtl_comrade/__main__.py` — entire file, excluded via `omit`
 
 `__main__.py` is the OS-level entry point for `python -m rtl_comrade` and the `rtl-comrade` console script. The test suite drives `App` directly and never spawns a subprocess, so this file is never imported during a test run. The logic it delegates to (`App().run()`) is fully covered by `tests/unit/test_app.py`.
 
-### `src/rtl_comrade/logging.py` — lines 18–19 and 22–23 (88%)
+The file is excluded entirely via `[tool.coverage.run] omit` in `pyproject.toml` — line-level pragmas cannot reach a file that is never imported.
 
-```
-Missing: 18-19, 22-23
-```
-
-These are the `raise AssertionError('unreachable')` statements at the end of `HarnessLogger.fatal()` and `HarnessLogger.critical()`:
+### `src/rtl_comrade/logging.py` — `HarnessLogger.fatal` and `.critical` bodies, excluded via `# pragma: no cover`
 
 ```python
-def fatal(self, event=None, *args, **kw) -> NoReturn:
+def fatal(self, event=None, *args, **kw) -> NoReturn:  # pragma: no cover
     super().fatal(event, *args, **kw)
-    raise AssertionError('unreachable')   # line 19 — never reached at runtime
+    raise AssertionError('unreachable')
 
-def critical(self, event=None, *args, **kw) -> NoReturn:
+def critical(self, event=None, *args, **kw) -> NoReturn:  # pragma: no cover
     super().critical(event, *args, **kw)
-    raise AssertionError('unreachable')   # line 23 — never reached at runtime
+    raise AssertionError('unreachable')
 ```
 
-`LoggingFatalHandler.emit()` raises `SystemExit(1)` on every `CRITICAL` record before control can return to `super().fatal()`. These statements exist solely to satisfy `ty`'s control-flow analysis, which requires `NoReturn`-annotated methods to contain a syntactically reachable termination. Covering them would require suppressing the very handler that implements the harness failure model.
+`LoggingFatalHandler.emit()` raises `SystemExit(1)` on every `CRITICAL` record before control can return to `super().fatal()`. These method bodies exist solely to satisfy `ty`'s control-flow analysis, which requires `NoReturn`-annotated methods to contain a syntactically reachable termination. Covering them would require suppressing the very handler that implements the harness failure model.
+
+### `src/rtl_comrade/graph.py` — `Graph.run()` body, excluded via `# pragma: no cover`
+
+```python
+def run(self):  # pragma: no cover
+    ...
+    log.fatal("dummy_run_called", context='harness.graph.cli')
+```
+
+`Graph.run()` is a intentional stub that guards against the old `asyncio.run(graph.run())` call pattern. The correct entry point is `Graph.construct_run()`. The stub exists to produce a clear fatal log if the old pattern is ever used by mistake; it is unreachable in normal operation and untestable without defeating its own purpose.

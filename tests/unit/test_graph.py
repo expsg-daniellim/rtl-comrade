@@ -9,6 +9,7 @@ from rtl_comrade.config import (
 	GraphConfigDstPort,
 	GraphConfigEdge,
 	GraphConfigNode,
+	GraphConfigSrcCLI,
 	GraphConfigSrcPort,
 )
 from rtl_comrade.graph import Graph
@@ -365,6 +366,23 @@ def test_cyclic_graph_detected_fatal(logging_handler):
 	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)
+
+
+# --- CLI edge errors ---
+
+
+def test_cli_invalid_parameter_name_fatal(logging_handler):
+	config = GraphConfig(
+		nodes=[],
+		edges=[GraphConfigEdge(
+			src=GraphConfigSrcCLI(cli='invalid-name'),
+			dst=GraphConfigDstPort(node='nonexistent', port=1),
+		)],
+		modules=[],
+		contracts=[],
+	)
+	with pytest.raises(SystemExit):
+		_from_config(config)
 
 
 def test_no_source_capable_node_detected(logging_handler):

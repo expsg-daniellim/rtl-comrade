@@ -1,15 +1,19 @@
 """Unit tests for app.py — App CLI, config discovery, and error handling."""
 
+import inspect
 import logging
 import sys
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import click
 import pytest
 import structlog
 import typer
 from click.exceptions import NoArgsIsHelpError
+from serde import SerdeError
 from typer.testing import CliRunner
+from yaml.error import Mark, MarkedYAMLError
+from yaml.reader import ReaderError
 
 from rtl_comrade.app import (
     DEFAULT_RTL_COMRADE_CONFIG_NAME,
@@ -25,6 +29,13 @@ MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path="graphs/te
 runner = CliRunner()
 
 
+def _mock_graph():
+    m = MagicMock()
+    m.sig = inspect.Signature([])
+    m.construct_run.side_effect = lambda cleanup: (lambda: cleanup())
+    return m
+
+
 @pytest.fixture(autouse=True)
 def reset_logging():
     yield
@@ -36,6 +47,7 @@ def reset_logging():
 
 def _make_app(argv=None, config=None):
     with patch("rtl_comrade.app.search_for_config", return_value=config or MINIMAL_CONFIG), \
+         patch("rtl_comrade.app.Graph.from_file", return_value=_mock_graph()), \
          patch.object(sys, "argv", argv or ["rtl-comrade"]):
         return App()
 
@@ -137,11 +149,9 @@ def test_app_custom_config_file_loaded(tmp_path, monkeypatch):
         "commands:\n  mycmd:\n    path: my_graph.yaml\n"
     )
     monkeypatch.chdir(tmp_path)
-    with patch.object(sys, "argv", ["rtl-comrade", "--config-file", "custom.yaml"]):
-        app = App()
-    with patch("rtl_comrade.app.Graph.from_file") as mock_from_file, \
-         patch("rtl_comrade.app.asyncio.run"):
-        runner.invoke(app.app, ["mycmd"])
+    with patch.object(sys, "argv", ["rtl-comrade", "--config-file", "custom.yaml"]), \
+         patch("rtl_comrade.app.Graph.from_file", return_value=_mock_graph()) as mock_from_file:
+        App()
     mock_from_file.assert_called_once_with("my_graph.yaml")
 
 
@@ -158,26 +168,22 @@ def test_app_help_exits_0():
 
 def test_app_subcommand_exits_0_on_success():
     app = _make_app()
-    with patch("rtl_comrade.app.Graph.from_file"), \
-         patch("rtl_comrade.app.asyncio.run"):
-        result = runner.invoke(app.app, ["run"])
+    result = runner.invoke(app.app, ["run"])
     assert result.exit_code == 0
 
 
 def test_app_subcommand_exits_1_on_graph_failure():
     app = _make_app()
-    with patch("rtl_comrade.app.Graph.from_file"), \
-         patch("rtl_comrade.app.asyncio.run"):
-        app.handler.failure = True
-        result = runner.invoke(app.app, ["run"])
+    app.handler.failure = True
+    result = runner.invoke(app.app, ["run"])
     assert result.exit_code == 1
 
 
 def test_app_subcommand_calls_graph_from_file():
-    app = _make_app()
-    with patch("rtl_comrade.app.Graph.from_file") as mock_from_file, \
-         patch("rtl_comrade.app.asyncio.run"):
-        runner.invoke(app.app, ["run"])
+    with patch("rtl_comrade.app.Graph.from_file", return_value=_mock_graph()) as mock_from_file, \
+         patch("rtl_comrade.app.search_for_config", return_value=MINIMAL_CONFIG), \
+         patch.object(sys, "argv", ["rtl-comrade"]):
+        App()
     mock_from_file.assert_called_once_with("graphs/test.yaml")
 
 
@@ -262,3 +268,59 @@ def test_run_usage_error_logs_error_and_returns_exit_code():
         code = app.run()
     assert code == exc.exit_code
     assert app.handler.failure
+
+
+# ---------------------------------------------------------------------------
+# App.__init__ — Graph.from_file exception handling (lines 78-100)
+# ---------------------------------------------------------------------------
+
+
+def _make_app_raises(exc):
+    with patch("rtl_comrade.app.search_for_config", return_value=MINIMAL_CONFIG), \
+         patch.object(sys, "argv", ["rtl-comrade"]), \
+         patch("rtl_comrade.app.Graph.from_file", side_effect=exc):
+        App()
+
+
+def test_from_file_unicode_decode_fatal():
+    exc = UnicodeDecodeError('utf-8', b'\x80', 0, 1, 'invalid start byte')
+    with pytest.raises(SystemExit):
+        _make_app_raises(exc)
+
+
+def test_from_file_not_found_fatal():
+    with pytest.raises(SystemExit):
+        _make_app_raises(FileNotFoundError())
+
+
+def test_from_file_is_directory_fatal():
+    with pytest.raises(SystemExit):
+        _make_app_raises(IsADirectoryError())
+
+
+def test_from_file_permission_error_fatal():
+    with pytest.raises(SystemExit):
+        _make_app_raises(PermissionError())
+
+
+def test_from_file_os_error_fatal():
+    with pytest.raises(SystemExit):
+        _make_app_raises(OSError(5, 'Input/output error'))
+
+
+def test_from_file_serde_error_fatal():
+    with pytest.raises(SystemExit):
+        _make_app_raises(SerdeError('bad schema'))
+
+
+def test_from_file_marked_yaml_error_with_mark_fatal():
+    mark = Mark('test.yaml', 5, 2, 4, None, 0)
+    exc = MarkedYAMLError('ctx', None, 'bad yaml', mark)
+    with pytest.raises(SystemExit):
+        _make_app_raises(exc)
+
+
+def test_from_file_reader_error_fatal():
+    exc = ReaderError('test', 0, b'\x80', 'utf-8', 'invalid character')
+    with pytest.raises(SystemExit):
+        _make_app_raises(exc)

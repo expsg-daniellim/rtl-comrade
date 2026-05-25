@@ -14,11 +14,11 @@ class HarnessLogger(BoundLogger):
 	practice but satisfies ty's control-flow analysis.
 	"""
 
-	def fatal(self, event:str|None = None, *args:Any, **kw:Any) -> NoReturn:
+	def fatal(self, event:str|None = None, *args:Any, **kw:Any) -> NoReturn:  # pragma: no cover
 		super().fatal(event, *args, **kw)
 		raise AssertionError('unreachable')
 
-	def critical(self, event:str|None = None, *args:Any, **kw:Any) -> NoReturn:
+	def critical(self, event:str|None = None, *args:Any, **kw:Any) -> NoReturn:  # pragma: no cover
 		super().critical(event, *args, **kw)
 		raise AssertionError('unreachable')
 

@@ -5,7 +5,12 @@ the harness graph-construction logic.
 """
 
 from dataclasses import dataclass
-from serde import serde, field, to_dict
+from inspect import Parameter
+from serde import serde, field, to_dict, Untagged
+import typer
+from typing import Any, Annotated, Literal
+
+PRIMITIVE_TYPES = { 'int': int, 'float': float, 'str': str, 'bool': bool }
 
 @serde
 @dataclass(slots=True, frozen=True)
@@ -41,6 +46,37 @@ class GraphConfigSrcPort:
 
 @serde
 @dataclass(slots=True, frozen=True)
+class GraphConfigSrcCLI:
+	"""A CLI argument or option as the source side of a graph edge.
+
+	Attributes:
+		cli: The CLI parameter name, used both as the argument/option name and as the virtual node id suffix.
+		option: If ``True``, the parameter is a ``--<name>`` option; if ``False``, a positional argument.
+		type: The primitive type to coerce the string input to. One of ``"int"``, ``"float"``, ``"bool"``, or ``"str"``.
+		default: The default value if the parameter is not supplied. Defaults to ``Parameter.empty``, making the parameter required.
+		help: Help text shown in ``--help`` output.
+	"""
+
+	cli: str
+	option: bool = field(default=True) # if it's not an option it's an argument
+	type: Literal["int", "float", "bool", "str"] = field(default="str")
+	default: Any = field(default=Parameter.empty) # Might as well instead of None
+	help: str|None = field(default=None)
+
+	def as_param(self) -> Parameter:
+		"""Build an ``inspect.Parameter`` suitable for inclusion in a typer command signature.
+
+		Returns:
+			A keyword-only ``Parameter`` with the appropriate typer annotation.
+		"""
+
+		t = PRIMITIVE_TYPES[self.type] if self.type in PRIMITIVE_TYPES else str
+		typer_kwargs = { 'help': self.help }
+		annotation = Annotated[t, typer.Option(**typer_kwargs) if self.option else typer.Argument(**typer_kwargs)]
+		return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
+
+@serde
+@dataclass(slots=True, frozen=True)
 class GraphConfigDstPort:
 	"""The destination side of a graph edge.
 
@@ -52,7 +88,7 @@ class GraphConfigDstPort:
 	node: str
 	port: int|str = field(default = 1)
 
-@serde
+@serde(tagging=Untagged)
 @dataclass(slots=True, frozen=True)
 class GraphConfigEdge:
 	"""A directed connection between two node ports.
@@ -62,14 +98,14 @@ class GraphConfigEdge:
 		dst: The destination node-port reference.
 	"""
 
-	src: GraphConfigSrcPort
+	src: GraphConfigSrcPort|GraphConfigSrcCLI
 	dst: GraphConfigDstPort
 
 	def __structlog__(self):
 		return to_dict(self)
 
 @serde
-@dataclass(slots=True, frozen=True)
+@dataclass(slots=True)
 class GraphConfig:
 	"""The top-level graph configuration schema loaded from YAML.
 

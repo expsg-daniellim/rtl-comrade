@@ -4,3 +4,5 @@ commands:
   add:
     path: "graphs/graph2.yaml"
     help: "Adds two numbers pairwise from a file."
+  test:
+    path: "graphs/graph3.yaml"

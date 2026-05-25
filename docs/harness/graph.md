@@ -22,6 +22,7 @@ This file is the top-level harness coordinator. It turns config data into a runn
 - load module and contract plugin classes
 - instantiate nodes
 - resolve and validate edges
+- create virtual `ModuleCLI` nodes for CLI-sourced edges and build a matching `inspect.Signature`
 - run pre-execution graph validation
 - launch all nodes concurrently
 
@@ -29,7 +30,7 @@ This file is the top-level harness coordinator. It turns config data into a runn
 
 - `Graph.from_file(path)`: load a graph config file and build a `Graph`
 - `Graph.from_config(config)`: construct the runtime graph from already-loaded config
-- `Graph.run()`: run every node concurrently under `asyncio`
+- `Graph.construct_run(cleanup)`: return a callable whose signature matches `Graph.sig`; when called with the CLI kwargs it injects values into the CLI nodes, runs the graph, then calls `cleanup()`
 
 ## Place In The System
 
@@ -44,6 +45,8 @@ It is also the main fail-fast boundary of the harness. This is where obviously b
 - duplicate incoming connections to the same destination input are rejected
 - static deadlock checks run before execution starts
 - node tasks are launched together via `asyncio.gather(...)`
+- CLI edges are converted into virtual `ModuleCLI` nodes during `from_config`; each injects one value into one destination port
+- a blank or non-identifier `cli` name causes a fatal error during construction
 - error-level and critical-level logs emitted during graph assembly intentionally participate in the harness failure model: `ERROR` defers failure until the run ends, while `CRITICAL` aborts immediately
 
 ## Validation Philosophy

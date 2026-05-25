@@ -1,6 +1,5 @@
 """Integration tests: full Graph.from_config → Graph.run path."""
 
-import asyncio
 import textwrap
 
 import pytest
@@ -10,6 +9,7 @@ from rtl_comrade.config import (
 	GraphConfigDstPort,
 	GraphConfigEdge,
 	GraphConfigNode,
+	GraphConfigSrcCLI,
 	GraphConfigSrcPort,
 )
 from rtl_comrade.graph import Graph
@@ -47,7 +47,7 @@ def _write_plugin(tmp_path, name, src):
 
 def _run_graph(config):
 	graph = Graph.from_config(config)
-	asyncio.run(graph.run())
+	graph.construct_run(lambda: None)()
 
 
 @pytest.fixture(autouse=True)
@@ -640,3 +640,135 @@ def test_it15_non_definite_emits(logging_handler, tmp_path):
 	_run_graph(config)
 	assert SIDE_CHANNEL == [42]
 	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# IT-16: CLI option value flows through to node
+# ---------------------------------------------------------------------------
+
+
+def test_it16_cli_option(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        class Collect:
+            def run(self, x):
+                import tests.integration.test_graph_run as t
+                t.SIDE_CHANNEL.append(x)
+                return None
+    """,
+	)
+
+	config = GraphConfig(
+		nodes=[_node("collect", "collect")],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value", type="int"),
+				dst=GraphConfigDstPort(node="collect", port=1),
+			)
+		],
+		modules=[str(tmp_path / "mods.py")],
+	)
+	graph = Graph.from_config(config)
+	graph.construct_run(lambda: None)(value=99)
+	assert SIDE_CHANNEL == [99]
+	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# IT-17: Missing CLI kwarg logs error and sets failure flag
+# ---------------------------------------------------------------------------
+
+
+def test_it17_missing_cli_kwarg(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        class Collect:
+            def run(self, x):
+                return None
+    """,
+	)
+
+	config = GraphConfig(
+		nodes=[_node("collect", "collect")],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value"),
+				dst=GraphConfigDstPort(node="collect", port=1),
+			)
+		],
+		modules=[str(tmp_path / "mods.py")],
+	)
+	graph = Graph.from_config(config)
+	graph.construct_run(lambda: None)()  # 'value' kwarg absent
+	assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# IT-18: Blank CLI name causes fatal error during graph construction
+# ---------------------------------------------------------------------------
+
+
+def test_it18_blank_cli_name(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        class Collect:
+            def run(self, x):
+                return None
+    """,
+	)
+
+	config = GraphConfig(
+		nodes=[_node("collect", "collect")],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli=""),
+				dst=GraphConfigDstPort(node="collect", port=1),
+			)
+		],
+		modules=[str(tmp_path / "mods.py")],
+	)
+	with pytest.raises(SystemExit):
+		Graph.from_config(config)
+
+
+# ---------------------------------------------------------------------------
+# IT-19: Duplicate CLI name causes fatal error during graph construction
+# ---------------------------------------------------------------------------
+
+
+def test_it19_duplicate_cli_name(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        class Collect:
+            def run(self, x):
+                return None
+    """,
+	)
+
+	config = GraphConfig(
+		nodes=[
+			_node("collect1", "collect"),
+			_node("collect2", "collect"),
+		],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value"),
+				dst=GraphConfigDstPort(node="collect1", port=1),
+			),
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value"),
+				dst=GraphConfigDstPort(node="collect2", port=1),
+			),
+		],
+		modules=[str(tmp_path / "mods.py")],
+	)
+	with pytest.raises(SystemExit):
+		Graph.from_config(config)
