@@ -5,15 +5,13 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import inspect
-from pathlib import Path
 from typing import cast, Any, Callable
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
-from .config import GraphFileConfig, InvalidCLIParameterError
 from .config_graph import GraphConfig
 from .contract_default import DefaultContract
-from .loader import load_file_configs, load_config_file
+from .loader import load_file_configs
 from .logging import HarnessLogger
 from .module_cli import ModuleCLI
 from .node import Connection, Node
@@ -42,29 +40,6 @@ class Graph:
 
 		self.nodes = {}
 		self.cli_nodes = []
-
-	@staticmethod
-	def from_file(path:str) -> Graph:
-		"""Load a graph YAML file and construct a runnable Graph.
-
-		Args:
-			path: Filesystem path to the graph YAML file.
-
-		Returns:
-			The constructed Graph instance.
-		"""
-
-		bind_contextvars(context='harness.config', file=path)
-		config = load_config_file(GraphFileConfig, Path(path))
-		unbind_contextvars('context', 'file')
-
-		try:
-			graph_config = GraphConfig.from_file_config(config)
-		except InvalidCLIParameterError as e:
-			log.error('cli_invalid_parameter_name', context='harness.graph.validation', name=e.name)
-			log.fatal('invalid_cli_edges', context='harness.graph.validation')
-
-		return Graph.from_config(graph_config)
 
 	@staticmethod
 	def from_config(config:GraphConfig) -> Graph:
@@ -200,7 +175,8 @@ class Graph:
 
 		log.fatal("dummy_run_called", context='harness.graph.cli')
 
-	def construct_run(self, run_cleanup:Callable[[Any], None]):
+	@staticmethod
+	def construct_run(config:GraphConfig, run_cleanup:Callable[[Any], None]):
 		"""Build a callable whose signature matches the graph's CLI parameters.
 
 		The returned callable injects the supplied kwargs into the graph's CLI nodes,
@@ -215,18 +191,20 @@ class Graph:
 		"""
 
 		def run(**kwargs):
+			# Only construct actual graph when run
+			graph = Graph.from_config(config)
 			async def async_run():
-				for cli_node in self.cli_nodes:
+				for cli_node in graph.cli_nodes:
 					if cli_node.module.cli not in kwargs:
 						log.error('missing_option', context='harness.graph.cli', cli=cli_node.module.cli)
 					else:
 						cli_node.module.value = kwargs[cli_node.module.cli]
 
-				runs = [ node.run() for node in self.nodes.values() ]
+				runs = [ node.run() for node in graph.nodes.values() ]
 				await asyncio.gather(*runs)
 
 			asyncio.run(async_run())
 			run_cleanup()
 
-		run.__signature__ = self.sig # Transform kwargs signature into one readable by Typer
+		run.__signature__ = config.sig # Transform kwargs signature into one readable by Typer
 		return run

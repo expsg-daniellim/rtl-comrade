@@ -40,31 +40,31 @@ def _config(node_ids, edge_pairs):
 
 def test_acyclic_linear():
 	cfg = _config(["a", "b", "c"], [("a", "b"), ("b", "c")])
-	result = validate_acyclic(cfg)
+	result = validate_acyclic(cfg.nodes, cfg.edges)
 	assert all(r is None for r in result)
 
 
 def test_acyclic_simple_cycle():
 	cfg = _config(["a", "b"], [("a", "b"), ("b", "a")])
-	result = validate_acyclic(cfg)
+	result = validate_acyclic(cfg.nodes, cfg.edges)
 	assert any(r is not None for r in result)
 
 
 def test_acyclic_self_loop():
 	cfg = _config(["a"], [("a", "a")])
-	result = validate_acyclic(cfg)
+	result = validate_acyclic(cfg.nodes, cfg.edges)
 	assert any(r is not None for r in result)
 
 
 def test_acyclic_disconnected():
 	cfg = _config(["a", "b", "c"], [("a", "b")])
-	result = validate_acyclic(cfg)
+	result = validate_acyclic(cfg.nodes, cfg.edges)
 	assert all(r is None for r in result)
 
 
 def test_acyclic_edge_unknown_node():
 	cfg = _config(["a", "b"], [("a", "b"), ("b", "unknown")])
-	result = validate_acyclic(cfg)
+	result = validate_acyclic(cfg.nodes, cfg.edges)
 	assert all(r is None for r in result)
 
 

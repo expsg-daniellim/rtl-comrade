@@ -1,6 +1,6 @@
 # `config.py`
 
-Source: [src/rtl_comrade/config.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/config.py)
+Source: [src/rtl_comrade/config.py](../../src/rtl_comrade/config.py)
 
 ## Role
 
@@ -8,11 +8,11 @@ This file defines the serde-backed graph configuration schema consumed by the ha
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md) — `GraphConfig`, the normalised intermediate produced from `GraphFileConfig`
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [loader.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/loader.md)
-- [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md)
+- [README.md](README.md)
+- [config_graph.md](config_graph.md) — `GraphConfig`, the normalised intermediate produced from `GraphFileConfig`
+- [graph.md](graph.md)
+- [loader.md](loader.md)
+- [validation.md](validation.md)
 
 ## Main Types
 
@@ -26,7 +26,7 @@ This file defines the serde-backed graph configuration schema consumed by the ha
 
 ## Place In The System
 
-This is the harness config boundary. `GraphFileConfig` is the typed shape of a graph YAML file. It is normalised into `GraphConfig` (see [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md)) before being passed to `Graph.from_config`.
+This is the harness config boundary. `GraphFileConfig` is the typed shape of a graph YAML file. It is normalised into `GraphConfig` (see [config_graph.md](config_graph.md)) before being passed to `Graph.from_config`.
 
 ## GraphFileConfig Schema
 

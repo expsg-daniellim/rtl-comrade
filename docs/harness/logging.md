@@ -1,6 +1,6 @@
 # `logging.py`
 
-Source: [src/rtl_comrade/logging.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/logging.py)
+Source: [src/rtl_comrade/logging.py](../../src/rtl_comrade/logging.py)
 
 ## Role
 
@@ -8,10 +8,10 @@ This file configures harness logging and encodes the current failure semantics a
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [__main__.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/__main__.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
+- [README.md](README.md)
+- [__main__.md](__main__.md)
+- [graph.md](graph.md)
+- [node.md](node.md)
 
 ## Main Responsibilities
 

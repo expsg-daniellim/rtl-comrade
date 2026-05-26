@@ -1,6 +1,6 @@
 # `graph.py`
 
-Source: [src/rtl_comrade/graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/graph.py)
+Source: [src/rtl_comrade/graph.py](../../src/rtl_comrade/graph.py)
 
 ## Role
 
@@ -8,18 +8,17 @@ This file is the top-level harness coordinator. It turns config data into a runn
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [__main__.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/__main__.md)
-- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
-- [loader.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/loader.md)
-- [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md)
-- [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
+- [README.md](README.md)
+- [__main__.md](__main__.md)
+- [config.md](config.md)
+- [loader.md](loader.md)
+- [node.md](node.md)
+- [validation.md](validation.md)
+- [logging.md](logging.md)
 
 ## Main Responsibilities
 
-- load `GraphFileConfig` from YAML and normalise it to `GraphConfig` via `GraphConfig.from_file_config`
-- load module and contract plugin classes
+- load module and contract plugin classes from a `GraphConfig`
 - instantiate nodes
 - create virtual `ModuleCLI` nodes from `GraphConfig.cli_srcs`
 - validate edge port names against module structure
@@ -28,9 +27,8 @@ This file is the top-level harness coordinator. It turns config data into a runn
 
 ## Key Entry Points
 
-- `Graph.from_file(path)`: load a graph config file and build a `Graph`
-- `Graph.from_config(config)`: construct the runtime graph from already-loaded config
-- `Graph.construct_run(cleanup)`: return a callable whose signature matches `Graph.sig`; when called with the CLI kwargs it injects values into the CLI nodes, runs the graph, then calls `cleanup()`
+- `Graph.from_config(config)`: construct the runtime graph from an already-loaded `GraphConfig`
+- `Graph.construct_run(config, cleanup)`: static method; returns a closure whose signature matches `config.sig`; when invoked with CLI kwargs, constructs the `Graph` via `from_config`, injects values into CLI nodes, runs the graph, then calls `cleanup()`
 
 ## Place In The System
 
@@ -40,7 +38,7 @@ It is also the main fail-fast boundary of the harness. This is where obviously b
 
 ## Notable Behaviors
 
-- structural config checks (duplicate node ids, invalid dst node, unused edge sources, cycles) are performed in `GraphConfig.from_file_config` before `Graph.from_config` is reached; see [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md)
+- structural config checks (duplicate node ids, invalid dst node, unused edge sources, cycles) are performed in `GraphConfig.from_file_config` before `Graph.from_config` is reached; see [config_graph.md](config_graph.md)
 - `Graph.from_config` handles only checks that require loaded plugin classes: invalid module/contract names, invalid port names, overloaded inputs, and static deadlock
 - missing modules or contracts are treated as fatal configuration errors
 - source port names are checked against statically inferred emits when `ModuleStructure` can prove them

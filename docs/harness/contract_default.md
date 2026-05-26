@@ -1,6 +1,6 @@
 # `contract_default.py`
 
-Source: [src/rtl_comrade/contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py)
+Source: [src/rtl_comrade/contract_default.py](../../src/rtl_comrade/contract_default.py)
 
 ## Role
 
@@ -8,11 +8,11 @@ This file provides the built-in default contract used when a node does not name 
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
-- [port.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md)
-- [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md)
+- [README.md](README.md)
+- [node.md](node.md)
+- [api.md](api.md)
+- [port.md](port.md)
+- [validation.md](validation.md)
 
 ## Main Responsibilities
 

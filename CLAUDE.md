@@ -14,7 +14,7 @@ Keep that split intact. Do not move scheduling logic into modules. Do not let mo
 
 `docs/code-style.md` applies to all code changes.
 
-## Before changing anything
+## Before working with any of the following
 
 | What you're touching | Read first |
 |---|---|

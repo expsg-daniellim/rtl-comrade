@@ -1,6 +1,6 @@
 # `api.py`
 
-Source: [src/rtl_comrade/api.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/api.py)
+Source: [src/rtl_comrade/api.py](../../src/rtl_comrade/api.py)
 
 ## Role
 
@@ -8,10 +8,10 @@ This file defines the small set of core data types shared across the harness and
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [port.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md)
-- [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
+- [README.md](README.md)
+- [node.md](node.md)
+- [port.md](port.md)
+- [contract_default.md](contract_default.md)
 
 ## Main Types
 

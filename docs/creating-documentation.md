@@ -2,8 +2,8 @@
 
 See also:
 
-- [CLAUDE.md](/Users/daniellim/Documents/random/rtl-comrade/CLAUDE.md) — the routing table this doc describes
-- [docs/contributing.md](/Users/daniellim/Documents/random/rtl-comrade/docs/contributing.md) — contribution process and seam discipline
+- [CLAUDE.md](../CLAUDE.md) — the routing table this doc describes
+- [docs/contributing.md](contributing.md) — contribution process and seam discipline
 
 ## Guiding principle: atomicity
 
@@ -59,7 +59,7 @@ When adding a new doc, consider whether it warrants a row in `CLAUDE.md`'s routi
 
 ## Cross-references
 
-Link to related docs at the top of a file, not inline in the body. A reader deciding whether to read the file should see its dependencies upfront. Use absolute file paths for links (the existing harness docs follow this convention).
+Link to related docs at the top of a file, not inline in the body. A reader deciding whether to read the file should see its dependencies upfront. Use relative file paths for links (the existing harness docs follow this convention).
 
 When a doc mentions a concern covered elsewhere, add a pointer rather than duplicating the content. Duplication drifts.
 

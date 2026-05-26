@@ -1,6 +1,6 @@
 # `__main__.py`
 
-Source: [src/rtl_comrade/__main__.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/__main__.py)
+Source: [src/rtl_comrade/__main__.py](../../src/rtl_comrade/__main__.py)
 
 ## Role
 
@@ -8,10 +8,10 @@ Process entrypoint. Creates an `App` instance and delegates the entire CLI lifec
 
 ## See Also
 
-- [app.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/app.md)
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
+- [app.md](app.md)
+- [README.md](README.md)
+- [graph.md](graph.md)
+- [logging.md](logging.md)
 
 ## What It Does
 

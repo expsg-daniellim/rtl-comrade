@@ -46,8 +46,7 @@ def _write_plugin(tmp_path, name, src):
 
 
 def _run_graph(config):
-	graph = Graph.from_config(config)
-	graph.construct_run(lambda: None)()
+	Graph.construct_run(config, lambda: None)()
 
 
 @pytest.fixture(autouse=True)
@@ -534,7 +533,7 @@ def test_it11_from_file_valid(logging_handler, tmp_path):
 	graph_yaml = tmp_path / "graph.yaml"
 	graph_yaml.write_text(f"modules:\n- {module_file}\nnodes:\n- id: src\n  module: src\nedges: []\n")
 
-	graph = Graph.from_file(str(graph_yaml))
+	graph = Graph.from_config(GraphConfig.from_file(str(graph_yaml)))
 	assert isinstance(graph, Graph)
 	assert "src" in graph.nodes
 
@@ -546,11 +545,11 @@ def test_it11_from_file_valid(logging_handler, tmp_path):
 
 def test_it12_from_file_not_found(logging_handler):
 	with pytest.raises(SystemExit):
-		Graph.from_file("/no/such/graph.yaml")
+		GraphConfig.from_file("/no/such/graph.yaml")
 
 
 # ---------------------------------------------------------------------------
-# IT-13: Graph.from_file — malformed YAML
+# IT-13: GraphConfig.from_file — malformed YAML
 # ---------------------------------------------------------------------------
 
 
@@ -558,7 +557,7 @@ def test_it13_from_file_malformed(logging_handler, tmp_path):
 	bad = tmp_path / "bad.yaml"
 	bad.write_text("nodes: [\nunclosed\n")
 	with pytest.raises(SystemExit):
-		Graph.from_file(str(bad))
+		GraphConfig.from_file(str(bad))
 
 
 # ---------------------------------------------------------------------------
@@ -670,8 +669,8 @@ def test_it16_cli_option(logging_handler, tmp_path):
 		],
 		modules=[str(tmp_path / "mods.py")],
 	)
-	graph = Graph.from_config(GraphConfig.from_file_config(config))
-	graph.construct_run(lambda: None)(value=99)
+	graph_config = GraphConfig.from_file_config(config)
+	Graph.construct_run(graph_config, lambda: None)(value=99)
 	assert SIDE_CHANNEL == [99]
 	assert logging_handler.failure is False
 
@@ -702,8 +701,8 @@ def test_it17_missing_cli_kwarg(logging_handler, tmp_path):
 		],
 		modules=[str(tmp_path / "mods.py")],
 	)
-	graph = Graph.from_config(GraphConfig.from_file_config(config))
-	graph.construct_run(lambda: None)()  # 'value' kwarg absent
+	graph_config = GraphConfig.from_file_config(config)
+	Graph.construct_run(graph_config, lambda: None)()  # 'value' kwarg absent
 	assert logging_handler.failure is True
 
 

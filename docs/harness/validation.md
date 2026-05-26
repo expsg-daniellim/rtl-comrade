@@ -1,6 +1,6 @@
 # `validation.py`
 
-Source: [src/rtl_comrade/validation.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/validation.py)
+Source: [src/rtl_comrade/validation.py](../../src/rtl_comrade/validation.py)
 
 ## Role
 
@@ -8,11 +8,11 @@ This file provides the harness’s static graph checks before execution begins.
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md) — calls `validate_acyclic`
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md) — calls `validate_no_static_deadlock`
-- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
-- [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
+- [README.md](README.md)
+- [config_graph.md](config_graph.md) — calls `validate_acyclic`
+- [graph.md](graph.md) — calls `validate_no_static_deadlock`
+- [config.md](config.md)
+- [contract_default.md](contract_default.md)
 
 ## Main Responsibilities
 
@@ -29,8 +29,8 @@ This file provides the harness’s static graph checks before execution begins.
 
 This module provides two functions called at different points in the loading pipeline:
 
-- `validate_acyclic` is called from `GraphConfig.from_file_config` in [config_graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/config_graph.py), before any plugin classes are loaded
-- `validate_no_static_deadlock` is called from `Graph.from_config` in [graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/graph.py), after nodes have been instantiated and edges wired
+- `validate_acyclic` is called from `GraphConfig.from_file_config` in [config_graph.py](../../src/rtl_comrade/config_graph.py), before any plugin classes are loaded
+- `validate_no_static_deadlock` is called from `Graph.from_config` in [graph.py](../../src/rtl_comrade/graph.py), after nodes have been instantiated and edges wired
 
 Both functions share the same purpose: reject obviously bad graphs before execution starts, not recover from them after work has begun.
 

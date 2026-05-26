@@ -1,6 +1,6 @@
 # `module_cli.py`
 
-Source: [src/rtl_comrade/module_cli.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/module_cli.py)
+Source: [src/rtl_comrade/module_cli.py](../../src/rtl_comrade/module_cli.py)
 
 ## Role
 
@@ -8,9 +8,9 @@ A virtual module used internally by the harness to bridge CLI arguments into the
 
 ## See Also
 
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
-- [docs/harness_configs/graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness_configs/graph.md)
+- [graph.md](graph.md)
+- [config.md](config.md)
+- [docs/harness_configs/graph.md](../harness_configs/graph.md)
 
 ## Main Responsibilities
 

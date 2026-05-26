@@ -1,6 +1,6 @@
 # `structure.py`
 
-Source: [src/rtl_comrade/structure.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/structure.py)
+Source: [src/rtl_comrade/structure.py](../../src/rtl_comrade/structure.py)
 
 ## Role
 
@@ -11,10 +11,10 @@ This file performs static analysis of module `run(...)` methods so the harness c
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
+- [README.md](README.md)
+- [graph.md](graph.md)
+- [node.md](node.md)
+- [config.md](config.md)
 
 ## Main Responsibilities
 

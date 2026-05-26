@@ -4,13 +4,13 @@ This document explains how to implement a module for `rtl-comrade`.
 
 For harness internals behind module instantiation and output analysis, see:
 
-- [docs/harness/node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [docs/harness/structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md)
-- [docs/harness/api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
+- [docs/harness/node.md](../harness/node.md)
+- [docs/harness/structure.md](../harness/structure.md)
+- [docs/harness/api.md](../harness/api.md)
 
 For testing modules in isolation, see [testing.md](testing.md).
 
-For available contracts to pair with your module, see [docs/contracts/index.md](/Users/daniellim/Documents/random/rtl-comrade/docs/contracts/index.md).
+For available contracts to pair with your module, see [docs/contracts/index.md](../contracts/index.md).
 
 ## What A Module Is
 
@@ -270,8 +270,8 @@ For modules, this usually means:
 
 The sample modules show both styles:
 
-- [modules/funcs.py](/Users/daniellim/Documents/random/rtl-comrade/modules/funcs.py): `ALUMod` logs `ERROR` on invalid opcodes
-- [modules/io.py](/Users/daniellim/Documents/random/rtl-comrade/modules/io.py): `FileReadMod` uses fatal logging for file-access failures
+- [modules/funcs.py](../../modules/funcs.py): `ALUMod` logs `ERROR` on invalid opcodes
+- [modules/io.py](../../modules/io.py): `FileReadMod` uses fatal logging for file-access failures
 
 ## Config-Bearing Module Example
 
@@ -335,9 +335,9 @@ To expose a module plugin by name, add it to a plugin file and register it in a 
 
 Current example:
 
-- [modules/io.py](/Users/daniellim/Documents/random/rtl-comrade/modules/io.py)
-- [modules/funcs.py](/Users/daniellim/Documents/random/rtl-comrade/modules/funcs.py)
-- [modules/config.yaml](/Users/daniellim/Documents/random/rtl-comrade/modules/config.yaml)
+- [modules/io.py](../../modules/io.py)
+- [modules/funcs.py](../../modules/funcs.py)
+- [modules/config.yaml](../../modules/config.yaml)
 
 Example manifest entry:
 

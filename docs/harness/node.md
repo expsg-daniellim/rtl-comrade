@@ -1,6 +1,6 @@
 # `node.py`
 
-Source: [src/rtl_comrade/node.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/node.py)
+Source: [src/rtl_comrade/node.py](../../src/rtl_comrade/node.py)
 
 ## Role
 
@@ -13,13 +13,13 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md)
-- [port.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md)
-- [api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
-- [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
-- [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
+- [README.md](README.md)
+- [graph.md](graph.md)
+- [structure.md](structure.md)
+- [port.md](port.md)
+- [api.md](api.md)
+- [contract_default.md](contract_default.md)
+- [logging.md](logging.md)
 
 ## Main Responsibilities
 
@@ -47,13 +47,13 @@ When a node is created, it first inspects the module class constructor with `ins
 - If module `__init__` accepts `id`, the node passes `<node-id>.module`.
 - If neither `config` nor `id` is accepted, the module is instantiated with no harness-injected arguments.
 
-The node then constructs [ModuleStructure](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md) from `Module.run(...)` and uses that inferred signature to create its input ports.
+The node then constructs [ModuleStructure](structure.md) from `Module.run(...)` and uses that inferred signature to create its input ports.
 
 ### Port construction
 
 After module structure analysis:
 
-- one [Port](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md) is created for each inferred `run(...)` parameter
+- one [Port](port.md) is created for each inferred `run(...)` parameter
 - parameters that have a Python default are marked `has_default=True` on the corresponding port
 - input port order is preserved through an `OrderedDict`
 
@@ -66,7 +66,7 @@ The node then inspects the contract constructor separately.
 - If contract `__init__` accepts `config`, the node passes `contract_config`.
 - If the contract defines a nested `Config` type, `contract_config` is deserialized through `serde.from_dict(...)` first.
 - If contract `__init__` accepts `id`, the node passes `<node-id>.contract`.
-- If contract `__init__` accepts `ports`, the node passes a mapping of [ContractPort](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md) adapters built from the underlying `Port`s.
+- If contract `__init__` accepts `ports`, the node passes a mapping of [ContractPort](api.md) adapters built from the underlying `Port`s.
 
 Each `ContractPort` exposes:
 

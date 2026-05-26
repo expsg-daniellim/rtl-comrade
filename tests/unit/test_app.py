@@ -22,6 +22,7 @@ from rtl_comrade.app import (
 	RtlComradeConfig,
 	search_for_config,
 )
+from rtl_comrade.config_graph import GraphConfig
 
 MINIMAL_CONFIG_YAML = "commands:\n  run:\n    path: graphs/test.yaml\n"
 MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path="graphs/test.yaml")})
@@ -29,10 +30,9 @@ MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path="graphs/te
 runner = CliRunner()
 
 
-def _mock_graph():
-	m = MagicMock()
+def _mock_config():
+	m = MagicMock(spec=GraphConfig)
 	m.sig = inspect.Signature([])
-	m.construct_run.side_effect = lambda cleanup: cleanup
 	return m
 
 
@@ -47,7 +47,8 @@ def reset_logging():
 
 def _make_app(argv=None, config=None):
 	with patch("rtl_comrade.app.search_for_config", return_value=config or MINIMAL_CONFIG), \
-		 patch("rtl_comrade.app.Graph.from_file", return_value=_mock_graph()), \
+		 patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()), \
+		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup), \
 		 patch.object(sys, "argv", argv or ["rtl-comrade"]):
 		return App()
 
@@ -150,7 +151,8 @@ def test_app_custom_config_file_loaded(tmp_path, monkeypatch):
 	)
 	monkeypatch.chdir(tmp_path)
 	with patch.object(sys, "argv", ["rtl-comrade", "--config-file", "custom.yaml"]), \
-		 patch("rtl_comrade.app.Graph.from_file", return_value=_mock_graph()) as mock_from_file:
+		 patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()) as mock_from_file, \
+		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup):
 		App()
 	mock_from_file.assert_called_once_with("my_graph.yaml")
 
@@ -180,7 +182,8 @@ def test_app_subcommand_exits_1_on_graph_failure():
 
 
 def test_app_subcommand_calls_graph_from_file():
-	with patch("rtl_comrade.app.Graph.from_file", return_value=_mock_graph()) as mock_from_file, \
+	with patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()) as mock_from_file, \
+		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup), \
 		 patch("rtl_comrade.app.search_for_config", return_value=MINIMAL_CONFIG), \
 		 patch.object(sys, "argv", ["rtl-comrade"]):
 		App()
@@ -278,7 +281,7 @@ def test_run_usage_error_logs_error_and_returns_exit_code():
 def _make_app_raises(exc):
 	with patch("rtl_comrade.app.search_for_config", return_value=MINIMAL_CONFIG), \
 		 patch.object(sys, "argv", ["rtl-comrade"]), \
-		 patch("rtl_comrade.app.Graph.from_file", side_effect=exc):
+		 patch("rtl_comrade.app.GraphConfig.from_file", side_effect=exc):
 		App()
 
 

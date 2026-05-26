@@ -1,6 +1,6 @@
 # `loader.py`
 
-Source: [src/rtl_comrade/loader.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/loader.py)
+Source: [src/rtl_comrade/loader.py](../../src/rtl_comrade/loader.py)
 
 ## Role
 
@@ -11,10 +11,10 @@ This file handles two related harness jobs:
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
-- [structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md)
+- [README.md](README.md)
+- [graph.md](graph.md)
+- [config.md](config.md)
+- [structure.md](structure.md)
 
 ## Main Responsibilities
 

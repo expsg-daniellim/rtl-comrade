@@ -7,11 +7,15 @@ YAML schema (config.py) and the runtime graph constructor (graph.py).
 from __future__ import annotations
 from dataclasses import dataclass, field
 from inspect import Signature
+from pathlib import Path
 from typing import cast
+
 import structlog
+from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config import GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
-from .loader import PluginFileConfig, resolve_paths
+from .config import InvalidCLIParameterError
+from .loader import load_config_file, resolve_paths, PluginFileConfig
 from .logging import HarnessLogger
 from .validation import validate_acyclic
 
@@ -36,6 +40,27 @@ class GraphConfig:
 	contracts: list[PluginFileConfig] = field(default_factory=list)
 	cli_srcs: list[tuple[str, GraphConfigSrcCLI]] = field(default_factory=list)
 	sig: Signature = field(default_factory=Signature)
+
+	@staticmethod
+	def from_file(path:str) -> GraphConfig:
+		"""Load a graph YAML file and construct a GraphConfig.
+
+		Args:
+			path: Filesystem path to the graph YAML file.
+
+		Returns:
+			The constructed GraphConfig instance.
+		"""
+
+		bind_contextvars(context='harness.config', file=path)
+		config = load_config_file(GraphFileConfig, Path(path))
+		unbind_contextvars('context', 'file')
+
+		try:
+			return GraphConfig.from_file_config(config)
+		except InvalidCLIParameterError as e:
+			log.fatal('cli_invalid_parameter_name', context='harness.graph.validation_config', name=e.name)
+			return None  # pragma: no cover
 
 	@staticmethod
 	def from_file_config(config:GraphFileConfig) -> GraphConfig:

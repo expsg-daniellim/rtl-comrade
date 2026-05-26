@@ -13,6 +13,7 @@ from yaml.reader import ReaderError
 import structlog
 import typer
 
+from .config_graph import GraphConfig
 from .graph import Graph
 from .logging import initialise_logging, HarnessLogger
 
@@ -71,9 +72,8 @@ class App:
 		# TODO: normalise config paths (relative to config, not runner)
 
 		for (name, command) in config.commands.items():
-			# TODO: lazy load graphs
 			try:
-				graph = Graph.from_file(command.path)
+				config = GraphConfig.from_file(command.path)
 			except UnicodeDecodeError as e:
 				log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
 			except FileNotFoundError as e:
@@ -97,7 +97,9 @@ class App:
 				log.fatal('yaml.marked', problem=e.problem, **mark_fields, exc_info=e)
 			except ReaderError as e:
 				log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
-			self.app.command(name, help=command.help, no_args_is_help=len(graph.sig.parameters) > 0)(graph.construct_run(self.cleanup))
+
+			# Register command
+			self.app.command(name, help=command.help, no_args_is_help=len(config.sig.parameters) > 0)(Graph.construct_run(config, self.cleanup))
 
 	# Dummy callback to reflect variables read by argparse into typer
 	def main(self, ctx:typer.Context, config_file:Annotated[str, typer.Option(help="File name of config file defining command/graphs.")]=DEFAULT_RTL_COMRADE_CONFIG_NAME, level:Annotated[Literal[*list(LOGGING_LEVELS.keys())], typer.Option(case_sensitive=False, help="Logging level.")]="info"):

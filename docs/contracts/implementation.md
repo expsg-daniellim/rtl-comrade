@@ -4,9 +4,9 @@ This document explains how to implement a contract for `rtl-comrade`.
 
 For harness internals behind contract instantiation, see:
 
-- [docs/harness/node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [docs/harness/api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
-- [docs/harness/contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
+- [docs/harness/node.md](../harness/node.md)
+- [docs/harness/api.md](../harness/api.md)
+- [docs/harness/contract_default.md](../harness/contract_default.md)
 
 For testing contracts in isolation, see [testing.md](testing.md).
 
@@ -140,8 +140,8 @@ Be deliberate here. Contract termination is part of graph liveness behavior.
 
 Two useful examples in the current codebase:
 
-- [src/rtl_comrade/contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py): ends when any required input ends
-- [contracts/contracts.py](/Users/daniellim/Documents/random/rtl-comrade/contracts/contracts.py): zip-style behavior; if any port ends, the node ends, and mismatched endings are logged as an error
+- [src/rtl_comrade/contract_default.py](../../src/rtl_comrade/contract_default.py): ends when any required input ends
+- [contracts/contracts.py](../../contracts/contracts.py): zip-style behavior; if any port ends, the node ends, and mismatched endings are logged as an error
 
 ## Minimal Contract Template
 
@@ -255,8 +255,8 @@ In the current codebase, many unexpected exceptions during `get_inputs()` are ca
 
 The two shipped contracts illustrate a useful split:
 
-- [contracts/contracts.py](/Users/daniellim/Documents/random/rtl-comrade/contracts/contracts.py) uses `ERROR` for a runtime mismatch in stream endings, then returns `EndSentinel`
-- [src/rtl_comrade/contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py) uses fatal logging for broken invariants such as invalid persistent-port configuration
+- [contracts/contracts.py](../../contracts/contracts.py) uses `ERROR` for a runtime mismatch in stream endings, then returns `EndSentinel`
+- [src/rtl_comrade/contract_default.py](../../src/rtl_comrade/contract_default.py) uses fatal logging for broken invariants such as invalid persistent-port configuration
 
 ## Manifest Registration
 
@@ -264,8 +264,8 @@ To expose a contract plugin by name, add it to a plugin file and register it in 
 
 Current example:
 
-- [contracts/contracts.py](/Users/daniellim/Documents/random/rtl-comrade/contracts/contracts.py)
-- [contracts/config.yaml](/Users/daniellim/Documents/random/rtl-comrade/contracts/config.yaml)
+- [contracts/contracts.py](../../contracts/contracts.py)
+- [contracts/config.yaml](../../contracts/config.yaml)
 
 Example manifest entry:
 

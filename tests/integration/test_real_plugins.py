@@ -58,6 +58,5 @@ def test_real_plugins_load_and_run(logging_handler, tmp_path):
 		],
 	)
 
-	graph = Graph.from_config(config)
-	graph.construct_run(lambda: None)()
+	Graph.construct_run(config, lambda: None)()
 	assert not logging_handler.failure

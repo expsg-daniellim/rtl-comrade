@@ -1,6 +1,6 @@
 # `app.py`
 
-Source: [src/rtl_comrade/app.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/app.py)
+Source: [src/rtl_comrade/app.py](../../src/rtl_comrade/app.py)
 
 ## Role
 
@@ -8,9 +8,9 @@ Owns the full CLI lifecycle: config-file discovery, logging setup, subcommand re
 
 ## See Also
 
-- [__main__.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/__main__.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
-- [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
+- [__main__.md](__main__.md)
+- [graph.md](graph.md)
+- [logging.md](logging.md)
 
 ## Config File — `rtl_comrade_config.yaml`
 
@@ -37,9 +37,9 @@ The same options are re-declared as typer parameters on the `main` callback so t
 
 ## Subcommand Registration
 
-Each entry in `config.commands` becomes a typer subcommand. During `App.__init__`, the graph for each command is eagerly loaded via `Graph.from_file`. Loading errors (file not found, invalid YAML, schema errors, invalid unicode) are caught and logged as fatal, aborting startup.
+Each entry in `config.commands` becomes a typer subcommand. During `App.__init__`, the graph config for each command is loaded via `GraphConfig.from_file`. Loading errors (file not found, invalid YAML, schema errors, invalid unicode, invalid CLI parameter names) are caught and logged as fatal, aborting startup.
 
-The loaded graph's `sig` field — an `inspect.Signature` built from the graph's CLI edges — drives the subcommand's parameter list. If the signature is non-empty, `no_args_is_help=True` is set automatically so the subcommand prints help when invoked with no arguments.
+The loaded `GraphConfig`'s `sig` field — an `inspect.Signature` built from the graph's CLI edges — drives the subcommand's parameter list. If the signature is non-empty, `no_args_is_help=True` is set automatically so the subcommand prints help when invoked with no arguments.
 
 ## Logging Level
 
@@ -61,15 +61,15 @@ The `--level` option accepts any standard Python logging level name (`DEBUG`, `I
 
 ## Graph Execution
 
-Each subcommand is driven by a closure returned by `Graph.construct_run(cleanup)`. When the subcommand is invoked, the closure:
+Each subcommand is driven by a closure returned by `Graph.construct_run(config, cleanup)`. When the subcommand is invoked, the closure:
 
-1. injects the resolved CLI argument values into the graph's CLI nodes
-2. runs the graph via `asyncio.run`
-3. calls `cleanup()`, which raises `typer.Exit(1)` if `self.handler.failure` is set
+1. constructs the runtime `Graph` from the pre-loaded `GraphConfig` via `Graph.from_config`
+2. injects the resolved CLI argument values into the graph's CLI nodes
+3. runs the graph via `asyncio.run`
+4. calls `cleanup()`, which raises `typer.Exit(1)` if `self.handler.failure` is set
 
 This converts deferred `ERROR`-level log failures into a non-zero process exit code.
 
 ## Known Gaps
 
 - Graph paths in the config are resolved relative to the runner's working directory, not relative to the config file's location.
-- Graphs are loaded eagerly at startup (TODO in the source); a graph with a syntax error in a rarely-used command will abort startup even if that command is never invoked.

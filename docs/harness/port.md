@@ -1,6 +1,6 @@
 # `port.py`
 
-Source: [src/rtl_comrade/port.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/port.py)
+Source: [src/rtl_comrade/port.py](../../src/rtl_comrade/port.py)
 
 ## Role
 
@@ -8,10 +8,10 @@ This file implements the queue-backed input ports owned by each runtime node.
 
 ## See Also
 
-- [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-- [api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
-- [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
+- [README.md](README.md)
+- [node.md](node.md)
+- [api.md](api.md)
+- [contract_default.md](contract_default.md)
 
 ## Main Responsibilities
 
