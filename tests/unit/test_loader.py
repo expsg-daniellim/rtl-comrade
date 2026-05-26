@@ -12,11 +12,13 @@ from rtl_comrade.loader import (
 	PluginModuleConfig,
 	load_config_file,
 	load_paths,
-	load_plugin,
 	load_path,
+	load_file_configs,
+	resolve_path,
+	resolve_paths,
 	PluginFileConfig,
 )
-from rtl_comrade.config import GraphConfig
+from rtl_comrade.config import GraphFileConfig
 
 
 # --- PluginModuleConfig.from_class_name ---
@@ -44,28 +46,28 @@ def test_load_config_file_valid(logging_handler, tmp_path):
 	yaml_content = "nodes:\n- id: n1\n  module: m1\nedges: []\n"
 	p = tmp_path / "graph.yaml"
 	p.write_text(yaml_content)
-	cfg = load_config_file(GraphConfig, p)
+	cfg = load_config_file(GraphFileConfig, p)
 	assert cfg is not None
 	assert len(cfg.nodes) == 1
 
 
 def test_load_config_file_not_found(logging_handler):
 	with pytest.raises(SystemExit):
-		load_config_file(GraphConfig, Path("/nonexistent/graph.yaml"))
+		load_config_file(GraphFileConfig, Path("/nonexistent/graph.yaml"))
 
 
 def test_load_config_file_malformed_yaml(logging_handler, tmp_path):
 	p = tmp_path / "bad.yaml"
 	p.write_text("nodes: [\nunclosed bracket\n")
 	with pytest.raises(SystemExit):
-		load_config_file(GraphConfig, p)
+		load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_serde_mismatch(logging_handler, tmp_path):
 	p = tmp_path / "bad.yaml"
 	p.write_text("nodes: not_a_list\nedges: []\n")
 	with pytest.raises(SystemExit):
-		load_config_file(GraphConfig, p)
+		load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_permission_denied(logging_handler, tmp_path):
@@ -73,7 +75,7 @@ def test_load_config_file_permission_denied(logging_handler, tmp_path):
 	p.write_text("nodes: []\nedges: []\n")
 	with patch("builtins.open", side_effect=PermissionError("denied")):
 		with pytest.raises(SystemExit):
-			load_config_file(GraphConfig, p)
+			load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_unicode_error(logging_handler, tmp_path):
@@ -82,13 +84,13 @@ def test_load_config_file_unicode_error(logging_handler, tmp_path):
 	exc = UnicodeDecodeError("utf-8", b"\x80", 0, 1, "invalid start byte")
 	with patch("builtins.open", side_effect=exc):
 		with pytest.raises(SystemExit):
-			load_config_file(GraphConfig, p)
+			load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_is_directory(logging_handler, tmp_path):
 	with patch("builtins.open", side_effect=IsADirectoryError("is a directory")):
 		with pytest.raises(SystemExit):
-			load_config_file(GraphConfig, tmp_path / "graph.yaml")
+			load_config_file(GraphFileConfig, tmp_path / "graph.yaml")
 
 
 def test_load_config_file_os_error(logging_handler, tmp_path):
@@ -96,7 +98,7 @@ def test_load_config_file_os_error(logging_handler, tmp_path):
 	p.write_text("nodes: []\nedges: []\n")
 	with patch("builtins.open", side_effect=OSError(5, "I/O error")):
 		with pytest.raises(SystemExit):
-			load_config_file(GraphConfig, p)
+			load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_reader_error(logging_handler, tmp_path):
@@ -105,10 +107,10 @@ def test_load_config_file_reader_error(logging_handler, tmp_path):
 	exc = ReaderError("test.yaml", 0, 0xFF, "utf-8", "special characters not allowed")
 	with patch("rtl_comrade.loader.from_yaml", side_effect=exc):
 		with pytest.raises(SystemExit):
-			load_config_file(GraphConfig, p)
+			load_config_file(GraphFileConfig, p)
 
 
-# --- load_plugin ---
+# --- PluginFileConfig.load ---
 
 _SIMPLE_PLUGIN = textwrap.dedent("""\
     class Foo:
@@ -121,35 +123,35 @@ _SIMPLE_PLUGIN = textwrap.dedent("""\
 """)
 
 
-def test_load_plugin_all_classes(logging_handler, tmp_path):
+def test_plugin_file_config_load_all_classes(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
-	result = load_plugin(config)
+	result = config.load()
 	assert "foo" in result
 	assert "bar" in result
 
 
-def test_load_plugin_explicit_list(logging_handler, tmp_path):
+def test_plugin_file_config_load_explicit_list(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	plugins = [PluginModuleConfig(class_name="Foo", name="my_foo")]
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=plugins)
-	result = load_plugin(config)
+	result = config.load()
 	assert "my_foo" in result
 	assert "bar" not in result
 
 
-def test_load_plugin_missing_class(logging_handler, tmp_path):
+def test_plugin_file_config_load_missing_class(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	plugins = [PluginModuleConfig(class_name="Missing", name="missing")]
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=plugins)
 	with pytest.raises(SystemExit):
-		load_plugin(config)
+		config.load()
 
 
-def test_load_plugin_duplicate_name(logging_handler, tmp_path):
+def test_plugin_file_config_load_duplicate_name(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	plugins = [
@@ -158,26 +160,26 @@ def test_load_plugin_duplicate_name(logging_handler, tmp_path):
 	]
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=plugins)
 	with pytest.raises(SystemExit):
-		load_plugin(config)
+		config.load()
 
 
-def test_load_plugin_not_a_file(logging_handler, tmp_path):
+def test_plugin_file_config_load_not_a_file(logging_handler, tmp_path):
 	# Pass a directory path — config.file.is_file() returns False → fatal.
 	config = PluginFileConfig(name=None, file=tmp_path, type_=None, plugins=None)
 	with pytest.raises(SystemExit):
-		load_plugin(config)
+		config.load()
 
 
-def test_load_plugin_spec_none(logging_handler, tmp_path):
+def test_plugin_file_config_load_spec_none(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
 	with patch("rtl_comrade.loader.importlib.util.spec_from_file_location", return_value=None):
 		with pytest.raises(SystemExit):
-			load_plugin(config)
+			config.load()
 
 
-def test_load_plugin_spec_loader_none(logging_handler, tmp_path):
+def test_plugin_file_config_load_spec_loader_none(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
@@ -188,7 +190,7 @@ def test_load_plugin_spec_loader_none(logging_handler, tmp_path):
 		return_value=mock_spec,
 	):
 		with pytest.raises(SystemExit):
-			load_plugin(config)
+			config.load()
 
 
 def _exec_raising_patches(exc):
@@ -239,14 +241,14 @@ def _exec_raising_patches(exc):
 		"generic",
 	],
 )
-def test_load_plugin_exec_module_raises_fatal(logging_handler, tmp_path, exc):
+def test_plugin_file_config_load_exec_module_raises_fatal(logging_handler, tmp_path, exc):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
 	p1, p2 = _exec_raising_patches(exc)
 	with p1, p2:
 		with pytest.raises(SystemExit):
-			load_plugin(config)
+			config.load()
 
 
 # --- load_path ---
@@ -398,10 +400,10 @@ def test_load_path_plain_dir_cross_file_import(logging_handler, tmp_path):
 	assert str(mods) in _sys.path
 
 
-# --- module-cache branches in load_plugin ---
+# --- module-cache branches in PluginFileConfig.load ---
 
 
-def test_load_plugin_canonical_relative_to_error_falls_back_to_fresh_load(logging_handler, tmp_path):
+def test_plugin_file_config_load_canonical_relative_to_error_falls_back_to_fresh_load(logging_handler, tmp_path):
 	# Package dir exists (__init__.py present) but relative_to raises ValueError →
 	# canonical_name = None → fresh load via else branch.
 	pkg = tmp_path / "pkg"
@@ -411,11 +413,11 @@ def test_load_plugin_canonical_relative_to_error_falls_back_to_fresh_load(loggin
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	config = PluginFileConfig(name="pkg_mods_relative_err", file=plugin_file, type_=None, plugins=None)
 	with patch.object(Path, "relative_to", side_effect=ValueError("no common prefix")):
-		result = load_plugin(config)
+		result = config.load()
 	assert "foo" in result
 
 
-def test_load_plugin_reuses_cached_module_by_plugin_name(logging_handler, tmp_path):
+def test_plugin_file_config_load_reuses_cached_module_by_plugin_name(logging_handler, tmp_path):
 	# No __init__.py → canonical_name = None; plugin_name already in sys.modules → reuse.
 	import sys as _sys  # pylint: disable=import-outside-toplevel
 	plugin_file = tmp_path / "cached.py"
@@ -431,7 +433,151 @@ def test_load_plugin_reuses_cached_module_by_plugin_name(logging_handler, tmp_pa
 	try:
 		plugins = [PluginModuleConfig(class_name="Baz", name="baz")]
 		config = PluginFileConfig(name=plugin_name, file=plugin_file, type_=None, plugins=plugins)
-		result = load_plugin(config)
+		result = config.load()
 		assert result["baz"] is Baz
 	finally:
 		_sys.modules.pop(plugin_name, None)
+
+
+# --- resolve_path ---
+
+
+def test_resolve_path_single_file(logging_handler, tmp_path):
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	result = resolve_path(plugin_file)
+	assert len(result) == 1
+	assert result[0].file == plugin_file
+
+
+def test_resolve_path_directory_no_config(logging_handler, tmp_path):
+	(tmp_path / "a.py").write_text(_SIMPLE_PLUGIN)
+	(tmp_path / "b.py").write_text(_SIMPLE_PLUGIN)
+	result = resolve_path(tmp_path)
+	files = [r.file for r in result]
+	assert tmp_path / "a.py" in files
+	assert tmp_path / "b.py" in files
+
+
+def test_resolve_path_directory_with_config(logging_handler, tmp_path):
+	(tmp_path / "mods.py").write_text(_SIMPLE_PLUGIN)
+	config_yaml = "files:\n- file: mods.py\n  name: null\n  type_: null\n  plugins: null\n"
+	(tmp_path / "config.yaml").write_text(config_yaml)
+	result = resolve_path(tmp_path)
+	assert len(result) == 1
+	assert result[0].file == tmp_path / "mods.py"
+
+
+def test_resolve_path_deduplicates_duplicate_files(logging_handler, tmp_path):
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	config_yaml = (
+		"files:\n"
+		"- file: mods.py\n  name: null\n  type_: null\n  plugins: null\n"
+		"- file: mods.py\n  name: null\n  type_: null\n  plugins: null\n"
+	)
+	(tmp_path / "config.yaml").write_text(config_yaml)
+	result = resolve_path(tmp_path)
+	assert len(result) == 1
+
+
+def test_resolve_path_nonexistent_fatal(logging_handler):
+	with pytest.raises(SystemExit):
+		resolve_path(Path("/no/such/path"))
+
+
+def test_resolve_path_does_not_load(logging_handler, tmp_path):
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	with patch("rtl_comrade.loader.importlib.util.spec_from_file_location") as mock_spec:
+		resolve_path(plugin_file)
+		mock_spec.assert_not_called()
+
+
+# --- resolve_paths ---
+
+
+def test_resolve_paths_flat_concatenation(logging_handler, tmp_path):
+	dir_a = tmp_path / "a"
+	dir_a.mkdir()
+	(dir_a / "m1.py").write_text("class Alpha:\n    pass\n")
+	dir_b = tmp_path / "b"
+	dir_b.mkdir()
+	(dir_b / "m2.py").write_text("class Beta:\n    pass\n")
+	result = resolve_paths([str(dir_a), str(dir_b)])
+	files = [r.file for r in result]
+	assert dir_a / "m1.py" in files
+	assert dir_b / "m2.py" in files
+
+
+def test_resolve_paths_deduplicates_duplicate_path_strings(logging_handler, tmp_path):
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	result = resolve_paths([str(plugin_file), str(plugin_file)])
+	assert len(result) == 1
+
+
+def test_resolve_paths_empty(logging_handler):
+	result = resolve_paths([])
+	assert result == []
+
+
+# --- load_file_configs ---
+
+
+def test_load_file_configs_happy_path(logging_handler, tmp_path):
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	configs = [PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)]
+	result = load_file_configs(configs)
+	assert "foo" in result
+	assert "bar" in result
+
+
+def test_load_file_configs_merges_multiple_files(logging_handler, tmp_path):
+	(tmp_path / "a.py").write_text("class Alpha:\n    def run(self): return None\n")
+	(tmp_path / "b.py").write_text("class Beta:\n    def run(self): return None\n")
+	configs = [
+		PluginFileConfig(name=None, file=tmp_path / "a.py", type_=None, plugins=None),
+		PluginFileConfig(name=None, file=tmp_path / "b.py", type_=None, plugins=None),
+	]
+	result = load_file_configs(configs)
+	assert "alpha" in result
+	assert "beta" in result
+
+
+def test_load_file_configs_duplicate_name_fatal(logging_handler, tmp_path):
+	(tmp_path / "a.py").write_text("class Foo:\n    def run(self): return None\n")
+	(tmp_path / "b.py").write_text("class Foo:\n    def run(self): return None\n")
+	configs = [
+		PluginFileConfig(name=None, file=tmp_path / "a.py", type_=None, plugins=None),
+		PluginFileConfig(name=None, file=tmp_path / "b.py", type_=None, plugins=None),
+	]
+	with pytest.raises(SystemExit):
+		load_file_configs(configs)
+
+
+def test_load_file_configs_empty(logging_handler):
+	result = load_file_configs([])
+	assert result == {}
+
+
+# --- PluginFileConfig.load ---
+
+
+def test_plugin_file_config_load_imports_classes(logging_handler, tmp_path):
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
+	result = config.load()
+	assert "foo" in result
+	assert "bar" in result
+
+
+def test_plugin_file_config_load_injects_sys_path(logging_handler, tmp_path):
+	import sys as _sys  # pylint: disable=import-outside-toplevel
+	plugin_file = tmp_path / "mods.py"
+	plugin_file.write_text(_SIMPLE_PLUGIN)
+	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
+	config.load()
+	assert str(tmp_path) in _sys.path

@@ -39,7 +39,7 @@ When adding a new harness module, add a corresponding test file under `tests/uni
 | `testing.py` (contract harness) | `tests/unit/test_contract_harness.py` |
 | `testing.py` (module harness) | `tests/unit/test_module_harness.py` |
 
-Integration tests covering the full `Graph.from_file → Graph.run` path live in `tests/integration/`. They write temporary plugin `.py` files to `tmp_path` and construct `GraphConfig` objects directly; they never depend on on-disk graph YAML files.
+Integration tests covering the full `Graph.from_file → Graph.run` path live in `tests/integration/`. They write temporary plugin `.py` files to `tmp_path` and construct `GraphConfig` objects directly (or `GraphFileConfig` objects converted via `GraphConfig.from_file_config` for tests that exercise CLI-edge expansion); they never depend on on-disk graph YAML files.
 
 ### Contracts (`contracts/`)
 

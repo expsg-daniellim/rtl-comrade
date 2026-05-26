@@ -18,12 +18,12 @@ This file is the top-level harness coordinator. It turns config data into a runn
 
 ## Main Responsibilities
 
-- load `GraphConfig` from YAML
+- load `GraphFileConfig` from YAML and normalise it to `GraphConfig` via `GraphConfig.from_file_config`
 - load module and contract plugin classes
 - instantiate nodes
-- resolve and validate edges
-- create virtual `ModuleCLI` nodes for CLI-sourced edges and build a matching `inspect.Signature`
-- run pre-execution graph validation
+- create virtual `ModuleCLI` nodes from `GraphConfig.cli_srcs`
+- validate edge port names against module structure
+- run static deadlock checks before execution
 - launch all nodes concurrently
 
 ## Key Entry Points
@@ -40,13 +40,14 @@ It is also the main fail-fast boundary of the harness. This is where obviously b
 
 ## Notable Behaviors
 
+- structural config checks (duplicate node ids, invalid dst node, unused edge sources, cycles) are performed in `GraphConfig.from_file_config` before `Graph.from_config` is reached; see [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md)
+- `Graph.from_config` handles only checks that require loaded plugin classes: invalid module/contract names, invalid port names, overloaded inputs, and static deadlock
 - missing modules or contracts are treated as fatal configuration errors
 - source port names are checked against statically inferred emits when `ModuleStructure` can prove them
 - duplicate incoming connections to the same destination input are rejected
 - static deadlock checks run before execution starts
 - node tasks are launched together via `asyncio.gather(...)`
-- CLI edges are converted into virtual `ModuleCLI` nodes during `from_config`; each injects one value into one destination port
-- a blank or non-identifier `cli` name causes a fatal error during construction
+- `GraphConfigSrcCLI` edges are normalised into `GraphConfig.cli_srcs` and `GraphConfig.sig` during `GraphConfig.from_file_config`; the corresponding virtual `ModuleCLI` nodes are created from `cli_srcs` during `Graph.from_config`; each injects one value into one destination port
 - error-level and critical-level logs emitted during graph assembly intentionally participate in the harness failure model: `ERROR` defers failure until the run ends, while `CRITICAL` aborts immediately
 
 ## Validation Philosophy

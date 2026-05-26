@@ -26,7 +26,8 @@ The harness is distinct from the modular building blocks:
 - [structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md): signature and AST analysis for module inputs and emitted output ports.
 - [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md): built-in default scheduling contract.
 - [loader.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/loader.md): YAML loading and plugin discovery/import.
-- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md): graph config schema.
+- [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md): serde-backed YAML schema types.
+- [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md): normalised `GraphConfig` intermediate between YAML and graph construction.
 - [api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md): payload, sentinel, and contract-facing port API types.
 - [port.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md): queue-backed input port implementation.
 - [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md): acyclicity and static deadlock checks.
@@ -40,21 +41,22 @@ If you are new to the harness, read in roughly this order:
 2. [app.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/app.md)
 3. [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
 4. [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
-5. [loader.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/loader.md)
-6. [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
-7. [structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md)
-8. [port.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md)
-9. [api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
-10. [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
-11. [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md)
-12. [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
+5. [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md)
+6. [loader.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/loader.md)
+7. [node.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/node.md)
+8. [structure.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/structure.md)
+9. [port.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/port.md)
+10. [api.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/api.md)
+11. [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
+12. [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md)
+13. [logging.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/logging.md)
 
 ## Runtime Flow
 
 At a high level:
 
 1. [__main__.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/__main__.py) delegates to [app.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/app.py), which discovers `rtl_comrade_config.yaml`, initializes logging, and dispatches the user-chosen subcommand to a graph path.
-2. [graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/graph.py) loads [config.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/config.py) data from YAML via [loader.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/loader.py).
+2. [graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/graph.py) loads [config.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/config.py) data from YAML via [loader.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/loader.py) and normalises it into a [config_graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/config_graph.py) `GraphConfig`.
 3. `Graph.from_config()` loads module and contract plugin classes, creates [node.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/node.py) instances, wires edges, and runs [validation.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/validation.py).
 4. Each `Node` analyzes its module through [structure.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/structure.py), creates [port.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/port.py) objects, and exposes [api.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/api.py) `ContractPort`s, including per-port `state` dicts, to the configured contract.
 5. The contract, often [contract_default.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/contract_default.py), decides when enough inputs are ready for the module to run.

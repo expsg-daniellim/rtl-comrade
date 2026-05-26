@@ -3,13 +3,8 @@
 import pytest
 
 from rtl_comrade.testing import logging_handler  # noqa: F401  # pylint: disable=unused-import
-from rtl_comrade.config import (
-	GraphConfig,
-	GraphConfigNode,
-	GraphConfigEdge,
-	GraphConfigSrcPort,
-	GraphConfigDstPort,
-)
+from rtl_comrade.config import GraphConfigNode, GraphConfigEdge, GraphConfigSrcPort, GraphConfigDstPort
+from rtl_comrade.config_graph import GraphConfig
 
 
 @pytest.fixture

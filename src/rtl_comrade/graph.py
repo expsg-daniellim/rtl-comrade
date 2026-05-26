@@ -10,13 +10,14 @@ from typing import cast, Any, Callable
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
-from .config import GraphConfig, GraphConfigSrcCLI, GraphConfigSrcPort, GraphConfigEdge
+from .config import GraphFileConfig, InvalidCLIParameterError
+from .config_graph import GraphConfig
 from .contract_default import DefaultContract
-from .loader import load_paths, load_config_file
+from .loader import load_file_configs, load_config_file
 from .logging import HarnessLogger
 from .module_cli import ModuleCLI
 from .node import Connection, Node
-from .validation import validate_acyclic, validate_no_static_deadlock
+from .validation import validate_no_static_deadlock
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -54,20 +55,23 @@ class Graph:
 		"""
 
 		bind_contextvars(context='harness.config', file=path)
+		config = load_config_file(GraphFileConfig, Path(path))
+		unbind_contextvars('context', 'file')
 
 		try:
-			config = load_config_file(GraphConfig, Path(path))
-		finally:
-			unbind_contextvars('context', 'file')
+			graph_config = GraphConfig.from_file_config(config)
+		except InvalidCLIParameterError as e:
+			log.error('cli_invalid_parameter_name', context='harness.graph.validation', name=e.name)
+			log.fatal('invalid_cli_edges', context='harness.graph.validation')
 
-		return Graph.from_config(config)
+		return Graph.from_config(graph_config)
 
 	@staticmethod
 	def from_config(config:GraphConfig) -> Graph:
 		"""Construct a runnable graph from an already-parsed GraphConfig.
 
 		Args:
-			config: Parsed top-level graph configuration.
+			config: Normalised graph configuration.
 
 		Returns:
 			The constructed Graph instance.
@@ -77,16 +81,12 @@ class Graph:
 
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
-		try:
-			module_mappings = load_paths([ Path(path) for path in config.modules ])
-		finally:
-			unbind_contextvars('context')
+		module_mappings = load_file_configs(config.modules)
+		unbind_contextvars('context')
 
 		bind_contextvars(context='harness.load.contract')
-		try:
-			contract_mappings = load_paths([ Path(path) for path in config.contracts ])
-		finally:
-			unbind_contextvars('context')
+		contract_mappings = load_file_configs(config.contracts)
+		unbind_contextvars('context')
 
 		contract_mappings['default'] = DefaultContract
 
@@ -103,75 +103,40 @@ class Graph:
 		# Initialise the nodes in the graph
 		errors = False
 		for i, node in enumerate(config.nodes):
-			if node.id in graph.nodes:
-				log.error('duplicate_node', context='harness.graph.node', index=i, id=node.id)
-				errors = True
+			has_error = False
+			if node.module not in module_mappings:
+				log.error('invalid_module', context='harness.graph.node', index=i, id=node.id, mod=node.module)
+				has_error = True
+
+			if node.contract != '' and node.contract not in contract_mappings:
+				log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, contract=node.contract)
+				has_error = True
+
+			if not has_error:
+				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
+				graph.nodes[node.id] = Node(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config)
 			else:
-				has_error = False
-				if node.module not in module_mappings:
-					log.error('invalid_module', context='harness.graph.node', index=i, id=node.id, mod=node.module)
-					has_error = True
-
-				if node.contract != '' and node.contract not in contract_mappings:
-					log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, contract=node.contract)
-					has_error = True
-
-				if not has_error:
-					contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-					graph.nodes[node.id] = Node(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config)
-				else:
-					errors = True
+				errors = True
 
 		if errors:
 			log.fatal('invalid_nodes', context='harness.graph.validation')
 
 		# Initialise the (virtual) cli nodes in the graph
-		errors = False
-		params = []
-		for (i, edge) in enumerate(filter(lambda edge: isinstance(edge.src, GraphConfigSrcCLI), config.edges)):
-			if edge.src.cli == '':
-				log.error('blank_cli', context='harness.graph.validation')
-				errors = True
-				continue
+		for (port_name, src) in config.cli_srcs:
+			n = Node(id=port_name, Module=ModuleCLI, config={ 'cli': src.cli }, Contract=DefaultContract)
+			graph.nodes[n.id] = n
+			graph.cli_nodes.append(n)
 
-			n = Node(id=f'cli-{edge.src.cli}', Module=ModuleCLI, config={ 'cli': edge.src.cli }, Contract=DefaultContract)
-			if n.id in graph.nodes:
-				log.error('duplicate_node', context='harness.graph.node', id=n.id, index=None)
-				errors = True
-			else:
-				graph.nodes[n.id] = n
-				config.edges.append(GraphConfigEdge(GraphConfigSrcPort(n.id), edge.dst))
-				graph.cli_nodes.append(n)
-
-				try:
-					# TODO: Get argument defaults from Module introspection as well
-					params.append(edge.src.as_param())
-				except ValueError:
-					log.error('cli_invalid_parameter_name', context='harness.graph.validation', name=edge.src.cli)
-					errors = True
-
-		if errors:
-			log.fatal('invalid_cli_edges', context='harness.graph.validation')
-
-		graph.sig = inspect.Signature(params)
-		config.edges = [ edge for edge in config.edges if isinstance(edge.src, GraphConfigSrcPort) ]
+		graph.sig = config.sig
 
 		# Initialise the edges in the graph
 		errors = False
 		source_tracker = {} # Verify each dst only has one source
-		consumption = [ False for _ in config.edges ] # Keep track of edge usage
 		for node in graph.nodes.values():
 			dsts = []
-			for (i, edge) in enumerate(config.edges):
+			for edge in config.edges:
 				if edge.src.node == node.id:
-					if edge.dst.node not in graph.nodes:
-						log.error('invalid_dst', context='harness.graph.edge', edge=edge)
-						consumption[i] = True
-						errors = True
-						continue
-
 					# Validate src/dst ports
-					consumption[i] = True
 					has_error = False
 					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
 					if dst_name is None:
@@ -208,16 +173,6 @@ class Graph:
 		node_ports = [ (node, port) for ((node, port), n) in source_tracker.items() if n > 1 ]
 		if len(node_ports) > 0:
 			log.fatal('overloaded_srcs', context='harness.graph.validation', node_ports=node_ports)
-
-		# Validate all edges are consumed (non-fatal)
-		unused_edges = [ config.edges[i] for (i, used) in enumerate(consumption) if not used ]
-		if len(unused_edges) > 0:
-			log.warn('unused_edges', context='harness.graph.validation', edges=unused_edges)
-
-		# Validate the graph is acyclic
-		cyclic_nodes = [ name for name in validate_acyclic(config) if name is not None ]
-		if len(cyclic_nodes) > 0:
-			log.fatal('not_acyclic', context='harness.graph.validation', cyclic_nodes=cyclic_nodes)
 
 		# Static validation of the graph edges
 		static_validation_res = validate_no_static_deadlock(graph)

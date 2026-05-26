@@ -14,14 +14,10 @@ What this covers that other tests do not:
 import shutil
 from pathlib import Path
 
-from rtl_comrade.config import (
-	GraphConfig,
-	GraphConfigDstPort,
-	GraphConfigEdge,
-	GraphConfigNode,
-	GraphConfigSrcPort,
-)
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort
+from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
+from rtl_comrade.loader import resolve_path
 
 _PROJECT_ROOT = Path(__file__).parents[2]
 
@@ -47,8 +43,8 @@ def test_real_plugins_load_and_run(logging_handler, tmp_path):
 	(tmp_path / "file2.txt").write_text("10\n20\n30\n")
 
 	config = GraphConfig(
-		modules=[str(tmp_path / "modules")],
-		contracts=[str(tmp_path / "contracts")],
+		modules=resolve_path(tmp_path / "modules"),
+		contracts=resolve_path(tmp_path / "contracts"),
 		nodes=[
 			GraphConfigNode(id="file-1", module="fileread", config={"file": str(tmp_path / "file1.txt")}, contract="zip", contract_config={}),
 			GraphConfigNode(id="file-2", module="fileread", config={"file": str(tmp_path / "file2.txt")}, contract="zip", contract_config={}),

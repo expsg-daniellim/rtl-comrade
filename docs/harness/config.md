@@ -9,27 +9,28 @@ This file defines the serde-backed graph configuration schema consumed by the ha
 ## See Also
 
 - [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
+- [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md) — `GraphConfig`, the normalised intermediate produced from `GraphFileConfig`
 - [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
 - [loader.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/loader.md)
 - [validation.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/validation.md)
 
 ## Main Types
 
-- `GraphConfig`
+- `GraphFileConfig` — serde-backed YAML schema; the direct output of deserialising a graph file
 - `GraphConfigNode`
 - `GraphConfigEdge`
 - `GraphConfigSrcPort`
 - `GraphConfigSrcCLI`
 - `GraphConfigDstPort`
+- `InvalidCLIParameterError` — raised by `GraphConfigSrcCLI.as_param()` when a CLI parameter name is invalid
 
 ## Place In The System
 
-This is the harness config boundary. It is the typed shape that sits between graph YAML and the runtime graph assembly in `graph.py`.
+This is the harness config boundary. `GraphFileConfig` is the typed shape of a graph YAML file. It is normalised into `GraphConfig` (see [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md)) before being passed to `Graph.from_config`.
 
-## Current Schema
+## GraphFileConfig Schema
 
-- `modules`: list of plugin paths
-- `contracts`: list of contract plugin paths
+- `modules`, `contracts`: `list[str]` plugin paths from the YAML file
 - `nodes`: node definitions with `id`, `module`, `config`, `contract`, and `contract_config`
 - `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
 

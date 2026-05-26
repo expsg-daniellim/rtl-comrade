@@ -4,14 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from rtl_comrade.config import (
-	GraphConfig,
-	GraphConfigDstPort,
-	GraphConfigEdge,
-	GraphConfigNode,
-	GraphConfigSrcCLI,
-	GraphConfigSrcPort,
-)
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
+from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 
 
@@ -64,6 +58,11 @@ class _CycleModule:
 		return a
 
 
+class _YieldFromModule:
+	def run(self):
+		yield from [1, 2, 3]
+
+
 # Mapping helpers
 _MODULE_MAP = {
 	"source_mod": _SourceModule,
@@ -101,7 +100,7 @@ def _from_config(config):
 			return _MODULE_MAP
 		return {}  # contract load returns empty
 
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
 		return Graph.from_config(config)
 
 
@@ -115,7 +114,7 @@ def _from_config_with_contracts(config):
 			return _MODULE_MAP
 		return _CONTRACT_MAP
 
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
 		return Graph.from_config(config)
 
 
@@ -135,24 +134,22 @@ def test_invalid_contract_fatal(logging_handler):
 
 
 def test_duplicate_node_id_fatal(logging_handler):
-	config = _make_config(
-		[_node("n1", "source_mod"), _node("n1", "sink_mod")],
-		[],
-	)
 	with pytest.raises(SystemExit):
-		_from_config(config)
+		GraphConfig.from_file_config(GraphFileConfig(
+			nodes=[GraphConfigNode(id="n1", module="source_mod"), GraphConfigNode(id="n1", module="sink_mod")],
+			edges=[],
+		))
 
 
 # --- Edge construction errors ---
 
 
 def test_invalid_dst_node_fatal(logging_handler):
-	config = _make_config(
-		[_node("src", "source_mod")],
-		[_edge("src", "default", "nonexistent", 1)],
-	)
 	with pytest.raises(SystemExit):
-		_from_config(config)
+		GraphConfig.from_file_config(GraphFileConfig(
+			nodes=[GraphConfigNode(id="src", module="source_mod")],
+			edges=[GraphConfigEdge(src=GraphConfigSrcPort(node="src"), dst=GraphConfigDstPort(node="nonexistent"))],
+		))
 
 
 def test_invalid_dst_port_fatal(logging_handler):
@@ -202,17 +199,14 @@ def test_unused_edge_warns(logging_handler):
 
 	def side_effect(paths):
 		call_count[0] += 1
-		if call_count[0] == 1:
-			return module_map
-		return {}  # contract load
+		return module_map if call_count[0] == 1 else {}
 
-	config2 = _make_config(
-		[_node("sink", "default_sink")],
-		[_edge("nonexistent_src", "default", "sink", 1)],
-	)
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
-		graph = Graph.from_config(config2)
-	# Should succeed (only a warning for unused edge, not fatal)
+	graph_config = GraphConfig.from_file_config(GraphFileConfig(
+		nodes=[GraphConfigNode(id="sink", module="default_sink")],
+		edges=[GraphConfigEdge(src=GraphConfigSrcPort(node="nonexistent_src"), dst=GraphConfigDstPort(node="sink"))],
+	))
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+		graph = Graph.from_config(graph_config)
 	assert "sink" in graph.nodes
 
 
@@ -292,7 +286,7 @@ def test_dst_port_by_index_resolves(logging_handler):
 		],
 		[_edge("src", "default", "sink", 2), _edge("src2", "default", "sink", 1)],
 	)
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
 		graph = Graph.from_config(config)
 	src_node = graph.nodes["src"]
 	assert src_node.dsts is not None
@@ -306,6 +300,24 @@ def test_non_definite_emits_warns(logging_handler):
 	)
 	# dynamic emit → non_definite_emits warn, not fatal
 	graph = _from_config(config)
+	assert "src" in graph.nodes
+	assert logging_handler.failure is False
+
+
+def test_yield_from_non_definite_emits_warns(logging_handler):
+	module_map = {**_MODULE_MAP, "yield_from_mod": _YieldFromModule}
+	call_count = [0]
+
+	def side_effect(paths):
+		call_count[0] += 1
+		return module_map if call_count[0] == 1 else {}
+
+	config = _make_config(
+		[_node("src", "yield_from_mod"), _node("sink", "sink_mod")],
+		[_edge("src", "someport", "sink", 1)],
+	)
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+		graph = Graph.from_config(config)
 	assert "src" in graph.nodes
 	assert logging_handler.failure is False
 
@@ -324,7 +336,7 @@ def test_module_plugin_missing_run_fatal(logging_handler):
 		return {"no_run_mod": _NoRunModule} if call_count[0] == 1 else {}
 
 	config = _make_config([_node("n1", "no_run_mod")], [])
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)
 
@@ -341,7 +353,7 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 		return _MODULE_MAP if call_count[0] == 1 else {"bad_contract": _NoGetInputsContract}
 
 	config = _make_config([_node("n1", "source_mod", contract="bad_contract")], [])
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)
 
@@ -350,39 +362,39 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 
 
 def test_cyclic_graph_detected_fatal(logging_handler):
-	# _CycleModule emits on "default" and accepts "a", so edge validation passes.
-	# The cycle is then caught by validate_acyclic.
-	cycle_map = {**_MODULE_MAP, "cycle_mod": _CycleModule}
-	call_count = [0]
-
-	def side_effect(paths):
-		call_count[0] += 1
-		return cycle_map if call_count[0] == 1 else {}
-
-	config = _make_config(
-		[_node("a", "cycle_mod"), _node("b", "cycle_mod")],
-		[_edge("a", "default", "b", 1), _edge("b", "default", "a", 1)],
-	)
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
-		with pytest.raises(SystemExit):
-			Graph.from_config(config)
+	with pytest.raises(SystemExit):
+		GraphConfig.from_file_config(GraphFileConfig(
+			nodes=[GraphConfigNode(id="a", module="m"), GraphConfigNode(id="b", module="m")],
+			edges=[
+				GraphConfigEdge(src=GraphConfigSrcPort(node="a"), dst=GraphConfigDstPort(node="b")),
+				GraphConfigEdge(src=GraphConfigSrcPort(node="b"), dst=GraphConfigDstPort(node="a")),
+			],
+		))
 
 
 # --- CLI edge errors ---
 
 
-def test_cli_invalid_parameter_name_fatal(logging_handler):
-	config = GraphConfig(
-		nodes=[],
-		edges=[GraphConfigEdge(
-			src=GraphConfigSrcCLI(cli='invalid-name'),
-			dst=GraphConfigDstPort(node='nonexistent', port=1),
-		)],
-		modules=[],
-		contracts=[],
+def test_cli_name_conflicts_with_node_fatal(logging_handler):
+	with pytest.raises(SystemExit):
+		GraphConfig.from_file_config(GraphFileConfig(
+			nodes=[GraphConfigNode(id="cli-foo", module="m")],
+			edges=[GraphConfigEdge(src=GraphConfigSrcCLI(cli="foo"), dst=GraphConfigDstPort(node="cli-foo"))],
+		))
+
+
+def test_cli_invalid_parameter_name_fatal(logging_handler, tmp_path):
+	(tmp_path / 'graph.yaml').write_text(
+		'nodes: []\n'
+		'edges:\n'
+		'  - src:\n'
+		'      cli: invalid-name\n'
+		'    dst:\n'
+		'      node: nowhere\n'
+		'      port: 1\n'
 	)
 	with pytest.raises(SystemExit):
-		_from_config(config)
+		Graph.from_file(str(tmp_path / 'graph.yaml'))
 
 
 def test_no_source_capable_node_detected(logging_handler):
@@ -400,6 +412,6 @@ def test_no_source_capable_node_detected(logging_handler):
 		[_node("a", "cycle_mod"), _node("b", "cycle_mod")],
 		[_edge("a", "default", "b", 1)],
 	)
-	with patch("rtl_comrade.graph.load_paths", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)

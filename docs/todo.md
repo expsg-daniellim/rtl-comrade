@@ -10,6 +10,4 @@
 
 - **Normalise config paths** — graph paths in `rtl_comrade_config.yaml` are resolved relative to the runner's working directory, not relative to the config file's location. (`src/rtl_comrade/app.py:70`)
 
-- **Dynamic CLI options from graph config** — subcommands have no options; graph configs are not introspected for dynamic CLI parameters. (`src/rtl_comrade/app.py:71`)
-
 - **Debug logging in `__main__.py`** — noted as a TODO with no further detail. (`src/rtl_comrade/__main__.py:5`)

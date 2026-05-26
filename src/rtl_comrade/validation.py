@@ -4,20 +4,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from .config import GraphConfig
-
 from typing import TYPE_CHECKING  # pylint: disable=wrong-import-order
 if TYPE_CHECKING:
 	from .graph import Graph
+	from .config import GraphConfigNode, GraphConfigEdge
 
 
 # Solely for the purpose of verifying graph acyclicity - ignores other graph
 # invalidities such as dangling edges.
-def validate_acyclic(config:GraphConfig) -> list[str|None]:
+def validate_acyclic(nodes:list[GraphConfigNode], edges:list[GraphConfigEdge]) -> list[str|None]:
 	"""Check whether the configured graph contains a cycle.
 
 	Args:
-		config: Parsed graph configuration to validate.
+		nodes: List of nodes in the graph to evaluate
+		edges: List of edges in the graph to evaluate
 
 	Returns:
 		A list of node names participating in detected cycles, or ``None`` entries
@@ -25,9 +25,9 @@ def validate_acyclic(config:GraphConfig) -> list[str|None]:
 	"""
 
 	# DFS-colours algorithm
-	adjacency:dict[str, list[str]] = { node.id: [] for node in config.nodes }
+	adjacency:dict[str, list[str]] = { node.id: [] for node in nodes }
 
-	for edge in config.edges:
+	for edge in edges:
 		if edge.src.node in adjacency and edge.dst.node in adjacency:
 			adjacency[edge.src.node].append(edge.dst.node)
 

@@ -45,6 +45,10 @@ class GraphConfigSrcPort:
 	node: str
 	port: str = field(default = "default")
 
+@dataclass(slots=True, frozen=True)
+class InvalidCLIParameterError(Exception):
+	name: str
+
 @serde
 @dataclass(slots=True, frozen=True)
 class GraphConfigSrcCLI:
@@ -74,7 +78,10 @@ class GraphConfigSrcCLI:
 		t = PRIMITIVE_TYPES[self.type] if self.type in PRIMITIVE_TYPES else str
 		typer_kwargs = { 'help': self.help } # Prevent code duplication
 		annotation = Annotated[t, typer.Option(**typer_kwargs) if self.option else typer.Argument(**typer_kwargs)]
-		return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
+		try:
+			return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
+		except ValueError as e:
+			raise InvalidCLIParameterError(self.cli) from e
 
 @serde
 @dataclass(slots=True, frozen=True)
@@ -106,8 +113,8 @@ class GraphConfigEdge:
 		return to_dict(self)
 
 @serde
-@dataclass(slots=True)
-class GraphConfig:
+@dataclass(slots=True, frozen=True)
+class GraphFileConfig:
 	"""The top-level graph configuration schema loaded from YAML.
 
 	Attributes:

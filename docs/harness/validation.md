@@ -9,7 +9,8 @@ This file provides the harness’s static graph checks before execution begins.
 ## See Also
 
 - [README.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/README.md)
-- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md)
+- [config_graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config_graph.md) — calls `validate_acyclic`
+- [graph.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/graph.md) — calls `validate_no_static_deadlock`
 - [config.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/config.md)
 - [contract_default.md](/Users/daniellim/Documents/random/rtl-comrade/docs/harness/contract_default.md)
 
@@ -21,14 +22,17 @@ This file provides the harness’s static graph checks before execution begins.
 
 ## Main Functions
 
-- `validate_acyclic(config)`: DFS-based cycle check over node ids
+- `validate_acyclic(nodes, edges)`: DFS-based cycle check over node ids; takes raw node and edge lists so it is independent of any higher-level config type
 - `validate_no_static_deadlock(graph)`: conservative first-run reachability and input-satisfaction checks
 
 ## Place In The System
 
-This is the harness validation layer used by `graph.py` before node tasks are launched.
+This module provides two functions called at different points in the loading pipeline:
 
-Its purpose is to reject obviously bad graphs before runtime, not to recover from them after execution has already started.
+- `validate_acyclic` is called from `GraphConfig.from_file_config` in [config_graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/config_graph.py), before any plugin classes are loaded
+- `validate_no_static_deadlock` is called from `Graph.from_config` in [graph.py](/Users/daniellim/Documents/random/rtl-comrade/src/rtl_comrade/graph.py), after nodes have been instantiated and edges wired
+
+Both functions share the same purpose: reject obviously bad graphs before execution starts, not recover from them after work has begun.
 
 ## Static Deadlock Checks
 

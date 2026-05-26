@@ -1,9 +1,9 @@
-"""Unit tests for config.py — GraphConfig deserialization."""
+"""Unit tests for config.py — GraphFileConfig deserialization."""
 
 from serde import from_dict
 
 from rtl_comrade.config import (
-	GraphConfig,
+	GraphFileConfig,
 	GraphConfigDstPort,
 	GraphConfigEdge,
 	GraphConfigNode,
@@ -72,7 +72,7 @@ def test_dst_port_str():
 	assert d.port == "inp"
 
 
-# --- GraphConfig ---
+# --- GraphFileConfig ---
 
 
 def test_graph_config_full():
@@ -87,7 +87,7 @@ def test_graph_config_full():
 		"modules": ["path/to/mods"],
 		"contracts": ["path/to/contracts"],
 	}
-	cfg = from_dict(GraphConfig, data)
+	cfg = from_dict(GraphFileConfig, data)
 	assert len(cfg.nodes) == 2
 	assert len(cfg.edges) == 1
 	assert cfg.modules == ["path/to/mods"]
@@ -99,7 +99,7 @@ def test_graph_config_defaults_lists():
 		"nodes": [],
 		"edges": [],
 	}
-	cfg = from_dict(GraphConfig, data)
+	cfg = from_dict(GraphFileConfig, data)
 	assert cfg.modules == []
 	assert cfg.contracts == []
 

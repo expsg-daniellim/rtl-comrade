@@ -111,6 +111,99 @@ class PluginFileConfig:
 	type_: str | None
 	plugins: list[PluginModuleConfig] | None
 
+	def load(self) -> dict:
+		"""Dynamically import this plugin file and return its exported class mappings.
+
+		Returns:
+			Mapping from exported plugin name to loaded Python class.
+		"""
+
+		# Allow plugin files to import siblings via Python's normal import machinery
+		file_dir = self.file.parent.resolve()
+		sys_path_entry = str(file_dir.parent if (file_dir / '__init__.py').exists() else file_dir)
+		if sys_path_entry not in sys.path:
+			sys.path.insert(0, sys_path_entry)
+
+		# Name plugin file based on file path without extension
+		plugin_name = Path(self.file).with_suffix('').as_posix().replace('/', '.') if self.name is None else self.name
+
+		# Bind some logging context
+		bind_contextvars(plugin=plugin_name, file=str(self.file))
+		try:
+			# Validate plugin file existence
+			if not self.file.is_file():
+				log.fatal('not_found')
+
+			# Do dynamic import of plugin file
+			spec = importlib.util.spec_from_file_location(plugin_name, self.file)
+			if spec is None:
+				log.fatal('spec.invalid')
+
+			if spec.loader is None:
+				log.fatal('spec.no_loader')
+
+			# Canonical name Python's machinery assigns; packages only — plain-dir stems collide with stdlib (e.g. "io").
+			plugin_file_dir = self.file.parent.resolve()
+			if (plugin_file_dir / '__init__.py').exists():
+				try:
+					canonical_name = self.file.resolve().relative_to(str(plugin_file_dir.parent)).with_suffix('').as_posix().replace('/', '.')
+				except ValueError:
+					canonical_name = None
+			else:
+				canonical_name = None
+
+			# Reuse if already loaded (e.g. as a transitive import); re-executing splits class identity.
+			if canonical_name is not None and canonical_name in sys.modules:
+				module = sys.modules[canonical_name]
+			elif plugin_name in sys.modules:
+				module = sys.modules[plugin_name]
+			else:
+				# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
+				module = importlib.util.module_from_spec(spec)
+				sys.modules[plugin_name] = module  # register before exec: needed for circular imports and inspect.getsource()
+				try:
+					spec.loader.exec_module(module)
+				except UnicodeDecodeError as e:
+					log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
+				except FileNotFoundError as e:
+					log.fatal('not_found', exc_info=e)
+				except IsADirectoryError as e:
+					log.fatal('is_directory', exc_info=e)
+				except PermissionError as e:
+					log.fatal('permission_denied', exc_info=e)
+				except OSError as e:
+					log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
+				except SyntaxError as e:
+					log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
+				except ValueError as e:
+					log.fatal('value_error', message=str(e), exc_info=e)
+				except TypeError as e:
+					log.fatal('type_error', message=str(e), exc_info=e)
+				except ModuleNotFoundError as e:
+					log.fatal('module_not_found', exc_info=e)
+				except ImportError as e:
+					log.fatal('import_error', module_name=e.name, module_path=e.path, exc_info=e)
+				except Exception as e:
+					log.fatal('exception', exc_info=e)
+
+			available_mods = dict(inspect.getmembers(module, inspect.isclass))
+
+			# Auto-discovery: exclude imported classes (foreign __module__) to avoid duplicate_definition.
+			to_get = [ PluginModuleConfig.from_class_name(n) for n, cls in available_mods.items() if cls.__module__ == module.__name__ ] if self.plugins is None else self.plugins
+			res = {}
+			for mod in to_get:
+				if mod.class_name in available_mods:
+					# Don't silently overwrite available mappings
+					if mod.name in res:
+						log.fatal('duplicate_key', key=mod.name)
+					res[mod.name] = available_mods[mod.class_name]
+				else:
+					log.fatal('missing_class', module=mod.name, class_name=mod.class_name)
+		finally:
+			unbind_contextvars('plugin', 'file')
+
+		return res
+
 @serde
 class PluginConfig:
 	"""Top-level manifest describing one plugin file collection.
@@ -121,105 +214,15 @@ class PluginConfig:
 
 	files: list[PluginFileConfig]
 
-# Actual load functions. Hierarchy: load_paths -> load_path -> load_plugin.
-def load_plugin(config:PluginFileConfig):
-	"""Load one plugin file and return its exported class mappings.
-
-	Args:
-		config: Manifest entry describing the plugin file and exported classes.
-
-	Returns:
-		Mapping from exported plugin name to loaded Python class.
-	"""
-
-	# Name plugin file based on file path without extension
-	plugin_name = Path(config.file).with_suffix('').as_posix().replace('/', '.') if config.name is None else config.name
-
-	# Bind some logging context
-	bind_contextvars(plugin=plugin_name, file=str(config.file))
-	try:
-		# Validate plugin file existence
-		if not config.file.is_file():
-			log.fatal('not_found')
-
-		# Do dynamic import of plugin file
-		spec = importlib.util.spec_from_file_location(plugin_name, config.file)
-		if spec is None:
-			log.fatal('spec.invalid')
-
-		if spec.loader is None:
-			log.fatal('spec.no_loader')
-
-		# Canonical name Python's machinery assigns; packages only — plain-dir stems collide with stdlib (e.g. "io").
-		plugin_file_dir = config.file.parent.resolve()
-		if (plugin_file_dir / '__init__.py').exists():
-			try:
-				canonical_name = config.file.resolve().relative_to(str(plugin_file_dir.parent)).with_suffix('').as_posix().replace('/', '.')
-			except ValueError:
-				canonical_name = None
-		else:
-			canonical_name = None
-
-		# Reuse if already loaded (e.g. as a transitive import); re-executing splits class identity.
-		if canonical_name is not None and canonical_name in sys.modules:
-			module = sys.modules[canonical_name]
-		elif plugin_name in sys.modules:
-			module = sys.modules[plugin_name]
-		else:
-			# All possible exceptions should have been covered by None checking, explicit string plugin_name and using spec_from_file_location
-			module = importlib.util.module_from_spec(spec)
-			sys.modules[plugin_name] = module  # register before exec: needed for circular imports and inspect.getsource()
-			try:
-				spec.loader.exec_module(module)
-			except UnicodeDecodeError as e:
-				log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
-			except FileNotFoundError as e:
-				log.fatal('not_found', exc_info=e)
-			except IsADirectoryError as e:
-				log.fatal('is_directory', exc_info=e)
-			except PermissionError as e:
-				log.fatal('permission_denied', exc_info=e)
-			except OSError as e:
-				log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
-			except SyntaxError as e:
-				log.fatal('syntax_error', filename=e.filename, lineno=e.lineno, offset=e.offset, text=e.text, end_lineno=e.end_lineno, end_offset=e.end_offset, exc_info=e)
-			except ValueError as e:
-				log.fatal('value_error', message=str(e), exc_info=e)
-			except TypeError as e:
-				log.fatal('type_error', message=str(e), exc_info=e)
-			except ModuleNotFoundError as e:
-				log.fatal('module_not_found', exc_info=e)
-			except ImportError as e:
-				log.fatal('import_error', module_name=e.name, module_path=e.path, exc_info=e)
-			except Exception as e:
-				log.fatal('exception', exc_info=e)
-
-		available_mods = dict(inspect.getmembers(module, inspect.isclass))
-
-		# Auto-discovery: exclude imported classes (foreign __module__) to avoid duplicate_definition.
-		to_get = [ PluginModuleConfig.from_class_name(n) for n, cls in available_mods.items() if cls.__module__ == module.__name__ ] if config.plugins is None else config.plugins
-		res = {}
-		for mod in to_get:
-			if mod.class_name in available_mods:
-				# Don't silently overwrite available mappings
-				if mod.name in res:
-					log.fatal('duplicate_key', key=mod.name)
-				res[mod.name] = available_mods[mod.class_name]
-			else:
-				log.fatal('missing_class', module=mod.name, class_name=mod.class_name)
-	finally:
-		unbind_contextvars('plugin', 'file')
-
-	return res
-
-def load_path(path:Path) -> dict:
-	"""Load every plugin exported from one configured path.
+# Actual load functions. Hierarchy: load_file_configs -> config.load(); load_paths -> load_path -> load_file_configs -> config.load().
+def resolve_path(path:Path) -> list[PluginFileConfig]:
+	"""Resolve one configured path into a list of plugin file configs without loading.
 
 	Args:
 		path: Path to a Python file or plugin directory.
 
 	Returns:
-		Mapping from exported plugin name to loaded Python class.
+		Plugin file configs discovered under path, deduplicated by resolved file path.
 	"""
 
 	bind_contextvars(file=str(path))
@@ -229,15 +232,14 @@ def load_path(path:Path) -> dict:
 	try:
 		if os.path.isfile(path): # Load directly if path is a file and not a dir
 			files = [PluginFileConfig(None, path, None, None)]
-			config = PluginConfig(files)
 		elif os.path.isfile(path / "config.yaml"): # Check for a config.yaml in dir
-			config = load_config_file(PluginConfig, path / 'config.yaml') # Let exceptions bubble up
-			for file in config.files:
-				file.file = path / file.file # Make path relative to script
+			plugin_config = load_config_file(PluginConfig, path / 'config.yaml') # Let exceptions bubble up
+			for file_config in plugin_config.files:
+				file_config.file = path / file_config.file # Make path relative to script
+			files = plugin_config.files
 		else:
 			# Recreate a dummy PluginFileConfig without any of the specifics
-			files = [ PluginFileConfig(None, file, None, None) for file in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
-			config = PluginConfig(files)
+			files = [ PluginFileConfig(None, p, None, None) for p in filter(lambda p: os.path.isfile(p) and p.suffix == '.py', map(lambda p: path / p, os.listdir(path))) ]
 	except UnicodeDecodeError as e:
 		log.fatal('invalid_unicode', file=str(path), reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
 	except FileNotFoundError as e:
@@ -251,23 +253,65 @@ def load_path(path:Path) -> dict:
 	finally:
 		unbind_contextvars('file')
 
-	# Allow plugin files to import siblings via Python's normal import machinery.
-	plugin_dir = path.parent.resolve() if os.path.isfile(path) else path.resolve()
-	sys_path_entry = str(plugin_dir.parent if (plugin_dir / '__init__.py').exists() else plugin_dir)
-	if sys_path_entry not in sys.path:
-		sys.path.insert(0, sys_path_entry)
+	seen: set[Path] = set()
+	result = []
+	for f in files:
+		resolved = f.file.resolve()
+		if resolved not in seen:
+			seen.add(resolved)
+			result.append(f)
+	return result
+
+def resolve_paths(paths:list[str]) -> list[PluginFileConfig]:
+	"""Resolve multiple configured path strings into a flat list of plugin file configs.
+
+	Args:
+		paths: Plugin file or directory paths to resolve.
+
+	Returns:
+		Flat list of plugin file configs from all paths, with duplicate path strings skipped.
+	"""
+
+	result = []
+	seen: set[str] = set()
+	for path in paths:
+		if path not in seen:
+			seen.add(path)
+			result.extend(resolve_path(Path(path)))
+
+	return result
+
+def load_file_configs(configs:list[PluginFileConfig]) -> dict:
+	"""Load and merge plugins from a list of resolved plugin file configs.
+
+	Args:
+		configs: Plugin file configs to load.
+
+	Returns:
+		Merged mapping from exported plugin name to loaded Python class.
+	"""
 
 	# Load each file and then merge into a single map
 	res = {}
-	for file_config in config.files:
-		file_plugins = load_plugin(file_config)
-		for (name, plugin) in file_plugins.items():
+	for config in configs:
+		for (name, plugin) in config.load().items():
 			if name in res:
-				log.fatal('duplicate_definition', file=str(file_config.file), key=name)
+				log.fatal('duplicate_definition', file=str(config.file), key=name)
 			else:
 				res[name] = plugin
-
 	return res
+
+def load_path(path:Path) -> dict:
+	"""Load every plugin exported from one configured path.
+
+	Args:
+		path: Path to a Python file or plugin directory.
+
+	Returns:
+		Mapping from exported plugin name to loaded Python class.
+	"""
+
+	return load_file_configs(resolve_path(path))
 
 def load_paths(paths:list[Path]) -> dict:
 	"""Load and merge plugins from multiple configured paths.

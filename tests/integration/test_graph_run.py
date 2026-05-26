@@ -1,18 +1,18 @@
 """Integration tests: full Graph.from_config → Graph.run path."""
 
 import textwrap
+from pathlib import Path
 
 import pytest
 
-from rtl_comrade.config import (
-	GraphConfig,
-	GraphConfigDstPort,
-	GraphConfigEdge,
-	GraphConfigNode,
-	GraphConfigSrcCLI,
-	GraphConfigSrcPort,
-)
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
+from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
+from rtl_comrade.loader import PluginFileConfig
+
+
+def _pfc(path) -> PluginFileConfig:
+	return PluginFileConfig(name=None, file=Path(path), type_=None, plugins=None)
 
 
 # ---------------------------------------------------------------------------
@@ -97,7 +97,7 @@ def test_it1_linear(logging_handler, tmp_path):
 			_edge("gen", "double"),
 			_edge("double", "collect"),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -168,8 +168,8 @@ def test_it2_fan_in(logging_handler, tmp_path):
 			_edge("src_b", "add", dst_port=2),
 			_edge("add", "collect"),
 		],
-		modules=[str(tmp_path / "mods.py")],
-		contracts=[str(tmp_path / "contracts.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
+		contracts=[_pfc(tmp_path / "contracts.py")],
 	)
 	_run_graph(config)
 	assert SIDE_CHANNEL == [11, 22]
@@ -214,7 +214,7 @@ def test_it3_sentinel_propagation(logging_handler, tmp_path):
 			_edge("gen", "pt"),
 			_edge("pt", "collect"),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -250,7 +250,7 @@ def test_it4_source_only_runs_once(logging_handler, tmp_path):
 			_node("collect", "collect"),
 		],
 		edges=[_edge("counter", "collect")],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -295,7 +295,7 @@ def test_it5_default_input(logging_handler, tmp_path):
 			_edge("src", "adder", dst_port=1),
 			_edge("adder", "collect"),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -351,7 +351,7 @@ def test_it6_persistent_input(logging_handler, tmp_path):
 			_edge("mul_src", "accumulate", dst_port=2),
 			_edge("accumulate", "collect"),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -400,7 +400,7 @@ def test_it7_named_port_routing(logging_handler, tmp_path):
 			_edge("router", "collect_odd", src_port="odd"),
 			_edge("router", "collect_even", src_port="even"),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -441,7 +441,7 @@ def test_it8_async_module(logging_handler, tmp_path):
 			_node("collect", "collect"),
 		],
 		edges=[_edge("async_gen", "collect")],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -475,7 +475,7 @@ def test_it9_module_exception(logging_handler, tmp_path):
 			_node("collect", "collect"),
 		],
 		edges=[_edge("crasher", "collect")],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	with pytest.raises(SystemExit):
@@ -514,7 +514,7 @@ def test_it10_module_error_deferred(logging_handler, tmp_path):
 			_node("collect", "collect"),
 		],
 		edges=[_edge("errorer", "collect")],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -597,7 +597,7 @@ def test_it14_dst_port_by_index(logging_handler, tmp_path):
 			_edge("src", "sink", dst_port=2),  # integer index
 			_edge("fill", "sink", dst_port=1),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -634,7 +634,7 @@ def test_it15_non_definite_emits(logging_handler, tmp_path):
 			_node("collect", "collect"),
 		],
 		edges=[_edge("dyn_src", "collect")],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
 	_run_graph(config)
@@ -660,7 +660,7 @@ def test_it16_cli_option(logging_handler, tmp_path):
     """,
 	)
 
-	config = GraphConfig(
+	config = GraphFileConfig(
 		nodes=[_node("collect", "collect")],
 		edges=[
 			GraphConfigEdge(
@@ -670,7 +670,7 @@ def test_it16_cli_option(logging_handler, tmp_path):
 		],
 		modules=[str(tmp_path / "mods.py")],
 	)
-	graph = Graph.from_config(config)
+	graph = Graph.from_config(GraphConfig.from_file_config(config))
 	graph.construct_run(lambda: None)(value=99)
 	assert SIDE_CHANNEL == [99]
 	assert logging_handler.failure is False
@@ -692,7 +692,7 @@ def test_it17_missing_cli_kwarg(logging_handler, tmp_path):
     """,
 	)
 
-	config = GraphConfig(
+	config = GraphFileConfig(
 		nodes=[_node("collect", "collect")],
 		edges=[
 			GraphConfigEdge(
@@ -702,7 +702,7 @@ def test_it17_missing_cli_kwarg(logging_handler, tmp_path):
 		],
 		modules=[str(tmp_path / "mods.py")],
 	)
-	graph = Graph.from_config(config)
+	graph = Graph.from_config(GraphConfig.from_file_config(config))
 	graph.construct_run(lambda: None)()  # 'value' kwarg absent
 	assert logging_handler.failure is True
 
@@ -723,7 +723,7 @@ def test_it18_blank_cli_name(logging_handler, tmp_path):
     """,
 	)
 
-	config = GraphConfig(
+	config = GraphFileConfig(
 		nodes=[_node("collect", "collect")],
 		edges=[
 			GraphConfigEdge(
@@ -734,7 +734,7 @@ def test_it18_blank_cli_name(logging_handler, tmp_path):
 		modules=[str(tmp_path / "mods.py")],
 	)
 	with pytest.raises(SystemExit):
-		Graph.from_config(config)
+		Graph.from_config(GraphConfig.from_file_config(config))
 
 
 # ---------------------------------------------------------------------------
@@ -753,7 +753,7 @@ def test_it19_duplicate_cli_name(logging_handler, tmp_path):
     """,
 	)
 
-	config = GraphConfig(
+	config = GraphFileConfig(
 		nodes=[
 			_node("collect1", "collect"),
 			_node("collect2", "collect"),
@@ -771,4 +771,4 @@ def test_it19_duplicate_cli_name(logging_handler, tmp_path):
 		modules=[str(tmp_path / "mods.py")],
 	)
 	with pytest.raises(SystemExit):
-		Graph.from_config(config)
+		Graph.from_config(GraphConfig.from_file_config(config))

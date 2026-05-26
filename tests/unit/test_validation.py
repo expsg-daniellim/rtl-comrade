@@ -3,13 +3,8 @@
 from collections import OrderedDict
 from unittest.mock import MagicMock
 
-from rtl_comrade.config import (
-	GraphConfig,
-	GraphConfigEdge,
-	GraphConfigNode,
-	GraphConfigSrcPort,
-	GraphConfigDstPort,
-)
+from rtl_comrade.config import GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort, GraphConfigDstPort
+from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 from rtl_comrade.port import Port
 from rtl_comrade.validation import (
