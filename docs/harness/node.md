@@ -43,7 +43,7 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 When a node is created, it first inspects the module class constructor with `inspect.signature(...)`.
 
 - If module `__init__` accepts `config`, the node passes the graph node's `config`.
-- If the module defines a nested `Config` type, that config is deserialized through `serde.from_dict(...)` before being passed in.
+- If the module defines a nested `Config` type, that config is deserialized through `serde.from_dict(...)` before being passed in. After deserialization, any `Path`-typed field that is not absolute and whose first path component is `{graph}` is replaced with `relative_path / <remaining components>`, where `relative_path` is the directory of the graph YAML file passed to `Node` by `Graph.from_config`. This allows module configs to reference files relative to the graph file using the `{graph}` prefix.
 - If module `__init__` accepts `id`, the node passes `<node-id>.module`.
 - If neither `config` nor `id` is accepted, the module is instantiated with no harness-injected arguments.
 
@@ -111,7 +111,7 @@ After the loop exits:
 
 `finalise` exceptions are treated as fatal — same path as unhandled exceptions in `run(...)`. It supports the same output dispatch as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator — all normalized through `process_result(...)`.
 
-## Important Details
+## Key Behaviors
 
 - module `__init__` may receive `config` and/or `id`
 - contract `__init__` may receive `config`, `id`, and/or `ports`

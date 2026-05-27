@@ -1,20 +1,20 @@
 contracts:
-- "contracts"
+- "../contracts"
 modules:
-- "modules"
+- "../modules"
 nodes:
 - id: file-1
   module: fileread
   config:
-    file: "file1.txt"
+    file: "../file1.txt"
 - id: file-2
   module: fileread
   config:
-    file: "file2.txt"
+    file: "../file2.txt"
 - id: config
   module: fileread
   config:
-    file: "config.txt"
+    file: "../config.txt"
 - id: alu
   module: alu
   contract_config:

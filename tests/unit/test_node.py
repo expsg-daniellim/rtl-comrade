@@ -1,6 +1,7 @@
 """Unit tests for node.py — Node construction, get_canonical_port, accept, process_result, run."""
 
 import inspect
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -230,6 +231,20 @@ class _CrashGetInputsContract:
 		raise RuntimeError("deliberate crash in get_inputs")
 
 
+class _ModuleWithPathConfig:
+	from serde import serde as _serde  # pylint: disable=import-outside-toplevel
+
+	@_serde  # pylint: disable=undefined-variable
+	class Config:
+		file: Path
+
+	def __init__(self, config):
+		self.cfg = config
+
+	def run(self):
+		return None
+
+
 def _make_node(Module, config=None, Contract=None, contract_config=None):
 	if config is None:
 		config = {}
@@ -263,6 +278,40 @@ def test_init_config_no_config_class_warns(logging_handler):
 def test_init_config_with_config_class(logging_handler):
 	node = _make_node(_ModuleWithConfigClass, config={"value": 7})
 	assert node.module.cfg.value == 7
+
+
+def test_init_graph_sentinel_path_resolved_against_relative_path(logging_handler, tmp_path):
+	node = Node(
+		id="test_node",
+		Module=_ModuleWithPathConfig,
+		config={"file": "{graph}/data.txt"},
+		Contract=DefaultContract,
+		relative_path=tmp_path,
+	)
+	assert node.module.cfg.file == tmp_path / "data.txt"
+
+
+def test_init_absolute_path_config_not_modified_by_relative_path(logging_handler, tmp_path):
+	abs_file = tmp_path / "data.txt"
+	node = Node(
+		id="test_node",
+		Module=_ModuleWithPathConfig,
+		config={"file": str(abs_file)},
+		Contract=DefaultContract,
+		relative_path=Path("/some/other/dir"),
+	)
+	assert node.module.cfg.file == abs_file
+
+
+def test_init_relative_path_config_without_sentinel_not_modified(logging_handler, tmp_path):
+	node = Node(
+		id="test_node",
+		Module=_ModuleWithPathConfig,
+		config={"file": "relative/path.txt"},
+		Contract=DefaultContract,
+		relative_path=tmp_path,
+	)
+	assert node.module.cfg.file == Path("relative/path.txt")
 
 
 def test_init_module_receives_id(logging_handler):

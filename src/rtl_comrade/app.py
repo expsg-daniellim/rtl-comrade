@@ -30,6 +30,7 @@ class CommandConfig:
 @serde
 class RtlComradeConfig:
 	commands: dict[str, CommandConfig]
+	relative_path: Path = field(default=Path(), skip=True)
 
 # Ascend until repo root or filesystem root or config is found
 def search_for_config(name:str, path:Path) -> RtlComradeConfig|None:
@@ -39,14 +40,18 @@ def search_for_config(name:str, path:Path) -> RtlComradeConfig|None:
 			if child.is_dir() and child.name == ".git":
 				is_git_top = True
 			if child.is_file() and child.name == name:
-				return from_yaml(RtlComradeConfig, child.read_text())
+				config = from_yaml(RtlComradeConfig, child.read_text())
+				config.relative_path = path
+				return config
 
 		if is_git_top or path.parent == path:
 			return None
 		else:
 			return search_for_config(name, path.parent)
 	elif path.name == name:
-		return from_yaml(RtlComradeConfig, path.read_text())
+		config = from_yaml(RtlComradeConfig, path.read_text())
+		config.relative_path = path
+		return config
 	else:
 		return None
 
@@ -69,11 +74,9 @@ class App:
 		# Initialise CLI app
 		self.app = typer.Typer(no_args_is_help=True, invoke_without_command=True, callback=self.main)
 
-		# TODO: normalise config paths (relative to config, not runner)
-
 		for (name, command) in config.commands.items():
 			try:
-				config = GraphConfig.from_file(command.path)
+				graph_config = GraphConfig.from_file(config.relative_path / command.path)
 			except UnicodeDecodeError as e:
 				log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
 			except FileNotFoundError as e:
@@ -99,7 +102,7 @@ class App:
 				log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
 			# Register command
-			self.app.command(name, help=command.help, no_args_is_help=len(config.sig.parameters) > 0)(Graph.construct_run(config, self.cleanup))
+			self.app.command(name, help=command.help, no_args_is_help=len(graph_config.sig.parameters) > 0)(Graph.construct_run(graph_config, self.cleanup))
 
 	# Dummy callback to reflect variables read by argparse into typer
 	def main(self, ctx:typer.Context, config_file:Annotated[str, typer.Option(help="File name of config file defining command/graphs.")]=DEFAULT_RTL_COMRADE_CONFIG_NAME, level:Annotated[Literal[*list(LOGGING_LEVELS.keys())], typer.Option(case_sensitive=False, help="Logging level.")]="info"):

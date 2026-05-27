@@ -2,6 +2,7 @@
 
 import inspect
 import logging
+from pathlib import Path
 import sys
 from unittest.mock import MagicMock, patch
 
@@ -117,6 +118,30 @@ def test_search_config_help_field_parsed(tmp_path):
 	assert result.commands["run"].help == "Run the ALU graph"
 
 
+def test_search_sets_relative_path_to_containing_dir(tmp_path):
+	(tmp_path / DEFAULT_RTL_COMRADE_CONFIG_NAME).write_text(MINIMAL_CONFIG_YAML)
+	result = search_for_config(DEFAULT_RTL_COMRADE_CONFIG_NAME, tmp_path)
+	assert result is not None
+	assert result.relative_path == tmp_path
+
+
+def test_search_ascended_sets_relative_path_to_parent_dir(tmp_path):
+	child = tmp_path / "child"
+	child.mkdir()
+	(tmp_path / DEFAULT_RTL_COMRADE_CONFIG_NAME).write_text(MINIMAL_CONFIG_YAML)
+	result = search_for_config(DEFAULT_RTL_COMRADE_CONFIG_NAME, child)
+	assert result is not None
+	assert result.relative_path == tmp_path
+
+
+def test_search_file_path_match_sets_relative_path_to_file(tmp_path):
+	f = tmp_path / "custom.yaml"
+	f.write_text(MINIMAL_CONFIG_YAML)
+	result = search_for_config("custom.yaml", f)
+	assert result is not None
+	assert result.relative_path == f
+
+
 # ---------------------------------------------------------------------------
 # App — startup
 # ---------------------------------------------------------------------------
@@ -154,7 +179,7 @@ def test_app_custom_config_file_loaded(tmp_path, monkeypatch):
 		 patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()) as mock_from_file, \
 		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup):
 		App()
-	mock_from_file.assert_called_once_with("my_graph.yaml")
+	mock_from_file.assert_called_once_with(tmp_path / "my_graph.yaml")
 
 
 # ---------------------------------------------------------------------------
@@ -187,7 +212,7 @@ def test_app_subcommand_calls_graph_from_file():
 		 patch("rtl_comrade.app.search_for_config", return_value=MINIMAL_CONFIG), \
 		 patch.object(sys, "argv", ["rtl-comrade"]):
 		App()
-	mock_from_file.assert_called_once_with("graphs/test.yaml")
+	mock_from_file.assert_called_once_with(Path("graphs/test.yaml"))
 
 
 def test_app_unknown_subcommand_exits_nonzero():

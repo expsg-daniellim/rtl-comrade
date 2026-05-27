@@ -53,7 +53,7 @@ commands:
     help: "optional help string"
 ```
 
-Graph paths are resolved relative to the runner's working directory, not relative to the config file's location.
+Graph paths are resolved relative to the config file's directory.
 
 See `docs/harness_configs/rtl_comrade_config.md` for the full config file format, and `docs/harness_configs/graph.md` for the graph YAML format.
 

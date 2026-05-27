@@ -18,11 +18,11 @@ This file handles two related harness jobs:
 
 ## Main Responsibilities
 
-- load YAML files with shared error handling
+- load YAML files with shared error handling (`load_config_file(Config, path, parent)` opens `parent / path`, defaulting `parent` to `Path()`)
 - parse plugin-folder manifests
 - import plugin modules dynamically from file paths
 - expose exported plugin classes under graph-visible names
-- normalize file paths relative to a plugin folder manifest
+- normalize file paths relative to a plugin folder manifest or a caller-supplied `relative_path`
 - register imported modules in `sys.modules`
 
 ## Place In The System
@@ -30,6 +30,14 @@ This file handles two related harness jobs:
 This is the harness discovery layer. `graph.py` relies on it to turn configured plugin paths into module and contract class mappings.
 
 It also participates in the harness fail-fast boundary: invalid files, invalid manifests, and broken imports are intended to stop bad graphs before execution starts.
+
+## Key Behaviors
+
+- plugin loading is split into resolution (`load_plugin_config`, `load_plugin_configs`) and import (`load_plugins`) so callers can inspect the file list before any Python is executed
+- the optional `relative_path` argument to resolution functions prepends a base directory so callers can supply paths from a config file's directory without adjusting the raw path strings
+- the optional `parent` argument to `load_config_file` opens `parent / path`, keeping YAML paths relative to the config file that contains them
+- duplicate file paths within a single resolution call are deduplicated by resolved path; duplicate path strings across a `load_plugin_configs` call are skipped
+- fatal-level logging is used deliberately for invalid files, manifests, and import errors so bad graphs are stopped before execution begins
 
 ## Supported Plugin Layouts
 
@@ -49,12 +57,12 @@ A manifest can:
 
 Plugin loading is split into resolution and loading:
 
-1. **Resolution** (`resolve_path`, `resolve_paths`) — filesystem-only: discovers which Python files belong to a configured path and returns `list[PluginFileConfig]`. No Python is imported. Duplicate file paths within a single `resolve_path` call are deduplicated by resolved path. Duplicate path strings across a `resolve_paths` call are also skipped.
-2. **Loading** (`PluginFileConfig.load`, `load_file_configs`) — imports each plugin file and returns a `dict[str, type]` mapping exported name to class.
+1. **Resolution** (`load_plugin_config(path, relative_path)`, `load_plugin_configs(paths, relative_path)`) — filesystem-only: discovers which Python files belong to a configured path and returns `list[PluginFileConfig]`. No Python is imported. The optional `relative_path` argument is prepended to the given path before any filesystem access, so callers can supply paths relative to a config file's directory. Duplicate file paths within a single `load_plugin_config` call are deduplicated by resolved path. Duplicate path strings across a `load_plugin_configs` call are also skipped.
+2. **Loading** (`PluginFileConfig.load`, `load_plugins(configs)`) — imports each plugin file and returns a `dict[str, type]` mapping exported name to class.
 
-`GraphConfig.from_file_config` calls `resolve_paths` on the raw path strings from `GraphFileConfig`; actual class loading happens later in `Graph.from_config`.
+`GraphConfig.from_file_config` calls `load_plugin_configs` on the raw path strings from `GraphFileConfig`, passing the graph file's parent directory as `relative_path`; actual class loading happens later in `Graph.from_config`.
 
-Call hierarchy: `load_file_configs` → `config.load()`. The legacy entry points `load_path` and `load_paths` are still available and compose `resolve_path` + `load_file_configs` internally.
+Call hierarchy: `load_plugins` → `config.load()`.
 
 ## Cross-file imports
 

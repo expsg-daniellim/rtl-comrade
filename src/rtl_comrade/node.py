@@ -3,6 +3,7 @@
 from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
+from pathlib import Path
 import inspect
 from typing import Any, cast
 
@@ -36,7 +37,7 @@ class Connection:
 class Node:
 	"""A live runtime node binding together a module, contract, and input ports."""
 
-	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None):  # pylint: disable=redefined-builtin
+	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None, relative_path:Path=Path()):  # pylint: disable=redefined-builtin
 		"""Instantiate one runtime node from module and contract classes.
 
 		Args:
@@ -66,6 +67,11 @@ class Node:
 			if hasattr(Module, 'Config'):
 				try:
 					config = from_dict(Module.Config, config)
+
+					# Relativise config paths (if not absolute)
+					for (attr, val) in [ (attr, getattr(config, attr)) for attr in dir(config) if not callable(getattr(config, attr)) and not (attr.startswith('__') and attr.endswith('__')) ]:
+						if isinstance(val, Path) and not val.is_absolute() and val.parts[0] == '{graph}':
+							setattr(config, attr, relative_path / Path(*val.parts[1:]))
 				except SerdeError as e:
 					log.fatal('config.deserialise.serde_error', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
 				except UserError as e:

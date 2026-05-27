@@ -278,12 +278,13 @@ The sample modules show both styles:
 The current file reader module shows the intended pattern:
 
 ```python
+from pathlib import Path
 from serde import serde
 
 class FileReadMod:
     @serde
     class Config:
-        file: str
+        file: Path
 
     def __init__(self, config):
         self.file = config.file
@@ -299,6 +300,7 @@ Key points:
 - the module defines a nested `Config`
 - `__init__` accepts `config`
 - the harness deserializes node config before construction
+- declaring a config field as `Path` (rather than `str`) enables the `{graph}` prefix in the graph YAML, which the harness resolves to the graph file's directory at construction time (see [docs/harness_configs/graph.md](../harness_configs/graph.md))
 
 ## Minimal Stateless Module Example
 

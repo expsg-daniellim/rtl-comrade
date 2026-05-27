@@ -1,3 +1,4 @@
+from pathlib import Path
 from serde import serde
 import structlog
 
@@ -7,7 +8,7 @@ log = structlog.get_logger()
 class FileReadMod:
 	@serde
 	class Config:
-		file: str
+		file: Path
 
 	def __init__(self, config):
 		self.file = config.file

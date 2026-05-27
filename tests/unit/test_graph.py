@@ -1,5 +1,6 @@
 """Unit tests for graph.py — Graph.from_config validation."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -100,7 +101,7 @@ def _from_config(config):
 			return _MODULE_MAP
 		return {}  # contract load returns empty
 
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		return Graph.from_config(config)
 
 
@@ -114,7 +115,7 @@ def _from_config_with_contracts(config):
 			return _MODULE_MAP
 		return _CONTRACT_MAP
 
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		return Graph.from_config(config)
 
 
@@ -139,6 +140,16 @@ def test_duplicate_node_id_fatal(logging_handler):
 			nodes=[GraphConfigNode(id="n1", module="source_mod"), GraphConfigNode(id="n1", module="sink_mod")],
 			edges=[],
 		))
+
+
+def test_from_file_config_stores_relative_path(logging_handler, tmp_path):
+	result = GraphConfig.from_file_config(GraphFileConfig(nodes=[], edges=[]), relative_path=tmp_path)
+	assert result.relative_path == tmp_path
+
+
+def test_from_file_config_default_relative_path_is_empty_path(logging_handler):
+	result = GraphConfig.from_file_config(GraphFileConfig(nodes=[], edges=[]))
+	assert result.relative_path == Path()
 
 
 # --- Edge construction errors ---
@@ -205,7 +216,7 @@ def test_unused_edge_warns(logging_handler):
 		nodes=[GraphConfigNode(id="sink", module="default_sink")],
 		edges=[GraphConfigEdge(src=GraphConfigSrcPort(node="nonexistent_src"), dst=GraphConfigDstPort(node="sink"))],
 	))
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		graph = Graph.from_config(graph_config)
 	assert "sink" in graph.nodes
 
@@ -286,7 +297,7 @@ def test_dst_port_by_index_resolves(logging_handler):
 		],
 		[_edge("src", "default", "sink", 2), _edge("src2", "default", "sink", 1)],
 	)
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		graph = Graph.from_config(config)
 	src_node = graph.nodes["src"]
 	assert src_node.dsts is not None
@@ -316,7 +327,7 @@ def test_yield_from_non_definite_emits_warns(logging_handler):
 		[_node("src", "yield_from_mod"), _node("sink", "sink_mod")],
 		[_edge("src", "someport", "sink", 1)],
 	)
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		graph = Graph.from_config(config)
 	assert "src" in graph.nodes
 	assert logging_handler.failure is False
@@ -336,7 +347,7 @@ def test_module_plugin_missing_run_fatal(logging_handler):
 		return {"no_run_mod": _NoRunModule} if call_count[0] == 1 else {}
 
 	config = _make_config([_node("n1", "no_run_mod")], [])
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)
 
@@ -353,7 +364,7 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 		return _MODULE_MAP if call_count[0] == 1 else {"bad_contract": _NoGetInputsContract}
 
 	config = _make_config([_node("n1", "source_mod", contract="bad_contract")], [])
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)
 
@@ -412,6 +423,6 @@ def test_no_source_capable_node_detected(logging_handler):
 		[_node("a", "cycle_mod"), _node("b", "cycle_mod")],
 		[_edge("a", "default", "b", 1)],
 	)
-	with patch("rtl_comrade.graph.load_file_configs", side_effect=side_effect):
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		with pytest.raises(SystemExit):
 			Graph.from_config(config)

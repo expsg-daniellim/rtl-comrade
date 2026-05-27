@@ -1,7 +1,7 @@
 contracts:
-- "contracts"
+- "../contracts"
 modules:
-- "modules"
+- "../modules"
 nodes:
 - id: file
   module: fileread

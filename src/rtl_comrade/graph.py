@@ -11,7 +11,7 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config_graph import GraphConfig
 from .contract_default import DefaultContract
-from .loader import load_file_configs
+from .loader import load_plugins
 from .logging import HarnessLogger
 from .module_cli import ModuleCLI
 from .node import Connection, Node
@@ -56,11 +56,11 @@ class Graph:
 
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
-		module_mappings = load_file_configs(config.modules)
+		module_mappings = load_plugins(config.modules)
 		unbind_contextvars('context')
 
 		bind_contextvars(context='harness.load.contract')
-		contract_mappings = load_file_configs(config.contracts)
+		contract_mappings = load_plugins(config.contracts)
 		unbind_contextvars('context')
 
 		contract_mappings['default'] = DefaultContract
@@ -89,7 +89,7 @@ class Graph:
 
 			if not has_error:
 				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-				graph.nodes[node.id] = Node(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config)
+				graph.nodes[node.id] = Node(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path)
 			else:
 				errors = True
 

@@ -15,7 +15,7 @@ nodes:      # list of node definitions
 edges:      # list of directed connections between node ports
 ```
 
-`modules` and `contracts` are paths to plugin directories. Each directory is resolved relative to the runner's working directory and must contain either a `config.yaml` manifest or one or more `.py` files for auto-discovery. See `docs/harness_configs/plugin_manifest.md`.
+`modules` and `contracts` are paths to plugin directories. Each directory is resolved relative to the graph YAML file's own directory and must contain either a `config.yaml` manifest or one or more `.py` files for auto-discovery. See `docs/harness_configs/plugin_manifest.md`.
 
 ## Node definition
 
@@ -29,6 +29,17 @@ nodes:
   contract_config:           # optional — passed to contract __init__ as config
     key: value
 ```
+
+### Path-relative config values
+
+If a module's `Config` class contains a `Path`-typed field, its value in the graph YAML can use `{graph}` as the first path component to resolve it relative to the graph file's directory:
+
+```yaml
+config:
+  file: "{graph}/data/input.txt"
+```
+
+The harness replaces `{graph}` with the graph file's parent directory at node construction time. Plain relative paths (without `{graph}`) are left unchanged and will be resolved relative to the runner's working directory when the module opens them.
 
 ## Edge definition
 

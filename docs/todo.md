@@ -8,6 +8,4 @@
 
 ## Harness
 
-- **Normalise config paths** — graph paths in `rtl_comrade_config.yaml` are resolved relative to the runner's working directory, not relative to the config file's location. (`src/rtl_comrade/app.py:70`)
-
 - **Debug logging in `__main__.py`** — noted as a TODO with no further detail. (`src/rtl_comrade/__main__.py:5`)

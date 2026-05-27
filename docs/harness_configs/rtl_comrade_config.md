@@ -11,7 +11,7 @@ The harness searches for this file by ascending the directory tree from the curr
 ```yaml
 commands:
   <name>:
-    path: <str>      # required — path to the graph YAML, relative to the runner's cwd
+    path: <str>      # required — path to the graph YAML, relative to this config file's directory
     help: <str>      # optional — help string shown in --help output
 ```
 
@@ -32,5 +32,4 @@ Running `uv run rtl-comrade add` loads `graphs/graph2.yaml` and executes it.
 
 ## Notes
 
-- Graph paths are resolved relative to the runner's working directory, not relative to the config file's location.
 - Subcommands currently have no additional options beyond those defined on the top-level CLI.

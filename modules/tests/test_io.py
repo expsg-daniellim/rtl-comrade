@@ -29,7 +29,7 @@ async def test_fileread_yields_lines(tmp_path):
 		FileReadMod,
 		input_sequence=[{}],
 		expected_emissions={"default": ["hello\n", "world\n"]},
-		config=FileReadMod.Config(file=str(f)),
+		config=FileReadMod.Config(file=f),
 	)
 
 
@@ -40,7 +40,7 @@ async def test_fileread_single_line_no_trailing_newline(tmp_path):
 		FileReadMod,
 		input_sequence=[{}],
 		expected_emissions={"default": ["only line"]},
-		config=FileReadMod.Config(file=str(f)),
+		config=FileReadMod.Config(file=f),
 	)
 
 
@@ -51,7 +51,7 @@ async def test_fileread_empty_file(tmp_path):
 		FileReadMod,
 		input_sequence=[{}],
 		expected_emissions={},
-		config=FileReadMod.Config(file=str(f)),
+		config=FileReadMod.Config(file=f),
 	)
 
 
@@ -61,7 +61,7 @@ async def test_fileread_not_found(logging_handler):
 			FileReadMod,
 			input_sequence=[{}],
 			expected_emissions={},
-			config=FileReadMod.Config(file="/nonexistent/path/file.txt"),
+			config=FileReadMod.Config(file=Path("/nonexistent/path/file.txt")),
 		)
 
 
@@ -71,7 +71,7 @@ async def test_fileread_is_directory(logging_handler, tmp_path):
 			FileReadMod,
 			input_sequence=[{}],
 			expected_emissions={},
-			config=FileReadMod.Config(file=str(tmp_path)),
+			config=FileReadMod.Config(file=tmp_path),
 		)
 
 
@@ -83,7 +83,7 @@ async def test_fileread_unicode_error(logging_handler, tmp_path):
 			FileReadMod,
 			input_sequence=[{}],
 			expected_emissions={},
-			config=FileReadMod.Config(file=str(f)),
+			config=FileReadMod.Config(file=f),
 		)
 
 
@@ -96,7 +96,7 @@ async def test_fileread_os_error(logging_handler, tmp_path):
 				FileReadMod,
 				input_sequence=[{}],
 				expected_emissions={},
-				config=FileReadMod.Config(file=str(f)),
+				config=FileReadMod.Config(file=f),
 			)
 
 
@@ -110,7 +110,7 @@ async def test_fileread_permission_denied(logging_handler, tmp_path):
 				FileReadMod,
 				input_sequence=[{}],
 				expected_emissions={},
-				config=FileReadMod.Config(file=str(f)),
+				config=FileReadMod.Config(file=f),
 			)
 	finally:
 		f.chmod(0o644)

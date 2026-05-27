@@ -13,10 +13,29 @@ This file defines `GraphConfig`, the normalised intermediate type that sits betw
 - [graph.md](graph.md)
 - [loader.md](loader.md)
 
+## Main Responsibilities
+
+- deserialise a `GraphFileConfig` into a `GraphConfig` via `from_file_config`
+- resolve plugin paths relative to the graph file's directory
+- validate graph structure before any plugin classes are loaded
+- normalise CLI edges into a single `sig` and `cli_srcs`
+- store `relative_path` for downstream use by `Node`
+
+## Place In The System
+
+`GraphConfig` is the intermediate between the YAML-backed `GraphFileConfig` and the fully-live `Graph`. It owns all structural checks that can be performed from config data alone, before any Python is imported.
+
+## Key Behaviors
+
+- structural validation is front-loaded in `from_file_config` so bad graphs are rejected before plugin classes are imported
+- CLI edges are converted to synthetic node IDs (`cli-{name}`) so `Graph.from_config` sees a uniform edge list
+- `relative_path` flows through to each `Node` so module configs can use the `{graph}` prefix at construction time (see [node.md](node.md))
+- unused source edges emit a warning and are retained, not dropped, so misconfigured graphs don't silently discard intended connections
+
 ## Key Entry Points
 
-- `GraphConfig.from_file(path)`: load a graph YAML file and produce a `GraphConfig`; called by `app.py` at startup for each registered command
-- `GraphConfig.from_file_config(file_config)`: normalise an already-deserialized `GraphFileConfig` into a `GraphConfig`; called by `from_file` and directly in tests
+- `GraphConfig.from_file(path)`: load a graph YAML file and produce a `GraphConfig`; called by `app.py` at startup for each registered command. Passes `Path(path).parent` as `relative_path` to `from_file_config`.
+- `GraphConfig.from_file_config(file_config, relative_path=Path())`: normalise an already-deserialized `GraphFileConfig` into a `GraphConfig`; called by `from_file` and directly in tests. The `relative_path` argument is forwarded to `load_plugin_configs` for plugin discovery and stored on the returned `GraphConfig`.
 
 ## Main Types
 
@@ -27,10 +46,11 @@ This file defines `GraphConfig`, the normalised intermediate type that sits betw
 Produced by `GraphConfig.from_file_config(file_config)`. Not serde-backed; constructed programmatically.
 
 - `nodes`: copied unchanged from `GraphFileConfig`
-- `modules`, `contracts`: `list[PluginFileConfig]` — produced by calling `resolve_paths` on the raw path strings from `GraphFileConfig`; see [loader.md](loader.md) for resolution semantics
+- `modules`, `contracts`: `list[PluginFileConfig]` — produced by calling `load_plugin_configs(paths, relative_path)` on the raw path strings from `GraphFileConfig`; plugin paths in the YAML are therefore resolved relative to the graph file's directory. See [loader.md](loader.md) for resolution semantics.
 - `edges`: only `GraphConfigSrcPort` sources; `GraphConfigSrcCLI` edges from `GraphFileConfig` are replaced with equivalent `GraphConfigSrcPort` edges pointing to synthetic `cli-{name}` node ids
 - `cli_srcs`: `list[tuple[str, GraphConfigSrcCLI]]` — one entry per original CLI edge, in declaration order; each tuple is `(port_name, src)` where `port_name` is the synthetic node id (`cli-{src.cli}`) used in both the replacement edge and the virtual `Node` created by `Graph.from_config`
 - `sig`: `inspect.Signature` built from the CLI sources; consumed by `Graph.construct_run` to expose a typer-compatible function signature
+- `relative_path`: the directory of the graph YAML file; forwarded to each `Node` by `Graph.from_config` so module configs can use the `{graph}` path prefix (see [node.md](node.md))
 
 ## Validation in `from_file_config`
 
@@ -45,3 +65,8 @@ Produced by `GraphConfig.from_file_config(file_config)`. Not serde-backed; const
 - **Cycle**: calls `validate_acyclic(nodes, edges)` on the node and edge lists; see [validation.md](validation.md)
 
 Checks that require loaded plugin classes (invalid module/contract names, invalid port names, deadlock) are deferred to `Graph.from_config`; see [graph.md](graph.md).
+
+## Caveats
+
+- checks that require loaded plugin classes (invalid module/contract names, invalid port names, deadlock) are deferred to `Graph.from_config`; a graph can pass `from_file_config` and still fail at runtime construction
+- the parameter names in `sig` and the `cli_node.module.cli` values used for kwarg lookup in `Graph.construct_run` both derive from the CLI edge `cli` field but are set in separate places; if parameter name derivation ever changes here, `construct_run` must be updated to match or kwarg lookup will silently fail

@@ -25,7 +25,7 @@ log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 CAMEL_CASE_RE = re.compile(r"(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 # Helper to have a common place to catch/log config file errors.
-def load_config_file(Config, path:Path):
+def load_config_file(Config, path:Path, parent:Path=Path()):
 	"""Load one YAML config file into a serde-backed type.
 
 	Args:
@@ -37,7 +37,7 @@ def load_config_file(Config, path:Path):
 	"""
 
 	try:
-		with open(path, 'r', encoding='utf-8') as file:
+		with open(parent / path, 'r', encoding='utf-8') as file:
 			config = from_yaml(Config, file.read())
 			return config
 	except UnicodeDecodeError as e:
@@ -214,8 +214,7 @@ class PluginConfig:
 
 	files: list[PluginFileConfig]
 
-# Actual load functions. Hierarchy: load_file_configs -> config.load(); load_paths -> load_path -> load_file_configs -> config.load().
-def resolve_path(path:Path) -> list[PluginFileConfig]:
+def load_plugin_config(path:Path, relative_path:Path=Path()) -> list[PluginFileConfig]:
 	"""Resolve one configured path into a list of plugin file configs without loading.
 
 	Args:
@@ -224,6 +223,8 @@ def resolve_path(path:Path) -> list[PluginFileConfig]:
 	Returns:
 		Plugin file configs discovered under path, deduplicated by resolved file path.
 	"""
+
+	path = relative_path / path
 
 	bind_contextvars(file=str(path))
 	if not path.exists():
@@ -260,9 +261,10 @@ def resolve_path(path:Path) -> list[PluginFileConfig]:
 		if resolved not in seen:
 			seen.add(resolved)
 			result.append(f)
+
 	return result
 
-def resolve_paths(paths:list[str]) -> list[PluginFileConfig]:
+def load_plugin_configs(paths:list[str], relative_path:Path=Path()) -> list[PluginFileConfig]:
 	"""Resolve multiple configured path strings into a flat list of plugin file configs.
 
 	Args:
@@ -277,11 +279,11 @@ def resolve_paths(paths:list[str]) -> list[PluginFileConfig]:
 	for path in paths:
 		if path not in seen:
 			seen.add(path)
-			result.extend(resolve_path(Path(path)))
+			result.extend(load_plugin_config(Path(path), relative_path))
 
 	return result
 
-def load_file_configs(configs:list[PluginFileConfig]) -> dict:
+def load_plugins(configs:list[PluginFileConfig]) -> dict[str, type[Any]]:
 	"""Load and merge plugins from a list of resolved plugin file configs.
 
 	Args:
@@ -299,37 +301,4 @@ def load_file_configs(configs:list[PluginFileConfig]) -> dict:
 				log.fatal('duplicate_definition', file=str(config.file), key=name)
 			else:
 				res[name] = plugin
-	return res
-
-def load_path(path:Path) -> dict:
-	"""Load every plugin exported from one configured path.
-
-	Args:
-		path: Path to a Python file or plugin directory.
-
-	Returns:
-		Mapping from exported plugin name to loaded Python class.
-	"""
-
-	return load_file_configs(resolve_path(path))
-
-def load_paths(paths:list[Path]) -> dict:
-	"""Load and merge plugins from multiple configured paths.
-
-	Args:
-		paths: Plugin file or directory paths to load.
-
-	Returns:
-		Merged mapping from exported plugin name to loaded Python class.
-	"""
-
-	res = {}
-	for path in paths:
-		file_plugins = load_path(path)
-		for (name, plugin) in file_plugins.items():
-			if name in res:
-				log.fatal('duplicate_definition', file=path, key=name)
-			else:
-				res[name] = plugin
-
 	return res

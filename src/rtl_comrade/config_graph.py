@@ -15,7 +15,7 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config import GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from .config import InvalidCLIParameterError
-from .loader import load_config_file, resolve_paths, PluginFileConfig
+from .loader import load_config_file, load_plugin_configs, PluginFileConfig
 from .logging import HarnessLogger
 from .validation import validate_acyclic
 
@@ -40,6 +40,7 @@ class GraphConfig:
 	contracts: list[PluginFileConfig] = field(default_factory=list)
 	cli_srcs: list[tuple[str, GraphConfigSrcCLI]] = field(default_factory=list)
 	sig: Signature = field(default_factory=Signature)
+	relative_path: Path = field(default_factory=Path)
 
 	@staticmethod
 	def from_file(path:str) -> GraphConfig:
@@ -57,13 +58,13 @@ class GraphConfig:
 		unbind_contextvars('context', 'file')
 
 		try:
-			return GraphConfig.from_file_config(config)
+			return GraphConfig.from_file_config(config, Path(path).parent)
 		except InvalidCLIParameterError as e:
 			log.fatal('cli_invalid_parameter_name', context='harness.graph.validation_config', name=e.name)
 			return None  # pragma: no cover
 
 	@staticmethod
-	def from_file_config(config:GraphFileConfig) -> GraphConfig:
+	def from_file_config(config:GraphFileConfig, relative_path:Path=Path()) -> GraphConfig:
 		"""Expand CLI edges into SrcPort replacements and collect cli_sources.
 
 		Returns:
@@ -133,4 +134,12 @@ class GraphConfig:
 		if cyclic_nodes:
 			log.fatal('not_acyclic', context='harness.graph_config.validation', cyclic_nodes=cyclic_nodes)
 
-		return GraphConfig(nodes=config.nodes, edges=edges, cli_srcs=cli_srcs, modules=resolve_paths(config.modules), contracts=resolve_paths(config.contracts), sig=Signature(params))
+		return GraphConfig(
+			nodes = config.nodes,
+			edges = edges,
+			cli_srcs = cli_srcs,
+			modules = load_plugin_configs(config.modules, relative_path),
+			contracts = load_plugin_configs(config.contracts, relative_path),
+			sig=Signature(params),
+			relative_path=relative_path
+		)
