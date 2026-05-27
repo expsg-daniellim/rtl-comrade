@@ -24,7 +24,7 @@ log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 @serde
 class CommandConfig:
-	path: str
+	path: Path
 	help: str = field(default="")
 
 @serde

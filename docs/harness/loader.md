@@ -57,10 +57,10 @@ A manifest can:
 
 Plugin loading is split into resolution and loading:
 
-1. **Resolution** (`load_plugin_config(path, relative_path)`, `load_plugin_configs(paths, relative_path)`) — filesystem-only: discovers which Python files belong to a configured path and returns `list[PluginFileConfig]`. No Python is imported. The optional `relative_path` argument is prepended to the given path before any filesystem access, so callers can supply paths relative to a config file's directory. Duplicate file paths within a single `load_plugin_config` call are deduplicated by resolved path. Duplicate path strings across a `load_plugin_configs` call are also skipped.
+1. **Resolution** (`load_plugin_config(path, relative_path)`, `load_plugin_configs(paths, relative_path)`) — filesystem-only: discovers which Python files belong to a configured path and returns `list[PluginFileConfig]`. No Python is imported. The optional `relative_path` argument is prepended to the given path before any filesystem access, so callers can supply paths relative to a config file's directory. Duplicate file paths within a single `load_plugin_config` call are deduplicated by resolved path. Duplicate paths across a `load_plugin_configs` call are also skipped.
 2. **Loading** (`PluginFileConfig.load`, `load_plugins(configs)`) — imports each plugin file and returns a `dict[str, type]` mapping exported name to class.
 
-`GraphConfig.from_file_config` calls `load_plugin_configs` on the raw path strings from `GraphFileConfig`, passing the graph file's parent directory as `relative_path`; actual class loading happens later in `Graph.from_config`.
+`GraphConfig.from_file_config` calls `load_plugin_configs` on the `Path` objects from `GraphFileConfig`, passing the graph file's parent directory as `relative_path`; actual class loading happens later in `Graph.from_config`.
 
 Call hierarchy: `load_plugins` → `config.load()`.
 

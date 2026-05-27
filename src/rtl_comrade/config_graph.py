@@ -43,7 +43,7 @@ class GraphConfig:
 	relative_path: Path = field(default_factory=Path)
 
 	@staticmethod
-	def from_file(path:str) -> GraphConfig:
+	def from_file(path:Path) -> GraphConfig:
 		"""Load a graph YAML file and construct a GraphConfig.
 
 		Args:
@@ -53,12 +53,12 @@ class GraphConfig:
 			The constructed GraphConfig instance.
 		"""
 
-		bind_contextvars(context='harness.config', file=path)
-		config = load_config_file(GraphFileConfig, Path(path))
+		bind_contextvars(context='harness.config', file=str(path))
+		config = load_config_file(GraphFileConfig, path)
 		unbind_contextvars('context', 'file')
 
 		try:
-			return GraphConfig.from_file_config(config, Path(path).parent)
+			return GraphConfig.from_file_config(config, path.parent)
 		except InvalidCLIParameterError as e:
 			log.fatal('cli_invalid_parameter_name', context='harness.graph.validation_config', name=e.name)
 			return None  # pragma: no cover

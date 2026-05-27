@@ -6,6 +6,7 @@ the harness graph-construction logic.
 
 from dataclasses import dataclass
 from inspect import Parameter
+from pathlib import Path
 from typing import Any, Annotated, Literal
 
 from serde import serde, field, to_dict, Untagged
@@ -126,5 +127,5 @@ class GraphFileConfig:
 
 	nodes: list[GraphConfigNode]
 	edges: list[GraphConfigEdge]
-	modules: list[str] = field(default_factory=list)
-	contracts: list[str] = field(default_factory=list)
+	modules: list[Path] = field(default_factory=list)
+	contracts: list[Path] = field(default_factory=list)

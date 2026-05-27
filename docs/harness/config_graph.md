@@ -34,7 +34,7 @@ This file defines `GraphConfig`, the normalised intermediate type that sits betw
 
 ## Key Entry Points
 
-- `GraphConfig.from_file(path)`: load a graph YAML file and produce a `GraphConfig`; called by `app.py` at startup for each registered command. Passes `Path(path).parent` as `relative_path` to `from_file_config`.
+- `GraphConfig.from_file(path)`: load a graph YAML file and produce a `GraphConfig`; called by `app.py` at startup for each registered command. Takes `path` as a `Path` and passes `path.parent` as `relative_path` to `from_file_config`.
 - `GraphConfig.from_file_config(file_config, relative_path=Path())`: normalise an already-deserialized `GraphFileConfig` into a `GraphConfig`; called by `from_file` and directly in tests. The `relative_path` argument is forwarded to `load_plugin_configs` for plugin discovery and stored on the returned `GraphConfig`.
 
 ## Main Types
@@ -46,7 +46,7 @@ This file defines `GraphConfig`, the normalised intermediate type that sits betw
 Produced by `GraphConfig.from_file_config(file_config)`. Not serde-backed; constructed programmatically.
 
 - `nodes`: copied unchanged from `GraphFileConfig`
-- `modules`, `contracts`: `list[PluginFileConfig]` — produced by calling `load_plugin_configs(paths, relative_path)` on the raw path strings from `GraphFileConfig`; plugin paths in the YAML are therefore resolved relative to the graph file's directory. See [loader.md](loader.md) for resolution semantics.
+- `modules`, `contracts`: `list[PluginFileConfig]` — produced by calling `load_plugin_configs(paths, relative_path)` on the `Path` objects from `GraphFileConfig`; plugin paths in the YAML are therefore resolved relative to the graph file's directory. See [loader.md](loader.md) for resolution semantics.
 - `edges`: only `GraphConfigSrcPort` sources; `GraphConfigSrcCLI` edges from `GraphFileConfig` are replaced with equivalent `GraphConfigSrcPort` edges pointing to synthetic `cli-{name}` node ids
 - `cli_srcs`: `list[tuple[str, GraphConfigSrcCLI]]` — one entry per original CLI edge, in declaration order; each tuple is `(port_name, src)` where `port_name` is the synthetic node id (`cli-{src.cli}`) used in both the replacement edge and the virtual `Node` created by `Graph.from_config`
 - `sig`: `inspect.Signature` built from the CLI sources; consumed by `Graph.construct_run` to expose a typer-compatible function signature

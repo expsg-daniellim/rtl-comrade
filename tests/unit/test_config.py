@@ -1,5 +1,7 @@
 """Unit tests for config.py — GraphFileConfig deserialization."""
 
+from pathlib import Path
+
 from serde import from_dict
 
 from rtl_comrade.config import (
@@ -90,8 +92,8 @@ def test_graph_config_full():
 	cfg = from_dict(GraphFileConfig, data)
 	assert len(cfg.nodes) == 2
 	assert len(cfg.edges) == 1
-	assert cfg.modules == ["path/to/mods"]
-	assert cfg.contracts == ["path/to/contracts"]
+	assert cfg.modules == [Path("path/to/mods")]
+	assert cfg.contracts == [Path("path/to/contracts")]
 
 
 def test_graph_config_defaults_lists():

@@ -125,7 +125,7 @@ class PluginFileConfig:
 			sys.path.insert(0, sys_path_entry)
 
 		# Name plugin file based on file path without extension
-		plugin_name = Path(self.file).with_suffix('').as_posix().replace('/', '.') if self.name is None else self.name
+		plugin_name = self.file.with_suffix('').as_posix().replace('/', '.') if self.name is None else self.name
 
 		# Bind some logging context
 		bind_contextvars(plugin=plugin_name, file=str(self.file))
@@ -264,22 +264,22 @@ def load_plugin_config(path:Path, relative_path:Path=Path()) -> list[PluginFileC
 
 	return result
 
-def load_plugin_configs(paths:list[str], relative_path:Path=Path()) -> list[PluginFileConfig]:
-	"""Resolve multiple configured path strings into a flat list of plugin file configs.
+def load_plugin_configs(paths:list[Path], relative_path:Path=Path()) -> list[PluginFileConfig]:
+	"""Resolve multiple configured paths into a flat list of plugin file configs.
 
 	Args:
 		paths: Plugin file or directory paths to resolve.
 
 	Returns:
-		Flat list of plugin file configs from all paths, with duplicate path strings skipped.
+		Flat list of plugin file configs from all paths, with duplicate paths skipped.
 	"""
 
 	result = []
-	seen: set[str] = set()
+	seen: set[Path] = set()
 	for path in paths:
 		if path not in seen:
 			seen.add(path)
-			result.extend(load_plugin_config(Path(path), relative_path))
+			result.extend(load_plugin_config(path, relative_path))
 
 	return result
 

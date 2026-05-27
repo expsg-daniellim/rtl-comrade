@@ -30,7 +30,7 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 
 ## GraphFileConfig Schema
 
-- `modules`, `contracts`: `list[str]` plugin paths from the YAML file
+- `modules`, `contracts`: `list[Path]` plugin paths from the YAML file
 - `nodes`: node definitions with `id`, `module`, `config`, `contract`, and `contract_config`
 - `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
 

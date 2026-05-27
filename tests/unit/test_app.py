@@ -26,7 +26,7 @@ from rtl_comrade.app import (
 from rtl_comrade.config_graph import GraphConfig
 
 MINIMAL_CONFIG_YAML = "commands:\n  run:\n    path: graphs/test.yaml\n"
-MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path="graphs/test.yaml")})
+MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path=Path("graphs/test.yaml"))})
 
 runner = CliRunner()
 
@@ -63,7 +63,7 @@ def test_search_finds_config_in_given_dir(tmp_path):
 	(tmp_path / DEFAULT_RTL_COMRADE_CONFIG_NAME).write_text(MINIMAL_CONFIG_YAML)
 	result = search_for_config(DEFAULT_RTL_COMRADE_CONFIG_NAME, tmp_path)
 	assert result is not None
-	assert result.commands["run"].path == "graphs/test.yaml"
+	assert result.commands["run"].path == Path("graphs/test.yaml")
 
 
 def test_search_ascends_to_parent_dir(tmp_path):

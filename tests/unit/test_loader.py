@@ -308,7 +308,7 @@ def test_load_plugins_merges_from_multiple_paths(logging_handler, tmp_path):
 	dir_b = tmp_path / "b"
 	dir_b.mkdir()
 	(dir_b / "m2.py").write_text("class Beta:\n    def run(self): return None\n")
-	result = load_plugins(load_plugin_configs([str(dir_a), str(dir_b)]))
+	result = load_plugins(load_plugin_configs([dir_a, dir_b]))
 	assert "alpha" in result
 	assert "beta" in result
 
@@ -321,7 +321,7 @@ def test_load_plugins_duplicate_from_multiple_paths_fatal(logging_handler, tmp_p
 	dir_b.mkdir()
 	(dir_b / "m2.py").write_text("class Alpha:\n    def run(self): return None\n")
 	with pytest.raises(SystemExit):
-		load_plugins(load_plugin_configs([str(dir_a), str(dir_b)]))
+		load_plugins(load_plugin_configs([dir_a, dir_b]))
 
 
 def test_load_plugins_duplicate_definition_in_dir_fatal(logging_handler, tmp_path):
@@ -529,7 +529,7 @@ def test_load_plugin_configs_flat_concatenation(logging_handler, tmp_path):
 	dir_b = tmp_path / "b"
 	dir_b.mkdir()
 	(dir_b / "m2.py").write_text("class Beta:\n    pass\n")
-	result = load_plugin_configs([str(dir_a), str(dir_b)])
+	result = load_plugin_configs([dir_a, dir_b])
 	files = [r.file for r in result]
 	assert dir_a / "m1.py" in files
 	assert dir_b / "m2.py" in files
@@ -538,7 +538,7 @@ def test_load_plugin_configs_flat_concatenation(logging_handler, tmp_path):
 def test_load_plugin_configs_deduplicates_duplicate_path_strings(logging_handler, tmp_path):
 	plugin_file = tmp_path / "mods.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
-	result = load_plugin_configs([str(plugin_file), str(plugin_file)])
+	result = load_plugin_configs([plugin_file, plugin_file])
 	assert len(result) == 1
 
 
@@ -551,7 +551,7 @@ def test_load_plugin_configs_with_relative_path(logging_handler, tmp_path):
 	subdir = tmp_path / "plugins"
 	subdir.mkdir()
 	(subdir / "mods.py").write_text(_SIMPLE_PLUGIN)
-	result = load_plugin_configs(["plugins"], relative_path=tmp_path)
+	result = load_plugin_configs([Path("plugins")], relative_path=tmp_path)
 	files = [r.file for r in result]
 	assert subdir / "mods.py" in files
 

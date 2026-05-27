@@ -533,7 +533,7 @@ def test_it11_from_file_valid(logging_handler, tmp_path):
 	graph_yaml = tmp_path / "graph.yaml"
 	graph_yaml.write_text(f"modules:\n- {module_file}\nnodes:\n- id: src\n  module: src\nedges: []\n")
 
-	graph = Graph.from_config(GraphConfig.from_file(str(graph_yaml)))
+	graph = Graph.from_config(GraphConfig.from_file(graph_yaml))
 	assert isinstance(graph, Graph)
 	assert "src" in graph.nodes
 
@@ -667,7 +667,7 @@ def test_it16_cli_option(logging_handler, tmp_path):
 				dst=GraphConfigDstPort(node="collect", port=1),
 			)
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[tmp_path / "mods.py"],
 	)
 	graph_config = GraphConfig.from_file_config(config)
 	Graph.construct_run(graph_config, lambda: None)(value=99)
@@ -699,7 +699,7 @@ def test_it17_missing_cli_kwarg(logging_handler, tmp_path):
 				dst=GraphConfigDstPort(node="collect", port=1),
 			)
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[tmp_path / "mods.py"],
 	)
 	graph_config = GraphConfig.from_file_config(config)
 	Graph.construct_run(graph_config, lambda: None)()  # 'value' kwarg absent
@@ -730,7 +730,7 @@ def test_it18_blank_cli_name(logging_handler, tmp_path):
 				dst=GraphConfigDstPort(node="collect", port=1),
 			)
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[tmp_path / "mods.py"],
 	)
 	with pytest.raises(SystemExit):
 		Graph.from_config(GraphConfig.from_file_config(config))
@@ -767,7 +767,7 @@ def test_it19_duplicate_cli_name(logging_handler, tmp_path):
 				dst=GraphConfigDstPort(node="collect2", port=1),
 			),
 		],
-		modules=[str(tmp_path / "mods.py")],
+		modules=[tmp_path / "mods.py"],
 	)
 	with pytest.raises(SystemExit):
 		Graph.from_config(GraphConfig.from_file_config(config))

@@ -405,7 +405,7 @@ def test_cli_invalid_parameter_name_fatal(logging_handler, tmp_path):
 		'      port: 1\n'
 	)
 	with pytest.raises(SystemExit):
-		GraphConfig.from_file(str(tmp_path / 'graph.yaml'))
+		GraphConfig.from_file(tmp_path / 'graph.yaml')
 
 
 def test_no_source_capable_node_detected(logging_handler):
