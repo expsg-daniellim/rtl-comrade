@@ -201,9 +201,16 @@ class Graph:
 						cli_node.module.value = kwargs[cli_node.module.cli]
 
 				runs = [ node.run() for node in graph.nodes.values() ]
-				await asyncio.gather(*runs)
+				try:
+					await asyncio.gather(*runs)
+				except SystemExit:
+					pass
 
-			asyncio.run(async_run())
+			try:
+				asyncio.run(async_run())
+			except SystemExit:
+				pass
+
 			run_cleanup()
 
 		run.__signature__ = config.sig # Transform kwargs signature into one readable by Typer
