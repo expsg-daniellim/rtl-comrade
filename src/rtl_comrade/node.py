@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 from collections import OrderedDict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 import inspect
 from typing import Any, cast
@@ -34,8 +34,27 @@ class Connection:
 	other_node: Node
 	other_port: str
 
+@dataclass(slots=True)
 class Node:
-	"""A live runtime node binding together a module, contract, and input ports."""
+	"""A live runtime node binding together a module, contract, and input ports.
+
+	Attributes:
+		id: Runtime node id from graph configuration.
+		module: Instantiated module object.
+		structure: Parsed module structure derived from the module class.
+		ports: Ordered input ports keyed by port name.
+		contract: Instantiated contract object controlling scheduling.
+		dsts: Outgoing downstream connections; ``None`` until ``set_dsts`` is called.
+		dst_counts: Running message count per ``(node_id, port)`` destination pair.
+	"""
+
+	id: str
+	module: type[Any]
+	structure: ModuleStructure
+	ports: OrderedDict[str, Port]
+	contract: type[Any]
+	dsts: list[Connection]|None = None
+	dst_counts: dict[tuple[str, str], int] = field(default_factory=dict)
 
 	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None, relative_path:Path=Path()):  # pylint: disable=redefined-builtin
 		"""Instantiate one runtime node from module and contract classes.
@@ -138,8 +157,8 @@ class Node:
 			log.fatal('init', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 
 		# Initialise output targets (for future setting in set_dsts after edges are validated (which requires Node)
-		self.dsts:list[Connection]|None = None
-		self.dst_counts:dict[tuple[str, str], int] = {}
+		self.dsts = None
+		self.dst_counts = {}
 
 	def set_dsts(self, dsts:list[Connection]):
 		"""Assign this node's validated downstream connections.
