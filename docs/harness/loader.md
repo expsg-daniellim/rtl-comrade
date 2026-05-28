@@ -58,11 +58,20 @@ A manifest can:
 Plugin loading is split into resolution and loading:
 
 1. **Resolution** (`load_plugin_config(path, relative_path)`, `load_plugin_configs(paths, relative_path)`) — filesystem-only: discovers which Python files belong to a configured path and returns `list[PluginFileConfig]`. No Python is imported. The optional `relative_path` argument is prepended to the given path before any filesystem access, so callers can supply paths relative to a config file's directory. Duplicate file paths within a single `load_plugin_config` call are deduplicated by resolved path. Duplicate paths across a `load_plugin_configs` call are also skipped.
-2. **Loading** (`PluginFileConfig.load`, `load_plugins(configs)`) — imports each plugin file and returns a `dict[str, type]` mapping exported name to class.
+2. **Loading** (`PluginFileConfig.load(namespace)`, `load_plugins(configs, namespace)`) — imports each plugin file and returns a `dict[str, type]` mapping exported name to class. The optional `namespace` argument is used to scope the `sys.modules` key for files whose name comes from a manifest override (see `sys.modules` key construction below).
 
 `GraphConfig.from_file_config` calls `load_plugin_configs` on the `Path` objects from `GraphFileConfig`, passing the graph file's parent directory as `relative_path`; actual class loading happens later in `Graph.from_config`.
 
-Call hierarchy: `load_plugins` → `config.load()`.
+Call hierarchy: `load_plugins` → `config.load(namespace)`.
+
+`graph.py` passes `'modules'` and `'contracts'` as the respective namespaces when loading the two plugin sets, keeping their `sys.modules` keys structurally disjoint even if both sets contain a manifest-named file with the same name.
+
+## `sys.modules` key construction
+
+The key under which a plugin file is registered in `sys.modules` (`plugin_name`) depends on whether the file has a manifest-supplied name:
+
+- **No manifest name** (`PluginFileConfig.name is None`): the key is the file path with the suffix stripped and `/` replaced by `.` (e.g. `/home/user/project/modules/stuff.py` → `home.user.project.modules.stuff`). The full path makes collisions between different files impossible regardless of namespace.
+- **Manifest name** (`PluginFileConfig.name` is set): the key is `{namespace}.{name}`. When `namespace` is non-empty this scopes the key to the plugin set (e.g. `modules.stuff`, `contracts.stuff`). When `namespace` is the empty string (the default, used outside `graph.py`) the key is `.{name}` — a leading-dot string that no user-supplied manifest name can produce, keeping it structurally disjoint from any namespaced key.
 
 ## Cross-file imports
 
@@ -71,7 +80,7 @@ Before importing a plugin file, `PluginFileConfig.load` inserts the appropriate 
 ## Caveats
 
 - without a manifest, auto-discovery filters to classes defined in the plugin file itself (by checking `cls.__module__ == module.__name__`); imported classes are excluded to prevent duplicate exports when multiple plugin files share a helper
-- a module already present in `sys.modules` under its canonical name is reused rather than re-executed; re-executing would produce a second distinct class object and break `isinstance` checks. The canonical name is only computed for package directories — plain-directory file stems (e.g. `io`, `re`) collide with stdlib
+- a module already present in `sys.modules` under its canonical name or `plugin_name` is reused rather than re-executed; re-executing would produce a second distinct class object and break `isinstance` checks. The canonical name is only computed for package directories — plain-directory file stems (e.g. `io`, `re`) collide with stdlib
 - because `structure.py` later uses `inspect.getsource(...)`, this loader intentionally inserts imported modules into `sys.modules`
 - many failures here log at fatal level by design, so import and parse errors block execution instead of letting the harness attempt to limp into runtime
 - when the loader catches non-`rtl_comrade` exceptions during YAML reads, filesystem access, or dynamic imports, it logs them with `exc_info=e` so traceback context is preserved

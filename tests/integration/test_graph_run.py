@@ -2,6 +2,7 @@
 
 import textwrap
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -733,7 +734,7 @@ def test_it18_blank_cli_name(logging_handler, tmp_path):
 		modules=[tmp_path / "mods.py"],
 	)
 	with pytest.raises(SystemExit):
-		Graph.from_config(GraphConfig.from_file_config(config))
+		Graph.from_config(GraphConfig.from_file_config(config))  # IT-18
 
 
 # ---------------------------------------------------------------------------
@@ -771,3 +772,29 @@ def test_it19_duplicate_cli_name(logging_handler, tmp_path):
 	)
 	with pytest.raises(SystemExit):
 		Graph.from_config(GraphConfig.from_file_config(config))
+
+
+# ---------------------------------------------------------------------------
+# IT-20: SystemExit from a fataling node is swallowed by gather and run_cleanup runs
+# ---------------------------------------------------------------------------
+
+
+def test_it20_node_fatal_cleanup_runs(logging_handler, tmp_path):
+	_write_plugin(tmp_path, "mods.py", """\
+        import structlog
+        log = structlog.get_logger()
+
+        class Crasher:
+            def run(self):
+                log.fatal('crash')
+    """)
+	config = GraphConfig(
+		nodes=[_node("crasher", "crasher")],
+		edges=[],
+		modules=[_pfc(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	cleanup_called = []
+	with pytest.raises(SystemExit):
+		Graph.construct_run(config, lambda: cleanup_called.append(True))()
+	assert cleanup_called

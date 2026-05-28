@@ -425,25 +425,26 @@ def test_plugin_file_config_load_canonical_relative_to_error_falls_back_to_fresh
 
 
 def test_plugin_file_config_load_reuses_cached_module_by_plugin_name(logging_handler, tmp_path):
-	# No __init__.py → canonical_name = None; plugin_name already in sys.modules → reuse.
+	# No __init__.py → canonical_name = None; plugin_name ('.name') already in sys.modules → reuse.
 	import sys as _sys  # pylint: disable=import-outside-toplevel
 	plugin_file = tmp_path / "cached.py"
 	plugin_file.write_text(_SIMPLE_PLUGIN)
-	plugin_name = "rtl_comrade_test_cached_reuse"
-	fake_mod = types.ModuleType(plugin_name)
+	name = "rtl_comrade_test_cached_reuse"
+	sys_modules_key = f'.{name}'  # empty namespace → leading-dot key
+	fake_mod = types.ModuleType(name)
 
 	class Baz:
 		def run(self): return None  # pylint: disable=multiple-statements
 
 	fake_mod.Baz = Baz
-	_sys.modules[plugin_name] = fake_mod
+	_sys.modules[sys_modules_key] = fake_mod
 	try:
 		plugins = [PluginModuleConfig(class_name="Baz", name="baz")]
-		config = PluginFileConfig(name=plugin_name, file=plugin_file, type_=None, plugins=plugins)
+		config = PluginFileConfig(name=name, file=plugin_file, type_=None, plugins=plugins)
 		result = config.load()
 		assert result["baz"] is Baz
 	finally:
-		_sys.modules.pop(plugin_name, None)
+		_sys.modules.pop(sys_modules_key, None)
 
 
 # --- load_plugin_config ---

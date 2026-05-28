@@ -56,11 +56,11 @@ class Graph:
 
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
-		module_mappings = load_plugins(config.modules)
+		module_mappings = load_plugins(config.modules, 'modules')
 		unbind_contextvars('context')
 
 		bind_contextvars(context='harness.load.contract')
-		contract_mappings = load_plugins(config.contracts)
+		contract_mappings = load_plugins(config.contracts, 'contracts')
 		unbind_contextvars('context')
 
 		contract_mappings['default'] = DefaultContract
@@ -205,13 +205,10 @@ class Graph:
 					await asyncio.gather(*runs)
 				except SystemExit:
 					pass
+				finally:
+					run_cleanup()
 
-			try:
-				asyncio.run(async_run())
-			except SystemExit:
-				pass
-
-			run_cleanup()
+			asyncio.run(async_run())
 
 		run.__signature__ = config.sig # Transform kwargs signature into one readable by Typer
 		return run

@@ -111,7 +111,7 @@ class PluginFileConfig:
 	type_: str | None
 	plugins: list[PluginModuleConfig] | None
 
-	def load(self) -> dict:
+	def load(self, namespace:str='') -> dict:
 		"""Dynamically import this plugin file and return its exported class mappings.
 
 		Returns:
@@ -125,7 +125,7 @@ class PluginFileConfig:
 			sys.path.insert(0, sys_path_entry)
 
 		# Name plugin file based on file path without extension
-		plugin_name = self.file.with_suffix('').as_posix().replace('/', '.') if self.name is None else self.name
+		plugin_name = self.file.with_suffix('').as_posix().replace('/', '.') if self.name is None else f'{namespace}.{self.name}'
 
 		# Bind some logging context
 		bind_contextvars(plugin=plugin_name, file=str(self.file))
@@ -283,7 +283,7 @@ def load_plugin_configs(paths:list[Path], relative_path:Path=Path()) -> list[Plu
 
 	return result
 
-def load_plugins(configs:list[PluginFileConfig]) -> dict[str, type[Any]]:
+def load_plugins(configs:list[PluginFileConfig], namespace:str='') -> dict[str, type[Any]]:
 	"""Load and merge plugins from a list of resolved plugin file configs.
 
 	Args:
@@ -296,7 +296,7 @@ def load_plugins(configs:list[PluginFileConfig]) -> dict[str, type[Any]]:
 	# Load each file and then merge into a single map
 	res = {}
 	for config in configs:
-		for (name, plugin) in config.load().items():
+		for (name, plugin) in config.load(namespace).items():
 			if name in res:
 				log.fatal('duplicate_definition', file=str(config.file), key=name)
 			else:

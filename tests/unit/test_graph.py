@@ -95,7 +95,7 @@ def _make_config(nodes, edges):
 def _from_config(config):
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		if call_count[0] == 1:
 			return _MODULE_MAP
@@ -109,7 +109,7 @@ def _from_config_with_contracts(config):
 	"""Load with both module and contract mappings."""
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		if call_count[0] == 1:
 			return _MODULE_MAP
@@ -208,7 +208,7 @@ def test_unused_edge_warns(logging_handler):
 	module_map = {**_MODULE_MAP, "default_sink": _DefaultSinkMod}
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		return module_map if call_count[0] == 1 else {}
 
@@ -285,7 +285,7 @@ def test_dst_port_by_index_resolves(logging_handler):
 	module_map = {**_MODULE_MAP, "source_mod2": _SourceMod2}
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		return module_map if call_count[0] == 1 else {}
 
@@ -319,7 +319,7 @@ def test_yield_from_non_definite_emits_warns(logging_handler):
 	module_map = {**_MODULE_MAP, "yield_from_mod": _YieldFromModule}
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		return module_map if call_count[0] == 1 else {}
 
@@ -342,7 +342,7 @@ def test_module_plugin_missing_run_fatal(logging_handler):
 
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		return {"no_run_mod": _NoRunModule} if call_count[0] == 1 else {}
 
@@ -359,7 +359,7 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		return _MODULE_MAP if call_count[0] == 1 else {"bad_contract": _NoGetInputsContract}
 
@@ -415,7 +415,7 @@ def test_no_source_capable_node_detected(logging_handler):
 	cycle_map = {**_MODULE_MAP, "cycle_mod": _CycleModule}
 	call_count = [0]
 
-	def side_effect(paths):
+	def side_effect(paths, namespace):
 		call_count[0] += 1
 		return cycle_map if call_count[0] == 1 else {}
 
