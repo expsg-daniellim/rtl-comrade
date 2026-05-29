@@ -70,7 +70,7 @@ def initialise_logging(level:int = logging.INFO) -> LoggingFatalHandler:
 			The installed handler used to track deferred run failure state.
 	"""
 
-	preprocessors = [ structlog.stdlib.add_log_level, structlog.stdlib.add_logger_name ]
+	preprocessors = [ structlog.stdlib.add_log_level, structlog.stdlib.add_logger_name, structlog.processors.TimeStamper(fmt="%Y-%m-%d %H:%M:%S") ]
 
 	handler = LoggingFatalHandler()
 	handler.setLevel(level)
