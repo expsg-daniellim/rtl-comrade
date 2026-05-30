@@ -49,7 +49,7 @@ class FanInContract:
         return EndSentinel(self.id)
 ```
 
-**Note on the inner loop**: the round-robin `for` iterates ports in declaration order, blocking on `await port.get()` for each non-ended port. When a real item arrives it is returned immediately; when `EndSentinel` arrives the port is retired and the loop continues. For the test graph this is correct — volume is small (dozens of result rows at most) and order of delivery to `run()` is irrelevant since the module sorts on `finalize()`.
+**Note on the inner loop**: the round-robin `for` iterates ports in declaration order, blocking on `await port.get()` for each non-ended port. When a real item arrives it is returned immediately; when `EndSentinel` arrives the port is retired and the loop continues. For the test graph this is correct — volume is small (dozens of result rows at most) and order of delivery to `run()` is irrelevant since the module sorts on `finalise()`.
 
 ## Register in `contracts/config.yaml`
 

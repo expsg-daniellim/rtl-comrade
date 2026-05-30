@@ -24,28 +24,11 @@ The per-module Python files (`bootstrap.py`, `suite.py`, etc.) are created by la
 
 ## artefacts.py
 
-All types are plain Python dataclasses. Use `from dataclasses import dataclass, field`. No serde decorators needed yet — add them later if the harness requires it.
-
-### `TestCliArgs`
-
-```python
-@dataclass
-class TestCliArgs:
-    test_config: str = "tests.yaml"
-    test_name: str | None = None
-    list_tests: bool = False
-    rnd_new: bool = False
-    rnd_last: bool = False
-    rtl_builder_mode: str | None = None
-    builder_override: str | None = None
-    run_depth: str = "post"
-    debug: bool = False
-    color: bool = True
-```
+All types are plain Python dataclasses. Use `from dataclasses import dataclass, field` and `from pathlib import Path`. No serde decorators needed yet — add them later if the harness requires it.
 
 ### `RootContext`
 
-Carries everything downstream nodes need from the root config. All fields are plain Python primitives (no live config objects).
+Carries everything downstream nodes need from the root config. No live config objects; path fields use `Path`.
 
 ```python
 @dataclass
@@ -53,8 +36,8 @@ class RootContext:
     builder_name: str
     rtl_builder_mode: str
     run_depth: str
-    project_root: str
-    root_config_path: str
+    project_root: Path
+    root_config_path: Path
     # Raw dicts from root_config.yaml for downstream reconstruction
     rtl_builder_cfg: dict        # serialised RtlBuilderConfig
     platform_name: str
@@ -69,7 +52,7 @@ Compatibility source: `root.py:L46-L113`, `rtl_buddy.py:L171-L172`.
 ```python
 @dataclass
 class SuiteContext:
-    path: str
+    path: Path
     test_names: list[str]
     tests: list["TestConfigEnvelope"]
 ```
@@ -81,18 +64,18 @@ class SuiteContext:
 class TestConfigEnvelope:
     name: str
     desc: str
-    model_path: str
+    model_path: Path
     testbench_name: str
-    testbench_filelist: str | None
+    testbench_filelist: Path | None
     reglvl: int | dict | None
     plusargs: list[str]
     plusdefines: dict[str, str | None]
     uvm: dict | None
-    preproc_path: str | None
-    postproc_path: str | None
-    sweep_path: str | None
+    preproc_path: Path | None
+    postproc_path: Path | None
+    sweep_path: Path | None
     timeout: int | None
-    suite_path: str
+    suite_path: Path
     declaration_index: int
 ```
 
@@ -105,7 +88,7 @@ Compatibility source: `test.py:L30-L264`.
 ```python
 @dataclass(frozen=True)
 class TestInstanceKey:
-    suite_path: str
+    suite_path: Path
     original_test_name: str
     expanded_test_name: str
     expanded_index: int
@@ -160,7 +143,7 @@ The `instance_key` property is required by `RunDepthGate`.
 ```python
 @dataclass
 class FilelistArtefact:
-    output_path: str
+    output_path: Path
     lines: list[str]
     run_plan: PreprocessedRunPlan    # embedded so CompileCommandBuild needs only 2 inputs
 ```
@@ -171,10 +154,10 @@ class FilelistArtefact:
 @dataclass
 class CompileCommand:
     argv: list[str]
-    cwd: str
+    cwd: Path
     test_name: str
-    build_dir: str
-    filelist_path: str
+    build_dir: Path
+    filelist_path: Path
     run_plan: PreprocessedRunPlan   # forwarded for RunDepthGateComp and RunFanout
 ```
 
@@ -225,9 +208,9 @@ class ResolvedRunPlan:
 @dataclass
 class SimCommand:
     argv: list[str]
-    cwd: str
+    cwd: Path
     key: TestInstanceKey
-    log_path_prefix: str
+    log_path_prefix: Path
     timeout_seconds: int
     seed: int
     test: TestConfigEnvelope
@@ -249,9 +232,9 @@ class SimResult:
 @dataclass
 class LinkedSimArtifacts:
     sim_result: SimResult
-    log_path: str
-    err_path: str
-    randseed_path: str
+    log_path: Path
+    err_path: Path
+    randseed_path: Path
 
     @property
     def instance_key(self) -> TestInstanceKey:
@@ -309,8 +292,6 @@ Later specs will append entries like:
 ```yaml
 - file: bootstrap.py
   plugins:
-  - name: cli_args_source
-    class_name: CliArgsSource
   - name: root_bootstrap
     class_name: RootBootstrap
   - name: seed_mode_select
@@ -332,5 +313,5 @@ These are the three `.instance_key` accessors that `RunDepthGate` depends on.
 ## Constraints
 
 - Do not implement any module logic here. This spec is purely dataclass definitions.
-- Do not import from rtl_buddy source. All fields are plain Python types.
+- Do not import from rtl_buddy source. All fields are plain Python types (`str`, `int`, `bool`, `dict`, `list`, `Path`, `Literal`, dataclasses).
 - All three payloads passed to `RunDepthGate` (`PreprocessedRunPlan`, `CompileResult`, `LinkedSimArtifacts`) must expose `.instance_key: TestInstanceKey`.

@@ -20,10 +20,12 @@ Read:
 ### `RootBootstrap`
 
 ```
-contract: unit
-inputs:  cli: TestCliArgs
+contract: zip
+inputs:  rtl_builder_mode: str | None, builder_override: str | None, run_depth: str
 outputs: default → RootContext
 ```
+
+All three inputs arrive from CLI edges.
 
 Implementation steps:
 
@@ -33,11 +35,11 @@ Implementation steps:
 
 3. **Select platform**: `platform.uname().system.lower()`. Map `"linux"` → look up `"linux"` key, `"darwin"` → look up `"darwin"` key (or whatever keys the config defines). Fatal if no matching key. Source: `root.py:L46-L80`.
 
-4. **Select builder**: if `cli.builder_override` is set use that; otherwise use the platform's default builder name. Fatal if the chosen builder name is not in `config["builder"]`. Source: `root.py:L80-L113`.
+4. **Select builder**: if `builder_override` is set use that; otherwise use the platform's default builder name. Fatal if the chosen builder name is not in `config["builder"]`. Source: `root.py:L80-L113`.
 
-5. **Set mode**: `rtl_builder_mode = cli.rtl_builder_mode or "debug"`.
+5. **Set mode**: `rtl_builder_mode = rtl_builder_mode or "debug"`.
 
-6. **Emit**: `RootContext(builder_name=..., rtl_builder_mode=..., run_depth=cli.run_depth, project_root=str(root_config_path.parent), root_config_path=str(root_config_path), rtl_builder_cfg=config["builder"][builder_name], platform_name=platform_name)`.
+6. **Emit**: `RootContext(builder_name=..., rtl_builder_mode=..., run_depth=run_depth, project_root=root_config_path.parent, root_config_path=root_config_path, rtl_builder_cfg=config["builder"][builder_name], platform_name=platform_name)`.
 
 `rtl_builder_cfg` is the raw dict for the selected builder — no live `RtlBuilderConfig` object crosses the boundary.
 
@@ -57,8 +59,8 @@ Add to `modules/rtl_buddy_compat/tests/test_bootstrap.py`.
 Use `tmp_path` and write minimal `root_config.yaml` files. Look at `rtl_buddy/src/rtl_buddy/config/root.py` for the expected YAML schema.
 
 - Valid config, matching platform → `RootContext` emitted with correct `builder_name`
-- `builder_override` → overrides the platform default
-- `rtl_builder_mode=None` in CLI → `rtl_builder_mode="debug"` in context
+- `builder_override` set → overrides the platform default
+- `rtl_builder_mode=None` → `rtl_builder_mode="debug"` in context
 - Missing `root_config.yaml` anywhere in tree → `SystemExit`
 - Platform key not in config → `SystemExit`
 - Builder name not in config → `SystemExit`

@@ -20,15 +20,15 @@ Read:
 
 ```
 contract: zip
-inputs:  cli: TestCliArgs, suite: SuiteContext
+inputs:  list_tests: bool, suite: SuiteContext
 outputs: list → SuiteContext, run → SuiteContext
 ```
 
-Pure routing. Emits `suite` unchanged on one of two named ports.
+`list_tests` arrives from a CLI edge. Pure routing. Emits `suite` unchanged on one of two named ports.
 
 ```python
-def run(self, cli, suite):
-    if cli.list_tests:
+def run(self, list_tests, suite):
+    if list_tests:
         return ("list", suite)
     return ("run", suite)
 ```
@@ -56,14 +56,14 @@ Compatibility: `rtl_buddy.py:L174-L176` — names joined with two spaces.
 
 ```
 contract: zip
-inputs:  cli: TestCliArgs, suite: SuiteContext
+inputs:  test_name: str | None, suite: SuiteContext
 outputs: default → stream of TestConfigEnvelope (generator)
 ```
 
-`run()` is a generator.
+`test_name` arrives from a CLI edge. `run()` is a generator.
 
 Implementation steps:
-1. If `cli.test_name` is set: find the matching test by name. Fatal if not found.
+1. If `test_name is not None`: find the matching test by name. Fatal if not found.
 2. Otherwise yield all tests in declaration order.
 
 Compatibility: `suite.py:L41-L55`.
@@ -89,14 +89,18 @@ Write `modules/rtl_buddy_compat/tests/test_suite_routing.py`.
 - `list_tests=True` → emits on `"list"` port with suite unchanged
 - `list_tests=False` → emits on `"run"` port with suite unchanged
 
+Pass `list_tests` and `suite` as plain arguments; no `TestCliArgs` construction needed.
+
 **`ListTestsRender`**:
 - `test_names=["a", "b", "c"]` → `"a  b  c"` (two spaces between names)
 - Single test → no trailing spaces
 
 **`TestSelect`**:
-- Named test present → yields exactly one `TestConfigEnvelope`
-- Named test absent → fatal (`SystemExit`)
-- No name → yields all tests in declaration order (verify count and order)
+- `test_name` set and present → yields exactly one `TestConfigEnvelope`
+- `test_name` set but absent → fatal (`SystemExit`)
+- `test_name=None` → yields all tests in declaration order (verify count and order)
+
+Pass `test_name` and `suite` as plain arguments; no `TestCliArgs` construction needed.
 
 ## Constraints
 

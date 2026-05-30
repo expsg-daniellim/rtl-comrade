@@ -23,33 +23,35 @@ Create this file. Spec 05 will add `ListTestsBranch`, `ListTestsRender`, and `Te
 
 ```
 contract: zip
-inputs:  cli: TestCliArgs, root: RootContext
+inputs:  test_config: str, root: RootContext
 outputs: default → SuiteContext
 ```
 
+`test_config` arrives from a CLI edge.
+
 Implementation steps:
 
-1. Open `cli.test_config`. Fatal if file not found (`suite.py:L18-L22`).
+1. Open `Path(test_config)`. Fatal if file not found (`suite.py:L18-L22`).
 
 2. Parse YAML. Top-level keys: `testbenches` (dict), `tests` (list). Fatal if malformed.
 
 3. Build `testbench_name → testbench_dict` lookup from the `testbenches` section.
 
 4. For each test entry in `tests`, in declaration order:
-   a. Resolve `model_path` relative to the directory containing `cli.test_config` (`test.py:L247-L264`).
+   a. Resolve `model_path` relative to the directory containing `test_config` as an absolute `Path` (`test.py:L247-L264`).
    b. Look up `testbench` by name in the testbench lookup. Fatal if not found.
    c. Normalize `plusargs` to `list[str]` — entries may be plain strings or single-key dicts; flatten to `"key=value"` or `"key"` strings.
    d. Normalize `plusdefines` to `dict[str, str | None]` — entries may be strings (`"KEY"` → `{KEY: None}`) or dicts (`{"KEY": "val"}` → `{KEY: "val"}`).
    e. Set `declaration_index` to 0-based position in the list.
    f. Populate `TestConfigEnvelope` with all fields.
 
-5. Emit `SuiteContext(path=cli.test_config, test_names=[t.name for t in tests], tests=tests)`.
+5. Emit `SuiteContext(path=Path(test_config), test_names=[t.name for t in tests], tests=tests)`.
 
 Key field mappings from `TestConfig` (`test.py:L30-L63`):
 - `uvm`: optional dict; keep as-is if present, `None` if absent
 - `reglvl`: may be `int`, `dict`, or absent → `None`
 - `timeout`: int seconds or absent → `None`
-- `preproc_path`, `postproc_path`, `sweep_path`: string paths or absent → `None`; resolve relative to the suite config directory
+- `preproc_path`, `postproc_path`, `sweep_path`: path or absent → `None`; resolve relative to the suite config directory as `Path` objects
 
 ## Create `modules/rtl_buddy_compat/config.yaml`
 
@@ -85,5 +87,5 @@ Use `tmp_path` to write minimal `tests.yaml` files.
 ## Constraints
 
 - Preserve declaration order. Do not sort tests.
-- `model_path`, `preproc_path`, `postproc_path`, `sweep_path` must be absolute or project-relative strings, not raw relative paths.
+- `model_path`, `preproc_path`, `postproc_path`, `sweep_path` must be absolute `Path` objects, not raw relative paths.
 - Do not carry live `SuiteConfig` objects; everything into `TestConfigEnvelope`.

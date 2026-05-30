@@ -20,11 +20,11 @@ Read:
 
 ```
 contract: latest, trigger_ports: [expanded_test]
-inputs:  expanded_test: TestConfigEnvelope, cli: TestCliArgs, seed_mode: SeedModePlan
+inputs:  expanded_test: TestConfigEnvelope, seed_mode: SeedModePlan
 outputs: default → stream of RunPlan (generator)
 ```
 
-`run()` is a generator. `cli` and `seed_mode` are state ports (arrive once and are cached).
+`run()` is a generator. `seed_mode` is a state port (arrives once and is cached).
 
 Implementation steps:
 

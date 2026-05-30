@@ -35,7 +35,7 @@ Implement in order. Each spec assumes all earlier ones are complete.
 |---|------|--------|-------------|
 | 00 | `00-artefacts.md` | Package setup + all shared dataclasses | `artefacts.py` (new) |
 | 01 | `01-collect-until-end-contract.md` | New harness contract | `contracts/collect_until_end.py` (new) |
-| 02 | `02-cli-args-and-seed-mode.md` | CliArgsSource, SeedModeSelect | `bootstrap.py` (new) |
+| 02 | `02-cli-args-and-seed-mode.md` | CliArgsMerge, SeedModeSelect | `bootstrap.py` (new) |
 | 03 | `03-root-bootstrap.md` | RootBootstrap | `bootstrap.py` (extend) |
 | 04 | `04-suite-config-load.md` | SuiteConfigLoad | `suite.py` (new) |
 | 05 | `05-suite-routing-and-select.md` | ListTestsBranch, ListTestsRender, TestSelect | `suite.py` (extend) |
@@ -74,13 +74,3 @@ Graph payloads fall into two categories:
 
 Observability data should flow through the logging system (via a custom logging provider and a structured log type), not through graph edges. Routing observability through the graph conflates scheduling concerns with reporting concerns and forces artificial fan-in nodes whose only job is to collect and render data that already exists at the log level.
 
-## TODO: rework result-emitting nodes once custom logging providers are implemented
-
-Currently specs 12, 14, 16, 17, 18, 19, and 20 route `TestResultRow` through graph edges as payloads, accumulated by `SuiteResultAccumulate` and rendered by `SummaryRender`. This is a pragmatic workaround for the absence of custom logging providers.
-
-Once custom logging providers land, the following should be reworked:
-
-- `DefaultLogParser`, `UvmLogParser` — emit `TestResultRow` as a structured log event instead of a graph payload; remove their output ports.
-- `CompileExecute.failure`, `SeedResolve.failure`, `SimExecute.timeout` — replace the `TestResultRow` output port with a `log.result(...)` call; branch terminates via harness `EndSentinel` propagation after logging.
-- `SuiteResultAccumulate`, `SummaryRender`, and all of `results.py` — replace with a structured log drain and renderer; remove from the graph entirely.
-- The `fan_in` contract (spec 01) — likely no longer needed once result rows leave the graph.

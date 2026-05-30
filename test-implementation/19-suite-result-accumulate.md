@@ -15,7 +15,7 @@ Read:
 - `rtl_buddy/src/rtl_buddy/rtl_buddy.py:L237-L289` — result row construction across all branches
 - `docs/contract-implementation.md` — how `fan_in` delivers items one at a time
 
-The `fan_in` contract delivers one `TestResultRow` per `run()` invocation via a synthetic `item` port. Rows arrive in undefined order (one per upstream emission). The module accumulates into `self.rows` and emits the final sorted summary from `finalize()`, which the harness calls once all input streams have ended.
+The `fan_in` contract delivers one `TestResultRow` per `run()` invocation via a synthetic `item` port. Rows arrive in undefined order (one per upstream emission). The module accumulates into `self.rows` and emits the final sorted summary from `finalise()`, which the harness calls once all input streams have ended.
 
 ## File: `modules/rtl_buddy_compat/results.py`
 
@@ -35,7 +35,7 @@ inputs (9 named ports in graph, multiplexed by contract into single "item" port)
   early_stop_comp_result
   early_stop_sim_result
   skip_result
-outputs: default → SuiteResultSummary  (emitted from finalize())
+outputs: default → SuiteResultSummary  (emitted from finalise())
 ```
 
 ```python
@@ -50,7 +50,7 @@ class SuiteResultAccumulate:
     def run(self, item: TestResultRow) -> None:
         self.rows.append(item)
 
-    def finalize(self) -> SuiteResultSummary:
+    def finalise(self) -> SuiteResultSummary:
         self.rows.sort(key=lambda r: (
             r.key.suite_path,
             r.key.expanded_index,
@@ -59,7 +59,7 @@ class SuiteResultAccumulate:
         return SuiteResultSummary(rows=self.rows)
 ```
 
-`run()` returns `None` — no per-row output. `finalize()` is called by the harness after all nine input streams have ended; its return value is emitted on the `default` port.
+`run()` returns `None` — no per-row output. `finalise()` is called by the harness after all nine input streams have ended; its return value is emitted on the `default` port.
 
 Compatibility: `rtl_buddy.py:L192-L199, L237-L289`.
 
@@ -80,16 +80,16 @@ Spec 20 will add `SummaryRender` to this entry.
 
 Write `modules/rtl_buddy_compat/tests/test_suite_result_accumulate.py`.
 
-Test `run()` and `finalize()` directly with plain Python objects (no contract machinery needed).
+Test `run()` and `finalise()` directly with plain Python objects (no contract machinery needed).
 
-- Call `run()` multiple times with rows from different ports → `finalize()` returns `SuiteResultSummary` containing all rows
-- No `run()` calls → `finalize()` returns `SuiteResultSummary(rows=[])`
+- Call `run()` multiple times with rows from different ports → `finalise()` returns `SuiteResultSummary` containing all rows
+- No `run()` calls → `finalise()` returns `SuiteResultSummary(rows=[])`
 - Mix of rows with different `expanded_index` values → output is sorted by `expanded_index`
 - Rows with `run_id=None` sort before rows with `run_id=0`
-- 3 calls to `run()` → `finalize()` returns 3 rows
+- 3 calls to `run()` → `finalise()` returns 3 rows
 
 ## Constraints
 
 - `run()` must return `None`; no per-row output is emitted.
 - Sort order must be deterministic: `suite_path` primary, `expanded_index` secondary, `run_id` tertiary (`None` sorts as `-1`).
-- `finalize()` is not called from `run()` — the harness calls it separately after all streams end.
+- `finalise()` is not called from `run()` — the harness calls it separately after all streams end.

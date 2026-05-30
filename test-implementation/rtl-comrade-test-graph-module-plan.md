@@ -231,15 +231,17 @@ Each module below should be implemented as a plain Python class with `run(...)`.
 
 ---
 
-## 6.1 `CliArgsSource`
+## 6.1 `CliArgsMerge`
 
 ### Role
 
-Convert harness-provided CLI/graph inputs into one `TestCliArgs` artefact.
+Collect individually-typed CLI argument values (arriving via CLI edges in the graph YAML) and assemble them into one `TestCliArgs` artefact.
 
 ### Inputs
 
-None, or graph-provided config values injected through node config.
+One port per `TestCliArgs` field, each sourced by a CLI edge:
+`test_config`, `test_name`, `list_tests`, `rnd_new`, `rnd_last`,
+`rtl_builder_mode`, `builder_override`, `run_depth`, `debug`, `color`.
 
 ### Outputs
 
@@ -247,13 +249,12 @@ None, or graph-provided config values injected through node config.
 
 ### Contract
 
-`unit` — runs once, no input ports.
+`zip` — fires once when all ten CLI edge values have arrived.
 
 ### Implementation steps
 
-1. Define `Config` matching the `test` graph CLI parameters.
-2. In `run()`, normalize absent values to the v1.4.0 defaults.
-3. Emit one `TestCliArgs` payload.
+1. Define `run(self, test_config, list_tests, ...)` with one parameter per CLI arg (no `Config` class).
+2. Assemble and return `TestCliArgs(...)` from the received values.
 
 ### Compatibility references
 
@@ -262,10 +263,10 @@ None, or graph-provided config values injected through node config.
 
 ### Acceptance checks
 
-- Default `test_config` is `tests.yaml`.
+- Default `test_config` is `tests.yaml` (declared in the CLI edge, not in a Config).
 - Default `run_depth` is `post`.
-- `test_name` may be absent.
-- `rnd_new` and `rnd_last` may both be false/None.
+- `test_name` may be absent (CLI edge declares `default: null`).
+- `rnd_new` and `rnd_last` may both be false.
 
 ---
 
@@ -1263,8 +1264,8 @@ Nine named ports, each from a single upstream source:
 ### Implementation steps
 
 1. `run(self, item: TestResultRow) -> None`: append `item` to `self.rows`; return `None` (no per-row output).
-2. `finalize(self) -> SuiteResultSummary`: sort `self.rows` by `(suite_path, expanded_index, run_id)` (`None` run_id sorts as `-1`); return `SuiteResultSummary(rows=self.rows)`.
-3. The harness calls `finalize()` once all nine input streams have ended; its return value is emitted on the `default` port.
+2. `finalise(self) -> SuiteResultSummary`: sort `self.rows` by `(suite_path, expanded_index, run_id)` (`None` run_id sorts as `-1`); return `SuiteResultSummary(rows=self.rows)`.
+3. The harness calls `finalise()` once all nine input streams have ended; its return value is emitted on the `default` port.
 
 ### Compatibility references
 
@@ -1335,7 +1336,7 @@ Modules responsible for calling `log.error`:
 
 Implement:
 
-1. `CliArgsSource`
+1. `CliArgsMerge`
 2. `RootBootstrap`
 3. `SuiteConfigLoad`
 4. `ListTestsBranch`
@@ -1456,9 +1457,9 @@ flowchart TD
   Start((StartBoundary))
   End((EndBoundary))
 
-  Start --> CliArgsSource[CliArgsSource]
-  CliArgsSource --> RootBootstrap[RootBootstrap]
-  CliArgsSource --> SeedModeSelect[SeedModeSelect]
+  Start --> CliArgsMerge[CliArgsMerge]
+  CliArgsMerge --> RootBootstrap[RootBootstrap]
+  CliArgsMerge --> SeedModeSelect[SeedModeSelect]
 
   RootBootstrap --> GitStatusReport[GitStatusReport]
   RootBootstrap --> SuiteConfigLoad[SuiteConfigLoad]
@@ -1518,11 +1519,11 @@ flowchart TD
   RootBootstrap -. state .-> SimCommandBuild
   RootBootstrap -. state .-> RunDepthGateSim
 
-  CliArgsSource -. state .-> RunIdPlan
+  CliArgsMerge -. state .-> RunIdPlan
   SeedModeSelect -. state .-> RunIdPlan
 
   subgraph BOOTSTRAP[bootstrap / command]
-    CliArgsSource
+    CliArgsMerge
     RootBootstrap
     GitStatusReport
     SuiteConfigLoad
@@ -1582,19 +1583,8 @@ contracts:
 nodes:
   # --- Bootstrap ---
   - id: cli-args
-    module: rtl_buddy_compat.cli_args_source
-    contract: unit
-    config:
-      test_config: tests.yaml
-      test_name: null
-      list_tests: false
-      rnd_new: null
-      rnd_last: null
-      rtl_builder_mode: null
-      builder_override: null
-      run_depth: post
-      debug: false
-      color: true
+    module: rtl_buddy_compat.cli_args_merge
+    contract: zip
 
   - id: root-bootstrap
     module: rtl_buddy_compat.root_bootstrap
@@ -1742,6 +1732,28 @@ nodes:
     contract: unit
 
 edges:
+  # CLI edges → cli-args (one per TestCliArgs field)
+  - src: {cli: test_config, option: true, type: str, default: "tests.yaml", help: "Path to tests YAML file."}
+    dst: {node: cli-args}
+  - src: {cli: test_name, option: true, type: str, default: null, help: "Run a single named test."}
+    dst: {node: cli-args, port: test_name}
+  - src: {cli: list_tests, option: true, type: bool, default: false, help: "Print test names and exit."}
+    dst: {node: cli-args, port: list_tests}
+  - src: {cli: rnd_new, option: true, type: bool, default: false, help: "Use a new random seed."}
+    dst: {node: cli-args, port: rnd_new}
+  - src: {cli: rnd_last, option: true, type: bool, default: false, help: "Replay last seed."}
+    dst: {node: cli-args, port: rnd_last}
+  - src: {cli: run_depth, option: true, type: str, default: "post", help: "Stop pipeline at: pre|comp|sim|post."}
+    dst: {node: cli-args, port: run_depth}
+  - src: {cli: debug, option: true, type: bool, default: false, help: "Enable debug build mode."}
+    dst: {node: cli-args, port: debug}
+  - src: {cli: color, option: true, type: bool, default: true, help: "Colorise output."}
+    dst: {node: cli-args, port: color}
+  - src: {cli: rtl_builder_mode, option: true, type: str, default: null, help: "Override RTL builder mode."}
+    dst: {node: cli-args, port: rtl_builder_mode}
+  - src: {cli: builder_override, option: true, type: str, default: null, help: "Override builder name."}
+    dst: {node: cli-args, port: builder_override}
+
   # cli-args → bootstrap nodes
   - src: {node: cli-args}
     dst: {node: root-bootstrap, port: cli}

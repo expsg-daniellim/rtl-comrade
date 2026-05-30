@@ -33,6 +33,8 @@ outputs: run → TestConfigEnvelope
 
 `reg_level` and `start_level` are optional `run()` parameters with default values of `None`. They are not upstream edges in the graph; they are intended for regression-mode usage (left unset for plain `test`).
 
+**Default-valued input behaviour**: when no upstream edge is wired for `reg_level` or `start_level`, the harness omits those keys from the dict passed to `run()` entirely — Python's own parameter default (`None`) takes effect. No `Payload` wrapper is injected. The `if reg_level is not None` checks in the implementation therefore work as written.
+
 Implementation steps:
 
 1. Resolve `t_lvl` from `test.reglvl` and `root.builder_name`:
