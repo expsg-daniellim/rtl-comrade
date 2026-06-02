@@ -1,6 +1,8 @@
 # Spec 09: Post-processing modules
 
-**Depends on:** spec 01 (schema).
+**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`RoutePostMod`
+reads `ctx["test"].uvm`; `ParseUvmLogMod` reads `ctx["test"].uvm.max_warns` /
+`.max_errors` — `UVMConfig` lives in 01b).
 **References:** [03 — Post-processing section](../03-module-catalog.md), [07 settled 14 / open 15](../07-ambiguities-and-assumptions.md).
 
 ## Goal
@@ -12,14 +14,29 @@ Implement the log-parse trio: a uvm/plain classifier router and two atomic parse
 In `modules/rtl_test/sim.py` (continuing from spec 08):
 
 - `RoutePostMod` — `(ctx)` → `("uvm", ctx)` if `ctx["test"].uvm is not None` else
-  `("plain", ctx)`. Pure data classifier; no scheduling.
+  `("plain", ctx)`. `ctx["test"].uvm` is `UVMConfig | None` per spec
+  [01b](01b-suite-schema.md). Pure data classifier; no scheduling.
 - `ParseLogMod` — reimplements rtl_buddy `VlogPost.get_results()` only: scan `ctx["log"]`
   for `^PASS\s*(.*)`, `^FAIL\s*(.*)`, `^(ERR|FAT):\s*(.*)`; default `{"result": "NA",
   "desc": "test result unknown"}`. Emits `{"key": ctx["key"], "result": TestResults(...)}`.
+  **Failure handling**: classification path — when the parsed result is FAIL, call
+  `log.error` at emission carrying the matched FAIL line and `ctx["log"]` path. SKIP/PASS
+  emission does not log. Parse-machinery exceptions distinct from the FAIL classification
+  (`FileNotFoundError` / `OSError` opening `ctx["log"]`; the inherited rtl_buddy quirk
+  where a `FAIL` line with no matching `ERR:`/`FAT:` raises `AttributeError`; `re.error`
+  on malformed regex input) are deferred pending TODO #13 — see [07 open 15].
 - `ParseUvmLogMod` — reimplements rtl_buddy `UvmVlogPost.get_results()` only: extract the
   UVM Report Summary "Report counts by severity" block; PASS iff `WARNING <=
-  ctx["test"].uvm.max_warns and ERROR <= max_errors and FATAL == 0`, else FAIL with the
-  counts summary in `desc`. Emits `{"key": ctx["key"], "result": TestResults(...)}`.
+  ctx["test"].uvm.max_warns and ERROR <= ctx["test"].uvm.max_errors and FATAL == 0`,
+  else FAIL with the counts summary in `desc`. Both thresholds are `int` per spec
+  [01b — `UVMConfig`](01b-suite-schema.md); their non-negative invariant is enforced
+  at YAML deserialisation, so this module does not re-validate. Emits `{"key":
+  ctx["key"], "result": TestResults(...)}`.
+  **Failure handling**: classification path — when the parsed result is FAIL, call
+  `log.error` at emission carrying the severity counts and `ctx["log"]` path. PASS
+  emission does not log. Parse-machinery exceptions (missing Report Summary block,
+  `FileNotFoundError` / `OSError` reading `ctx["log"]`, `ValueError` from `int()` on
+  malformed counts) are deferred pending TODO #13 — see [07 open 15].
 
 Manifest entries per [06](../06-graph-yaml.md).
 

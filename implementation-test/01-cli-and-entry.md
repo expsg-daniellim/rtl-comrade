@@ -23,7 +23,8 @@ are limited to the primitives `int | float | bool | str`.
 
 | rtl_buddy arg | flag | type | default | CLI edge `cli` name | feeds node |
 |---|---|---|---|---|---|
-| `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `parse-suite-config` |
+| `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `check-suite-cwd` → `parse-suite-config` |
+| *(none)* | `-L/--logs-dir` | str | `logs` | `logs_dir` | `ensure-logs-dir`, `build-compile-cmd`, `build-sim-cmd`, `resolve-seed` |
 | `test_name` | positional (optional) | str | `""` (= all) | `test_name` | `select-tests` |
 | `list_tests` | `--list` | bool | `false` | `list` | `route-list-mode` |
 | `rnd_new` | `-n/--rnd-new` | bool | `false` | `rnd_new` | `derive-seed-mode` |
@@ -50,6 +51,37 @@ Notes and decisions (see [07](07-ambiguities-and-assumptions.md)):
 - `rtl_buddy` always prepends `.` to `$PATH` so a simulator in the CWD is found. The
   `run-process` module should replicate this (or a setup node like `resolve-builder`), since
   it is load-bearing for `verilator`/`simv` discovery.
+- **`-L/--logs-dir` is a small Notable divergence from `rtl_buddy`.** `rtl_buddy` hard-codes
+  `"logs"` (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55`); Plan B keeps the same default
+  but exposes the path as a CLI override so the artefact directory can be relocated without
+  chdir gymnastics. The directory is materialised by the `ensure-logs-dir` setup node and
+  consumed by `build-compile-cmd` / `build-sim-cmd` / `resolve-seed`. See
+  [07 settled 26](07-ambiguities-and-assumptions.md).
+
+## Where to invoke `rtl-comrade test` from
+
+`rtl-comrade test` and `rtl-comrade randtest` follow `rtl_buddy`'s convention: **invoke
+from the suite directory** (the directory that contains `tests.yaml`). `rtl_buddy`'s
+`do_cmd_test` never `chdir`s — only `do_rtl_regression` does, per-suite
+(`rtl_buddy/src/rtl_buddy/rtl_buddy.py:404`). The validation example in
+`rtl_buddy/AGENTS.md` makes this concrete: `cd .../verif && python -m rtl_buddy test
+basic`.
+
+The plain `test` and `randtest` graphs inherit this user-driven posture because `run.f`,
+`obj_dir_<tag>/`, `logs/` (or whatever `--logs-dir` resolves to), and the `test.*` symlinks
+land in CWD. To prevent the silent "wrong CWD → artefacts in wrong place" failure mode (the
+monorepo case with `-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`, or
+`-c subdir/tests.yaml`), a [`check-suite-cwd`](03-module-catalog.md) setup node fails fast
+with `log.critical` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
+or if the resolved file doesn't exist. The `regression` graph does not wire this node — it
+`chdir`s per-suite internally. See [07 settled 24](07-ambiguities-and-assumptions.md) for
+the full rationale.
+
+The artefact directory itself is materialised by an [`ensure-logs-dir`](03-module-catalog.md)
+setup node fed by the CLI `logs_dir` edge (default `"logs"` — parity with rtl_buddy). It
+runs once at startup, after `check-suite-cwd` has validated the CWD and after
+`prepend-cwd-path` has fixed `$PATH`, then unblocks every subprocess via the chained
+`env_ready` sequencing surface. See [07 settled 26](07-ambiguities-and-assumptions.md).
 
 ## What the harness does NOT give us
 

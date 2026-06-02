@@ -25,15 +25,27 @@ ctx = {
     "key":  "alu_smoke#0#0",   # correlation key
     "test": <TestConfig>,      # the rtl_buddy TestConfig (mutated in place by preproc/sweep)
     "simv": <Path>,            # ADDED by interpret-compile; absent before compile
+    "seed": <int>,             # ADDED by resolve-seed; absent before sim-build
+    "log":  <Path>,            # ADDED by build-sim-cmd; the sim log path (used by post-parsers)
+    "randseed_path": <Path>,   # ADDED by build-sim-cmd; consumed by write-randseed
 }
 ```
 
 Rules that keep this from becoming the rejected envelope:
 
 - **Only genuinely-pervasive values live here.** `test` is needed by almost every stage;
-  `simv` is needed by every run of a compiled test. A value earns a place in `ctx` *only
-  if every downstream stage needs it*. Everything else is a Shape-2/3 payload consumed
-  locally.
+  `simv` is needed by every run of a compiled test; `seed`/`log`/`randseed_path` are folded
+  in by `build-sim-cmd` so the downstream `keyed_join` (`write-randseed`) and post-parsers
+  carry no persistent config port (`keyed_join` joins every port by key and so cannot also
+  carry a persistent config — see [07 Implementation notes](07-ambiguities-and-assumptions.md)).
+  A value earns a place in `ctx` *only if every downstream stage needs it*. Everything else
+  is a Shape-2/3 payload consumed locally.
+- **Path composition lives at the use site, not in `ctx`.** `log` and `randseed_path` are
+  pre-composed by `build-sim-cmd` from the CLI `logs_dir` persistent input plus
+  `test.get_name()` and `ctx["run_id"]`; `build-compile-cmd` does the equivalent for the
+  compile log paths, which it puts into `command` (not `ctx`) since only `cc-run` reads
+  them. The `logs/` directory itself is materialised once at startup by `ensure-logs-dir`
+  (see [07 settled 26](07-ambiguities-and-assumptions.md)); no writer calls `mkdir`.
 - **No derived or transient values** — `argv`, `rc`, `stdout`, `stderr`, `log`, `duration`
   never enter `ctx`.
 - **No `result` field, ever.** A terminal outcome does not ride inside `ctx`; it leaves the

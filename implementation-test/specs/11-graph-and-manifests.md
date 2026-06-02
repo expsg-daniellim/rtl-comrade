@@ -41,6 +41,8 @@ This spec is mostly assembly — copy [06](../06-graph-yaml.md) faithfully. If a
 node/port name diverged between [03](../03-module-catalog.md) and what got built in specs
 04–10, reconcile here (prefer matching the actual module signatures over the plan).
 
-If the framework verification in spec 00 found that `**kwargs` port inference doesn't
-work, declare `agg`'s eight ports explicitly in the module (per spec 10's notes) and
-adjust this graph accordingly — the edges already name each port.
+`agg`'s edges land on contract-declared input ports (the 13 terminal sources), not module
+parameters. The module signature is just `run(self, result)`; the `merge` contract's
+`fan_in: result` collapses every contract-side input onto `result` before invocation.
+See [spec 02 Prerequisite](02-merge-contract.md#prerequisite) for the harness change this
+relies on.

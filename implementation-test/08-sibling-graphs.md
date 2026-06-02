@@ -9,9 +9,12 @@ orchestration nodes differ.
 
 The entire main pipeline carries over with the same contracts and wiring:
 
-- setup chain — `discover-config-file`, `parse-root-config`, `select-platform`,
-  `resolve-builder`, `parse-suite-config` *(contract switches for regression — see below)*,
-  `load-model`
+- setup chain — `discover-config-file`, `prepend-cwd-path` *(wired to both `run-process`
+  instances via `env_ready` in every graph — see [07 settled
+  25](07-ambiguities-and-assumptions.md))*, `parse-root-config`, `select-platform`,
+  `resolve-builder`, `check-suite-cwd` *(test/randtest only — regression chdir's per-suite,
+  see structural note #1)*, `parse-suite-config` *(contract switches for regression — see
+  below)*, `load-model`
 - selection / expansion — `route-list-mode`, `list-test-names`, `select-tests`,
   `filter-reglvl` *(finally exercised by regression)*, `expand-sweep`, `run-preproc`
 - per-test — `gate-pre`, `write-filelist`, `build-compile-cmd`, `run-process` (compile),
@@ -65,6 +68,8 @@ this file.
 - `derive-randtest-runs.seed_mode` → `resolve-seed.seed_mode` (persistent).
 - CLI edges: `rnd_new`/`rnd_last` removed; `rnd_cnt`, `rnd_rpt` added; `test_name` becomes
   a true required positional (no `default`); `--list` removed (randtest has no list mode).
+- `check-suite-cwd` wired identically to the test graph (same user-driven CWD posture —
+  see [01](01-cli-and-entry.md) and [07 settled 24](07-ambiguities-and-assumptions.md)).
 - Everything else identical.
 
 ---
@@ -113,7 +118,9 @@ default-resolution lives in one obvious place.
 
 - Suite stream: `resolve-reg-config-path` → `parse-reg-config` → `parse-suite-config` →
   `select` directly (regression has no list mode — drop `route-list`/`list-names` from
-  this graph).
+  this graph). `check-suite-cwd` is **not** wired: regression `chdir`s per-suite (see
+  structural note #1), so each `parse-suite-config` invocation already sees the correct
+  CWD without an upstream check.
 - Filter wiring: `reg_level`/`start_level` CLI edges connect to the existing
   `filter-reglvl` persistent inputs (which sit unwired in the test graph).
 - Suite stamping: `parse-suite-config` stamps the suite name into each test's identity

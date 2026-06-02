@@ -14,11 +14,24 @@ Items are numbered globally for cross-referencing (e.g., "see TODO #5"). The ord
 
 ### 1. Enumerate failure modes — and resolve open questions sitting in build tickets
 
+**Status: Resolved (2026-05-31).** Step 1 (hedge-phrase scan across `specs/`) returns 0
+matches after the `08` REPLAY edit. Step 2 (per-module failure audit: exception classes,
+emission shape, log idiom) is captured in each module's spec via inline
+`**Failure handling:**` blocks across specs 03–10; the log-idiom dimension is centralised
+in [`05-branching-and-results.md` — Log idioms per failure site](implementation-test/05-branching-and-results.md#log-idioms-per-failure-site).
+Step 3 (decide / promote each open question) is vacuous given step 1's empty result;
+the one example originally cited is resolved (see TODO #2). Step 4 (re-read each spec
+end-to-end) is implicit in the per-module annotation pass. New Notable divergences from
+rtl_buddy (per-test FAIL routing for preproc/sweep/load-model/write-filelist crashes)
+are recorded in `07-ambiguities-and-assumptions.md`.
+
 Several `specs/` tickets contain unresolved design questions phrased *as* spec prose. The clearest example is `specs/08-sim-cycle-modules.md:24-26` for `ResolveSeedMod`'s REPLAY-missing path:
 
 > "on missing/invalid file, emit a `result` envelope with `SimTimeoutResults`-style FAIL? — actually per [03] writes a FAIL stub log + symlinks (verify against rtl_buddy `VlogSim.execute` REPLAY-missing path)."
 
 A build ticket should never contain a question the implementer cannot answer from the ticket alone. This is upstream of every other todo in this file — none of the per-spec polish below is meaningful until specs are actually answerable.
+
+The specific `ResolveSeedMod` REPLAY-missing example cited above is now resolved (see TODO #2) and the spec file (`specs/08-sim-cycle-modules.md:19-27`) has been updated. The broader audit — scanning every `specs/` file for hedge phrases — remains open.
 
 #### Concrete steps
 
@@ -37,6 +50,14 @@ A build ticket should never contain a question the implementer cannot answer fro
 No `specs/` file contains a question mark or hedge phrase in `Deliverables` or `Acceptance criteria`. Any remaining open items carry an explicit `[open: see 07-...]` tag pointing at the corresponding entry in `07-ambiguities-and-assumptions.md`.
 
 ### 2. Integrate graph failures with `log.fatal` / `log.error`
+
+**Status: Resolved (2026-05-31).** Per-site decisions and the topology consequences live in
+[`implementation-test/05-branching-and-results.md` — Log idioms per failure site](implementation-test/05-branching-and-results.md#log-idioms-per-failure-site).
+Each affected module entry in `implementation-test/03-module-catalog.md` carries a one-line
+`**Log idiom:**` pointer. Downstream edits to row 22 of `04-pipeline-and-contracts.md`,
+the edge list in `06-graph-yaml.md`, and Settled item 10 in `07-ambiguities-and-assumptions.md`
+followed. Parse-machinery exceptions (distinct from FAIL classification) are still deferred
+pending TODO #13 (VlogPost quirks).
 
 The plan states the principle in three places (`00-overview.md:142`, `05-branching-and-results.md:101-113`, `07-ambiguities-and-assumptions.md:57-60`): `aggregate-results.finalise()` calls `log.error` if any row is not `is_pass()`, and `CRITICAL`/`FATAL` is reserved for unrecoverable config errors. Per `docs/invariants.md:20-21`, `ERROR` defers to a non-zero exit and `CRITICAL`/`FATAL` triggers immediate `SystemExit(1)`.
 
@@ -67,6 +88,24 @@ Cross-reference: Plan A (`test-implementation/20-summary-and-exit-code.md`) enum
 
 ### 3. Define the interim strategy for parallel runs
 
+**Status: Resolved (2026-05-31).** Posture chosen: option (b), a serialising contract on the
+compile/sim region. The hazard is that a concurrent next-test compile would stomp the prior
+test's non-graph-routed build artefacts (`obj_dir_<tag>/`, `simv`, `run.f`) before its sim
+has consumed them. Posture: `write-filelist` acquires a process-wide `asyncio.Lock` per
+(test, sweep-variant); `aggregate-results`' existing `merge` contract releases the same lock
+once per delivered terminal payload. Pre-region nodes still parallelise across tests; the
+mid-region is atomic per test. Two contract pieces: a new `serial_acquire` contract, and an
+extension to the existing `merge` contract (`release_lock` Config field). Both are
+**explicitly temporary** and must be removed when upstream `rtl_buddy` per-test artefact
+dirs land (see `07` item 17). Scoped to the plain `test` graph (R=1); sibling graphs
+(`randtest`, `regression`) need a different release rule and are out of scope here.
+Mechanism, constraints, sketch, and cross-links are in
+[`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture);
+node-table update in [`04`](implementation-test/04-pipeline-and-contracts.md) rows 7 and 22;
+graph + manifest wiring in [`06`](implementation-test/06-graph-yaml.md); cross-link from
+[`07`](implementation-test/07-ambiguities-and-assumptions.md) item 17 (kept in Deferred —
+the upstream change itself is still deferred).
+
 `07-ambiguities-and-assumptions.md:146` notes `obj_dir`, `logs/`, and CWD-based artefacts are all CWD-relative — same as rtl_buddy. `07` item 17 defers per-invocation subdirs to an upstream rtl_buddy change. But structural concurrency is the design's whole advantage over rtl_buddy, and running two compiles or two sims in parallel will collide on `run.f`, `obj_dir`, `test.*` symlinks, and `rtl_buddy.log`. With no interim plan, the graph is effectively single-threaded.
 
 #### Concrete steps
@@ -81,6 +120,19 @@ Cross-reference: Plan A (`test-implementation/20-summary-and-exit-code.md`) enum
 Any reader can answer "what happens if two tests run in parallel?" without the entire answer being "the upstream change."
 
 ### 4. Validate the `MergeContract` design before downstream specs depend on it
+
+**Status: Resolved (2026-05-31).** Step 1 (formal description) is captured in
+[`05 — Invariants and termination`](implementation-test/05-branching-and-results.md#invariants-and-termination):
+state, no-loss invariant, per-port `EndSentinel` handling, drainage order, non-correlating
+behaviour, termination rule, and `release_lock` side-effect. Steps 2–3 (stress test +
+property-based test) are enumerated as concrete test cases in
+[`specs/02-merge-contract.md`](implementation-test/specs/02-merge-contract.md) — including
+the multi-done-per-wake and drainage-order cases the original prose only implied. Step 4
+(`docs/contracts/index.md` promotion) is added as an acceptance criterion on the same spec,
+to be carried out during implementation; the interim `release_lock` field is included in
+the entry but flagged as a TODO #30 hook rather than as part of the contract's first-class
+surface. The `SerialAcquireContract` + `merge.release_lock` interim shim added by TODO #3
+is **not** in scope for TODO #4 — tracked separately in TODO #30.
 
 `05-branching-and-results.md:98-99` identifies `MergeContract` as the only piece of genuine scheduling the design adds. `07` items 19–20 acknowledge that its concurrency safety is asserted, not proven. Eight terminal-result branches converge on `agg` through it (`04-pipeline-and-contracts.md` row 22); if it is wrong, every branch is wrong.
 
@@ -97,6 +149,21 @@ Any reader can answer "what happens if two tests run in parallel?" without the e
 
 ### 5. Finalise `run-process` async + signal semantics
 
+**Status: Resolved (2026-05-31).** Spec rewritten as
+[`specs/03-run-process.md`](implementation-test/specs/03-run-process.md) with an
+exhaustive Lifecycle section (states 1–4, including the timeout 3a and cancellation 3b
+cleanup paths), a Signal-and-timeout-policy table, an `rc=4444` ownership block, a
+Cancellation-behaviour block, four enumerated failure cases (launch failure, external
+kill, exit-before-wake, never-reaps), and ten enumerated tests exerciseable against a
+slow-sleep bash fake. Two deliberate departures from rtl_buddy: SIGQUIT to the full
+process group (not just the leader; rtl_buddy `vlog_sim.py:259` only signals the
+leader) and SIGKILL escalation after a `_TIMEOUT_GRACE_S = 5.0 s` window. `timed_out`
+is set independently of `rc` (rtl_buddy implicitly uses `rc == 4444`). Catalog sketch
+in [`03-module-catalog.md`](implementation-test/03-module-catalog.md) updated to match;
+[`07-ambiguities-and-assumptions.md`](implementation-test/07-ambiguities-and-assumptions.md)
+item 23 updated with a "what remains to verify empirically" note (design is
+finalised but the framework probes still need to run before module implementation).
+
 `07` item 23 flags the SIGQUIT-to-process-group + `rc=4444` + `asyncio.wait_for` interaction as tricky and unfinalised. `run-process` is shared by compile and sim; if its semantics drift, both legs misbehave.
 
 #### Concrete steps
@@ -112,20 +179,56 @@ Any reader can answer "what happens if two tests run in parallel?" without the e
 
 ### 6. Document framework-verification contingencies
 
-`specs/00-framework-verification.md` is a probe-first spec — it verifies `**kwargs` port inference, persistent-without-edge handling, and `keyed_join` payload unwrap before any module is built. But there is no documented decision tree for what to do if any probe *fails*. The fallback for `aggregate-results.run(**fired)` (eight explicit `=None` ports) is mentioned in passing but not written out. (The same probes are tracked as items 19, 21, 22 in `07-ambiguities-and-assumptions.md` under "To verify against the framework before building".)
+**Status: Resolved (2026-06-02).** All three probes in `specs/00-framework-verification.md`
+turned out to be answerable from the harness docs/source, not empirically. Resolutions
+recorded in `07-ambiguities-and-assumptions.md` Settled items 19, 21, 22 (numbers kept in
+place to preserve cross-references):
 
-#### Concrete steps
+- **`**kwargs` port inference (07 item 19)** — `src/rtl_comrade/structure.py:115-119`
+  builds ports strictly from `inspect.signature(...).parameters`, so `**kwargs` produces
+  one VAR_KEYWORD port, not arbitrary inference. Design pivoted to `MergeContract` M-N
+  fan-in with contract-declared input ports (module declares only `result`, contract
+  declares the 13 terminal-source inputs via `Config.fan_in`). Depends on a harness
+  change called out as a prerequisite in
+  [`specs/02-merge-contract.md`](implementation-test/specs/02-merge-contract.md#prerequisite);
+  implementation work owned outside this plan.
+- **Persistent input with no upstream edge (07 item 21)** — settled by three doc citations
+  (`docs/harness/validation.md:39`, `docs/contracts/default.md` step 4,
+  `docs/modules/implementation.md`). Default-having ports are exempt from edge validation
+  and the default contract falls through to the Python default when nothing has been
+  queued. `run_ids = [None]`, `reg_level = None`, `start_level = None` fire as written;
+  no constant-emitter or sentinel-edge workaround needed.
+- **`keyed_join` payload unwrap (07 item 22)** — settled by `docs/modules/implementation.md`
+  Runtime Call Model: the harness unwraps payloads to raw values at `node.py:281` before
+  `module.run(**inputs)`. Universal across contracts, so `keyed_join` delivers raw dicts.
+  No alternative payload shape needed.
 
-1. For each probe in `specs/00-framework-verification.md`, add an "If this fails, …" section that names the fallback design and identifies which downstream specs need to change.
-2. For `**kwargs` port inference: pre-write the eight-explicit-port version of `aggregate-results` (signature + body sketch) and place it in the spec as the standby.
-3. For persistent-without-edge: identify which CLI defaults (`run_ids`, `reg_level`, `start_level`) rely on this and pre-design the workaround (explicit constant-emitter nodes, or sentinel edges).
-4. For `keyed_join` payload unwrap: identify alternative payload shapes that work even if the contract delivers tuples instead of unwrapped values.
-
-#### Acceptance check
-
-Running `specs/00-framework-verification.md` produces either a green light or a written fallback plan — never an open question.
+Knock-on edits: `specs/00-framework-verification.md` deleted entirely (the doc-settled
+probes were its only content); `specs/README.md` index updated; `specs/01-shared-schema.md`
+and `specs/03-run-process.md` lose their "Depends on: spec 00" line; `specs/11-graph-and-manifests.md`
+loses its kwargs-fallback note. **TODO #11 is closed by the same evidence** — see its
+resolution.
 
 ### 7. Pin the interim CWD strategy
+
+**Status: Resolved (2026-06-02).** Posture chosen: user-driven invocation (parity with
+`rtl_buddy`, whose `do_cmd_test` never `chdir`s — only `do_rtl_regression` does, at
+`rtl_buddy/src/rtl_buddy/rtl_buddy.py:404`), with a new `check-suite-cwd` setup node
+enforcing the convention via `log.critical`. The check resolves the CLI `test_config`
+against CWD and fails if `(Path.cwd() / test_config).resolve().parent !=
+Path.cwd().resolve()` or if the resolved file doesn't exist — catching three
+monorepo-mistarget cases (`-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`,
+`-c subdir/tests.yaml`) that the existing `parse-suite-config` file-missing check does
+not. Wired in `test` and `randtest`; not wired in `regression` (which `chdir`s
+per-suite). Spec in [`specs/04-setup-modules.md`](implementation-test/specs/04-setup-modules.md);
+catalog entry in [`03-module-catalog.md`](implementation-test/03-module-catalog.md);
+node row S4.5 in [`04`](implementation-test/04-pipeline-and-contracts.md); log-idiom
+row in [`05`](implementation-test/05-branching-and-results.md#log-idioms-per-failure-site);
+graph + manifest in [`06`](implementation-test/06-graph-yaml.md); user-facing convention
+in [`01`](implementation-test/01-cli-and-entry.md) under "Where to invoke `rtl-comrade
+test` from"; sibling-graph wiring in [`08`](implementation-test/08-sibling-graphs.md);
+Settled item 24 + updated "CWD assumptions preserved" implementation note in
+[`07`](implementation-test/07-ambiguities-and-assumptions.md).
 
 `08-sibling-graphs.md:135` drops `chdir-suite` "on the assumption" the upstream per-invocation-subdir change lands first. The plain `test` graph already relies on CWD-based artefact placement (`link-latest` writes symlinks "in CWD"; multiple modules write to `logs/...`). Until the upstream change lands, the design silently assumes someone `cd`s into the suite directory before invocation. The CLI entry path does not say so. (See `07-ambiguities-and-assumptions.md` "Implementation notes" — "CWD assumptions preserved" — for the explicit acknowledgement; the deeper concurrency story is `07` item 17.)
 
@@ -142,6 +245,32 @@ Running `specs/00-framework-verification.md` produces either a green light or a 
 
 ### 8. Prepend `.` to `$PATH` for CWD-local tool discovery
 
+**Status: Resolved (2026-06-02).** Owner chosen: a new dedicated `prepend-cwd-path`
+setup `unit` node (spec [04](implementation-test/specs/04-setup-modules.md), catalog
+entry in [03](implementation-test/03-module-catalog.md)), zero-input, that mirrors
+`rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` and idempotently prepends `.` to
+`os.environ["PATH"]`. Sequencing is provided by a generic persistent input
+`env_ready:bool = True` added to `run-process`: the graph wires
+`prepend-path → cc-run.env_ready` and `prepend-path → sim-run.env_ready` so the
+harness's data-dependency ordering pins the PATH mutation strictly upstream of every
+subprocess (no race window). The `env_ready` name is deliberately generic so any
+future env-setup node joins the same sequencing surface — `run-process` itself stays
+ignorant of PATH policy. Considered and rejected: doing the mutation inside
+`run-process` (per-call in the inner loop, widens the workhorse) and inside
+`resolve-builder` (widens config-resolution with env-policy concerns). Knock-on
+edits: catalog entries and provenance row in
+[`03`](implementation-test/03-module-catalog.md); node-table row S0 plus `cc-run` /
+`sim-run` input lists and the setup narrative in
+[`04`](implementation-test/04-pipeline-and-contracts.md); graph node + two
+`env_ready` edges + manifest line in
+[`06`](implementation-test/06-graph-yaml.md); deliverable + tests + acceptance
+criterion in [`specs/04-setup-modules.md`](implementation-test/specs/04-setup-modules.md);
+ownership resolution + `env_ready` test bullet in
+[`specs/03-run-process.md`](implementation-test/specs/03-run-process.md); sibling-graph
+reuse note in [`08`](implementation-test/08-sibling-graphs.md); promotion of the
+"Implementation notes" entry to Settled item 25 in
+[`07`](implementation-test/07-ambiguities-and-assumptions.md).
+
 `07-ambiguities-and-assumptions.md` "Implementation notes" records that rtl_buddy prepends `.` to `$PATH` so a CWD-local simulator (`simv`, `verilator`) is discoverable. The note says `run-process` "or a setup node like `resolve-builder`" must replicate it. No current spec captures the behaviour, and skipping it breaks tool discovery in the common rtl_buddy invocation pattern.
 
 #### Concrete steps
@@ -156,6 +285,41 @@ Running `specs/00-framework-verification.md` produces either a green light or a 
 The chosen module's spec explicitly mentions the PATH-prepend behaviour, and a test exercises it.
 
 ### 9. Define the `builder_cfg` / `RtlBuilderConfig` schema
+
+**Status: Resolved (2026-06-02).** Builder schema extracted into a dedicated spec
+[`specs/01a-builder-schema.md`](implementation-test/specs/01a-builder-schema.md), pinned
+to `rtl_buddy/src/rtl_buddy/config/rtl.py:8-126` (`process_opts`,
+`RtlBuilderConfigOpts`, `RtlBuilderConfig`). Spec enumerates every field (name, exe,
+simv, sim_rand_seed, sim_rand_prefix, opts) with YAML rename targets, the nested
+`RtlBuilderConfigOpts` (compile_time/run_time + `process_opts` whitespace-splitting
+deserializer), and every method (`get_name`, `get_exe`, `get_simv`, `get_seed`,
+`get_modes`, `get_compile_time_opts(mode)`, `get_run_time_opts(mode, seed=None)`)
+with returns, behaviour, and the `log.critical`-on-missing-mode/stage idiom for the
+two `get_*_opts` methods. The caller-side **Verilator quirk** (callers switch on
+`os.path.basename(builder_cfg.get_exe()).startswith("verilator")` to choose
+`f"{build_dir}/simv"` over `builder_cfg.get_simv()`, per
+`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:73-80`) is documented in spec 01a and
+referenced from every caller spec rather than duplicated. Knock-on edits:
+[`specs/01-shared-schema.md`](implementation-test/specs/01-shared-schema.md)
+drops the `RtlBuilderConfig` line and adds a `builder.py` reference pointing to 01a;
+[`specs/README.md`](implementation-test/specs/README.md) adds row 01a and updates the
+parallelism narrative; consumer specs
+[`05`](implementation-test/specs/05-selection-expansion-modules.md),
+[`07`](implementation-test/specs/07-compile-cycle-modules.md), and
+[`08`](implementation-test/specs/08-sim-cycle-modules.md) now name methods
+explicitly (`builder_cfg.get_name()`, `get_exe()`, `get_compile_time_opts(mode)`,
+`get_run_time_opts(mode, seed)`) with the verilator switch shown at the use site;
+[`03-module-catalog.md`](implementation-test/03-module-catalog.md) `filter-reglvl`
+entry names `builder_cfg.get_name()` (mirrors
+`rtl_buddy/src/rtl_buddy/rtl_buddy.py:350`).
+
+**One discrepancy with the original TODO text.** TODO #9's enumeration listed
+`write-filelist` as a `builder_cfg` consumer; neither the catalog (`03-module-catalog.md`
+`write-filelist` entry) nor rtl_buddy's source (`vlog_sim.py:88-93`,
+`tools/vlog_filelist.py`) bears this out — `write-filelist` takes `ctx` only,
+pulling `model_cfg` and the testbench filelist from inside it. Builder config does
+not flow through that node. No spec edit needed; the resolution simply does not
+extend `builder_cfg` to `write-filelist`.
 
 `resolve-builder`, `filter-reglvl`, `build-compile-cmd`, `resolve-seed`, `build-sim-cmd`, and `write-filelist` all consume a `builder_cfg`/`builder_mode` value (`03-module-catalog.md:47,210,225`; `04-pipeline-and-contracts.md:98`). The shape — fields, types, methods like `get_seed()` — is implicit. `02-payload-conventions.md` does not pin it. (`07-ambiguities-and-assumptions.md` item 1 settles that the YAML config schema is preserved drop-in; the Python types that load it are the implementer's responsibility.)
 
@@ -172,6 +336,58 @@ Any module consuming `builder_cfg` can be written without opening rtl_buddy to d
 
 ### 10. Pin the `tests.yaml` and `models.yaml` schemas
 
+**Status: Resolved (2026-06-02).** Same pattern as TODO #9 — schemas extracted into
+two dedicated specs:
+
+- [`specs/01b-suite-schema.md`](implementation-test/specs/01b-suite-schema.md), pinned
+  to `rtl_buddy/src/rtl_buddy/config/{suite,test,uvm}.py`. Covers `SuiteConfigFile`,
+  `SuiteConfig`, `TestbenchConfig`, `TestConfigFile` (raw, with every `field(rename=)`
+  including `reglvl`/`plusargs`→`pa`/`plusdefines`→`pd`/`preproc|postproc|sweep` path
+  extraction/`testbench`→`tb`/`sim_timeout`→`timeout`), `TestConfig` (runtime, with
+  every getter/setter and `get_reglvl`'s four-branch resolution logic), and
+  `UVMConfig` (with `__post_init__` validation). Records three Plan B divergences from
+  rtl_buddy: lazy model loading ([07 settled 8](implementation-test/07-ambiguities-and-assumptions.md)),
+  the `model` → `model_name` rename on the runtime type to avoid the rtl_buddy name
+  collision (raw `model: str` becomes runtime `ModelConfig`), and the new
+  `suite_dir: Path` field stamped by `parse-suite-config` for downstream `load-model`
+  resolution.
+- [`specs/01c-model-schema.md`](implementation-test/specs/01c-model-schema.md), pinned
+  to `rtl_buddy/src/rtl_buddy/config/model.py`. Covers `ModelConfig`,
+  `ModelConfigFile`, `ModelConfigLoader`, plus the `path` field mutation side-effect
+  in `get_model`. Records the Plan B divergence at the loader layer: `__init__` and
+  `get_model` **raise** instead of `log.critical`ing, so `LoadModelMod` can catch and
+  route per-test FAIL (matches [07 settled
+  10](implementation-test/07-ambiguities-and-assumptions.md)). Also notes the
+  rtl_buddy `get_model_name` bug (returns `self.model_name`, a missing attribute)
+  with Plan B's fix (return `self.name`).
+
+Knock-on edits:
+[`specs/01-shared-schema.md`](implementation-test/specs/01-shared-schema.md) drops the
+`suite.py` / `model.py` / `uvm.py` bullets and adds pointers to 01b / 01c;
+[`specs/README.md`](implementation-test/specs/README.md) adds rows 01b and 01c and
+updates the parallelism narrative + schema fan-in summary;
+[`specs/04-setup-modules.md`](implementation-test/specs/04-setup-modules.md)
+`ParseSuiteConfigMod` now names the binding step (`tbs = {tb.get_name(): tb for tb in
+raw.testbenches}`), the `suite_dir` stamp, and the `UVMConfig` `ValueError` catch;
+[`specs/05-selection-expansion-modules.md`](implementation-test/specs/05-selection-expansion-modules.md)
+`SelectTestsMod` / `LoadModelMod` / `ExpandSweepMod` reference fields by name
+(`suite_cfg.get_test_names()`, `suite_cfg.get_tests(test_name or None)`,
+`ctx["test"].suite_dir`, `ctx["test"].model_path`, `ctx["test"].model_name`,
+`ctx["test"].get_sweep_path()`);
+[`specs/06-prep-modules.md`](implementation-test/specs/06-prep-modules.md)
+`RunPreprocMod` / `WriteFilelistMod` name the field reads (`ctx["test"].get_preproc_path()`,
+`ctx["test"].get_testbench().get_filelist()`, `ctx["test"].get_model().get_filelist()`,
+`.path`);
+[`specs/07-compile-cycle-modules.md`](implementation-test/specs/07-compile-cycle-modules.md)
+`BuildCompileCmdMod` names the plusdefines source and the `test_tag` regex (mirrors
+`vlog_sim.py:65`);
+[`specs/08-sim-cycle-modules.md`](implementation-test/specs/08-sim-cycle-modules.md)
+`BuildSimCmdMod` names the plusargs/plusdefines sources and the `get_timeout()` tuple
+shape;
+[`specs/09-post-modules.md`](implementation-test/specs/09-post-modules.md)
+`RoutePostMod` / `ParseUvmLogMod` reference `ctx["test"].uvm` and its fields
+explicitly.
+
 `parse-suite-config` reads `tests.yaml` and deserialises "into the schema (spec 01)" (`specs/04-setup-modules.md:24`); `load-model` later reads `models.yaml`. Neither schema is committed to in `specs/01-shared-schema.md` or `02-payload-conventions.md`. (As with TODO #9, `07-ambiguities-and-assumptions.md` item 1 settles that the YAML surface is preserved drop-in but does not name the Python types.)
 
 #### Concrete steps
@@ -187,20 +403,50 @@ Any consumer module can be written from the spec without reading rtl_buddy sourc
 
 ### 11. Verify persistent-but-unwired CLI defaults
 
-`07` item 21 flags that `run_ids`, `reg_level`, and `start_level` are persistent inputs on `resolve-seed`/`filter-reglvl` but have no edges in the plain `test` graph — the design relies on Python defaults activating. Whether the harness allows a persistent input port to be unwired (with a default kicking in) is an unverified behavioural assumption.
-
-#### Concrete steps
-
-1. Add a probe to `specs/00-framework-verification.md` that explicitly tests an unwired persistent input: does the contract fire the module with the default, or does validation reject the graph as missing an edge?
-2. If validation rejects: design either (a) explicit constant-emitter nodes for each default, or (b) sentinel "run-with-default" edges.
-3. If validation accepts but the module never fires: same fallback.
-4. Update `06-graph-yaml.md` to wire the chosen approach.
-
-#### Acceptance check
-
-The plain `test` graph passes validation and `resolve-seed`/`filter-reglvl` fire with the intended defaults.
+**Status: Resolved (2026-06-02).** Closed by the same evidence as TODO #6 step 3 (and
+07 Settled item 21). Three doc citations confirm a persistent-listed port with a Python
+default and no upstream edge passes validation and fires with the default:
+`docs/harness/validation.md:39` (default-having ports exempt from edge validation);
+`docs/contracts/default.md` invocation precedence step 4 ("Default-valued ports with
+nothing queued — omitted from the dict; Python's own default activates"); and
+`docs/modules/implementation.md` ("The built-in default contract can use such defaults
+without any upstream edge"). No constant-emitter nodes or sentinel-edge workaround is
+needed. The plain `test` graph's unwired persistent inputs (`expand-runs.run_ids = [None]`,
+`filter-reglvl.reg_level = None`, `filter-reglvl.start_level = None`) fire as written.
 
 ### 12. Specify `logs/` directory ownership and lifecycle
+
+**Status: Resolved (2026-06-02).** Ownership lifted out of per-test lazy `makedirs`
+into a dedicated [`ensure-logs-dir`](implementation-test/03-module-catalog.md) `unit`
+setup node (spec [`04`](implementation-test/specs/04-setup-modules.md)), pinned to
+`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59`. Location stays CWD-relative `logs/`
+by default — parity with rtl_buddy's hard-coded literal — but is now overridable via a
+new `-L/--logs-dir` CLI flag (recorded as a small Notable divergence in
+[`07`](implementation-test/07-ambiguities-and-assumptions.md) Settled 26). Sequencing:
+the existing `prepend-path → cc-run/sim-run.env_ready` chain becomes `prepend-path →
+ensure-logs → cc-run/sim-run.env_ready`, with an additional `check-cwd → ensure-logs._cwd`
+edge so a bad-CWD invocation aborts before any rogue `logs/` is materialised. Lifecycle:
+never auto-cleaned (parity); user owns purging. Concurrency: filenames within `logs/`
+are uniquely keyed by `<test_name>[_NNNN]` (sweep + run-id), so no within-directory
+collisions even under the [`03`](implementation-test/07-ambiguities-and-assumptions.md)
+TODO #3 interim serialising shim — no per-test/per-invocation subdir needed.
+Knock-on edits: catalog entry + provenance row + persistent-input updates on
+`build-compile-cmd` / `build-sim-cmd` / `resolve-seed` + `randseed_path` fold in
+[`03-module-catalog.md`](implementation-test/03-module-catalog.md); node row S4.6 and
+env-setup narrative in [`04`](implementation-test/04-pipeline-and-contracts.md); CLI
+edge + manifest + rewired env_ready edges in
+[`06`](implementation-test/06-graph-yaml.md); CLI table row + Notable divergence note +
+"Where to invoke" amendment in [`01`](implementation-test/01-cli-and-entry.md);
+Settled 26 + updated "CWD assumptions preserved" note + Notable divergence bullet in
+[`07`](implementation-test/07-ambiguities-and-assumptions.md); `ctx`-shape extension
+for `log` / `randseed_path` and path-composition rule in
+[`02-payload-conventions.md`](implementation-test/02-payload-conventions.md); consumer
+deliverable + test updates in
+[`specs/07-compile-cycle-modules.md`](implementation-test/specs/07-compile-cycle-modules.md)
+and [`specs/08-sim-cycle-modules.md`](implementation-test/specs/08-sim-cycle-modules.md).
+Regression sibling deferred to [`08`](implementation-test/08-sibling-graphs.md) (its
+per-suite `chdir` needs a per-suite bootstrap rather than the once-at-startup `unit`
+node used here).
 
 Multiple modules write to `logs/<test>...` (compile log `03-module-catalog.md:150`, sim log/err `:225-226`, randseed `:237`, parse-log input `specs/09-post-modules.md:16`). Who creates `logs/`, when, where (relative to what), and how it interacts with concurrency is not specified. (`07-ambiguities-and-assumptions.md` item 17 defers the broader concurrency story; the "CWD assumptions preserved" implementation note in 07 confirms `logs/` is currently CWD-relative.)
 
@@ -257,6 +503,65 @@ Plan B has no `git-status` module. rtl_buddy records git state alongside test re
 #### Acceptance check
 
 A reader can tell at a glance whether git state is recorded with test results, and why.
+
+### 30. Validate the interim parallel-safety shim added by TODO #3
+
+TODO #3 introduced `SerialAcquireContract` and an optional `release_lock` field on
+`MergeContract` as an interim shim until upstream `rtl_buddy` per-test artefact directories
+land. The mechanism is described in
+[`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
+and constrained to the plain `test` graph (R=1), but its concurrency properties are
+asserted, not proven. TODO #4 explicitly scoped that work to the original `MergeContract`
+semantics; this TODO covers the shim.
+
+Because the shim is **explicitly temporary** (removed when `07` item 17's upstream change
+lands), this TODO's outputs live in the implementation-test plan and tests only — do not
+promote either piece to `docs/contracts/index.md` as first-class. Treat the validation work
+itself as removable alongside the shim.
+
+#### Concrete steps
+
+1. **Formal description of the acquire side.** Extend
+   [`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
+   with a `SerialAcquireContract` invariants block parallel to the merge one: state held
+   (the shared `_LOCKS` dict, the inherited `DefaultContract` port state), lock acquisition
+   timing relative to upstream `await`, `EndSentinel` short-circuit (no acquire), and
+   interaction with `DefaultContract`'s persistent-input precedence (the lock must not be
+   acquired for invocations that resolve entirely from persistent caches with no consumed
+   work item — verify this matches the design intent).
+2. **Formal description of the release side.** In the same section, document the
+   `release_lock` branch of `MergeContract` distinctly from the base contract: one release
+   per delivered payload, none on `EndSentinel`, fail-fast on missing prior acquire, and
+   the pairing invariant ("every acquired item must reach `agg`") repeated from the
+   Constraints block.
+3. **Pairing-arithmetic test.** Add a new test file (`contracts/tests/test_serial.py`) or
+   extend `test_merge.py`. Enumerate cases for the spec at
+   [`specs/02-merge-contract.md`](implementation-test/specs/02-merge-contract.md) (or a
+   new sibling spec):
+   - acquire then release through the merge → second acquire blocks until release fires;
+   - acquire then `EndSentinel` (no item reaches merge) → release never fires, lock is
+     left held (documented as invariant violation; verifies fail-fast surfaces);
+   - `release_lock` configured but no `serial_acquire` upstream → first delivered payload
+     raises `RuntimeError` from `asyncio.Lock.release()`;
+   - shared-state check: instantiate two contracts with the same `lock_name`; confirm
+     they share the same `asyncio.Lock` object via the module-level `_LOCKS` registry.
+4. **End-to-end check.** Inside [`specs/12-end-to-end.md`](implementation-test/specs/12-end-to-end.md),
+   add a smoke case that exercises the shim under concurrency: two tests with overlapping
+   compile/sim regions; assert that the second test's `cc-run` does not start until the
+   first test's terminal result has been delivered to `agg`. This is the actual property
+   the shim exists to provide.
+5. **Removal plan.** Add a one-line "Removal" subsection at the foot of
+   [`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
+   stating the trigger (upstream `rtl_buddy` per-invocation subdirs lands and `07` item 17
+   moves out of Deferred), the artefacts to delete (`SerialAcquireContract`, the
+   `release_lock` Config field on `MergeContract`, the `_LOCKS` registry, the wiring in
+   `04` rows 7 & 22 and `06`), and the tests added by this TODO that must also be deleted.
+
+#### Acceptance check
+
+The interim shim's correctness is supported by enumerated tests and a written invariant
+that explicitly notes the temporary status and removal plan. No `docs/contracts/index.md`
+entry exists for `serial_acquire` (deliberately — to prevent it from becoming load-bearing).
 
 ## Spec polish — required to make specs buildable
 

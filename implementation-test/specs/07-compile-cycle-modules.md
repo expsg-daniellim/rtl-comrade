@@ -1,6 +1,9 @@
 # Spec 07: Compile-cycle modules
 
-**Depends on:** spec 03 (run-process), spec 06 (write-filelist).
+**Depends on:** spec 03 (run-process), spec 06 (write-filelist), spec
+[01a](01a-builder-schema.md) (`BuildCompileCmdMod` consumes `RtlBuilderConfig` methods),
+spec [01b](01b-suite-schema.md) (`BuildCompileCmdMod` reads
+`ctx["test"].get_name()`/`get_plusdefines()`).
 **References:** [03 — Reusable subprocess core section](../03-module-catalog.md), [04 — keyed_join paragraph](../04-pipeline-and-contracts.md).
 
 ## Goal
@@ -13,17 +16,39 @@ and route on the rc.
 
 In `modules/rtl_test/build.py`:
 
-- `BuildCompileCmdMod` — `(ctx, filelist, builder_cfg, builder_mode:str="debug")` →
-  assembles
-  `[exe] + compile_time_opts(mode) + (["--Mdir", obj_dir] if verilator) + plusdefines + ["-f", filelist["filelist"]]`;
-  computes prospective `build_dir` and `simv` path; emits:
+- `BuildCompileCmdMod` — `(ctx, filelist, builder_cfg, builder_mode:str="debug", logs_dir:str="logs")` →
+  assembles the argv as
+  `[builder_cfg.get_exe()] + builder_cfg.get_compile_time_opts(builder_mode) + (["--Mdir", build_dir] if is_verilator else []) + plusdefines + ["-f", filelist["filelist"]]`,
+  where `is_verilator = os.path.basename(builder_cfg.get_exe()).startswith("verilator")`
+  (the caller-side verilator switch documented in spec [01a — Verilator
+  quirk](01a-builder-schema.md)). Computes `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
+  ctx["test"].get_name())`, `build_dir = f"obj_dir_{test_tag}"`, and `simv =
+  f"{build_dir}/simv" if is_verilator else builder_cfg.get_simv()` (mirrors
+  `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:61-80`). `plusdefines` is built from
+  `ctx["test"].get_plusdefines()` (spec [01b](01b-suite-schema.md) — returns
+  `dict | None`; when not `None`, format each entry as `f"+define+{k}={v}"` or
+  `f"+define+{k}"` for `v is None`, mirroring `vlog_sim.py:107-117`). Compile log paths
+  are composed as `f"{logs_dir}/{test_tag}.compile.log"` and `.err` (default `logs/...`,
+  matching rtl_buddy; `logs_dir` is a persistent input fed by `--logs-dir`, see
+  [01](../01-cli-and-entry.md) and [07 settled 26](../07-ambiguities-and-assumptions.md)).
+  Does not `mkdir(logs_dir)` — `ensure-logs-dir` has already bootstrapped the directory
+  via the env_ready chain. Emits:
   - `("ctx", ctx_with_build_dir_and_simv)` (folds them in so the downstream join carries
     no config port)
-  - `("command", {"key", "argv", "stdout_path", "stderr_path"})` — log paths are
-    `logs/<test>.compile.log`/`.err`.
+  - `("command", {"key", "argv", "stdout_path", "stderr_path"})` — log paths under
+    `logs_dir`.
+  **Failure handling**: `builder_cfg.get_compile_time_opts(builder_mode)` calls
+  `log.critical` (immediate `SystemExit(1)`) if `builder_mode` is not in
+  `builder_cfg.opts` or the mode's `compile_time` is `None` — see spec
+  [01a](01a-builder-schema.md). No catching; system-wide misconfiguration.
 - `InterpretCompileMod` — `(ctx, proc)`, with `keyed_join` contract on the node;
   rc == 0 → `("ok", ctx)`; rc != 0 → reads `proc["stderr_path"]`/`stdout_path` and logs
   at ERROR, then `("fail", {"key": ctx["key"], "result": CompileFailResults()})`.
+  **Failure handling**: routing on `proc["rc"]`; no Python exception is caught here. The
+  ERROR log at emission carries `rc`, `stderr_path`, and a tail of the stderr file
+  (mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:170-172`). `OSError` /
+  `FileNotFoundError` reading `stderr_path` would be surprising (the path was created by
+  `run-process`); let it propagate as a harness CRITICAL.
 
 Manifest entries per [06](../06-graph-yaml.md).
 
@@ -31,6 +56,9 @@ Tests in `modules/tests/test_compile_cycle.py`:
 - Argv assembly matches rtl_buddy's `VlogSim.compile` for both verilator and non-verilator
   builders, with and without plusdefines.
 - `build_dir` and `simv` paths derived correctly per builder type.
+- `logs_dir` is honoured in `command["stdout_path"]` / `stderr_path`: default `"logs"`
+  yields `logs/<test>.compile.log`/`.err` (rtl_buddy parity); a custom `logs_dir`
+  yields the prefixed path.
 - `interpret-compile` ok-path passes ctx through; fail-path emits `CompileFailResults` and
   ERROR-level log entry with stderr content.
 

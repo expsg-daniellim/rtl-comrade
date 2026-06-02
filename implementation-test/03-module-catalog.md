@@ -28,6 +28,20 @@ root. Generic and reusable (the harness itself locates `rtl_comrade_config.yaml`
 - **Config:** `filename:str` (e.g. `root_config.yaml`), `max_levels:int = 8`
 - **In:** — (zero-input; runs once)
 - **Out:** default → `Path`
+- **Log idiom:** `log.critical` if no `root_config.yaml` found; immediate `SystemExit(1)`. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+
+### `prepend-cwd-path`  · tags: setup · contract: `unit`
+Prepend `.` to `$PATH` so a CWD-local simulator (`simv`, `verilator`) is discoverable by
+downstream subprocess invocations. Idempotent — skips the mutation if `.` is already on
+`$PATH`. Mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, where rtl_buddy does the
+same once at CLI bootstrap; here it is a graph node so the responsibility is explicit.
+Emits a `bool` sentinel consumed by `run-process` (`env_ready`), which pins the mutation
+strictly upstream of every compile/sim subprocess via the harness's data-dependency
+ordering — no race window. No failure path: dict mutation cannot meaningfully fail.
+
+- **In:** — (zero-input; runs once)
+- **Out:** default → `bool` (always `True`; the receiver only uses it for sequencing)
+- **Log idiom:** none (no failure path). See [07 settled 25](07-ambiguities-and-assumptions.md).
 
 ### `parse-root-config`  · tags: setup · contract: `unit`
 Deserialise the root-config YAML into schema-compatible dataclasses (preserving rtl_buddy
@@ -35,6 +49,7 @@ field names: `rtl-buddy-filetype`, `cfg-rtl-builder`, `cfg-platforms`, …).
 
 - **In:** `path:Path`
 - **Out:** default → `root_cfg`
+- **Log idiom:** `log.critical` on malformed YAML / schema mismatch. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `select-platform`  · tags: setup · contract: `unit`
 Run `uname` and match it against each platform's `unames`; pick the platform. Side-effecting
@@ -42,6 +57,7 @@ Run `uname` and match it against each platform's `unames`; pick the platform. Si
 
 - **In:** `root_cfg`
 - **Out:** default → `platform_cfg`
+- **Log idiom:** `log.critical` if no platform's `unames` matches the current host. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `resolve-builder`  · tags: setup · contract: `unit`
 Resolve the active builder from the platform (honouring the `--builder` override); critical
@@ -49,14 +65,57 @@ if the named builder is missing.
 
 - **In:** `platform_cfg`, `builder:str = ""`
 - **Out:** default → `builder_cfg`
+- **Log idiom:** `log.critical` if the named builder is missing on the platform. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+
+### `check-suite-cwd`  · tags: setup · contract: `unit`
+Enforce the user-driven CWD convention: `rtl-comrade test`/`randtest` must be invoked from
+the suite directory (matching `rtl_buddy`'s `do_cmd_test`, which never `chdir`s — only
+`do_rtl_regression` does, per-suite). Resolves the CLI `test_config` against CWD and
+fails fast if the resolved path's parent is not CWD. Emits the resolved `Path` for
+downstream `parse-suite-config`.
+
+- **In:** `test_config:str = "tests.yaml"`
+- **Out:** default → `Path` (the resolved suite-config path)
+- **Log idiom:** `log.critical` if (a) `(Path.cwd() / test_config).resolve().parent !=
+  Path.cwd().resolve()` (CWD mismatch), or (b) the resolved path is not a file. See
+  [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site). Not wired
+  in the regression graph (regression `chdir`s per-suite — see
+  [08](08-sibling-graphs.md)).
+
+### `ensure-logs-dir`  · tags: setup · contract: `unit`
+Bootstrap the CWD-relative artefact directory (`logs/` by default) that downstream subprocess
+nodes and randseed writers redirect into. Mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59`
+(`output_dir = "logs"; if not os.path.exists(...): os.makedirs(...)`), lifted out of
+`VlogSim.__init__`'s per-test lazy mkdir into a single explicit setup node so no downstream
+writer needs to `mkdir` and the directory is created exactly once per invocation. Takes the
+CLI `logs_dir` (with `--logs-dir` default `"logs"` — a small **Notable divergence** from
+rtl_buddy, which has no override; see [07](07-ambiguities-and-assumptions.md)), plus two
+sequencing inputs: `env_ready:bool` from `prepend-cwd-path` (chains the PATH-prepend
+strictly upstream) and `_cwd:Path` from `check-suite-cwd` (so a bad-CWD invocation never
+materialises a rogue `logs/` before the cwd check has aborted). Emits a `bool` sentinel
+consumed by `cc-run.env_ready` and `sim-run.env_ready` — the env_ready chain
+([07 settled 25](07-ambiguities-and-assumptions.md)) is now `prepend-path → ensure-logs →
+cc-run/sim-run`. Idempotent (`mkdir(parents=True, exist_ok=True)`) — accepts nested or
+absolute `logs_dir`. Not wired in the regression graph (regression `chdir`s per-suite — see
+[08](08-sibling-graphs.md)).
+
+- **In:** `logs_dir:str = "logs"`, `env_ready:bool = True`, `_cwd:Path`
+- **Out:** default → `bool` (always `True`; only used for sequencing)
+- **Log idiom:** `log.info("logs_dir_ready", path=...)` once; no failure port. `OSError` /
+  `PermissionError` from `mkdir` propagate uncaught and surface as a harness CRITICAL via
+  the bubbling-SystemExit catch (same idiom as `discover-config-file`'s `PermissionError`).
+  See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site) and
+  [07 settled 26](07-ambiguities-and-assumptions.md).
 
 ### `parse-suite-config`  · tags: setup · contract: `unit`
 Deserialise `tests.yaml` into the schema-compatible suite (testbenches + tests), binding each
 test to its testbench (within-file) and recording the suite directory on each test so
 `load-model` can resolve `model_path` later. Model loading is deferred to `load-model`.
 
-- **In:** `test_config:str = "tests.yaml"`
+- **In:** `test_config:Path` (resolved by `check-suite-cwd` in test/randtest, or by
+  `parse-reg-config` in regression — see [08](08-sibling-graphs.md))
 - **Out:** default → `suite_cfg`
+- **Log idiom:** `log.critical` on `tests.yaml` missing/malformed or testbench bind failure. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `derive-seed-mode`  · tags: setup · contract: `unit`
 Collapse the two bool flags into one `SeedMode` (`rnd_new` wins, else `DEFAULT`).
@@ -88,6 +147,7 @@ Select one test or all (`get_tests(test_name)`) and yield one `ctx` per test, st
 
 - **In:** `suite_cfg`, `test_name:str = ""`
 - **Out:** default → `ctx` per test
+- **Log idiom:** `log.critical` if `test_name` is given but not found in the suite (matches `rtl_buddy`'s `typer.Abort`). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ```python
 class SelectTestsMod:
@@ -97,12 +157,16 @@ class SelectTestsMod:
 ```
 
 ### `filter-reglvl`  · tags: select · contract: `default` (persistent: `builder_cfg`,`reg_level`,`start_level`)
-`TestConfig.get_reglvl(builder)`. Emits on `skip` (a `result` payload) when outside the
-`[start_level, reg_level]` window, else on `keep`. For `test`, `reg_level`/`start_level`
-default to `None`, so it always emits `keep`; the node exists so `regression` reuses it.
+`TestConfig.get_reglvl(builder_cfg.get_name())`. Emits on `skip` (a `result` payload)
+when outside the `[start_level, reg_level]` window, else on `keep`. For `test`,
+`reg_level`/`start_level` default to `None`, so it always emits `keep`; the node exists
+so `regression` reuses it. Only the builder *name* is read off `builder_cfg` (see spec
+[01a](specs/01a-builder-schema.md)); the full object is carried on the port because the
+same `builder_cfg` feeds `cc-build`, `seed`, and `sim-build` downstream.
 
 - **In:** `ctx`, `builder_cfg`, `reg_level=None`, `start_level=None`
 - **Out:** `("keep", ctx)` | `("skip", result)`
+- **Log idiom:** port-routed `skip` `result`; no log call (SKIP is pass-like via `is_pass()`). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `load-model`  · tags: select · contract: `default`
 Load the test's `models.yaml` (resolving `model_path` relative to the suite dir recorded by
@@ -110,14 +174,16 @@ Load the test's `models.yaml` (resolving `model_path` relative to the suite dir 
 parse so it is per-test and reusable (the `filelist` command needs the same step).
 
 - **In:** `ctx`
-- **Out:** default → `ctx` (test now carries its model)
+- **Out:** `("default", ctx)` (test now carries its model) | `("fail", result)`
+- **Log idiom:** port-routed `fail` `result` on missing/malformed `models.yaml`; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `expand-sweep`  · tags: expand · contract: `default` (persistent: `root_cfg`)
 Reimplements `_expand_tests_with_sweep`'s `exec` pattern. No sweep → emit the one `ctx`
 unchanged. Else yield one refined `ctx` per produced `TestConfig`.
 
 - **In:** `ctx`, `root_cfg`
-- **Out:** default → `ctx` per variant (key suffixed `#i`)
+- **Out:** `("default", ctx)` per variant (key suffixed `#i`) | `("fail", result)`
+- **Log idiom:** port-routed `fail` `result` on sweep script `exec` crash; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -127,7 +193,8 @@ unchanged. Else yield one refined `ctx` per produced `TestConfig`.
 Reimplements `VlogSim.pre`: if the test has a `preproc` script, `exec` it to mutate the test.
 
 - **In:** `ctx`, `root_cfg`
-- **Out:** default → `ctx`
+- **Out:** `("default", ctx)` | `("fail", result)`
+- **Log idiom:** port-routed `fail` `result` on preproc script `exec` crash; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `write-filelist`  · tags: compile · contract: `default`
 Reimplements `VlogFilelist.write_output(unroll=True, deduplicate=True)`. Emits the `ctx`
@@ -135,7 +202,8 @@ unchanged **and** the filelist payload on a second port (both consumed in lockst
 `build-compile-cmd`, so no join is needed there).
 
 - **In:** `ctx`
-- **Out:** `("ctx", ctx)`, `("filelist", {key, filelist})`
+- **Out:** `("ctx", ctx)`, `("filelist", {key, filelist})` | `("fail", result)`
+- **Log idiom:** port-routed `fail` `result` on filelist generation failure (e.g. unresolved source file); `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 - **Caveat:** `rtl_buddy` writes one `run.f` in CWD → collides under concurrency.
   Recommend a per-test `run.<tag>.f`; see [07](07-ambiguities-and-assumptions.md).
 
@@ -143,25 +211,32 @@ unchanged **and** the filelist payload on a second port (both consumed in lockst
 
 ## The reusable subprocess core
 
-### `build-compile-cmd`  · tags: compile · contract: `default` (persistent: `builder_cfg`,`builder_mode`)
+### `build-compile-cmd`  · tags: compile · contract: `default` (persistent: `builder_cfg`,`builder_mode`,`logs_dir`)
 Assembles the compiler argv as `VlogSim.compile`:
 `[exe] + compile_time_opts(mode) + (["--Mdir", obj_dir] if verilator) + plusdefines + ["-f", run.f]`.
 It has the builder + test, so it also computes the prospective `build_dir`, `simv` path, and
-the compile log paths (`logs/<test>.compile.log`/`.err`) — folds `build_dir`/`simv` into
-`ctx` and puts the log paths into `command` so `run-process` redirects there.
+the compile log paths (`<logs_dir>/<test>.compile.log`/`.err` — default `logs/<test>...`,
+matching rtl_buddy) — folds `build_dir`/`simv` into `ctx` and puts the log paths into
+`command` so `run-process` redirects there. Does not `mkdir` — `ensure-logs-dir` has
+already bootstrapped the directory before any subprocess runs (env_ready chain).
 
-- **In:** `ctx`, `filelist`, `builder_cfg`, `builder_mode:str = "debug"`
+- **In:** `ctx`, `filelist`, `builder_cfg`, `builder_mode:str = "debug"`, `logs_dir:str = "logs"`
 - **Out:** `("ctx", ctx + {build_dir, simv})`, `("command", {key, argv, stdout_path, stderr_path})`
 
 ### `run-process`  · tags: compile, sim  ← **the reusable star**
 Run a command's argv as an async subprocess, **redirecting** stdout/stderr to the files named
 in the command (not buffering them in memory). Returns `rc`/`timed_out` and echoes the paths.
 Redirecting means a timed-out run keeps whatever it wrote before the SIGQUIT, and memory is
-bounded regardless of log size. Optionally enforces a timeout (SIGQUIT to the process group +
-`rc=4444`). Used as two node instances (compile: no timeout; sim: with timeout).
+bounded regardless of log size. Optionally enforces a timeout: SIGQUIT to the process group,
+then SIGKILL after a `_TIMEOUT_GRACE_S` grace period, with `rc=4444` as the timeout sentinel
+and `timed_out` set independently of `rc`. Used as two node instances (compile: no timeout;
+sim: with timeout). See [specs/03-run-process.md](specs/03-run-process.md) for the full
+lifecycle and cancellation semantics.
 
-- **In:** `command:{key,argv,stdout_path,stderr_path}`, `timeout:float | None = None`
+- **In:** `command:{key,argv,stdout_path,stderr_path}`, `timeout:float | None = None`, `env_ready:bool = True`
 - **Out:** default → `proc:{key,rc,timed_out,stdout_path,stderr_path}`
+- **Log idiom:** `log.critical` if the subprocess fails to *launch* (binary not on PATH, permission denied) — system-wide condition, not per-test. Non-zero `rc` and `timed_out` are not failures here; they are interpreted downstream by `interpret-compile` / `interpret-sim` as per-test results. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **`env_ready`** is a generic persistent sequencing input. The default `True` keeps the module testable in isolation (and the graph valid if no env-setup nodes are wired); in the production graph it carries the `bool` signal from `prepend-cwd-path` (and any future env-setup node) so the PATH mutation strictly precedes the first subprocess. The value is never read or branched on. Pairs with [07 settled 25](07-ambiguities-and-assumptions.md).
 
 ```python
 class RunProcessMod:
@@ -169,12 +244,14 @@ class RunProcessMod:
         with open(command["stdout_path"], "wb") as out, open(command["stderr_path"], "wb") as err:
             proc = await asyncio.create_subprocess_exec(*command["argv"],
                      stdout=out, stderr=err, preexec_fn=os.setpgrp)
+            timed_out = False
             try:
                 await asyncio.wait_for(proc.wait(), timeout)
                 rc = proc.returncode
             except asyncio.TimeoutError:
-                os.killpg(proc.pid, signal.SIGQUIT); await proc.wait(); rc = 4444
-        return { "key": command["key"], "rc": rc, "timed_out": rc == 4444,
+                # spec 03 step 3a: SIGQUIT to group, grace, SIGKILL escalation
+                rc, timed_out = 4444, True
+        return { "key": command["key"], "rc": rc, "timed_out": timed_out,
                  "stdout_path": command["stdout_path"], "stderr_path": command["stderr_path"] }
 ```
 
@@ -191,6 +268,7 @@ Joins the direct `ctx` edge with the subprocess `proc` by key. `rc == 0` → emi
 
 - **In:** `ctx`, `proc`
 - **Out:** `("ok", ctx)` | `("fail", result)`
+- **Log idiom:** port-routed `fail` `result` (`CompileFailResults`) when `rc != 0`; `log.error` at emission with the compile `rc` and stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -207,23 +285,27 @@ One compiled test → one `ctx` per run-id (key suffixed `#run`, `run_id` record
 
 ## Simulation
 
-### `resolve-seed`  · tags: sim · contract: `default` (persistent: `seed_mode`,`builder_cfg`)
+### `resolve-seed`  · tags: sim · contract: `default` (persistent: `seed_mode`,`builder_cfg`,`logs_dir`)
 `VlogSim.execute` seed logic: `NEW`→`random.randrange(1_000_000)`,
-`DEFAULT`→`builder_cfg.get_seed()`, `REPLAY`→read `logs/<test>[_NNNN].randseed`. Emits the
-`ctx` unchanged **and** the seed (lockstep → `build-sim-cmd` needs no join).
+`DEFAULT`→`builder_cfg.get_seed()`, `REPLAY`→read `<logs_dir>/<test>[_NNNN].randseed`
+(default `logs/...`, matching rtl_buddy). Emits the `ctx` unchanged **and** the seed
+(lockstep → `build-sim-cmd` needs no join).
 
-- **In:** `ctx`, `seed_mode`, `builder_cfg`
-- **Out:** `("ctx", ctx)`, `("seed", {key, seed})`
+- **In:** `ctx`, `seed_mode`, `builder_cfg`, `logs_dir:str = "logs"`
+- **Out:** `("ctx", ctx)`, `("seed", {key, seed})` | `("fail", result)` *(REPLAY only)*
+- **Log idiom:** port-routed `fail` `result` in REPLAY mode when `<logs_dir>/<test>[_NNNN].randseed` is missing or malformed; `log.error` at emission with the path. `NEW`/`DEFAULT` modes have no failure path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
-### `build-sim-cmd`  · tags: sim · contract: `default` (persistent: `builder_cfg`,`builder_mode`)
+### `build-sim-cmd`  · tags: sim · contract: `default` (persistent: `builder_cfg`,`builder_mode`,`logs_dir`)
 `VlogSim.execute` argv: `[simv] + run_time_opts(mode, seed) + plusdefines + plusargs`; also
 computes the per-test `timeout` from `TestConfig.get_timeout()` and the sim log paths
-(`logs/<test>[_NNNN].log`/`.err`). Folds `seed` and the `log` path into `ctx` (needed by
-`write-randseed` and `post`) and puts the log paths into `command` so `run-process` redirects
-there.
+(`<logs_dir>/<test>[_NNNN].log`/`.err` — default `logs/<test>...`, matching rtl_buddy).
+Folds `seed`, the `log` path, and the `randseed_path` (`<logs_dir>/<test>[_NNNN].randseed`)
+into `ctx` so the downstream `keyed_join` nodes (`write-randseed`, post-parsers) carry no
+persistent config port. Puts the log paths into `command` so `run-process` redirects there.
+Does not `mkdir` — `ensure-logs-dir` has already done so.
 
-- **In:** `ctx`, `seed`, `builder_cfg`, `builder_mode`
-- **Out:** `("ctx", ctx + {seed, log})`, `("command", {key, argv, stdout_path, stderr_path})`, `("timeout", float)`
+- **In:** `ctx`, `seed`, `builder_cfg`, `builder_mode`, `logs_dir:str = "logs"`
+- **Out:** `("ctx", ctx + {seed, log, randseed_path})`, `("command", {key, argv, stdout_path, stderr_path})`, `("timeout", float)`
 
 *(then `run-process` again, wired with the `timeout` input)*
 
@@ -233,9 +315,12 @@ there.
 > their own nodes. The first of them holds the `ctx ⋈ proc` join.
 
 ### `write-randseed`  · tags: sim · contract: `keyed_join` (`key_field: key`)
-The sim's join point: pairs `ctx` (carrying `seed`) with the sim `proc` by key. Writes
-`logs/<test>[_NNNN].randseed` from `ctx["seed"]` (plus `HierInstanceSeed.txt` contents when
-present). Folds `rc`/`timed_out` from `proc` into `ctx` for the two nodes after it.
+The sim's join point: pairs `ctx` (carrying `seed` and `randseed_path`) with the sim `proc`
+by key. Writes `ctx["randseed_path"]` (composed by `build-sim-cmd` from `logs_dir` + test
+name + run-id; default `logs/<test>[_NNNN].randseed`) from `ctx["seed"]` (plus
+`HierInstanceSeed.txt` contents when present). The directory was created at startup by
+`ensure-logs-dir`. Folds `rc`/`timed_out` from `proc` into `ctx` for the two nodes after
+it.
 
 - **In:** `ctx`, `proc`
 - **Out:** default → `ctx + {rc, timed_out}`
@@ -254,6 +339,7 @@ No side-effects — the artifacts were written upstream.
 
 - **In:** `ctx`
 - **Out:** `("ok", ctx)` | `("timeout", result)`
+- **Log idiom:** port-routed `timeout` `result` (`SimTimeoutResults`) when `timed_out` is set; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -272,6 +358,7 @@ Reimplements `VlogPost` only: the `PASS/FAIL/ERR/FAT` regex scan. Emits `{key, r
 
 - **In:** `ctx`
 - **Out:** default → `result`
+- **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL (not when SKIP/PASS). Parse-machinery exceptions distinct from FAIL classification are deferred pending TODO #13. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 - **Note:** inherits `rtl_buddy`'s `VlogPost` quirks (PASS wins over FAIL; a FAIL line with
   no ERR/FAT raises). No `postproc` script is run (parity). See [07](07-ambiguities-and-assumptions.md).
 
@@ -281,6 +368,7 @@ Reimplements `UvmVlogPost` only: parse the UVM Report Summary severity counts an
 
 - **In:** `ctx`
 - **Out:** default → `result`
+- **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. Parse-machinery exceptions distinct from FAIL classification are deferred pending TODO #13. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -293,24 +381,26 @@ emit `stop` (`EarlyStopResults`); else `go`. Three instances differing only in c
 - **In:** `ctx`, `early_stop:str = "post"`
 - **Config:** `phase:str` (`pre`|`comp`|`sim`)
 - **Out:** `("go", ctx)` | `("stop", result)`
+- **Log idiom:** port-routed `stop` `result` (`EarlyStopResults`); no log call (a normal terminal, not a failure). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
-### `aggregate-results`  · tags: report · contract: **`merge`** + `finalise()`
-The single collector. The `merge` contract (see [05](05-branching-and-results.md)) drains
-its many terminal-result ports, delivering one `result` per invocation under whichever port
-fired. `run` accumulates; `finalise` prints the summary and logs `ERROR` if any result is
-not `is_pass()` (harness maps a single ERROR → exit 1, reproducing the OR-accumulated exit
-code).
+### `aggregate-results`  · tags: report · contract: **`merge`** (`fan_in: result`) + `finalise()`
+The single collector. The `merge` contract (see [05](05-branching-and-results.md))
+declares the 13 terminal-result input ports on the contract side and collapses them onto
+the module's single `result` parameter via `fan_in: result`. `run` accumulates; `finalise`
+prints the summary and logs `ERROR` if any result is not `is_pass()` (harness maps a
+single ERROR → exit 1, reproducing the OR-accumulated exit code). The module knows nothing
+about the upstream port set — every delivery arrives on `result`.
 
-- **In:** `**results` (one terminal-result port per source — see the edge list in [06](06-graph-yaml.md))
+- **In:** `result` (single module input port; the `merge` contract delivers every upstream terminal here — see [05](05-branching-and-results.md) and the contract input list in [06](06-graph-yaml.md))
 - **Out:** none (sink)
+- **Log idiom:** `finalise()` calls `log.error("suite_has_failures", n=...)` once if any accumulated row is not `is_pass()` — the centralised deferred-exit driver. This is the only `log.error` site the design *requires* the harness to react to for exit code purposes; per-test emission sites also call `log.error` as belt-and-braces against any merge/`finalise()` misfire. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ```python
 class AggregateResultsMod:
     def __init__(self):
         self._rows = []
-    def run(self, **fired):                 # merge delivers exactly one {port: result}
-        for payload in fired.values():
-            self._rows.append(payload)
+    def run(self, result):                       # merge collapses every contract-side input onto `result`
+        self._rows.append(result)
     def finalise(self):
         for r in self._rows:
             res = r["result"]
@@ -329,6 +419,8 @@ identical (07, item 1).
 | module | reimplements (rtl_buddy source) |
 |---|---|
 | `discover-config-file` | `_discover_root_cfg` upward walk |
+| `prepend-cwd-path` | `rtl_buddy.py:100-102` `os.environ["PATH"]` prepend |
+| `ensure-logs-dir` | `tools/vlog_sim.py:55-59` `output_dir = "logs"` lazy mkdir (lifted to setup) |
 | `parse-root-config` | `RootConfigFile` deserialisation |
 | `select-platform` | `RootConfig` `uname`/platform match |
 | `resolve-builder` | `PlatformConfig.initialise` builder resolution |
