@@ -98,6 +98,46 @@ def test_args_typed_with_default():
 	assert s.args[1].type_ == str(int)
 
 
+class _VarPositional:
+	def run(self, *args):
+		return None
+
+
+class _VarKeyword:
+	def run(self, **kwargs):
+		return None
+
+
+class _MixedVarAndNormal:
+	def run(self, a, *args, b, **kwargs):
+		return None
+
+
+def test_args_definite_inputs_true():
+	s = ModuleStructure(_TwoArgs)
+	assert s.definite_inputs is True
+
+
+def test_args_var_positional_excluded():
+	s = ModuleStructure(_VarPositional)
+	assert s.args == []  # pylint: disable=use-implicit-booleaness-not-comparison
+	assert s.definite_inputs is False
+
+
+def test_args_var_keyword_excluded():
+	s = ModuleStructure(_VarKeyword)
+	assert s.args == []  # pylint: disable=use-implicit-booleaness-not-comparison
+	assert s.definite_inputs is False
+
+
+def test_args_mixed_variadic_excludes_variadic_keeps_normal():
+	s = ModuleStructure(_MixedVarAndNormal)
+	assert len(s.args) == 2
+	assert s.args[0] == ModuleStructureArg("a")
+	assert s.args[1] == ModuleStructureArg("b")
+	assert s.definite_inputs is False
+
+
 # --- ModuleStructure emit inference ---
 
 

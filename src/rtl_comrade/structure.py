@@ -88,11 +88,13 @@ class ModuleStructure:
 		args: Ordered input arguments inferred from ``run(...)``.
 		emits: Statically known output-port names.
 		definite_emits: Whether ``emits`` is believed to be complete.
+		definite_inputs: Whether ``args`` is believed to be complete.
 	"""
 
 	args: list[ModuleStructureArg]
 	emits: list[str]
 	definite_emits: bool
+	definite_inputs: bool
 
 	def __init__(self, Module):
 		"""Analyze one module class and infer its runtime structure.
@@ -112,11 +114,13 @@ class ModuleStructure:
 		except (TypeError, ValueError) as e:
 			log.fatal('unavailable_signature', exc_info=e)
 
+		non_self = [(name, param) for (name, param) in sig.parameters.items() if name != 'self']
+		self.definite_inputs = not any(param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD) for (_, param) in non_self)
 		self.args = [ ModuleStructureArg(
 			name=name,
 			type_=str(param.annotation) if param.annotation != Parameter.empty else None,
 			has_default=param.default != Parameter.empty,
-		) for (name, param) in sig.parameters.items() if name != 'self' ]
+		) for (name, param) in non_self if param.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD) ]
 
 		# Parse AST in steps to catch individual Exceptions from each step
 		try:

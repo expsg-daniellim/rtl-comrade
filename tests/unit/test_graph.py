@@ -64,6 +64,11 @@ class _YieldFromModule:
 		yield from [1, 2, 3]
 
 
+class _KwargsModule:
+	def run(self, **kwargs):
+		return 1
+
+
 # Mapping helpers
 _MODULE_MAP = {
 	"source_mod": _SourceModule,
@@ -326,6 +331,24 @@ def test_yield_from_non_definite_emits_warns(logging_handler):
 	config = _make_config(
 		[_node("src", "yield_from_mod"), _node("sink", "sink_mod")],
 		[_edge("src", "someport", "sink", 1)],
+	)
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
+		graph = Graph.from_config(config)
+	assert "src" in graph.nodes
+	assert logging_handler.failure is False
+
+
+def test_non_definite_inputs_warns(logging_handler):
+	module_map = {**_MODULE_MAP, "kwargs_mod": _KwargsModule}
+	call_count = [0]
+
+	def side_effect(paths, namespace):
+		call_count[0] += 1
+		return module_map if call_count[0] == 1 else {}
+
+	config = _make_config(
+		[_node("src", "kwargs_mod"), _node("sink", "sink_mod")],
+		[_edge("src", "default", "sink", 1)],
 	)
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		graph = Graph.from_config(config)

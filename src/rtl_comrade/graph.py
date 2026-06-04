@@ -141,6 +141,9 @@ class Graph:
 			dsts.sort(key=lambda conn: conn.self_port)
 			node.set_dsts(dsts)
 
+			if not node.structure.definite_inputs:
+				log.warn('non_definite_inputs', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
+
 		if errors:
 			log.fatal('invalid_edges', context='harness.graph.validation')
 
