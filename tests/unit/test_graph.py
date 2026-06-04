@@ -356,6 +356,26 @@ def test_non_definite_inputs_warns(logging_handler):
 	assert logging_handler.failure is False
 
 
+def test_non_definite_inputs_allows_undeclared_dst_port(logging_handler):
+	module_map = {**_MODULE_MAP, "kwargs_mod": _KwargsModule}
+	call_count = [0]
+
+	def side_effect(paths, namespace):
+		call_count[0] += 1
+		return module_map if call_count[0] == 1 else {}
+
+	# "any_port" is not declared on kwargs_mod — should be allowed without error
+	config = _make_config(
+		[_node("src", "source_mod"), _node("agg", "kwargs_mod")],
+		[_edge("src", "default", "agg", "any_port")],
+	)
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
+		graph = Graph.from_config(config)
+	assert "agg" in graph.nodes
+	assert logging_handler.failure is False
+	assert graph.nodes["src"].dsts[0].other_port == "any_port"
+
+
 # --- Plugin validation ---
 
 

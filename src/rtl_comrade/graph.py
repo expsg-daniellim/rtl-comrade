@@ -115,8 +115,11 @@ class Graph:
 					has_error = False
 					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
 					if dst_name is None:
-						has_error = True
-						log.error('invalid_dst_port', context='harness.graph.edge', edge=edge)
+						if graph.nodes[edge.dst.node].structure.definite_inputs or not isinstance(edge.dst.port, str):
+							has_error = True
+							log.error('invalid_dst_port', context='harness.graph.edge', edge=edge)
+						else:
+							dst_name = edge.dst.port
 
 					if edge.src.port not in node.structure.emits and node.structure.definite_emits:
 						has_error = True
