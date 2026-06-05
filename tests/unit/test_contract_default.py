@@ -1,6 +1,7 @@
 """Unit tests for contract_default.py — is_special and DefaultContract.get_inputs."""
 
 import pytest
+import typer
 
 from rtl_comrade.api import Payload, EndSentinel, ContractPort
 from rtl_comrade.contract_default import DefaultContract, is_special
@@ -191,7 +192,7 @@ async def test_persistent_input_updates_on_new_payload():
 
 def test_persistent_input_unknown_port_fatal(logging_handler):
 	port = _make_port("value")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_contract({"value": port}, persistent_inputs=["nonexistent"])
 
 

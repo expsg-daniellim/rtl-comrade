@@ -6,15 +6,15 @@ nodes:
 - id: file-1
   module: fileread
   config:
-    file: "../file1.txt"
+    file: "{graph}/../file1.txt"
 - id: file-2
   module: fileread
   config:
-    file: "../file2.txt"
+    file: "{graph}/../file2.txt"
 - id: config
   module: fileread
   config:
-    file: "../config.txt"
+    file: "{graph}/../config.txt"
 - id: alu
   module: alu
   contract_config:

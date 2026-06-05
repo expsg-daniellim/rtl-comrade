@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
 from typing import cast, Any, Callable
@@ -13,8 +14,10 @@ from .config_graph import GraphConfig
 from .contract_default import DefaultContract
 from .loader import load_plugins
 from .logging import HarnessLogger
+from .module import GraphModule
 from .module_cli import ModuleCLI
 from .node import Connection, Node
+from .port import Port
 from .validation import validate_no_static_deadlock
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
@@ -56,7 +59,7 @@ class Graph:
 
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
-		module_mappings = load_plugins(config.modules, 'modules')
+		module_mappings = { name: GraphModule.from_module(Module) for (name, Module) in load_plugins(config.modules, 'modules').items() }
 		unbind_contextvars('context')
 
 		bind_contextvars(context='harness.load.contract')
@@ -66,9 +69,9 @@ class Graph:
 		contract_mappings['default'] = DefaultContract
 
 		# Validate modules have run functions
-		missing_runs = [ name for (name, mod) in module_mappings.items() if not hasattr(mod, 'run') ]
-		if len(missing_runs) > 0:
-			log.fatal("missing_functions", context='harness.load.module', plugins=missing_runs)
+		missing_runs = [ name for (name, mod) in module_mappings.items() if not (hasattr(mod.Module, 'run') and callable(getattr(mod.Module, 'run'))) ]
+		if len(missing_runs) > 0:  # pragma: no cover
+			log.fatal("missing_functions", context='harness.load.module', plugins=missing_runs)  # pragma: no cover
 
 		# Validate contracts have get_inputs functions
 		missing_get_inputs = [ name for (name, contract) in contract_mappings.items() if not hasattr(contract, 'get_inputs') ]
@@ -88,8 +91,13 @@ class Graph:
 				has_error = True
 
 			if not has_error:
+				# Assemble port mappings if node module has non-definite inputs
+				ports = None
+				if not module_mappings[node.module].structure.definite_inputs:
+					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id })
+
 				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-				graph.nodes[node.id] = Node(id=node.id, Module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path)
+				graph.nodes[node.id] = Node(id=node.id, module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports)
 			else:
 				errors = True
 
@@ -97,14 +105,15 @@ class Graph:
 			log.fatal('invalid_nodes', context='harness.graph.validation')
 
 		# Initialise the (virtual) cli nodes in the graph
+		module_cli = GraphModule.from_module(ModuleCLI)
 		for (port_name, src) in config.cli_srcs:
-			n = Node(id=port_name, Module=ModuleCLI, config={ 'cli': src.cli }, Contract=DefaultContract)
+			n = Node(id=port_name, module=module_cli, config={ 'cli': src.cli }, Contract=DefaultContract)
 			graph.nodes[n.id] = n
 			graph.cli_nodes.append(n)
 
 		graph.sig = config.sig
 
-		# Initialise the edges in the graph
+		# Initialise the edges in the graph.
 		errors = False
 		source_tracker = {} # Verify each dst only has one source
 		for node in graph.nodes.values():
@@ -118,8 +127,8 @@ class Graph:
 						if graph.nodes[edge.dst.node].structure.definite_inputs or not isinstance(edge.dst.port, str):
 							has_error = True
 							log.error('invalid_dst_port', context='harness.graph.edge', edge=edge)
-						else:
-							dst_name = edge.dst.port
+						else:  # pragma: no cover
+							dst_name = edge.dst.port  # pragma: no cover
 
 					if edge.src.port not in node.structure.emits and node.structure.definite_emits:
 						has_error = True
@@ -207,12 +216,8 @@ class Graph:
 						cli_node.module.value = kwargs[cli_node.module.cli]
 
 				runs = [ node.run() for node in graph.nodes.values() ]
-				try:
-					await asyncio.gather(*runs)
-				except SystemExit:
-					pass
-				finally:
-					run_cleanup()
+				await asyncio.gather(*runs)
+				run_cleanup()
 
 			asyncio.run(async_run())
 

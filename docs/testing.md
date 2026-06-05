@@ -33,6 +33,7 @@ When adding a new harness module, add a corresponding test file under `tests/uni
 | `loader.py` | `tests/unit/test_loader.py` |
 | `validation.py` | `tests/unit/test_validation.py` |
 | `contract_default.py` | `tests/unit/test_contract_default.py` |
+| `module.py` | `tests/unit/test_module.py` |
 | `node.py` | `tests/unit/test_node.py` |
 | `graph.py` | `tests/unit/test_graph.py` |
 | `app.py` | `tests/unit/test_app.py` |
@@ -90,13 +91,13 @@ uv run pytest tests/ contracts/tests/ modules/tests/
 ## Conventions
 
 - `asyncio_mode = "auto"` is set in `pyproject.toml`; async tests need no extra decoration.
-- Tests that exercise fatal or error log paths must use the `logging_handler` fixture (defined in `tests/conftest.py`). Fatal calls (`log.critical` / `log.fatal`) raise `SystemExit(1)`; assert them with `pytest.raises(SystemExit)`. Error calls set `handler.failure = True` without raising.
+- Tests that exercise fatal or error log paths must use the `logging_handler` fixture (defined in `tests/conftest.py`). Fatal calls (`log.critical` / `log.fatal`) raise `typer.Exit(1)` (a `BaseException` subclass via `click.Exit`, distinct from `SystemExit`); assert them with `pytest.raises(typer.Exit)`. Error calls set `handler.failure = True` without raising.
 
 ---
 
 ## Accepted coverage misses
 
-Three locations in the harness are intentionally excluded from coverage. All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
+Five locations in the harness are intentionally excluded from coverage. All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
 
 ### `src/rtl_comrade/__main__.py` — entire file, excluded via `omit`
 
@@ -116,7 +117,7 @@ def critical(self, event=None, *args, **kw) -> NoReturn:  # pragma: no cover
     raise AssertionError('unreachable')
 ```
 
-`LoggingFatalHandler.emit()` raises `SystemExit(1)` on every `CRITICAL` record before control can return to `super().fatal()`. These method bodies exist solely to satisfy `ty`'s control-flow analysis, which requires `NoReturn`-annotated methods to contain a syntactically reachable termination. Covering them would require suppressing the very handler that implements the harness failure model.
+`LoggingFatalHandler.emit()` raises `typer.Exit(1)` on every `CRITICAL` record before control can return to `super().fatal()`. These method bodies exist solely to satisfy `ty`'s control-flow analysis, which requires `NoReturn`-annotated methods to contain a syntactically reachable termination. Covering them would require suppressing the very handler that implements the harness failure model.
 
 ### `src/rtl_comrade/graph.py` — `Graph.run()` body, excluded via `# pragma: no cover`
 
@@ -127,3 +128,9 @@ def run(self):  # pragma: no cover
 ```
 
 `Graph.run()` is a intentional stub that guards against the old `asyncio.run(graph.run())` call pattern. The correct entry point is `Graph.construct_run()`. The stub exists to produce a clear fatal log if the old pattern is ever used by mistake; it is unreachable in normal operation and untestable without defeating its own purpose.
+
+### `src/rtl_comrade/graph.py` — `missing_runs` guard and non-definite string-port fallback, excluded via `# pragma: no cover`
+
+`missing_runs` (lines 73–74): the guard `not (hasattr(mod.Module, 'run') and callable(...))` can never be True at runtime — `GraphModule.from_module` is called on every module before this check and always raises (`AttributeError` for a missing `run`, `typer.Exit` for a non-callable one) before returning an entry to `module_mappings`.
+
+`dst_name = edge.dst.port` (line 131): the fallback for a non-definite-input node addressed by a string port that was not found in `get_canonical_port`. Since graph assembly pre-builds every incoming string port into `node.ports` at line 97, `get_canonical_port` always finds them and this branch is never reached.

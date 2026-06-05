@@ -5,11 +5,12 @@ from typing import Any, NoReturn
 import structlog
 from structlog.contextvars import merge_contextvars
 from structlog.stdlib import ProcessorFormatter, LoggerFactory, BoundLogger
+import typer
 
 class HarnessLogger(BoundLogger):
 	"""BoundLogger subclass that declares fatal/critical as non-returning.
 
-	At runtime the LoggingFatalHandler raises SystemExit(1) on CRITICAL records,
+	At runtime the LoggingFatalHandler raises typer.Exit(1) on CRITICAL records,
 	so these methods never return. The raise after super() is unreachable in
 	practice but satisfies ty's control-flow analysis.
 	"""
@@ -58,7 +59,7 @@ class LoggingFatalHandler(logging.StreamHandler):
 			self.failure = True
 
 		if record.levelno >= logging.CRITICAL:
-			raise SystemExit(1)
+			raise typer.Exit(1)
 
 def initialise_logging(level:int = logging.INFO) -> LoggingFatalHandler:
 	"""Configure stdlib logging and structlog for harness execution.

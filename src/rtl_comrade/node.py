@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from collections import OrderedDict
+import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 import inspect
@@ -11,12 +12,13 @@ from serde import from_dict, SerdeError
 from serde.compat import UserError
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
+import typer
 
 from .api import Payload, EndSentinel, ContractPort
 from .logging import HarnessLogger
+from .module import GraphModule
 from .port import Port, InvalidEnqueuedError
 from .structure import ModuleStructure
-from .structure import StructureInvalidTupleError, StructureNonStrPortNameError
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -56,15 +58,17 @@ class Node:
 	dsts: list[Connection]|None = None
 	dst_counts: dict[tuple[str, str], int] = field(default_factory=dict)
 
-	def __init__(self, id:str, Module, config:dict, Contract, contract_config:dict|None=None, relative_path:Path=Path()):  # pylint: disable=redefined-builtin
-		"""Instantiate one runtime node from module and contract classes.
+	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None):  # pylint: disable=redefined-builtin
+		"""Instantiate one runtime node from a GraphModule descriptor and a contract class.
 
 		Args:
 			id: Runtime node id from graph configuration.
-			Module: Module plugin class to instantiate for this node.
+			module: Pre-validated GraphModule descriptor wrapping the module class.
 			config: Module-specific configuration dictionary.
 			Contract: Contract plugin class controlling this node's scheduling.
 			contract_config: Optional contract-specific configuration dictionary.
+			relative_path: Base path used to resolve ``{graph}``-relative config paths.
+			ports: Override port mapping for non-definite-input modules; merged on top of the module's own ports.
 
 		Returns:
 			None.
@@ -76,50 +80,39 @@ class Node:
 			contract_config = {}
 
 		# Initialise Module (with config/id if available/supported)
-		try:
-			module_init_sig = inspect.signature(Module.__init__)
-		except (TypeError, ValueError) as e:
-			log.fatal('unavailable_signature', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
-
 		module_init_args:dict[str, Any] = {}
-		if 'config' in module_init_sig.parameters:
-			if hasattr(Module, 'Config'):
+		if module.has_config:
+			if module.defines_config:
 				try:
-					config = from_dict(Module.Config, config)
+					config = from_dict(module.Module.Config, config)
 
 					# Relativise config paths (if not absolute)
 					for (attr, val) in [ (attr, getattr(config, attr)) for attr in dir(config) if not callable(getattr(config, attr)) and not (attr.startswith('__') and attr.endswith('__')) ]:
 						if isinstance(val, Path) and not val.is_absolute() and val.parts[0] == '{graph}':
 							setattr(config, attr, relative_path / Path(*val.parts[1:]))
 				except SerdeError as e:
-					log.fatal('config.deserialise.serde_error', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
+					log.fatal('config.deserialise.serde_error', context='harness.node.module', node=self.id, module=module.name, exc_info=e)
 				except UserError as e:
-					log.fatal('config.deserialise.user_error', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
-			else:
-				log.warn('config.mismatch', context='harness.node.module', node=self.id, module=Module.__name__)
+					log.fatal('config.deserialise.user_error', context='harness.node.module', node=self.id, module=module.name, exc_info=e)
 
 			module_init_args['config'] = config
 
-		if 'id' in module_init_sig.parameters:
+		if module.has_id:
 			module_init_args['id'] = self.id + '.module'
 
 		try:
-			self.module = Module(**module_init_args)
+			self.module = module.Module(**module_init_args)
+		except typer.Exit:
+			raise
 		except Exception as e:
-			log.fatal('init', context='harness.node.module', node=self.id, module=Module.__name__, exc_info=e)
+			log.fatal('init', context='harness.node.module', node=self.id, module=module.name, exc_info=e)
 
 		# Initialise ports
-		bind_contextvars(context='harness.node.module.source', node=self.id, module=Module.__name__)
-		try:
-			self.structure = ModuleStructure(Module)
-		except StructureInvalidTupleError as e:
-			log.fatal('invalid_tuple', context='harness.node.module.emits', lineno=e.lineno, tuple_=e.tuple_)
-		except StructureNonStrPortNameError as e:
-			log.fatal('invalid_port_name', context='harness.node.module.emits', lineno=e.lineno, port=str(e.port_name))
-		finally:
-			unbind_contextvars('context', 'node', 'module')
+		self.structure = module.structure # It's a reference, should be fine
 
-		self.ports = OrderedDict({ arg.name: Port.from_structure(arg) for arg in self.structure.args })
+		self.ports = copy.deepcopy(module.ports)
+		if ports is not None:
+			self.ports.update(ports)
 
 		# Initialise Contract with available init params
 		try:
@@ -153,6 +146,8 @@ class Node:
 
 		try:
 			self.contract = Contract(**contract_init_args)
+		except typer.Exit:
+			raise
 		except Exception as e:
 			log.fatal('init', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 
@@ -267,6 +262,8 @@ class Node:
 					inputs = self.contract.get_inputs()
 			except InvalidEnqueuedError as e:
 				log.fatal('invalid_enqueued', context='harness.node.port', port=e.name, type_=e.type_)
+			except typer.Exit:
+				raise
 			except Exception as e:
 				# exc_info to make use of structlog's native exception handling
 				log.fatal('exception', exc_info=e)
@@ -298,6 +295,8 @@ class Node:
 						await self.process_result(r)
 				else: # return (async/regular)
 					await self.process_result(res)
+			except typer.Exit:
+				raise
 			except Exception as e:
 				log.fatal('exception', exc_info=e)
 			finally:
@@ -329,6 +328,8 @@ class Node:
 						await self.process_result(r)
 				else: # return (async/regular)
 					await self.process_result(res)
+			except typer.Exit:
+				raise
 			except Exception as e:
 				log.fatal('exception', exc_info=e)
 			finally:

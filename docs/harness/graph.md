@@ -12,6 +12,7 @@ This file is the top-level harness coordinator. It turns config data into a runn
 - [__main__.md](__main__.md)
 - [config.md](config.md)
 - [loader.md](loader.md)
+- [module.md](module.md)
 - [node.md](node.md)
 - [validation.md](validation.md)
 - [logging.md](logging.md)
@@ -19,6 +20,8 @@ This file is the top-level harness coordinator. It turns config data into a runn
 ## Main Responsibilities
 
 - load module and contract plugin classes from a `GraphConfig`
+- wrap each loaded module class in a `GraphModule` descriptor via `GraphModule.from_module`
+- pre-build port mappings for non-definite-input nodes from incoming edge definitions
 - instantiate nodes
 - create virtual `ModuleCLI` nodes from `GraphConfig.cli_srcs`
 - validate edge port names against module structure
@@ -44,7 +47,9 @@ It is also the main fail-fast boundary of the harness. This is where obviously b
 - source port names are checked against statically inferred emits when `ModuleStructure` can prove them
 - duplicate incoming connections to the same destination input are rejected
 - static deadlock checks run before execution starts
-- node tasks are launched together via `asyncio.gather(...)`
+- each loaded module class is wrapped in a `GraphModule` descriptor exactly once; nodes that share a module class share the same descriptor but each get their own deep-copied port instances
+- for modules with non-definite inputs, `Graph.from_config` pre-builds a port mapping from the incoming edges before constructing the node; this is passed as the `ports` override parameter to `Node.__init__`
+- node tasks are launched together via `asyncio.gather(...)`; if any node raises `typer.Exit`, it propagates out of the gather immediately
 - `GraphConfigSrcCLI` edges are normalised into `GraphConfig.cli_srcs` and `GraphConfig.sig` during `GraphConfig.from_file_config`; the corresponding virtual `ModuleCLI` nodes are created from `cli_srcs` during `Graph.from_config`; each injects one value into one destination port
 - error-level and critical-level logs emitted during graph assembly intentionally participate in the harness failure model: `ERROR` defers failure until the run ends, while `CRITICAL` aborts immediately
 

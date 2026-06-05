@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import typer
 
 from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
@@ -129,18 +130,18 @@ def _from_config_with_contracts(config):
 
 def test_invalid_module_fatal(logging_handler):
 	config = _make_config([_node("n1", "nonexistent_mod")], [])
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
 def test_invalid_contract_fatal(logging_handler):
 	config = _make_config([_node("n1", "source_mod", contract="nonexistent_contract")], [])
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config_with_contracts(config)
 
 
 def test_duplicate_node_id_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
 			nodes=[GraphConfigNode(id="n1", module="source_mod"), GraphConfigNode(id="n1", module="sink_mod")],
 			edges=[],
@@ -161,7 +162,7 @@ def test_from_file_config_default_relative_path_is_empty_path(logging_handler):
 
 
 def test_invalid_dst_node_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
 			nodes=[GraphConfigNode(id="src", module="source_mod")],
 			edges=[GraphConfigEdge(src=GraphConfigSrcPort(node="src"), dst=GraphConfigDstPort(node="nonexistent"))],
@@ -173,7 +174,7 @@ def test_invalid_dst_port_fatal(logging_handler):
 		[_node("src", "source_mod"), _node("sink", "sink_mod")],
 		[_edge("src", "default", "sink", "nonexistent_port")],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
@@ -182,7 +183,7 @@ def test_invalid_src_port_fatal(logging_handler):
 		[_node("src", "source_mod"), _node("sink", "sink_mod")],
 		[_edge("src", "nonexistent_emit", "sink", 1)],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
@@ -198,7 +199,7 @@ def test_overloaded_srcs_fatal(logging_handler):
 			_edge("src2", "default", "sink", 1),
 		],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
@@ -238,7 +239,7 @@ def test_cyclic_graph_fatal(logging_handler):
 		],
 	)
 	# Both nodes have required inputs; will fail deadlock check too.
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
@@ -247,7 +248,7 @@ def test_required_input_no_edge_fatal(logging_handler):
 		[_node("src", "source_mod"), _node("sink", "sink_mod")],
 		[],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
@@ -256,7 +257,7 @@ def test_no_source_capable_node_fatal(logging_handler):
 		[_node("a", "sink_mod"), _node("b", "sink_mod")],
 		[_edge("a", "default", "b", 1)],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_from_config(config)
 
 
@@ -379,7 +380,9 @@ def test_non_definite_inputs_allows_undeclared_dst_port(logging_handler):
 # --- Plugin validation ---
 
 
-def test_module_plugin_missing_run_fatal(logging_handler):
+def test_module_plugin_missing_run_raises(logging_handler):
+	# A module without a run attribute causes ModuleStructure to raise AttributeError
+	# (inspect.signature(Module.run) fails) before the missing_runs guard is reached.
 	class _NoRunModule:
 		pass
 
@@ -391,7 +394,7 @@ def test_module_plugin_missing_run_fatal(logging_handler):
 
 	config = _make_config([_node("n1", "no_run_mod")], [])
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
-		with pytest.raises(SystemExit):
+		with pytest.raises(AttributeError):
 			Graph.from_config(config)
 
 
@@ -408,7 +411,7 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 
 	config = _make_config([_node("n1", "source_mod", contract="bad_contract")], [])
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			Graph.from_config(config)
 
 
@@ -416,7 +419,7 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 
 
 def test_cyclic_graph_detected_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
 			nodes=[GraphConfigNode(id="a", module="m"), GraphConfigNode(id="b", module="m")],
 			edges=[
@@ -430,7 +433,7 @@ def test_cyclic_graph_detected_fatal(logging_handler):
 
 
 def test_cli_name_conflicts_with_node_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
 			nodes=[GraphConfigNode(id="cli-foo", module="m")],
 			edges=[GraphConfigEdge(src=GraphConfigSrcCLI(cli="foo"), dst=GraphConfigDstPort(node="cli-foo"))],
@@ -447,7 +450,7 @@ def test_cli_invalid_parameter_name_fatal(logging_handler, tmp_path):
 		'      node: nowhere\n'
 		'      port: 1\n'
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file(tmp_path / 'graph.yaml')
 
 
@@ -467,5 +470,5 @@ def test_no_source_capable_node_detected(logging_handler):
 		[_edge("a", "default", "b", 1)],
 	)
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			Graph.from_config(config)

@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
+import typer
 from yaml.reader import ReaderError
 
 from rtl_comrade.loader import (
@@ -59,21 +60,21 @@ def test_load_config_file_with_parent(logging_handler, tmp_path):
 
 
 def test_load_config_file_not_found(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_config_file(GraphFileConfig, Path("/nonexistent/graph.yaml"))
 
 
 def test_load_config_file_malformed_yaml(logging_handler, tmp_path):
 	p = tmp_path / "bad.yaml"
 	p.write_text("nodes: [\nunclosed bracket\n")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_serde_mismatch(logging_handler, tmp_path):
 	p = tmp_path / "bad.yaml"
 	p.write_text("nodes: not_a_list\nedges: []\n")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_config_file(GraphFileConfig, p)
 
 
@@ -81,7 +82,7 @@ def test_load_config_file_permission_denied(logging_handler, tmp_path):
 	p = tmp_path / "graph.yaml"
 	p.write_text("nodes: []\nedges: []\n")
 	with patch("builtins.open", side_effect=PermissionError("denied")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_config_file(GraphFileConfig, p)
 
 
@@ -90,13 +91,13 @@ def test_load_config_file_unicode_error(logging_handler, tmp_path):
 	p.write_text("nodes: []\nedges: []\n")
 	exc = UnicodeDecodeError("utf-8", b"\x80", 0, 1, "invalid start byte")
 	with patch("builtins.open", side_effect=exc):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_config_file(GraphFileConfig, p)
 
 
 def test_load_config_file_is_directory(logging_handler, tmp_path):
 	with patch("builtins.open", side_effect=IsADirectoryError("is a directory")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_config_file(GraphFileConfig, tmp_path / "graph.yaml")
 
 
@@ -104,7 +105,7 @@ def test_load_config_file_os_error(logging_handler, tmp_path):
 	p = tmp_path / "graph.yaml"
 	p.write_text("nodes: []\nedges: []\n")
 	with patch("builtins.open", side_effect=OSError(5, "I/O error")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_config_file(GraphFileConfig, p)
 
 
@@ -113,7 +114,7 @@ def test_load_config_file_reader_error(logging_handler, tmp_path):
 	p.write_text("nodes: []\nedges: []\n")
 	exc = ReaderError("test.yaml", 0, 0xFF, "utf-8", "special characters not allowed")
 	with patch("rtl_comrade.loader.from_yaml", side_effect=exc):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_config_file(GraphFileConfig, p)
 
 
@@ -154,7 +155,7 @@ def test_plugin_file_config_load_missing_class(logging_handler, tmp_path):
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	plugins = [PluginModuleConfig(class_name="Missing", name="missing")]
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=plugins)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		config.load()
 
 
@@ -166,14 +167,14 @@ def test_plugin_file_config_load_duplicate_name(logging_handler, tmp_path):
 		PluginModuleConfig(class_name="Bar", name="same"),
 	]
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=plugins)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		config.load()
 
 
 def test_plugin_file_config_load_not_a_file(logging_handler, tmp_path):
 	# Pass a directory path — config.file.is_file() returns False → fatal.
 	config = PluginFileConfig(name=None, file=tmp_path, type_=None, plugins=None)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		config.load()
 
 
@@ -182,7 +183,7 @@ def test_plugin_file_config_load_spec_none(logging_handler, tmp_path):
 	plugin_file.write_text(_SIMPLE_PLUGIN)
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
 	with patch("rtl_comrade.loader.importlib.util.spec_from_file_location", return_value=None):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			config.load()
 
 
@@ -196,7 +197,7 @@ def test_plugin_file_config_load_spec_loader_none(logging_handler, tmp_path):
 		"rtl_comrade.loader.importlib.util.spec_from_file_location",
 		return_value=mock_spec,
 	):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			config.load()
 
 
@@ -254,7 +255,7 @@ def test_plugin_file_config_load_exec_module_raises_fatal(logging_handler, tmp_p
 	config = PluginFileConfig(name=None, file=plugin_file, type_=None, plugins=None)
 	p1, p2 = _exec_raising_patches(exc)
 	with p1, p2:
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			config.load()
 
 
@@ -294,7 +295,7 @@ def test_load_plugins_from_directory_with_config(logging_handler, tmp_path):
 
 
 def test_load_plugin_config_nonexistent_path(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_plugins(load_plugin_config(Path("/no/such/path")))
 
 
@@ -320,7 +321,7 @@ def test_load_plugins_duplicate_from_multiple_paths_fatal(logging_handler, tmp_p
 	dir_b = tmp_path / "b"
 	dir_b.mkdir()
 	(dir_b / "m2.py").write_text("class Alpha:\n    def run(self): return None\n")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_plugins(load_plugin_configs([dir_a, dir_b]))
 
 
@@ -328,39 +329,39 @@ def test_load_plugins_duplicate_definition_in_dir_fatal(logging_handler, tmp_pat
 	# Two files in the same dir both export a class with the same snake_case name.
 	(tmp_path / "a.py").write_text("class Foo:\n    def run(self): return None\n")
 	(tmp_path / "b.py").write_text("class Foo:\n    def run(self): return None\n")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_plugins(load_plugin_config(tmp_path))
 
 
 def test_load_plugin_config_listdir_permission_error(logging_handler, tmp_path):
 	# tmp_path has no config.yaml → else branch → os.listdir raises.
 	with patch("os.listdir", side_effect=PermissionError("denied")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_plugin_config(tmp_path)
 
 
 def test_load_plugin_config_listdir_os_error(logging_handler, tmp_path):
 	with patch("os.listdir", side_effect=OSError(5, "I/O error")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_plugin_config(tmp_path)
 
 
 def test_load_plugin_config_listdir_unicode_error(logging_handler, tmp_path):
 	exc = UnicodeDecodeError("utf-8", b"\x80", 0, 1, "invalid start byte")
 	with patch("os.listdir", side_effect=exc):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_plugin_config(tmp_path)
 
 
 def test_load_plugin_config_listdir_file_not_found(logging_handler, tmp_path):
 	with patch("os.listdir", side_effect=FileNotFoundError("gone")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_plugin_config(tmp_path)
 
 
 def test_load_plugin_config_listdir_is_directory_error(logging_handler, tmp_path):
 	with patch("os.listdir", side_effect=IsADirectoryError("not a dir")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			load_plugin_config(tmp_path)
 
 
@@ -490,7 +491,7 @@ def test_load_plugin_config_deduplicates_duplicate_files(logging_handler, tmp_pa
 
 
 def test_load_plugin_config_nonexistent_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_plugin_config(Path("/no/such/path"))
 
 
@@ -588,7 +589,7 @@ def test_load_plugins_duplicate_name_fatal(logging_handler, tmp_path):
 		PluginFileConfig(name=None, file=tmp_path / "a.py", type_=None, plugins=None),
 		PluginFileConfig(name=None, file=tmp_path / "b.py", type_=None, plugins=None),
 	]
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		load_plugins(configs)
 
 

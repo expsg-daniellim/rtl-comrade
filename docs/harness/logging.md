@@ -29,7 +29,7 @@ This is the harness observability and failure-policy layer. Logging is intention
 - `initialise_logging(...)` clears existing root handlers and installs `LoggingFatalHandler`
 - `DEBUG`, `INFO`, and `WARNING` behave as normal logging levels
 - `ERROR` sets `handler.failure = True`
-- `CRITICAL` raises `SystemExit(1)` immediately
+- `CRITICAL` raises `typer.Exit(1)` immediately
 - `main()` checks `handler.failure` to decide its final exit code
 - harness sites that catch non-`rtl_comrade` exceptions now attach `exc_info=e` so the original traceback is preserved in the log event
 - changing a log level can therefore change both what operators see and how the harness reports success or failure

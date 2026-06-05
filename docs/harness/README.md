@@ -21,6 +21,7 @@ The harness is distinct from the modular building blocks:
 - [__main__.md](__main__.md): process entrypoint; delegates entirely to `App`.
 - [app.md](app.md): CLI implementation — config discovery, subcommand registration, logging setup, graph execution.
 - [graph.md](graph.md): graph construction, wiring, and top-level validation.
+- [module.md](module.md): frozen descriptor wrapping a module plugin class with pre-computed reflection results and port templates.
 - [module_cli.md](module_cli.md): virtual module that bridges CLI arguments into the graph.
 - [node.md](node.md): runtime execution unit that binds modules, contracts, ports, and downstream connections together.
 - [structure.md](structure.md): signature and AST analysis for module inputs and emitted output ports.
@@ -43,13 +44,14 @@ If you are new to the harness, read in roughly this order:
 4. [config.md](config.md)
 5. [config_graph.md](config_graph.md)
 6. [loader.md](loader.md)
-7. [node.md](node.md)
-8. [structure.md](structure.md)
-9. [port.md](port.md)
-10. [api.md](api.md)
-11. [contract_default.md](contract_default.md)
-12. [validation.md](validation.md)
-13. [logging.md](logging.md)
+7. [module.md](module.md)
+8. [node.md](node.md)
+9. [structure.md](structure.md)
+10. [port.md](port.md)
+11. [api.md](api.md)
+12. [contract_default.md](contract_default.md)
+13. [validation.md](validation.md)
+14. [logging.md](logging.md)
 
 ## Runtime Flow
 
@@ -57,8 +59,8 @@ At a high level:
 
 1. [__main__.py](../../src/rtl_comrade/__main__.py) delegates to [app.py](../../src/rtl_comrade/app.py), which discovers `rtl_comrade_config.yaml`, initializes logging, and registers typer subcommands.
 2. At startup, [config_graph.py](../../src/rtl_comrade/config_graph.py) loads each graph YAML via [loader.py](../../src/rtl_comrade/loader.py), deserializes it into a [config.py](../../src/rtl_comrade/config.py) `GraphFileConfig`, and normalises it into a `GraphConfig`. Structural validation (duplicate IDs, invalid edges, cycles) happens here.
-3. When the user invokes a subcommand, [graph.py](../../src/rtl_comrade/graph.py)'s `Graph.from_config()` loads module and contract plugin classes, creates [node.py](../../src/rtl_comrade/node.py) instances, wires edges, and runs [validation.py](../../src/rtl_comrade/validation.py).
-4. Each `Node` analyzes its module through [structure.py](../../src/rtl_comrade/structure.py), creates [port.py](../../src/rtl_comrade/port.py) objects, and exposes [api.py](../../src/rtl_comrade/api.py) `ContractPort`s, including per-port `state` dicts, to the configured contract.
+3. When the user invokes a subcommand, [graph.py](../../src/rtl_comrade/graph.py)'s `Graph.from_config()` loads module and contract plugin classes, wraps each module class in a [module.py](../../src/rtl_comrade/module.py) `GraphModule` descriptor (which runs [structure.py](../../src/rtl_comrade/structure.py) analysis and builds port templates once per class), creates [node.py](../../src/rtl_comrade/node.py) instances, wires edges, and runs [validation.py](../../src/rtl_comrade/validation.py).
+4. Each `Node` deep-copies its port template from the shared `GraphModule` descriptor, creates [port.py](../../src/rtl_comrade/port.py) objects, and exposes [api.py](../../src/rtl_comrade/api.py) `ContractPort`s, including per-port `state` dicts, to the configured contract.
 5. The contract, often [contract_default.py](../../src/rtl_comrade/contract_default.py), decides when enough inputs are ready for the module to run.
 6. Module outputs are dispatched downstream as `Payload` objects, and graph termination is propagated with `EndSentinel`.
 

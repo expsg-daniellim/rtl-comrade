@@ -15,6 +15,7 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 
 - [README.md](README.md)
 - [graph.md](graph.md)
+- [module.md](module.md)
 - [structure.md](structure.md)
 - [port.md](port.md)
 - [api.md](api.md)
@@ -23,10 +24,9 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 
 ## Main Responsibilities
 
-- instantiate module and contract classes
+- instantiate module and contract classes using pre-validated metadata from a `GraphModule` descriptor
 - deserialize module and contract configs when `Config` types are provided
-- infer module input and output structure
-- create queue-backed input ports
+- deep-copy port templates from `GraphModule` to give each node instance independent queues
 - expose contract-facing `ContractPort` adapters
 - accept inbound payloads and sentinels
 - run the contract/module loop
@@ -36,32 +36,29 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 
 ## Instantiation Model
 
-`Node` is not a thin wrapper around prebuilt objects. It performs a staged construction process that mixes reflection, optional config deserialization, and runtime adapter creation.
+`Node` takes a pre-validated [GraphModule](module.md) descriptor rather than a raw module class. All module-side reflection (constructor inspection, `ModuleStructure` analysis, port template construction) is done once by `GraphModule.from_module` before any `Node` is created. `Node.__init__` reads the pre-computed metadata from the descriptor instead of re-running reflection.
 
 ### Module instantiation
 
-When a node is created, it first inspects the module class constructor with `inspect.signature(...)`.
+`Node.__init__` uses the `has_config`, `has_id`, and `defines_config` flags from the `GraphModule` descriptor to decide what to pass to the module class constructor.
 
-- If module `__init__` accepts `config`, the node passes the graph node's `config`.
-- If the module defines a nested `Config` type, that config is deserialized through `serde.from_dict(...)` before being passed in. After deserialization, any `Path`-typed field that is not absolute and whose first path component is `{graph}` is replaced with `relative_path / <remaining components>`, where `relative_path` is the directory of the graph YAML file passed to `Node` by `Graph.from_config`. This allows module configs to reference files relative to the graph file using the `{graph}` prefix.
-- If module `__init__` accepts `id`, the node passes `<node-id>.module`.
-- If neither `config` nor `id` is accepted, the module is instantiated with no harness-injected arguments.
-
-The node then constructs [ModuleStructure](structure.md) from `Module.run(...)` and uses that inferred signature to create its input ports.
+- If `has_config` is true, the node passes the graph node's `config`.
+- If `defines_config` is true, that config is deserialized through `serde.from_dict(...)` before being passed in. After deserialization, any `Path`-typed field that is not absolute and whose first path component is `{graph}` is replaced with `relative_path / <remaining components>`, where `relative_path` is the directory of the graph YAML file. This allows module configs to reference files relative to the graph file using the `{graph}` prefix.
+- If `has_id` is true, the node passes `<node-id>.module`.
+- If neither flag is set, the module is instantiated with no harness-injected arguments.
 
 ### Port construction
 
-After module structure analysis:
+`Node.__init__` deep-copies the port template from `GraphModule.ports` to give each node instance its own independent queues.
 
-- one [Port](port.md) is created for each inferred `run(...)` parameter
-- parameters that have a Python default are marked `has_default=True` on the corresponding port
-- input port order is preserved through an `OrderedDict`
+- for modules with definite inputs, `GraphModule.ports` is a fully built `OrderedDict` keyed by parameter name, with `has_default` set from the function signature; the deep-copy is the entire port set
+- for modules with non-definite inputs (variadic or keyword-only), `GraphModule.ports` is empty; `Graph.from_config` builds override ports from the actual incoming edges and passes them to `Node.__init__` via the `ports` parameter, which are merged in after the deep-copy
 
 The raw `Port` objects are harness-owned runtime queues. Contracts do not receive them directly.
 
 ### Contract instantiation
 
-The node then inspects the contract constructor separately.
+`Node.__init__` inspects the contract constructor separately with `inspect.signature(...)`.
 
 - If contract `__init__` accepts `config`, the node passes `contract_config`.
 - If the contract defines a nested `Config` type, `contract_config` is deserialized through `serde.from_dict(...)` first.
@@ -82,12 +79,11 @@ This is the main boundary between harness-owned transport and contract-owned sch
 
 The ordering is important:
 
-1. module constructor inspection decides how node config enters the module
-2. module `run(...)` analysis defines the node's input surface
-3. ports are created from that inferred input surface
-4. contract constructor inspection decides how those ports are exposed to scheduling logic
+1. `GraphModule.from_module` inspects the module constructor and `run(...)` to define the node's input surface and build a reusable port template
+2. `Node.__init__` deep-copies that template so each node has independent queues
+3. `Node.__init__` inspects the contract constructor to decide how ports are exposed to scheduling logic
 
-That means a change to a module's `run(...)` signature can indirectly change contract-visible inputs even if the contract code itself is untouched.
+That means a change to a module's `run(...)` signature can indirectly change contract-visible inputs even if the contract code itself is untouched. The analysis in step 1 is shared across all nodes backed by the same module class.
 
 ## Place In The System
 
@@ -118,7 +114,7 @@ After the loop exits:
 - destination ports can be resolved by name or by 1-based position
 - output tuples must be exactly `(port_name, value)`
 - `None` is treated as "emit nothing"
-- non-`rtl_comrade` exceptions caught during module/contract reflection, config deserialization, construction, and runtime execution are logged with `exc_info=e`
+- non-`rtl_comrade` exceptions caught during contract reflection, config deserialization, construction, and runtime execution are logged with `exc_info=e`; module-side reflection exceptions are handled by `GraphModule.from_module` before `Node` is involved
 - error-level and critical-level logs during node execution intentionally participate in the harness failure model: `ERROR` allows best-effort continued execution, while `CRITICAL` aborts immediately
 - `module.finalise` is detected with `hasattr` + `callable`; a non-callable attribute named `finalise` is silently ignored
 - `EndSentinel` is only propagated after `finalise` completes — if `finalise` raises fatally, downstream nodes do not receive a sentinel and will block indefinitely
@@ -127,4 +123,5 @@ After the loop exits:
 
 - output sequence numbers currently start at `0`
 - this file is a sensitive seam because it combines reflection, async execution, contracts, ports, and termination semantics
-- constructor signatures are part of the plugin API surface because `Node` injects `config`, `id`, and `ports` only when those parameters are explicitly accepted
+- module constructor signatures are inspected once by `GraphModule.from_module` and cached in the descriptor; contract constructor signatures are still inspected per-node in `Node.__init__`
+- `typer.Exit` raised inside module or contract code during construction or execution propagates up through `Node` rather than being caught and re-logged; the `except typer.Exit: raise` guards ensure it bypasses the generic `except Exception` handlers

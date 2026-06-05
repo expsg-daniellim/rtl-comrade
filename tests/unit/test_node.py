@@ -5,12 +5,14 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import typer
 
 from serde import SerdeError
 from serde.compat import UserError
 
 from rtl_comrade.api import Payload, EndSentinel
 from rtl_comrade.contract_default import DefaultContract
+from rtl_comrade.module import GraphModule
 from rtl_comrade.node import Node, Connection
 from rtl_comrade.port import Port
 
@@ -183,12 +185,48 @@ class _ModuleWithFinaliseAsyncGenerator:
 		yield 20
 
 
+class _ModuleInitExitModule:
+	"""Module whose __init__ raises typer.Exit (simulates log.fatal inside init)."""
+	def __init__(self):
+		raise typer.Exit(1)
+
+	def run(self):
+		return None
+
+
 class _NoPortsContract:
 	def __init__(self, id):  # pylint: disable=redefined-builtin
 		self.id = id
 
 	async def get_inputs(self):
 		return EndSentinel(self.id)
+
+
+class _ContractInitExitContract:
+	"""Contract whose __init__ raises typer.Exit (simulates log.fatal inside init)."""
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		raise typer.Exit(1)
+
+	async def get_inputs(self):
+		return EndSentinel("x")
+
+
+class _ContractGetInputsExitContract:
+	"""Contract whose get_inputs raises typer.Exit (simulates log.fatal inside get_inputs)."""
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+
+	async def get_inputs(self):
+		raise typer.Exit(1)
+
+
+class _ModuleWithFinaliseExitModule:
+	"""Module whose finalise raises typer.Exit (simulates log.fatal inside finalise)."""
+	def run(self):
+		return None
+
+	def finalise(self):
+		raise typer.Exit(1)
 
 
 # Module-scope: ModuleStructure calls inspect.getsource, so these must be top-level.
@@ -254,7 +292,7 @@ def _make_node(Module, config=None, Contract=None, contract_config=None):
 		contract_config = {}
 	return Node(
 		id="test_node",
-		Module=Module,
+		module=GraphModule.from_module(Module),
 		config=config,
 		Contract=Contract,
 		contract_config=contract_config,
@@ -283,7 +321,7 @@ def test_init_config_with_config_class(logging_handler):
 def test_init_graph_sentinel_path_resolved_against_relative_path(logging_handler, tmp_path):
 	node = Node(
 		id="test_node",
-		Module=_ModuleWithPathConfig,
+		module=GraphModule.from_module(_ModuleWithPathConfig),
 		config={"file": "{graph}/data.txt"},
 		Contract=DefaultContract,
 		relative_path=tmp_path,
@@ -295,7 +333,7 @@ def test_init_absolute_path_config_not_modified_by_relative_path(logging_handler
 	abs_file = tmp_path / "data.txt"
 	node = Node(
 		id="test_node",
-		Module=_ModuleWithPathConfig,
+		module=GraphModule.from_module(_ModuleWithPathConfig),
 		config={"file": str(abs_file)},
 		Contract=DefaultContract,
 		relative_path=Path("/some/other/dir"),
@@ -306,7 +344,7 @@ def test_init_absolute_path_config_not_modified_by_relative_path(logging_handler
 def test_init_relative_path_config_without_sentinel_not_modified(logging_handler, tmp_path):
 	node = Node(
 		id="test_node",
-		Module=_ModuleWithPathConfig,
+		module=GraphModule.from_module(_ModuleWithPathConfig),
 		config={"file": "relative/path.txt"},
 		Contract=DefaultContract,
 		relative_path=tmp_path,
@@ -500,7 +538,7 @@ async def _run_node_with_input(Module, inputs_dict):
 			self.dsts = dsts  # pylint: disable=attribute-defined-outside-init
 
 	collect = _CollectNode()
-	node = Node(id="runner", Module=Module, config={}, Contract=_CollectContract)
+	node = Node(id="runner", module=GraphModule.from_module(Module), config={}, Contract=_CollectContract)
 	conn = Connection(self_port="default", other_node=collect, other_port="x")  # ty: ignore[invalid-argument-type] — _CollectNode is a duck-typed test double satisfying Node's runtime interface without inheriting it
 	node.set_dsts([conn])
 	collect.set_dsts([])
@@ -534,7 +572,7 @@ async def test_run_no_input_runs_once(logging_handler):
 
 
 async def test_run_module_exception_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		await _run_node_with_input(_CrashModule, {})
 
 
@@ -543,19 +581,19 @@ async def test_run_module_exception_fatal(logging_handler):
 
 def test_module_unavailable_signature_fatal(logging_handler):
 	with patch.object(inspect, "signature", side_effect=TypeError("uninspectable")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			_make_node(_MinimalModule)
 
 
 def test_module_config_serde_error_fatal(logging_handler):
 	with patch("rtl_comrade.node.from_dict", side_effect=SerdeError("bad config")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			_make_node(_ModuleWithConfigClass, config={"value": "wrong_type"})
 
 
 def test_module_config_user_error_fatal(logging_handler):
 	with patch("rtl_comrade.node.from_dict", side_effect=UserError("user error")):  # ty: ignore[invalid-argument-type] — ty misreads the class-level annotation `inner: Exception` as a constructor parameter; UserError has no custom __init__ and inherits Exception(*args)
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			_make_node(_ModuleWithConfigClass, config={"value": 0})
 
 
@@ -567,23 +605,28 @@ def test_module_init_exception_fatal(logging_handler):
 		def run(self):
 			return None
 
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_node(_InitCrashModule)
 
 
+def test_module_init_typer_exit_propagates(logging_handler):
+	with pytest.raises(typer.Exit):
+		_make_node(_ModuleInitExitModule)
+
+
 def test_module_invalid_tuple_structure_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_node(_InvalidTupleModule)
 
 
 def test_module_non_str_port_name_structure_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_node(_NonStrPortNameModule)
 
 
 def test_contract_unavailable_signature_fatal(logging_handler):
 	# inspect.signature is called three times before Node init completes:
-	#   1. Module.__init__ (node.py)
+	#   1. Module.__init__ (module.py, inside GraphModule.from_module)
 	#   2. Module.run    (structure.py, inside ModuleStructure)
 	#   3. Contract.__init__ (node.py) ← want this to raise
 	_orig = inspect.signature
@@ -596,7 +639,7 @@ def test_contract_unavailable_signature_fatal(logging_handler):
 		return _orig(obj)
 
 	with patch.object(inspect, "signature", side_effect=_patched):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			_make_node(_MinimalModule)
 
 
@@ -635,7 +678,7 @@ def test_contract_config_serde_error_fatal(logging_handler):
 			return EndSentinel(self.id)
 
 	with patch("rtl_comrade.node.from_dict", side_effect=SerdeError("contract serde error")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			_make_node(_MinimalModule, Contract=_ContractWithSerdeCfg)
 
 
@@ -658,7 +701,7 @@ def test_contract_config_user_error_fatal(logging_handler):
 		"rtl_comrade.node.from_dict",
 		side_effect=UserError("contract user error"),  # ty: ignore[invalid-argument-type] — ty misreads the class-level annotation `inner: Exception` as a constructor parameter; UserError has no custom __init__ and inherits Exception(*args)
 	):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			_make_node(_MinimalModule, Contract=_ContractWithSerdeCfg)
 
 
@@ -668,8 +711,13 @@ def test_contract_no_config_class_warns(logging_handler):
 
 
 def test_contract_init_exception_fatal(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_node(_MinimalModule, Contract=_ContractInitCrash)
+
+
+def test_contract_init_typer_exit_propagates(logging_handler):
+	with pytest.raises(typer.Exit):
+		_make_node(_MinimalModule, Contract=_ContractInitExitContract)
 
 
 # --- process_result — dsts not initialised ---
@@ -690,14 +738,21 @@ async def test_run_invalid_enqueued_error_fatal(logging_handler):
 	node.set_dsts([])
 	# Put a non-Payload/EndSentinel value directly into the port queue.
 	node.ports["a"].queue.put_nowait(42)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		await node.run()
 
 
 async def test_run_get_inputs_exception_fatal(logging_handler):
-	node = Node(id="test", Module=_MinimalModule, config={}, Contract=_CrashGetInputsContract)
+	node = Node(id="test", module=GraphModule.from_module(_MinimalModule), config={}, Contract=_CrashGetInputsContract)
 	node.set_dsts([])
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
+		await node.run()
+
+
+async def test_run_get_inputs_typer_exit_propagates(logging_handler):
+	node = _make_node(_MinimalModule, Contract=_ContractGetInputsExitContract)
+	node.set_dsts([])
+	with pytest.raises(typer.Exit):
 		await node.run()
 
 
@@ -719,7 +774,7 @@ async def test_run_sync_contract_get_inputs(logging_handler):
 		def get_inputs(self):  # intentionally sync
 			return EndSentinel(self.id)
 
-	node = Node(id="test", Module=_MinimalModule, config={}, Contract=_SyncTerminateContract)
+	node = Node(id="test", module=GraphModule.from_module(_MinimalModule), config={}, Contract=_SyncTerminateContract)
 	node.set_dsts([])
 	await node.run()  # should terminate cleanly via the sync EndSentinel
 
@@ -751,7 +806,14 @@ async def test_run_no_finalise_runs_cleanly(logging_handler):
 async def test_run_finalise_exception_is_fatal(logging_handler):
 	node = _make_node(_ModuleWithCrashingFinalise)
 	node.set_dsts([])
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
+		await node.run()
+
+
+async def test_run_finalise_typer_exit_propagates(logging_handler):
+	node = _make_node(_ModuleWithFinaliseExitModule)
+	node.set_dsts([])
+	with pytest.raises(typer.Exit):
 		await node.run()
 
 

@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import typer
 
 from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
@@ -478,7 +479,7 @@ def test_it9_module_exception(logging_handler, tmp_path):
 		modules=[_pfc(tmp_path / "mods.py")],
 		contracts=[],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_run_graph(config)
 
 
@@ -545,7 +546,7 @@ def test_it11_from_file_valid(logging_handler, tmp_path):
 
 
 def test_it12_from_file_not_found(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file("/no/such/graph.yaml")
 
 
@@ -557,7 +558,7 @@ def test_it12_from_file_not_found(logging_handler):
 def test_it13_from_file_malformed(logging_handler, tmp_path):
 	bad = tmp_path / "bad.yaml"
 	bad.write_text("nodes: [\nunclosed\n")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		GraphConfig.from_file(str(bad))
 
 
@@ -733,7 +734,7 @@ def test_it18_blank_cli_name(logging_handler, tmp_path):
 		],
 		modules=[tmp_path / "mods.py"],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		Graph.from_config(GraphConfig.from_file_config(config))  # IT-18
 
 
@@ -770,16 +771,16 @@ def test_it19_duplicate_cli_name(logging_handler, tmp_path):
 		],
 		modules=[tmp_path / "mods.py"],
 	)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		Graph.from_config(GraphConfig.from_file_config(config))
 
 
 # ---------------------------------------------------------------------------
-# IT-20: SystemExit from a fataling node is swallowed by gather and run_cleanup runs
+# IT-20: typer.Exit from a fataling node propagates out of gather; run_cleanup is not called
 # ---------------------------------------------------------------------------
 
 
-def test_it20_node_fatal_cleanup_runs(logging_handler, tmp_path):
+def test_it20_node_fatal_propagates(logging_handler, tmp_path):
 	_write_plugin(tmp_path, "mods.py", """\
         import structlog
         log = structlog.get_logger()
@@ -795,6 +796,6 @@ def test_it20_node_fatal_cleanup_runs(logging_handler, tmp_path):
 		contracts=[],
 	)
 	cleanup_called = []
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		Graph.construct_run(config, lambda: cleanup_called.append(True))()
-	assert cleanup_called
+	assert not cleanup_called

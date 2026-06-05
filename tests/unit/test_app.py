@@ -150,7 +150,7 @@ def test_search_file_path_match_sets_relative_path_to_file(tmp_path):
 def test_app_config_not_found_exits():
 	with patch("rtl_comrade.app.search_for_config", return_value=None), \
 		 patch.object(sys, "argv", ["rtl-comrade"]):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			App()
 
 
@@ -312,43 +312,43 @@ def _make_app_raises(exc):
 
 def test_from_file_unicode_decode_fatal():
 	exc = UnicodeDecodeError('utf-8', b'\x80', 0, 1, 'invalid start byte')
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(exc)
 
 
 def test_from_file_not_found_fatal():
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(FileNotFoundError())
 
 
 def test_from_file_is_directory_fatal():
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(IsADirectoryError())
 
 
 def test_from_file_permission_error_fatal():
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(PermissionError())
 
 
 def test_from_file_os_error_fatal():
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(OSError(5, 'Input/output error'))
 
 
 def test_from_file_serde_error_fatal():
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(SerdeError('bad schema'))
 
 
 def test_from_file_marked_yaml_error_with_mark_fatal():
 	mark = Mark('test.yaml', 5, 2, 4, None, 0)
 	exc = MarkedYAMLError('ctx', None, 'bad yaml', mark)
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(exc)
 
 
 def test_from_file_reader_error_fatal():
 	exc = ReaderError('test', 0, b'\x80', 'utf-8', 'invalid character')
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		_make_app_raises(exc)
