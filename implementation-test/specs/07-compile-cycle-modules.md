@@ -8,9 +8,9 @@ spec [01b](01b-suite-schema.md) (`BuildCompileCmdMod` reads
 
 ## Goal
 
-Build the per-test compile leg: assemble the compile argv (with log paths and the simv
-artifact path pre-folded into `ctx`), run the subprocess via `run-process` (spec 03),
-and route on the rc.
+Build the per-test compile leg: assemble the compile argv (with log paths placed in
+`command`), fold `simv` into `ctx`, run the subprocess via `run-process` (spec 03), and
+route on the rc.
 
 ## Deliverables
 
@@ -24,31 +24,29 @@ In `modules/rtl_test/build.py`:
   quirk](01a-builder-schema.md)). Computes `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
   ctx["test"].get_name())`, `build_dir = f"obj_dir_{test_tag}"`, and `simv =
   f"{build_dir}/simv" if is_verilator else builder_cfg.get_simv()` (mirrors
-  `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:61-80`). `plusdefines` is built from
-  `ctx["test"].get_plusdefines()` (spec [01b](01b-suite-schema.md) — returns
-  `dict | None`; when not `None`, format each entry as `f"+define+{k}={v}"` or
-  `f"+define+{k}"` for `v is None`, mirroring `vlog_sim.py:107-117`). Compile log paths
-  are composed as `f"{logs_dir}/{test_tag}.compile.log"` and `.err` (default `logs/...`,
-  matching rtl_buddy; `logs_dir` is a persistent input fed by `--logs-dir`, see
-  [01](../01-cli-and-entry.md) and [07 settled 26](../07-ambiguities-and-assumptions.md)).
-  Does not `mkdir(logs_dir)` — `ensure-logs-dir` has already bootstrapped the directory
-  via the env_ready chain. Emits:
-  - `("ctx", ctx_with_build_dir_and_simv)` (folds them in so the downstream join carries
-    no config port)
-  - `("command", {"key", "argv", "stdout_path", "stderr_path"})` — log paths under
-    `logs_dir`.
+  `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:61-80`). Folds `simv` into `ctx`
+  (`ctx["simv"] = simv`); does not fold `build_dir` (not needed downstream). Does not
+  `mkdir(logs_dir)` — `ensure-logs-dir` has already bootstrapped the directory via the
+  env_ready chain. `plusdefines` is built from `ctx["test"].get_plusdefines()` (spec
+  [01b](01b-suite-schema.md) — returns `dict | None`; when not `None`, format each entry
+  as `f"+define+{k}={v}"` or `f"+define+{k}"` for `v is None`, mirroring
+  `vlog_sim.py:107-117`). Compile log paths are composed as
+  `f"{logs_dir}/{test_tag}.compile.log"` and `.err`.
+  Emits:
+  - `("ctx", ctx_with_simv)` — ctx now carries `simv`
+  - `("command", {"key", "argv", "stdout_path", "stderr_path"})` — log paths under `logs_dir`.
   **Failure handling**: `builder_cfg.get_compile_time_opts(builder_mode)` calls
   `log.critical` (immediate `SystemExit(1)`) if `builder_mode` is not in
   `builder_cfg.opts` or the mode's `compile_time` is `None` — see spec
   [01a](01a-builder-schema.md). No catching; system-wide misconfiguration.
 - `InterpretCompileMod` — `(ctx, proc)`, with `keyed_join` contract on the node;
-  rc == 0 → `("ok", ctx)`; rc != 0 → reads `proc["stderr_path"]`/`stdout_path` and logs
-  at ERROR, then `("fail", {"key": ctx["key"], "result": CompileFailResults()})`.
+  rc == 0 → `("ok", ctx)` unchanged (`ctx["simv"]` already set by `build-compile-cmd`);
+  rc != 0 → reads `proc["stderr_path"]`/`stdout_path` and logs at ERROR, then
+  `("fail", {"key": ctx["key"], "result": CompileFailResults()})`.
   **Failure handling**: routing on `proc["rc"]`; no Python exception is caught here. The
   ERROR log at emission carries `rc`, `stderr_path`, and a tail of the stderr file
   (mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:170-172`). `OSError` /
-  `FileNotFoundError` reading `stderr_path` would be surprising (the path was created by
-  `run-process`); let it propagate as a harness CRITICAL.
+  `FileNotFoundError` reading `stderr_path` would be surprising; let it propagate.
 
 Manifest entries per [06](../06-graph-yaml.md).
 
@@ -71,7 +69,7 @@ Tests in `modules/tests/test_compile_cycle.py`:
 
 ## Notes
 
-`cc-int` (interpret-compile) is one of the two `keyed_join` nodes in the entire graph.
-The `keyed_join` contract joins **every** port by key, which is why `simv`/`build_dir`
-were folded into `ctx` at `build-compile-cmd` rather than passed as a separate config
-port to `interpret-compile`. See [04 — keyed_join paragraph](../04-pipeline-and-contracts.md).
+`cc-int` (interpret-compile) is one of the two `keyed_join` nodes. `simv` is set by
+`build-compile-cmd` and carried in `ctx` — `build-sim-cmd` reads it directly. `build_dir`
+is not in `ctx` (not needed downstream). See
+[04 — keyed_join paragraph](../04-pipeline-and-contracts.md).

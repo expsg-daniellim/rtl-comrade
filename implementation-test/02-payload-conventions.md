@@ -16,47 +16,52 @@ The key exists so the two join nodes can match a subprocess result back to the t
 came from. It appears as a field only on payloads that actually enter a `keyed_join`
 (the `ctx` and `proc` payloads). Modules copy it forward; they never parse or branch on it.
 
-## Shape 1 — `ctx`: the main-line context record
+## Shape 1 — `ctx`: the main-line correlation record
 
-A minimal dict that rides the main line and is forwarded stage-to-stage:
+A stable 3-field dict from `select` through the compile join (`cc-int`) and on through to
+`write-randseed`:
 
 ```python
 ctx = {
-    "key":  "alu_smoke#0#0",   # correlation key
-    "test": <TestConfig>,      # the rtl_buddy TestConfig (mutated in place by preproc/sweep)
-    "simv": <Path>,            # ADDED by interpret-compile; absent before compile
-    "seed": <int>,             # ADDED by resolve-seed; absent before sim-build
-    "log":  <Path>,            # ADDED by build-sim-cmd; the sim log path (used by post-parsers)
-    "randseed_path": <Path>,   # ADDED by build-sim-cmd; consumed by write-randseed
+    "key":    "alu_smoke#0#0",  # correlation key — stamped at select/sweep/runs fan-outs
+    "test":   <TestConfig>,     # mutated in-place by preproc/sweep; model attached by load-model
+    "run_id": int | None,       # set by expand-runs; None for plain test (R=1)
+    "simv":   <Path>,           # set by build-compile-cmd; absent on the pre-compile segment
 }
 ```
 
-Rules that keep this from becoming the rejected envelope:
+- **One addition, at one boundary.** `build-compile-cmd` sets `simv` in `ctx` — the only
+  field added after `select` creates the record. After that point no further fields are
+  added. `seed`, `log`, `err`, and `randseed_path` travel as a separate `sim_cmd` keyed
+  payload (Shape 2) from `sim-build` to `write-randseed`.
+- **Always a dict** — `keyed_join` reads `payload["key"]` to correlate ports; `ctx`
+  satisfies this at both join points (`cc-int`, `write-randseed`).
+- **`ctx["test"]` is the live `TestConfig`**, mutated in-place by `run-preproc` /
+  `expand-sweep`; `ctx["test"].model` carries the loaded `ModelConfig` after `load-model`.
+- **No `result` field, ever.** Terminal outcomes leave as Shape-3 payloads, removing the
+  need for any guard inside modules.
+- Modules forward `ctx` unchanged on their continue-port and read only the fields they use.
 
-- **Only genuinely-pervasive values live here.** `test` is needed by almost every stage;
-  `simv` is needed by every run of a compiled test; `seed`/`log`/`randseed_path` are folded
-  in by `build-sim-cmd` so the downstream `keyed_join` (`write-randseed`) and post-parsers
-  carry no persistent config port (`keyed_join` joins every port by key and so cannot also
-  carry a persistent config — see [07 Implementation notes](07-ambiguities-and-assumptions.md)).
-  A value earns a place in `ctx` *only if every downstream stage needs it*. Everything else
-  is a Shape-2/3 payload consumed locally.
-- **Path composition lives at the use site, not in `ctx`.** `log` and `randseed_path` are
-  pre-composed by `build-sim-cmd` from the CLI `logs_dir` persistent input plus
-  `test.get_name()` and `ctx["run_id"]`; `build-compile-cmd` does the equivalent for the
-  compile log paths, which it puts into `command` (not `ctx`) since only `cc-run` reads
-  them. The `logs/` directory itself is materialised once at startup by `ensure-logs-dir`
-  (see [07 settled 26](07-ambiguities-and-assumptions.md)); no writer calls `mkdir`.
-- **No derived or transient values** — `argv`, `rc`, `stdout`, `stderr`, `log`, `duration`
-  never enter `ctx`.
-- **No `result` field, ever.** A terminal outcome does not ride inside `ctx`; it leaves the
-  main line as a Shape-3 payload (below). This is what removes the need for any
-  "am I already done?" guard inside modules.
-- Modules read only `ctx["test"]` (and `ctx["simv"]` post-compile). They forward `ctx`
-  unchanged on their continue-port.
+## Shape 1b — `test_run`: the post-sim context record
 
-> Why a dict and not separate `key`/`test` ports? `keyed_join` correlates by reading
-> `payload[key_field]`, so any payload entering a join must be a dict carrying the key.
-> Keeping `ctx` a dict everywhere makes the join trivial and the forwarding uniform.
+Assembled once by `write-randseed` (the sim-side join) from `ctx`, `proc`, and `sim_cmd`.
+Replaces `ctx` as the main payload from `write-randseed` onward: `link-latest` →
+`sim-int` → `gate-sim` → `route-post` → `parse-log` / `parse-uvm-log`:
+
+```python
+test_run = {
+    "key":          "alu_smoke#0#0",
+    "test":         <TestConfig>,
+    "run_id":       int | None,
+    "rc":           int,
+    "timed_out":    bool,
+    "log":          <Path>,         # sim .log path (parse-log / parse-uvm-log / link-latest)
+    "err":          <Path>,         # sim .err path (link-latest)
+    "randseed_path":<Path>,         # .randseed path (link-latest)
+}
+```
+
+Assembled once at `write-randseed`; no downstream node adds to it.
 
 ## Shape 2 — work payloads (local, single-hop)
 
@@ -68,6 +73,8 @@ command  = { "key": k, "argv": [ ... ] }                     # build-*-cmd     �
 proc     = { "key": k, "rc": int, "stdout": bytes,           # run-process     → interpret-*
              "stderr": bytes, "timed_out": bool }
 seed     = { "key": k, "seed": int }                         # resolve-seed    → build-sim-cmd
+sim_cmd  = { "key": k, "seed": int, "log": Path,             # sim-build        → write-randseed
+             "err": Path, "randseed_path": Path }
 ```
 
 These never accumulate. Each is consumed by exactly the next stage(s).

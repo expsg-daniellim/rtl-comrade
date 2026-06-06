@@ -9,7 +9,7 @@
 ## Goal
 
 Build the per-run simulate leg: fan out per run-id, resolve the seed, assemble the sim
-argv (with log paths in `command` and `seed`/`log` folded into `ctx`), run the subprocess,
+argv (with log paths in `command` and `seed`/`log`/`randseed_path` carried in `sim_cmd`), run the subprocess,
 then write `.randseed` (the second keyed_join), force the `test.*` symlinks, and route
 on timeout.
 
@@ -17,8 +17,9 @@ on timeout.
 
 In `modules/rtl_test/sim.py`:
 
-- `ExpandRunsMod` — `(ctx, run_ids:list=[None])` → generator yielding one `ctx` per
-  `run_id` (key suffixed `#run`, `run_id` recorded in `ctx`).
+- `ExpandRunsMod` — `(ctx, run_ids:list=[None])` → generator yielding one fresh `ctx`
+  per `run_id`, with `ctx["run_id"]` set and key suffixed `#run_id` (when `run_id is not
+  None`). For `run_ids=[None]` emits one `ctx` unchanged (key unmodified, `run_id=None`).
 - `ResolveSeedMod` — `(ctx, seed_mode, builder_cfg, logs_dir:str="logs")` → integrated
   seed-producer for all three modes:
   - `NEW` → `random.randrange(1_000_000)`
@@ -39,10 +40,9 @@ In `modules/rtl_test/sim.py`:
   failure path.
 - `BuildSimCmdMod` — `(ctx, seed, builder_cfg, builder_mode, logs_dir:str="logs")` → assembles
   `[simv_path] + builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]) + plusdefines + plusargs`,
-  where `simv_path` is `ctx["simv"]` (already resolved by `build-compile-cmd` honouring
-  the spec [01a — Verilator quirk](01a-builder-schema.md): `f"{build_dir}/simv"` for
-  verilator, `builder_cfg.get_simv()` otherwise). `get_run_time_opts` appends
-  `builder_cfg.sim_rand_prefix + str(seed)` internally — do **not** add the seed
+  where `simv_path` is `ctx["simv"]` (set by `build-compile-cmd` — see spec
+  [07](07-compile-cycle-modules.md) and spec [01a — Verilator quirk](01a-builder-schema.md)). `get_run_time_opts`
+  appends `builder_cfg.sim_rand_prefix + str(seed)` internally — do **not** add the seed
   separately. `plusdefines` is built from `ctx["test"].get_plusdefines()` exactly as in
   `BuildCompileCmdMod` (spec [07](07-compile-cycle-modules.md)); `plusargs` is built
   from `ctx["test"].get_plusargs()` (spec [01b](01b-suite-schema.md) — returns `dict |
@@ -53,34 +53,33 @@ In `modules/rtl_test/sim.py`:
   `timeout` value (an `int` seconds) is emitted as a `float | None`. Log paths are
   `f"{logs_dir}/{test_name}[_{run_id:04d}].log"`/`.err` (default `logs/...`, matching
   rtl_buddy; `logs_dir` is a persistent input fed by `--logs-dir`). Also composes
-  `randseed_path = f"{logs_dir}/{test_name}[_{run_id:04d}].randseed"` and folds it into
-  `ctx` so the downstream `keyed_join` (`write-randseed`) carries the path without
-  needing a persistent config port. Does not `mkdir(logs_dir)` — `ensure-logs-dir` has
-  already bootstrapped the directory via the env_ready chain. Emits in lockstep:
-  `("ctx", ctx_with_seed_log_and_randseed_path)`, `("command", {"key", "argv", "stdout_path", "stderr_path"})`,
-  `("timeout", float | None)`.
+  `randseed_path = f"{logs_dir}/{test_name}[_{run_id:04d}].randseed"`. These paths are
+  emitted in `sim_cmd` (not folded into `ctx`) so `write-randseed` receives them as a
+  dedicated keyed port. Does not `mkdir(logs_dir)` — `ensure-logs-dir` has already
+  bootstrapped the directory via the env_ready chain. Emits in lockstep:
+  `("ctx", ctx)` (unchanged), `("sim_cmd", {"key", "seed", "log", "err", "randseed_path"})`,
+  `("command", {"key", "argv", "stdout_path", "stderr_path"})`, `("timeout", float | None)`.
   **Failure handling**: `builder_cfg.get_run_time_opts(builder_mode, seed)` calls
   `log.critical` if `builder_mode` is not in `builder_cfg.opts` or the mode's
   `run_time` is `None` — see spec [01a](01a-builder-schema.md). No catching.
-- `WriteRandseedMod` — `(ctx, proc)`, with `keyed_join` contract on the node; writes
-  `ctx["randseed_path"]` (composed by `build-sim-cmd` from `logs_dir` + `test_name` +
-  `run_id`; default `logs/<test>[_NNNN].randseed`) from `ctx["seed"]`
-  (+ `HierInstanceSeed.txt` contents if present); folds `rc`/`timed_out` from `proc` into
-  `ctx`; emits `ctx`. The directory was materialised at startup by `ensure-logs-dir`;
-  this module does not `mkdir`. `logs_dir` is **not** a persistent input here —
-  `keyed_join` joins every port by key and cannot carry a persistent config port (see
-  [02 — Path composition](../02-payload-conventions.md) and [07 Implementation
-  notes](../07-ambiguities-and-assumptions.md)), so the path is delivered through `ctx`
-  instead.
-- `LinkLatestMod` — `(ctx)` → force CWD symlinks `test.log`/`test.err`/`test.randseed`
-  to this run's files (in the configured `logs_dir`, default `logs/`, via the paths
-  already folded into `ctx` by `build-sim-cmd`); emits `ctx`. Symlinks themselves are
+- `WriteRandseedMod` — `(ctx, proc, sim_cmd)`, 3-port `keyed_join`; writes
+  `sim_cmd["randseed_path"]` from `sim_cmd["seed"]` (+ `HierInstanceSeed.txt` contents
+  if present); assembles and emits `test_run` from `ctx` + `proc` + `sim_cmd`. The
+  directory was materialised at startup by `ensure-logs-dir`; this module does not
+  `mkdir`. `logs_dir` is **not** a persistent input — `keyed_join` joins every port by
+  key and cannot carry one; instead `sim_cmd` delivers the pre-composed paths as a keyed
+  port (see [02 — Shape 2](../02-payload-conventions.md) and
+  [07 Implementation notes](../07-ambiguities-and-assumptions.md)).
+- `LinkLatestMod` — `(test_run)` → force CWD symlinks `test.log`/`test.err`/`test.randseed`
+  to this run's files (paths from `test_run["log"]`, `test_run["err"]`,
+  `test_run["randseed_path"]`); emits `test_run` unchanged. Symlinks themselves are
   always placed in CWD, matching rtl_buddy.
-- `InterpretSimMod` — `(ctx)` → pure routing: `ctx["timed_out"]` → `("timeout",
-  {"key", "result": SimTimeoutResults()})`, else `("ok", ctx)`.
-  **Failure handling**: routing on `ctx["timed_out"]`; no Python exception is caught.
-  The ERROR log at emission of `("timeout", ...)` carries `ctx["key"]`, the configured
-  timeout, and the sim `stderr_path` (mirrors rtl_buddy's `vlog_sim.py` timeout reporting).
+- `InterpretSimMod` — `(test_run)` → pure routing: `test_run["timed_out"]` →
+  `("timeout", {"key", "result": SimTimeoutResults()})`, else `("ok", test_run)`.
+  **Failure handling**: routing on `test_run["timed_out"]`; no Python exception is caught.
+  The ERROR log at emission of `("timeout", ...)` carries `test_run["key"]`, the
+  configured timeout, and `test_run["err"]` (mirrors rtl_buddy's `vlog_sim.py` timeout
+  reporting).
 
 Manifest entries per [06](../06-graph-yaml.md).
 
@@ -93,11 +92,12 @@ Tests in `modules/tests/test_sim_cycle.py`:
   back. The REPLAY-missing fail path quotes the `logs_dir`-prefixed path in the FAIL
   payload's `desc`.
 - `build-sim-cmd` argv matches rtl_buddy `VlogSim.execute`; timeout pulled from test
-  config. `stdout_path` / `stderr_path` in `command` and `log` / `randseed_path` in `ctx`
+  config. `stdout_path`/`stderr_path` in `command` and `log`/`randseed_path` in `sim_cmd`
   all carry the `logs_dir` prefix (verify with default `"logs"` and a custom value).
-- `write-randseed` writes to `ctx["randseed_path"]` (not a hard-coded `logs/...` path) —
-  exercise with a custom `logs_dir` end-to-end. `link-latest` forces symlinks atomically
-  (use `os.replace` or unlink+symlink ordering); `interpret-sim` routes timeout-vs-ok.
+- `write-randseed` writes to `sim_cmd["randseed_path"]` (not a hard-coded `logs/...`
+  path) — exercise with a custom `logs_dir` end-to-end. `link-latest` forces symlinks
+  atomically (use `os.replace` or unlink+symlink ordering); `interpret-sim` routes
+  timeout-vs-ok on `test_run["timed_out"]`.
 
 ## Acceptance criteria
 
@@ -109,6 +109,8 @@ Tests in `modules/tests/test_sim_cycle.py`:
 ## Notes
 
 `write-randseed` is the **second** `keyed_join` node (the sim-side join). It holds the
-join because it's the first node needing both `ctx` (for the seed) and `proc` (for the
-completion signal + rc). `link-latest` and `interpret-sim` are downstream single-source
-`default` nodes; no further joins. Mirror [04 — Why each contract](../04-pipeline-and-contracts.md).
+join because it is the first node needing `proc` (for completion signal + rc), `sim_cmd`
+(for the pre-composed paths), and `ctx` (for test identity). It assembles `test_run` once;
+all downstream nodes (`link-latest`, `interpret-sim`, `gate-sim`, `route-post`,
+`parse-log`, `parse-uvm-log`) are single-source `default` on `test_run`. No further joins.
+Mirror [04 — Why each contract](../04-pipeline-and-contracts.md).

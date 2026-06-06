@@ -7,8 +7,8 @@ the repo style (no space before the annotation colon, British spelling). "Tags" 
 documentation-level labels (the manifest has no tag field — see
 [07](07-ambiguities-and-assumptions.md)); they replace the old phase structure.
 
-Conventions: `ctx`, `command`, `proc`, `seed`, `filelist`, `result` are the payload shapes
-from [02](02-payload-conventions.md). **Contract** is the recommended pairing
+Conventions: `ctx`, `test_run`, `sim_cmd`, `command`, `proc`, `seed`, `filelist`, `result`
+are the payload shapes from [02](02-payload-conventions.md). **Contract** is the recommended pairing
 ([04](04-pipeline-and-contracts.md)).
 
 ---
@@ -153,7 +153,7 @@ Select one test or all (`get_tests(test_name)`) and yield one `ctx` per test, st
 class SelectTestsMod:
     def run(self, suite_cfg, test_name:str = ""):
         for t in suite_cfg.get_tests(test_name or None):
-            yield ("default", { "key": t.get_name(), "test": t })
+            yield ("default", { "key": t.get_name(), "test": t, "run_id": None })
 ```
 
 ### `filter-reglvl`  · tags: select · contract: `default` (persistent: `builder_cfg`,`reg_level`,`start_level`)
@@ -214,14 +214,13 @@ unchanged **and** the filelist payload on a second port (both consumed in lockst
 ### `build-compile-cmd`  · tags: compile · contract: `default` (persistent: `builder_cfg`,`builder_mode`,`logs_dir`)
 Assembles the compiler argv as `VlogSim.compile`:
 `[exe] + compile_time_opts(mode) + (["--Mdir", obj_dir] if verilator) + plusdefines + ["-f", run.f]`.
-It has the builder + test, so it also computes the prospective `build_dir`, `simv` path, and
-the compile log paths (`<logs_dir>/<test>.compile.log`/`.err` — default `logs/<test>...`,
-matching rtl_buddy) — folds `build_dir`/`simv` into `ctx` and puts the log paths into
-`command` so `run-process` redirects there. Does not `mkdir` — `ensure-logs-dir` has
-already bootstrapped the directory before any subprocess runs (env_ready chain).
+Computes `test_tag`, `build_dir`, and `simv` for use in the argv and log paths; puts the
+compile log paths into `command` so `run-process` redirects there. Folds `simv` into `ctx` so downstream nodes carry it without re-derivation; does not fold
+`build_dir` (not needed downstream). Does not `mkdir` — `ensure-logs-dir` has already
+bootstrapped the directory (env_ready chain).
 
 - **In:** `ctx`, `filelist`, `builder_cfg`, `builder_mode:str = "debug"`, `logs_dir:str = "logs"`
-- **Out:** `("ctx", ctx + {build_dir, simv})`, `("command", {key, argv, stdout_path, stderr_path})`
+- **Out:** `("ctx", ctx_with_simv)`, `("command", {key, argv, stdout_path, stderr_path})`
 
 ### `run-process`  · tags: compile, sim  ← **the reusable star**
 Run a command's argv as an async subprocess, **redirecting** stdout/stderr to the files named
@@ -260,11 +259,11 @@ handles don't survive across async queue edges; downstream re-opens by path. The
 is carried for correlation only — `run-process` never reads or branches on it.
 
 ### `interpret-compile`  · tags: compile · contract: `keyed_join` (`key_field: key`)
-Joins the direct `ctx` edge with the subprocess `proc` by key. `rc == 0` → emit `ok`
-(`simv` is already in `ctx`, folded in by `build-compile-cmd`). `rc != 0` → emit `fail`
-(`CompileFailResults`; reads `proc["stderr_path"]`/`stdout_path` and logs at ERROR, as
-`rtl_buddy`). Takes only the two keyed ports — no config port, since `keyed_join` joins
-*every* port by key.
+Joins the direct `ctx` edge (carrying `simv` set by `build-compile-cmd`) with the
+subprocess `proc` by key. `rc == 0` → emit `ok` (`ctx` unchanged, `simv` already present).
+`rc != 0` → emit `fail` (`CompileFailResults`; reads `proc["stderr_path"]`/`stdout_path`
+and logs at ERROR). Takes only the two keyed ports — no config port, since `keyed_join`
+joins *every* port by key.
 
 - **In:** `ctx`, `proc`
 - **Out:** `("ok", ctx)` | `("fail", result)`
@@ -275,11 +274,12 @@ Joins the direct `ctx` edge with the subprocess `proc` by key. `rc == 0` → emi
 ## Run expansion (fan-out per run-id)
 
 ### `expand-runs`  · tags: sim · contract: `default` (persistent: `run_ids`)
-One compiled test → one `ctx` per run-id (key suffixed `#run`, `run_id` recorded). For
-`test`, `run_ids=[None]` → a single passthrough.
+One compiled test → one `ctx` per run-id, yielding a fresh `ctx` with `key` suffixed
+`#run_id` and `run_id` set. For `test`, `run_ids=[None]` → a single passthrough with
+`run_id=None` and key unchanged.
 
 - **In:** `ctx`, `run_ids=[None]`
-- **Out:** default → `ctx` per run-id
+- **Out:** default → `ctx` per run-id (fresh dict; `run_id` set; key suffixed when `run_id is not None`)
 
 ---
 
@@ -288,8 +288,8 @@ One compiled test → one `ctx` per run-id (key suffixed `#run`, `run_id` record
 ### `resolve-seed`  · tags: sim · contract: `default` (persistent: `seed_mode`,`builder_cfg`,`logs_dir`)
 `VlogSim.execute` seed logic: `NEW`→`random.randrange(1_000_000)`,
 `DEFAULT`→`builder_cfg.get_seed()`, `REPLAY`→read `<logs_dir>/<test>[_NNNN].randseed`
-(default `logs/...`, matching rtl_buddy). Emits the `ctx` unchanged **and** the seed
-(lockstep → `build-sim-cmd` needs no join).
+(default `logs/...`, matching rtl_buddy). Emits `ctx` unchanged and the seed payload
+in lockstep so `build-sim-cmd` receives both from the same upstream without a join.
 
 - **In:** `ctx`, `seed_mode`, `builder_cfg`, `logs_dir:str = "logs"`
 - **Out:** `("ctx", ctx)`, `("seed", {key, seed})` | `("fail", result)` *(REPLAY only)*
@@ -297,15 +297,14 @@ One compiled test → one `ctx` per run-id (key suffixed `#run`, `run_id` record
 
 ### `build-sim-cmd`  · tags: sim · contract: `default` (persistent: `builder_cfg`,`builder_mode`,`logs_dir`)
 `VlogSim.execute` argv: `[simv] + run_time_opts(mode, seed) + plusdefines + plusargs`; also
-computes the per-test `timeout` from `TestConfig.get_timeout()` and the sim log paths
-(`<logs_dir>/<test>[_NNNN].log`/`.err` — default `logs/<test>...`, matching rtl_buddy).
-Folds `seed`, the `log` path, and the `randseed_path` (`<logs_dir>/<test>[_NNNN].randseed`)
-into `ctx` so the downstream `keyed_join` nodes (`write-randseed`, post-parsers) carry no
-persistent config port. Puts the log paths into `command` so `run-process` redirects there.
+computes the per-test `timeout` from `TestConfig.get_timeout()` and the sim log/randseed
+paths. Reads `simv` from `ctx["simv"]` (set by `build-compile-cmd`).
+Puts log paths into `command` so `run-process` redirects there, and into `sim_cmd` so
+`write-randseed` and the post-sim chain have them without a persistent config port.
 Does not `mkdir` — `ensure-logs-dir` has already done so.
 
 - **In:** `ctx`, `seed`, `builder_cfg`, `builder_mode`, `logs_dir:str = "logs"`
-- **Out:** `("ctx", ctx + {seed, log, randseed_path})`, `("command", {key, argv, stdout_path, stderr_path})`, `("timeout", float)`
+- **Out:** `("ctx", ctx)` (unchanged), `("sim_cmd", {key, seed, log, err, randseed_path})`, `("command", {key, argv, stdout_path, stderr_path})`, `("timeout", float)`
 
 *(then `run-process` again, wired with the `timeout` input)*
 
@@ -315,30 +314,29 @@ Does not `mkdir` — `ensure-logs-dir` has already done so.
 > their own nodes. The first of them holds the `ctx ⋈ proc` join.
 
 ### `write-randseed`  · tags: sim · contract: `keyed_join` (`key_field: key`)
-The sim's join point: pairs `ctx` (carrying `seed` and `randseed_path`) with the sim `proc`
-by key. Writes `ctx["randseed_path"]` (composed by `build-sim-cmd` from `logs_dir` + test
-name + run-id; default `logs/<test>[_NNNN].randseed`) from `ctx["seed"]` (plus
-`HierInstanceSeed.txt` contents when present). The directory was created at startup by
-`ensure-logs-dir`. Folds `rc`/`timed_out` from `proc` into `ctx` for the two nodes after
-it.
+The sim's join point: correlates `ctx` (the stable identity record), `proc` (the subprocess
+result), and `sim_cmd` (the pre-composed sim paths) by key. Writes `sim_cmd["randseed_path"]`
+from `sim_cmd["seed"]` (plus `HierInstanceSeed.txt` contents when present). Then assembles
+and emits `test_run` — the single post-sim context record consumed by all downstream nodes.
+The directory was created at startup by `ensure-logs-dir`.
 
-- **In:** `ctx`, `proc`
-- **Out:** default → `ctx + {rc, timed_out}`
+- **In:** `ctx`, `proc`, `sim_cmd` (3-port `keyed_join`)
+- **Out:** default → `test_run`
 
 ### `link-latest`  · tags: sim · contract: `default`
 Force the stable `test.log`/`test.err`/`test.randseed` symlinks in CWD to this run's files
-(known from `ctx`). Runs after `write-randseed` so the `.randseed` target exists. Distinct
-functionality from randseed writing.
+(paths from `test_run`). Runs after `write-randseed` so the `.randseed` target exists.
+Distinct functionality from randseed writing.
 
-- **In:** `ctx`
-- **Out:** default → `ctx`
+- **In:** `test_run`
+- **Out:** default → `test_run`
 
 ### `interpret-sim`  · tags: sim · contract: `default`
 Pure routing on the joined result: `timed_out` → `timeout` (`SimTimeoutResults`), else `ok`.
 No side-effects — the artifacts were written upstream.
 
-- **In:** `ctx`
-- **Out:** `("ok", ctx)` | `("timeout", result)`
+- **In:** `test_run`
+- **Out:** `("ok", test_run)` | `("timeout", result)`
 - **Log idiom:** port-routed `timeout` `result` (`SimTimeoutResults`) when `timed_out` is set; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
@@ -346,29 +344,30 @@ No side-effects — the artifacts were written upstream.
 ## Post-processing
 
 ### `route-post`  · tags: post · contract: `default`
-Classifies on `ctx["test"].uvm`: emit `uvm` when a `UVMConfig` is present, else `plain`.
-Pure data classification expressed as a named-port return (like `interpret-compile` on
-`rc`) — not scheduling. This is the only place the uvm/plain decision lives.
+Classifies on `test_run["test"].uvm`: emit `uvm` when a `UVMConfig` is present, else
+`plain`. Pure data classification expressed as a named-port return — not scheduling. This
+is the only place the uvm/plain decision lives.
 
-- **In:** `ctx`
-- **Out:** `("uvm", ctx)` | `("plain", ctx)`
+- **In:** `test_run`
+- **Out:** `("uvm", test_run)` | `("plain", test_run)`
 
 ### `parse-log`  · tags: post · contract: `default`
-Reimplements `VlogPost` only: the `PASS/FAIL/ERR/FAT` regex scan. Emits `{key, result}`.
+Reimplements `VlogPost` with corrections (see [07 settled 15](07-ambiguities-and-assumptions.md)):
+the `PASS/FAIL/ERR/FAT` regex scan on `test_run["log"]`. Emits `{key, result}`.
 
-- **In:** `ctx`
+- **In:** `test_run`
 - **Out:** default → `result`
-- **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL (not when SKIP/PASS). Parse-machinery exceptions distinct from FAIL classification are deferred pending TODO #13. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
-- **Note:** inherits `rtl_buddy`'s `VlogPost` quirks (PASS wins over FAIL; a FAIL line with
-  no ERR/FAT raises). No `postproc` script is run (parity). See [07](07-ambiguities-and-assumptions.md).
+- **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Note:** no `postproc` script is run (parity with rtl_buddy). See [07 settled 14](07-ambiguities-and-assumptions.md).
 
 ### `parse-uvm-log`  · tags: post · contract: `default`
-Reimplements `UvmVlogPost` only: parse the UVM Report Summary severity counts and compare against
-`ctx["test"].uvm.max_warns`/`max_errors` (FATAL must be 0). Emits `{key, result}`.
+Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
+`test_run["log"]` and compare against `test_run["test"].uvm.max_warns`/`max_errors`
+(FATAL must be 0). Emits `{key, result}`.
 
-- **In:** `ctx`
+- **In:** `test_run`
 - **Out:** default → `result`
-- **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. Parse-machinery exceptions distinct from FAIL classification are deferred pending TODO #13. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -377,29 +376,52 @@ Reimplements `UvmVlogPost` only: parse the UVM Report Summary severity counts an
 ### `early-stop-gate`  · tags: (cross-cutting) · contract: `default` (persistent: `early_stop`)
 Compare the global `early_stop` phase against this gate's configured `phase`. Stop here →
 emit `stop` (`EarlyStopResults`); else `go`. Three instances differing only in config.
+The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp) or
+`test_run` (gate-sim) without a signature change.
 
-- **In:** `ctx`, `early_stop:str = "post"`
+- **In:** `payload`, `early_stop:str = "post"`
 - **Config:** `phase:str` (`pre`|`comp`|`sim`)
-- **Out:** `("go", ctx)` | `("stop", result)`
+- **Out:** `("go", payload)` | `("stop", result)`
 - **Log idiom:** port-routed `stop` `result` (`EarlyStopResults`); no log call (a normal terminal, not a failure). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
-### `aggregate-results`  · tags: report · contract: **`merge`** (`fan_in: result`) + `finalise()`
-The single collector. The `merge` contract (see [05](05-branching-and-results.md))
-declares the 13 terminal-result input ports on the contract side and collapses them onto
-the module's single `result` parameter via `fan_in: result`. `run` accumulates; `finalise`
-prints the summary and logs `ERROR` if any result is not `is_pass()` (harness maps a
-single ERROR → exit 1, reproducing the OR-accumulated exit code). The module knows nothing
-about the upstream port set — every delivery arrives on `result`.
+### `fan-in-results`  · tags: report · contract: **`any`** (`release_lock: compile-sim`)
+Relay module that normalises the 13 mutually-exclusive terminal-result branches onto a
+single `result` output consumed by `aggregate-results`. Uses `**kwargs` so the harness
+populates its ports from graph edges at load time (non-definite-inputs mechanism,
+`graph.py:95-97`). Each call receives exactly one arriving payload; the port name is
+discarded (provenance is already encoded in the payload type). The `any` contract fires on
+whichever port is ready first, one at a time. The `release_lock` field on the contract is
+the release side of the interim parallel-safety shim (see [05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
+and TODO #30); it is removed once upstream `rtl_buddy` per-test artefact dirs land.
 
-- **In:** `result` (single module input port; the `merge` contract delivers every upstream terminal here — see [05](05-branching-and-results.md) and the contract input list in [06](06-graph-yaml.md))
+- **In:** `**inputs` (13 edge-derived ports: `skip`, `es_pre`, `cc_fail`, `es_comp`,
+  `sim_to`, `es_sim`, `post_plain`, `post_uvm`, `model_fail`, `sweep_fail`, `preproc_fail`,
+  `filelist_fail`, `seed_fail`)
+- **Out:** `("result", payload)`
+- **Log idiom:** none (pure relay; no failure path).
+
+```python
+class FanInResultsMod:
+    def run(self, **inputs):
+        _, payload = next(iter(inputs.items()))
+        return ("result", payload)
+```
+
+### `aggregate-results`  · tags: report · contract: `default` + `finalise()`
+The single collector. Receives from `fan-in-results` via the single `result` port.
+`run` accumulates; `finalise` prints the summary and logs `ERROR` if any result is not
+`is_pass()` (harness maps a single ERROR → exit 1, reproducing the OR-accumulated exit
+code).
+
+- **In:** `result`
 - **Out:** none (sink)
-- **Log idiom:** `finalise()` calls `log.error("suite_has_failures", n=...)` once if any accumulated row is not `is_pass()` — the centralised deferred-exit driver. This is the only `log.error` site the design *requires* the harness to react to for exit code purposes; per-test emission sites also call `log.error` as belt-and-braces against any merge/`finalise()` misfire. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Log idiom:** `finalise()` calls `log.error("suite_has_failures", n=...)` once if any accumulated row is not `is_pass()` — the centralised deferred-exit driver. Per-test emission sites also call `log.error` as belt-and-braces against any `finalise()` misfire. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ```python
 class AggregateResultsMod:
     def __init__(self):
         self._rows = []
-    def run(self, result):                       # merge collapses every contract-side input onto `result`
+    def run(self, result):
         self._rows.append(result)
     def finalise(self):
         for r in self._rows:
@@ -447,4 +469,5 @@ identical (07, item 1).
 | `parse-log` | `VlogPost` |
 | `parse-uvm-log` | `UvmVlogPost` |
 | `early-stop-gate` | `RunDepth`/`--early-stop` + `EarlyStopResults` |
+| `fan-in-results` | no rtl_buddy equivalent (structural relay node) |
 | `aggregate-results` | `do_cmd_test` summary + exit OR + `typer.Exit` |

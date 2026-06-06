@@ -31,8 +31,9 @@ documenting any divergences observed.
 - Compile logs are persisted as expected (the new behaviour from [07 settled 12](../07-ambiguities-and-assumptions.md)).
 - Lazy `load-model` behaves correctly: skipped tests don't trip on broken `models.yaml`
   (the new behaviour from [07 settled 8](../07-ambiguities-and-assumptions.md)).
-- VlogPost quirks behave per the decision made in [07 open 15](../07-ambiguities-and-assumptions.md)
-  (faithful copy by default).
+- `ParseLogMod` quirk corrections verified: FAIL wins over PASS, `PASSTHROUGH` does not
+  misclassify as PASS, FAIL-without-ERR does not crash — per
+  [07 settled 15](../07-ambiguities-and-assumptions.md).
 - Any unexpected divergence is documented and a follow-up issue opened.
 
 ## Notes

@@ -119,33 +119,29 @@ the upstream change itself is still deferred).
 
 Any reader can answer "what happens if two tests run in parallel?" without the entire answer being "the upstream change."
 
-### 4. Validate the `MergeContract` design before downstream specs depend on it
+### 4. Specify and validate the `any` contract and `fan-in-results` module
 
-**Status: Resolved (2026-05-31).** Step 1 (formal description) is captured in
-[`05 — Invariants and termination`](implementation-test/05-branching-and-results.md#invariants-and-termination):
-state, no-loss invariant, per-port `EndSentinel` handling, drainage order, non-correlating
-behaviour, termination rule, and `release_lock` side-effect. Steps 2–3 (stress test +
-property-based test) are enumerated as concrete test cases in
-[`specs/02-merge-contract.md`](implementation-test/specs/02-merge-contract.md) — including
-the multi-done-per-wake and drainage-order cases the original prose only implied. Step 4
-(`docs/contracts/index.md` promotion) is added as an acceptance criterion on the same spec,
-to be carried out during implementation; the interim `release_lock` field is included in
-the entry but flagged as a TODO #30 hook rather than as part of the contract's first-class
-surface. The `SerialAcquireContract` + `merge.release_lock` interim shim added by TODO #3
-is **not** in scope for TODO #4 — tracked separately in TODO #30.
+**Status: Resolved (2026-06-05).** The `MergeContract` design this item previously
+validated is replaced by a `fan-in-results` module (`run(self, **inputs)`, edge-derived
+ports via the non-definite-inputs mechanism) paired with a general-purpose `any` contract.
+The redesign eliminates the harness-change prerequisite that was blocking spec 02. All
+design-level work is complete:
 
-`05-branching-and-results.md:98-99` identifies `MergeContract` as the only piece of genuine scheduling the design adds. `07` items 19–20 acknowledge that its concurrency safety is asserted, not proven. Eight terminal-result branches converge on `agg` through it (`04-pipeline-and-contracts.md` row 22); if it is wrong, every branch is wrong.
+1. **Formal description of `any` contract** written in
+   [`05 — Re-convergence`](implementation-test/05-branching-and-results.md#re-convergence-the-fan-in-module-and-any-contract):
+   `_pending` task dict state, per-port `EndSentinel` handling, no-loss invariant
+   (multi-done-per-wake), drainage order, termination rule, and `release_lock` side-effect.
+2. **Module and test spec** written in
+   [`specs/02-any-contract-and-fan-in.md`](implementation-test/specs/02-any-contract-and-fan-in.md):
+   `AnyContract` sketch, `FanInResultsMod` sketch, behavioural tests, ≥13-port stress
+   test, property-based test, `FanInResultsMod` unit tests, and acceptance criteria.
+3. **Docs promotion** deferred to implementation time — captured as an acceptance
+   criterion in spec 02 (add `docs/contracts/index.md` entry listing invariants, both
+   contract and module, and reusability note; `release_lock` flagged as interim per
+   TODO #30).
 
-#### Concrete steps
-
-1. Write a formal description: state held across `get()` calls, how `EndSentinel` propagates from each upstream port, behaviour on a key whose branch has already terminated, and the contract's overall termination rule.
-2. Add a stress test: concurrent emissions from 8 mock upstreams with overlapping keys; assert no items lost, no duplicates emitted, and termination once all upstreams sent `EndSentinel`.
-3. Add a property-based test if feasible: random `(key, port, payload)` interleavings produce a deterministic output set.
-4. Once stabilised, document the contract in `docs/contracts/index.md` as a first-class shipped contract — not an `rtl_test`-private artefact.
-
-#### Acceptance check
-
-`MergeContract`'s correctness is supported by enumerated tests and a written invariant, not by intuition.
+The `SerialAcquireContract` + `any.release_lock` interim shim is **not** in scope for
+TODO #4 — tracked separately in TODO #30.
 
 ### 5. Finalise `run-process` async + signal semantics
 
@@ -186,12 +182,12 @@ place to preserve cross-references):
 
 - **`**kwargs` port inference (07 item 19)** — `src/rtl_comrade/structure.py:115-119`
   builds ports strictly from `inspect.signature(...).parameters`, so `**kwargs` produces
-  one VAR_KEYWORD port, not arbitrary inference. Design pivoted to `MergeContract` M-N
-  fan-in with contract-declared input ports (module declares only `result`, contract
-  declares the 13 terminal-source inputs via `Config.fan_in`). Depends on a harness
-  change called out as a prerequisite in
-  [`specs/02-merge-contract.md`](implementation-test/specs/02-merge-contract.md#prerequisite);
-  implementation work owned outside this plan.
+  one VAR_KEYWORD port, not arbitrary inference. The non-definite-inputs mechanism
+  (`graph.py:95-97`) resolves this: when a module's `run()` uses `**kwargs`, ports are
+  populated from the graph edges at load time. Design uses a `fan-in-results` module
+  (`run(self, **inputs)`, edge-derived ports) with a general-purpose `any` contract;
+  `aggregate-results` retains `run(self, result)` with `default`. No harness change
+  required. See updated item 19 in `07-ambiguities-and-assumptions.md`.
 - **Persistent input with no upstream edge (07 item 21)** — settled by three doc citations
   (`docs/harness/validation.md:39`, `docs/contracts/default.md` step 4,
   `docs/modules/implementation.md`). Default-having ports are exempt from edge validation
@@ -478,6 +474,13 @@ No spec writes to `logs/...` without referencing the documented ownership rule.
 
 ### 14. Confirm sibling-graph scope (resolve `07` item 16)
 
+**Status: Resolved (2026-06-05).** `08-sibling-graphs.md` is a modularity analysis
+demonstrating the extension cost of the sibling graphs (1 new module for `randtest`;
+2 new modules + 1 contract switch for `regression`), not a build commitment. Sibling
+graphs are not deliverables of this plan. `07` item 16 moved to Settled; `specs/README.md`
+updated to reflect the analysis framing; `00-overview.md` needed no change (describes
+the `test` graph only throughout).
+
 `07-ambiguities-and-assumptions.md` item 16 sits under "Open — needs your call" asking whether to also design the `randtest` graph (adds `rnd_cnt`/`rnd_rpt`) and the `regression` graph (adds `reg_level`/`start_level` wiring, outer suite loop, per-suite `chdir`). The designs for both already live in `08-sibling-graphs.md`, but item 16 has not been moved out of "Open" — leaving readers unsure whether `08` is a committed scope or a sketch.
 
 #### Concrete steps
@@ -506,13 +509,14 @@ A reader can tell at a glance whether git state is recorded with test results, a
 
 ### 30. Validate the interim parallel-safety shim added by TODO #3
 
-TODO #3 introduced `SerialAcquireContract` and an optional `release_lock` field on
-`MergeContract` as an interim shim until upstream `rtl_buddy` per-test artefact directories
-land. The mechanism is described in
+TODO #3 introduced `SerialAcquireContract` and an optional `release_lock` field (now on
+`AnyContract` used by the `fan-in` node, following the TODO #4 redesign) as an interim
+shim until upstream `rtl_buddy` per-test artefact directories land. The mechanism is
+described in
 [`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
 and constrained to the plain `test` graph (R=1), but its concurrency properties are
-asserted, not proven. TODO #4 explicitly scoped that work to the original `MergeContract`
-semantics; this TODO covers the shim.
+asserted, not proven. TODO #4 covers the `any` contract's core semantics; this TODO covers
+the shim specifically.
 
 Because the shim is **explicitly temporary** (removed when `07` item 17's upstream change
 lands), this TODO's outputs live in the implementation-test plan and tests only — do not
@@ -530,16 +534,16 @@ itself as removable alongside the shim.
    acquired for invocations that resolve entirely from persistent caches with no consumed
    work item — verify this matches the design intent).
 2. **Formal description of the release side.** In the same section, document the
-   `release_lock` branch of `MergeContract` distinctly from the base contract: one release
-   per delivered payload, none on `EndSentinel`, fail-fast on missing prior acquire, and
-   the pairing invariant ("every acquired item must reach `agg`") repeated from the
-   Constraints block.
+   `release_lock` branch of `AnyContract` (on the `fan-in` node) distinctly from the base
+   contract: one release per delivered payload, none on `EndSentinel`, fail-fast on missing
+   prior acquire, and the pairing invariant ("every acquired item must reach `agg`")
+   repeated from the Constraints block.
 3. **Pairing-arithmetic test.** Add a new test file (`contracts/tests/test_serial.py`) or
-   extend `test_merge.py`. Enumerate cases for the spec at
-   [`specs/02-merge-contract.md`](implementation-test/specs/02-merge-contract.md) (or a
+   extend `test_any.py`. Enumerate cases for the spec at
+   [`specs/02-any-contract-and-fan-in.md`](implementation-test/specs/02-any-contract-and-fan-in.md) (or a
    new sibling spec):
-   - acquire then release through the merge → second acquire blocks until release fires;
-   - acquire then `EndSentinel` (no item reaches merge) → release never fires, lock is
+   - acquire then release through `fan-in` → second acquire blocks until release fires;
+   - acquire then `EndSentinel` (no item reaches `fan-in`) → release never fires, lock is
      left held (documented as invariant violation; verifies fail-fast surfaces);
    - `release_lock` configured but no `serial_acquire` upstream → first delivered payload
      raises `RuntimeError` from `asyncio.Lock.release()`;
@@ -554,8 +558,8 @@ itself as removable alongside the shim.
    [`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
    stating the trigger (upstream `rtl_buddy` per-invocation subdirs lands and `07` item 17
    moves out of Deferred), the artefacts to delete (`SerialAcquireContract`, the
-   `release_lock` Config field on `MergeContract`, the `_LOCKS` registry, the wiring in
-   `04` rows 7 & 22 and `06`), and the tests added by this TODO that must also be deleted.
+   `release_lock` Config field on `AnyContract`, the `_LOCKS` registry, the wiring in
+   `04` rows 7 & 22a and `06`), and the tests added by this TODO that must also be deleted.
 
 #### Acceptance check
 

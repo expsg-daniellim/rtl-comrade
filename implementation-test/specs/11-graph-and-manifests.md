@@ -17,7 +17,7 @@ subcommand in `rtl_comrade_config.yaml`.
 - **`modules/config.yaml`** — full manifest from [06](../06-graph-yaml.md) covering every
   module from specs 03–10 (`run-process`, the setup chain, selection/expansion, prep,
   compile cycle, sim cycle, post, control/aggregate).
-- **`contracts/config.yaml`** — `merge` registration from spec 02.
+- **`contracts/config.yaml`** — `any` and `serial_acquire` registrations from spec 02.
 - **`rtl_comrade_config.yaml`** — add:
   ```yaml
   commands:
@@ -41,8 +41,8 @@ This spec is mostly assembly — copy [06](../06-graph-yaml.md) faithfully. If a
 node/port name diverged between [03](../03-module-catalog.md) and what got built in specs
 04–10, reconcile here (prefer matching the actual module signatures over the plan).
 
-`agg`'s edges land on contract-declared input ports (the 13 terminal sources), not module
-parameters. The module signature is just `run(self, result)`; the `merge` contract's
-`fan_in: result` collapses every contract-side input onto `result` before invocation.
-See [spec 02 Prerequisite](02-merge-contract.md#prerequisite) for the harness change this
-relies on.
+The 13 terminal edges wire to `fan-in` (a `fan-in-results` node with the `any` contract),
+not directly to `agg`. `fan-in` emits one `result` edge to `agg`, which uses the plain
+`default` contract. `fan-in-results` uses `**kwargs`; the harness populates its port set
+from the 13 incoming edges at load time. See [spec 02](02-any-contract-and-fan-in.md) for the
+`any` contract and module specs.

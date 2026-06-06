@@ -42,69 +42,47 @@ stream, reproducing `rtl_buddy`. `--early-stop post` (default) means no gate fir
 propagates `EndSentinel` to `agg`, which finalises with zero rows → exit 0. No special
 casing anywhere else.
 
-## Re-convergence: the custom `merge` contract
+## Re-convergence: the fan-in module and `any` contract
 
-The 8 terminal ports feed `agg`. Input ports are single-source, so `agg` has 8 input ports
-(one per source). A contract must drain *whichever* port has an item, because for any given
-key only one ever fires. The built-ins don't fit:
+The 13 terminal ports must re-converge at `agg`. A given key reaches exactly one of the 13
+ports; the others never fire for it. The built-in contracts don't fit:
 
 - **`branch_aware_join` — no.** It fires a key only when *every* port has seen it (real or
-  `BranchSkip`). Here each key reaches exactly one port; the other ports' upstreams never
-  process that key and can't emit `BranchSkip` for it. The key stays incomplete forever.
-- **`group_until_end` / `zip` / `keyed_join` — no.** All assume every port participates per
-  unit of work. Our terminal ports are mutually exclusive per key.
+  `BranchSkip`). Our terminal ports are mutually exclusive per key; the incomplete key
+  stays unresolved forever.
+- **`keyed_join` / `default` (all-ports) — no.** Both assume every port participates per
+  unit of work.
 
-So we **author a `merge` contract** — exactly the kind of scheduling that belongs in a
-contract. Semantics: *forward the next item from any contract-side input port to its
-mapped module-side output port; end when all input ports have ended.* The mapping is set
-by `Config.fan_in`, supporting M-N fan-in:
+The solution is two cooperating pieces:
 
-- **String form** (`fan_in: "out"`) — N→1 shorthand: every contract-declared input port
-  fans in to the single output port `out` (which is a module parameter).
-- **Dict form** (`fan_in: {out1: [in1, in2], out2: [in3, in4]}`) — explicit M-N. Each
-  entry names one output port (a module parameter) and the list of contract-declared
-  input ports that deliver under it.
+**`fan-in-results` module** — uses `**kwargs` so the harness populates its 13 ports from
+graph edges at load time (non-definite-inputs mechanism, `graph.py:95-97`). The body
+discards the port name and forwards the payload:
 
-The contract returns `{output_port: payload}` (one entry per call). For
-`aggregate-results`, the output port is `result` — the only parameter on `run()`. The 13
-upstream terminals wire to **contract-side** input ports (`skip`, `es_pre`, …,
-`seed_fail`), not module parameters; the module sees only the collapsed `result` stream.
+```python
+class FanInResultsMod:
+    def run(self, **inputs):
+        _, payload = next(iter(inputs.items()))
+        return ("result", payload)
+```
 
-> **Harness prerequisite.** This design requires the harness to support
-> *contract-declared input ports* — ports the contract introduces independently of the
-> module's `run()` signature. Today's implementation (`src/rtl_comrade/node.py:122`)
-> builds the node's port set strictly from module parameters, so the contract cannot
-> introduce additional ports. The user is owning that change; the spec below is written
-> against the post-change harness.
+**`any` contract** — fires on whichever port is ready first, one delivery per call, and
+propagates `EndSentinel` after all ports have ended:
 
 ```python
 @dataclass
-class MergeContract:
-    """Non-correlating M-N fan-in: contract-side inputs deliver to module-side outputs; end when all inputs end."""
-
+class AnyContract:
     @dataclass(frozen=True)
     class Config:
-        # Either a single module output-port name (all contract-declared inputs fan into it),
-        # or {output_port: [input_ports...]} mapping module outputs to contract-side inputs.
-        fan_in: dict[str, list[str]] | str
         release_lock: str | None = None
 
     id: str
-    ports: dict[str, ContractPort]    # union of module input ports and contract-declared input ports
+    ports: dict[str, ContractPort]
     config: Config
-    _port_map: dict[str, str] = field(default_factory=dict, init=False, repr=False)
     _pending: dict[str, asyncio.Task] = field(default_factory=dict, init=False, repr=False)
 
-    def __post_init__(self):
-        # `_port_map` maps contract-side input port → module-side output port.
-        # Validation of fan_in against self.ports surfaces misconfiguration as log.fatal.
-        # (See the spec for the enumerated rules — the implementation owns the harness
-        # interaction for distinguishing input ports from module-side output ports.)
-        ...
-
     async def get_inputs(self) -> dict[str, Payload] | EndSentinel:
-        for name in self._port_map:                                   # listen only on input ports
-            port = self.ports[name]
+        for name, port in self.ports.items():
             if not port.has_ended() and name not in self._pending:
                 self._pending[name] = asyncio.ensure_future(port.get())
 
@@ -116,78 +94,42 @@ class MergeContract:
                 val = task.result()
                 del self._pending[name]
                 if isinstance(val, EndSentinel):
-                    continue                                          # that input closed; others may still run
+                    continue
                 if self.config.release_lock is not None:
                     _get_lock(self.config.release_lock).release()
-                return { self._port_map[name]: val }                  # delivered under the mapped module-output name
+                return {name: val}   # port name surfaced to module; FanInResultsMod discards it
 
         return EndSentinel(self.id)
 ```
 
 ### Invariants and termination
 
-The properties downstream specs (`aggregate-results`, the serialising shim) depend on:
-
-- **Two port surfaces.** The node has a *module-side* surface (parameters on `run()`) and
-  a *contract-side* surface (input ports declared by the contract's `Config`). Graph
-  edges wire into contract-side input ports; the module sees only deliveries under its
-  declared parameter names. `MergeContract` consumes from contract-side inputs and emits
-  on module-side outputs, mediated by `Config.fan_in`. The exact harness mechanism for
-  declaring contract-side ports is owned by the harness change called out as a
-  prerequisite above; this spec assumes it is in place.
-- **State held across calls.** `_port_map: dict[str, str]` (frozen after `__post_init__`)
-  maps each contract-side input port to its module-side output port. `_pending: dict[str,
-  asyncio.Task]` carries one in-flight `port.get()` task per *input* port that has not
-  yet emitted `EndSentinel`. Tasks created in call N but not consumed by call N's return
-  remain in `_pending` and are honoured in call N+1. Output ports are delivery-only —
-  the contract never reads them.
-- **Construction-time validation.** `__post_init__` validates `fan_in` against
-  `self.ports`: every output port named must correspond to a module parameter, every
-  input port named must be a contract-declared port, no input port appears in more than
-  one output's list, no port is both an input and an output (in the dict form), and no
-  declared contract-side input is left unmapped. Failures call `log.fatal`
-  (misconfiguration is unrecoverable; immediate `SystemExit(1)`).
+- **State held across calls.** `_pending: dict[str, asyncio.Task]` carries one in-flight
+  `port.get()` task per open port. Tasks created in call N but not returned remain in
+  `_pending` and are honoured in call N+1. Pending tasks are **never cancelled** between
+  calls.
 - **No-loss invariant.** `asyncio.wait(..., FIRST_COMPLETED)` may report several `done`
-  tasks in one wake-up. The contract returns the first non-`EndSentinel` payload found
-  and leaves the remaining `done` tasks in `_pending`; on the next call, `asyncio.wait`
-  returns them immediately (already-completed). Pending tasks are **never cancelled**
-  between calls.
-- **Per-port `EndSentinel` handling.** When an input port's task resolves to
-  `EndSentinel`, the task is removed from `_pending` and **no new task is created** for
-  that port (`port.has_ended()` is now `True`). Other input ports keep being awaited.
-- **Drainage order.** An input port's payloads queued before its `EndSentinel` are
-  delivered first, by FIFO at the port plus the upstream invariant that `EndSentinel` is
-  propagated only after every payload has been enqueued.
-- **Non-correlating; no input-port identity surfaced.** Merge does **not** inspect or
-  correlate payload contents, **and does not surface contract-side input-port identity to
-  the module** — each delivered payload arrives under the module output port its source
-  input is mapped to in `Config.fan_in`. The "each test reaches exactly one terminal
-  input" property is enforced by the graph topology (gates, routers, single-port emits),
-  **not** by this contract. If two inputs sharing an output port both emit a payload for
-  the same upstream key (invariant violation), merge delivers both; the consumer would
-  record duplicate rows. Detection belongs upstream.
+  tasks in one wake-up. The contract returns the first non-`EndSentinel` result and leaves
+  the remaining done tasks in `_pending`; on the next call they are returned immediately
+  (already-completed).
+- **Per-port `EndSentinel` handling.** When a port's task resolves to `EndSentinel`, the
+  task is removed from `_pending` and no new task is created for it (`port.has_ended()` is
+  now `True`). Other ports keep being awaited.
+- **Drainage order.** A port's payloads queued before its `EndSentinel` are delivered
+  first, by FIFO at the port.
 - **Termination rule.** `get_inputs()` returns `EndSentinel(self.id)` exactly when every
-  contract-side input port has emitted its `EndSentinel` **and** every previously-pending
-  task has resolved — i.e. `_pending` is empty and no new tasks can be created. The outer
-  `while self._pending` guarantees this. Output ports are not consulted for termination.
-- **`release_lock` side-effect (when configured, per
-  [Serialising contracts](#serialising-contracts--interim-parallel-safety-posture)).**
-  Fires once immediately before the `return { ...: val }` line — one release per delivered
-  payload. The `EndSentinel` paths (the `continue` after an end, and the final terminal
-  return) do **not** release. If `release_lock` names a lock that no upstream
-  `serial_acquire` ever held, `asyncio.Lock.release()` raises `RuntimeError` on the first
-  payload — fail-fast misconfiguration, no protective guard.
-- **Cancellation.** If the harness cancels the node task mid-`get_inputs`, pending tasks are
-  cancelled by the event loop. Items in flight in those tasks are lost. This is process-end
-  behaviour and matches every other contract.
+  port has emitted its `EndSentinel` and every previously-pending task has resolved
+  (`_pending` is empty and no new tasks can be created).
+- **`release_lock` side-effect** (when configured — interim shim only, see
+  [Serialising contracts](#serialising-contracts--interim-parallel-safety-posture)). Fires
+  once per delivered payload, immediately before the `return`. `EndSentinel` paths do
+  **not** release. Mismatched release (no prior acquire) raises `RuntimeError` from
+  `asyncio.Lock.release()` — fail-fast, no guard.
+- **Cancellation.** Mid-`get_inputs` cancellation by the harness drops in-flight items.
+  This is process-end behaviour, matching every other contract.
 
-Notes:
-
-- `merge` is broadly reusable: any "collect results from alternative branches" fan-in.
-  Register it in the contracts manifest (see [06](06-graph-yaml.md)).
-- This is the one piece of genuine scheduling the design adds (excluding the interim
-  serialising shim above), and it lives where the framework wants scheduling — in a
-  contract, not in a module.
+`any` is broadly reusable for any "deliver the first ready item" fan-in. Register it in
+the contracts manifest (see [06](06-graph-yaml.md)).
 
 ## Serialising contracts — interim parallel-safety posture
 
@@ -195,18 +137,18 @@ Notes:
 > until the upstream `rtl_buddy` change to per-test (per-invocation) artefact directories
 > lands. Once compile/sim each get their own working directory, the collisions these
 > contracts protect against (next compile stomping the previous test's `obj_dir`, `simv`,
-> `run.f`) disappear, and `write-filelist` returns to plain `default` while `aggregate-results`
-> returns to plain `merge`. See [07](07-ambiguities-and-assumptions.md) item 17. Do not build
-> further design on top of these contracts; treat them as a removable shim.
+> `run.f`) disappear, and `write-filelist` returns to plain `default` while `fan-in`'s
+> `any` contract drops its `release_lock` config field. See
+> [07](07-ambiguities-and-assumptions.md) item 17. Do not build further design on top of
+> the shim; treat it as removable.
 
 ### The hazard
 
 A compile produces non-graph-routed artefacts in CWD (`obj_dir_<tag>/`, the `simv` binary,
 and `run.f`) that the *same test's* sim later consumes. The harness launches all node tasks
 concurrently (`asyncio.gather`), so absent any serialisation a second compile can start while
-a previous test's sim has not yet read those artefacts, and stomp them. `cc-int` carries the
-`simv` path forward in `ctx` to `sim-build`/`sim-run`, but the file on disk that the path
-refers to is shared. The lock makes this region atomic per test.
+a previous test's sim has not yet read those artefacts, and stomp them. `sim-build` reads `simv` from `ctx["simv"]` (set by `build-compile-cmd`), but the file on
+disk that the path refers to is shared. The lock makes this region atomic per test.
 
 ### Region and lock semantics
 
@@ -220,10 +162,9 @@ refers to is shared. The lock makes this region atomic per test.
 
 ### Two contracts share one lock
 
-The acquire side is a new contract `serial_acquire` annotated on `write-filelist`. The
-release side is the existing `merge` contract on `aggregate-results`, extended with an
-optional `release_lock` config field. Both contracts live in the same plugin file so they
-share a module-level lock registry:
+The acquire side is a new contract `serial_acquire` on `write-filelist`. The release side
+is the `any` contract on `fan-in`, configured with an optional `release_lock` field. Both
+contracts import the same module-level lock registry from `contracts/serial.py`:
 
 ```python
 # contracts/serial.py
@@ -262,9 +203,9 @@ The acquire happens *after* default-contract logic has resolved the upstream ite
 until the lock is free, and the contract only acquires when it has real work to dispatch.
 End-sentinel propagation does not acquire.
 
-The release side is the `MergeContract`'s built-in `Config.release_lock` field (sketch in
-[Re-convergence](#re-convergence-the-custom-merge-contract)). On every `get_inputs()` call
-that returns one `{output_port: payload}`, the contract releases the named lock once.
+The release side is the `AnyContract`'s `Config.release_lock` field (sketch in
+[Re-convergence](#re-convergence-the-fan-in-module-and-any-contract)). On every
+`get_inputs()` call that delivers one payload, the contract releases the named lock once.
 Returning `EndSentinel` does not release.
 
 `asyncio.Lock` releases are not bound to the acquiring task, so the acquire-in-`write-filelist`
@@ -279,8 +220,8 @@ Returning `EndSentinel` does not release.
   `parse-log`, `parse-uvm-log`) do not change contract — the global lock alone is enough
   to ensure only one test's data is in flight through them at a time.
 - Every per-test failure path inside the region (`cc-int.fail`, `gate-comp.stop`,
-  `seed.fail`, the four pre-region `*.fail` ports that also route into `agg`) still reaches
-  `agg` via the `merge` contract; the release fires uniformly on every port.
+  `seed.fail`, the four pre-region `*.fail` ports that also route into `fan-in`) still
+  reaches `agg` via `fan-in`; the release fires uniformly on every port.
 
 ### Constraints
 
@@ -322,7 +263,7 @@ Each module and contract that can fail records its idiom here. Three idioms are 
 - **`log.critical`** — immediate `SystemExit(1)`. Reserved for unrecoverable setup/config
   failures and harness-internal scheduling errors.
 - **Port-routed `result`** — failure becomes a `result` payload on a dedicated output port,
-  fanned into `aggregate-results` via `MergeContract`. Per-test failures use this idiom.
+  routed via `fan-in-results` to `aggregate-results`. Per-test failures use this idiom.
 - **`log.error` at emission** — paired with port-routed `result` for every per-test FAIL
   emission site. The deferred-exit flag (`handler.failure`) is set both at emission
   (immediate operator visibility, belt-and-braces against any merge / `finalise()` misfire)
@@ -342,7 +283,6 @@ Each module and contract that can fail records its idiom here. Three idioms are 
 | `parse-suite-config` | `tests.yaml` missing/malformed; testbench bind failure |
 | `select-tests` | named test not in suite |
 | `run-process` | subprocess launch failure (binary not on PATH, permission denied) — distinct from non-zero `rc`, which is per-test |
-| `MergeContract` | internal scheduling error |
 
 ### Per-test failure — port-routed `result` to merge, `log.error` at emission *and* at aggregate
 
@@ -359,11 +299,10 @@ Each module and contract that can fail records its idiom here. Three idioms are 
 | `resolve-seed.fail` (REPLAY only) | `fail` → FAIL payload | `log.error` (missing/malformed `.randseed` path) |
 
 The bottom five rows are **new failure ports** added to modules that previously had only a
-success path. Topology consequence: the `MergeContract` fan-in into `aggregate-results`
-grows from 8 contract-side input ports to 13. [04](04-pipeline-and-contracts.md) row 22
-and the merge edge list in [06](06-graph-yaml.md) need to be updated to reflect this. The
-module's `run()` signature is unchanged — still just `run(self, result)` — because the
-new input ports live on the contract side; only `Config.fan_in`'s input list grows.
+success path. Topology consequence: `fan-in-results` now has 13 edge-derived input ports
+(up from the original 8). Adding a new terminal source means one new graph edge to
+`fan-in` — neither `fan-in-results`' `**inputs` signature nor `aggregate-results`'
+`run(self, result)` changes.
 
 ### Per-test non-failure terminals — port-routed `result` to merge, **no log call**
 

@@ -37,9 +37,9 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
    emits it on a dedicated output port that routes the item *off the main line* to the
    result collector. Items that continue stay on the main line. Because terminal items
    leave, downstream stages never see them — which is why no module needs a guard. The
-   collector fans the mutually-exclusive terminal ports back in with a small **custom
-   `merge` contract** (the built-in joins can't express mutually-exclusive exits; see
-   [05](05-branching-and-results.md)).
+   collector fans the mutually-exclusive terminal ports back in via a **`fan-in-results`
+   relay module** paired with a general-purpose **`any` contract** (the built-in joins
+   can't express mutually-exclusive exits; see [05](05-branching-and-results.md)).
 
 4. **`compile` and `sim` are one reusable module.** `run-process` — `run(self, command,
    timeout=None) -> {rc, timed_out, stdout_path, stderr_path}` — is the single subprocess
@@ -59,10 +59,13 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
 With no god-object carrying everything, a stage needs its inputs *matched up* under
 concurrency. The chosen strategy (see [02](02-payload-conventions.md)):
 
-- A minimal **`ctx` record** `{key, test}` rides the main line and is forwarded
-  stage-to-stage, because nearly every stage needs the test config. `simv` is folded into
-  `ctx` after compile (every run of that test needs it). `ctx` never carries derived or
-  transient values (`argv`, `rc`, `stdout`, `log`, and crucially no `result`).
+- A stable **`ctx` record** `{key, test, run_id}` rides the main line from `select` through
+  `write-randseed`. It is assembled at fan-out points and never modified: no stage adds
+  fields. `simv` is set by `build-compile-cmd` and carried in `ctx` to `sim-build`.
+  `seed`/`log`/`err`/`randseed_path` travel as `sim_cmd`, a keyed
+  payload from `sim-build` to `write-randseed`. `write-randseed` assembles `test_run` once
+  (from `ctx`, `proc`, and `sim_cmd`); the post-sim chain receives `test_run` in place of
+  `ctx`. No `result` field ever enters either record.
 - A stable **correlation key** is stamped at each fan-out (`select`→`name`,
   `sweep`→`name#i`, `runs`→`name#i#run`).
 - **Joins happen only where a fast path meets a slow path**: the direct `ctx` edge meets
@@ -84,7 +87,7 @@ only the ports they declare, and no module contains scheduling.
  parse-root ─► root_cfg (persistent) ;  seed-mode ─► seed_mode                            │ │
  parse-suite ─► suite_cfg ─► route-list ──list──► list-names (prints names; exit 0)       │ │
         │                                                                                 │ │
-        ▼  MAIN LINE carries ctx = {key, test (+simv after compile)}                      │ │
+        ▼  MAIN LINE carries ctx = {key, test, run_id} → test_run after write-randseed    │ │
  route-list ──run──► select (unit, FAN-OUT) ─► ctx per test                              │ │
         ▼                                                                                 │ │
  filter ──keep──► load-model ─► ┐   └──skip───────────────────────────────────────────┐  │ │
@@ -118,15 +121,17 @@ only the ports they declare, and no module contains scheduling.
  route-post ─uvm─► parse-uvm-log ─► {key, result} ──────────────────────────────────►┤   │ │
            └plain► parse-log ─────► {key, result} ──────────────────────────────────►┘   │ │
                                                                                           │ │
- aggregate-results (merge contract + finalise) ◄── all terminal ports ───────────────────┘ │
+ fan-in-results (any contract) ◄── all terminal ports ──────────────────────────────────────┘ │
+        ▼                                                                                       │
+ aggregate-results (default + finalise)                                                          │
         └─► summary; log.error on any non-pass → exit 1                                     │
                                                                                             │
  (persistent config fans out from parse-root / resolve-builder / seed-mode / CLI to nodes above)┘
 ```
 
 `select`, `sweep`, and `runs` are the only fan-out points (generators). `cc-int` and
-`randseed` are the only joins. The collector is the only fan-in (the `merge` contract).
-Everything else is single-input/single-output with a plain `default` contract.
+`randseed` are the only joins. `fan-in-results` (with the `any` contract) is the only
+fan-in. Everything else is single-input/single-output with a plain `default` contract.
 
 ## Why this maps cleanly
 
@@ -138,6 +143,6 @@ Everything else is single-input/single-output with a plain `default` contract.
 | `--early-stop` phase truncation | `early-stop-gate` nodes emitting on `stop` |
 | compile vs sim | one reusable `run-process` module + two command builders |
 | matching async results to their test | `keyed_join` on the correlation key at `cc-int`/`randseed` |
-| collecting all outcomes | the custom `merge` contract on `aggregate-results` |
+| collecting all outcomes | `fan-in-results` relay module + `any` contract → `aggregate-results` |
 | OR-accumulated exit code | `aggregate-results.finalise()` → `log.error` (harness maps ERROR → exit 1) |
 | `RootConfig`/`SuiteConfig` monolithic loaders | reimplemented as atomic setup nodes; config schema preserved |

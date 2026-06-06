@@ -18,15 +18,19 @@ informational.
    `parse-root-config`, `select-platform`, `resolve-builder`, `parse-suite-config`,
    `load-model`). `TestResults` and `SeedMode` are reimplemented as a thin shared schema.
 
-2. **Hybrid correlation strategy.** Main-line `ctx` is `{key, test}` plus values *every*
-   downstream stage needs (`simv` after compile; `seed`/`log` after sim-build). Derived or
-   transient values (argv, rc, log bytes, `result`) never enter `ctx`. The only
-   `keyed_join`s are `cc-int` and `randseed` — exactly where a fast `ctx` path meets a slow
-   subprocess `proc` path. Everywhere else is single-source lockstep on `default`.
+2. **Correlation strategy.** `ctx` starts as `{key, test, run_id}` from `select`;
+   `build-compile-cmd` adds `simv`, giving `{key, test, run_id, simv}`. No further fields
+   are added after that point. `seed`/`log`/`err`/`randseed_path` travel as
+   `sim_cmd = {key, seed, log, err, randseed_path}` emitted by `sim-build`.
+   `write-randseed` is a 3-port `keyed_join` (`ctx`, `proc`, `sim_cmd`) that assembles
+   `test_run = {key, test, run_id, rc, timed_out, log, err, randseed_path}` once; all
+   post-sim nodes receive `test_run`. The only `keyed_join`s are `cc-int` (2 ports) and
+   `randseed` (3 ports). Everywhere else is single-source lockstep on `default`.
 
-3. **Custom `merge` contract for terminal fan-in.** The eight mutually-exclusive terminal
-   outcomes re-converge through an authored non-correlating `merge` contract (forward any
-   port; end when all end). No built-in expresses mutually-exclusive exits — see
+3. **`fan-in-results` module + `any` contract for terminal fan-in.** The 13 mutually-exclusive
+   terminal outcomes re-converge through a `fan-in-results` relay module (`**kwargs`,
+   edge-derived ports) paired with a general-purpose `any` contract (forward whichever
+   port is ready; end when all end). No built-in expresses mutually-exclusive exits — see
    [05](05-branching-and-results.md).
 
 4. **`run-process` redirects to caller-supplied files; emits paths.** stdout/stderr go
@@ -51,8 +55,9 @@ informational.
    skipped tests no longer pay for (or fail on) their `models.yaml`.
 
 9. **No scheduling in modules.** Branches are named output ports; correlation lives in
-   `keyed_join`; fan-in lives in `merge`; persistent config lives in the `default` contract.
-   No envelope, no passthrough guards, no `result` field on the main line.
+   `keyed_join`; fan-in lives in the `any` contract (on `fan-in-results`); persistent
+   config lives in the `default` contract. No envelope, no passthrough guards, no `result`
+   field on the main line.
 
 10. **Exit code via logging.** `aggregate-results.finalise()` logs ERROR if any row is not
     `is_pass()` → harness exits 1 (reproducing rtl_buddy's OR-accumulated exit code). PASS
@@ -83,26 +88,39 @@ informational.
 14. **`postproc` script not run** (parity with rtl_buddy, which parses `postproc_path` but
     never executes it). `parse-log`/`parse-uvm-log` do built-in parsing only.
 
-19. **`merge` is M-N, with contract-declared input ports** (settled 2026-05-31). Earlier
-    drafts had `aggregate-results.run(self, **fired)` rely on the harness inferring an
-    open port set from `**kwargs`. `src/rtl_comrade/structure.py:115-119` shows the
-    harness builds the port surface strictly from `inspect.signature(...).parameters`, so
-    a `VAR_KEYWORD` parameter produces one port literally named after the variable, not
-    arbitrary inference. Resolved by making `MergeContract` an M-N fan-in:
-    `Config.fan_in: dict[str, list[str]] | str` maps contract-side input ports to
-    module-side output ports (string form is N-1 shorthand). `aggregate-results` declares
-    only `result` on `run()`; the 13 upstream terminal ports are **contract-declared
-    inputs**, named in `Config.fan_in`, not on the module. The contract collapses every
-    input onto `result`. Sketch and invariants in [05](05-branching-and-results.md).
-    (Number kept at 19 to preserve cross-references — sits in Settled despite being
-    numerically out of order.)
+15. **`ParseLogMod` corrects all three `VlogPost` quirks** (settled 2026-06-05). Decision:
+    fix, not replicate. Three corrections applied to `ParseLogMod` in
+    [spec 09](specs/09-post-modules.md):
+    (1) **Word-boundary guard**: `re.match(r"PASS\b\s*(.*)", line)` and
+    `re.match(r"FAIL\b\s*(.*)", line)` replace rtl_buddy's `re.search(r"^PASS\s*(.*)")` /
+    `re.search(r"^FAIL\s*(.*)")` so `PASSTHROUGH`/`FAILING` do not misclassify.
+    (2) **FAIL wins over PASS**: `if match_fail … elif match_pass …` replaces the two
+    independent `if` blocks so a log containing both `PASS` and `FAIL` lines resolves to
+    FAIL regardless of order.
+    (3) **Safe FAIL-without-ERR**: guard `match_err` when building `desc` — if `match_fail`
+    is set but `match_err` is not, `desc = match_fail.group(1)` (no `AttributeError` on
+    `None.group(2)`). `ParseUvmLogMod` (`UvmVlogPost` path) is unaffected — its path has
+    no equivalent quirks.
 
-    **Harness prerequisite (open).** The current harness builds the node's port set
-    strictly from module parameters (`src/rtl_comrade/node.py:122`); contracts cannot
-    introduce additional ports. Realising this design depends on a harness change that
-    lets contract Config introduce input ports independent of the module's `run()`
-    signature. Implementation work owned outside this plan; tracked here so downstream
-    specs are not built on the contract until the harness change lands.
+16. **Sibling graphs are a modularity analysis, not deliverables** (settled 2026-06-05).
+    `08-sibling-graphs.md` shows that the core module catalogue supports `randtest` and
+    `regression` with minimal additions: 1 new module for `randtest`; 2 new modules + 1
+    contract switch for `regression` — see the
+    [Summary section](08-sibling-graphs.md#summary). The sibling graphs are **not**
+    deliverables of this plan; `08` is the design starting point when they are built.
+
+19. **`fan-in-results` + `any` contract for terminal re-convergence** (revised 2026-06-05;
+    originally settled 2026-05-31 as `MergeContract`). Earlier drafts had
+    `aggregate-results.run(self, **fired)` rely on the harness inferring an open port set
+    from `**kwargs`. `src/rtl_comrade/structure.py:115-119` shows a `VAR_KEYWORD`
+    parameter produces one port literally named after the variable, not arbitrary
+    inference. The non-definite-inputs mechanism (`graph.py:95-97`) resolves this cleanly:
+    when a module's `run()` uses `**kwargs`, the harness populates its port set from graph
+    edges at load time. Design: a `fan-in-results` relay module (`run(self, **inputs)`,
+    13 edge-derived ports) paired with a general-purpose `any` contract (fire on any
+    single ready port; end when all end). `aggregate-results` retains `run(self, result)`
+    with `default`. No harness change required. Sketch and invariants in
+    [05](05-branching-and-results.md). (Number kept at 19 to preserve cross-references.)
 
 21. **`default` + persistent port with no upstream edge** (settled 2026-06-02). For
     `filter-reglvl`'s `reg_level`/`start_level` and `expand-runs`' `run_ids`, persistent
@@ -117,9 +135,10 @@ informational.
     (Number kept at 21 to preserve cross-references — sits in Settled despite being
     numerically out of order.)
 
-22. **`keyed_join` payload delivery** (settled 2026-06-02). Modules at the joins (`cc-int`,
-    `randseed`, `interpret-compile`) receive `ctx`/`proc` dict payloads unwrapped — no
-    `Payload` wrapper. Settled by `docs/modules/implementation.md` Runtime Call Model:
+22. **`keyed_join` payload delivery** (settled 2026-06-02). Modules at the two join nodes
+    (`cc-int`, `randseed`) receive their keyed port payloads unwrapped — no `Payload`
+    wrapper. `cc-int` receives `ctx` and `proc`; `randseed` receives `ctx`, `proc`, and
+    `sim_cmd`. Settled by `docs/modules/implementation.md` Runtime Call Model:
     "the harness unwraps the payload objects to raw values" and "modules receive raw
     values, not `Payload` wrappers." The unwrap happens at `src/rtl_comrade/node.py:281`
     before `module.run(**inputs)` and is contract-agnostic, so `keyed_join` delivers raw
@@ -177,9 +196,9 @@ informational.
     Notable divergence from rtl_buddy (which has no override) — it broadcasts as a
     CLI edge to `ensure-logs-dir` (creates the directory) and to `build-compile-cmd`
     / `build-sim-cmd` / `resolve-seed` as persistent inputs (compose paths inside it).
-    `write-randseed` does not consume `logs_dir` directly — `build-sim-cmd` folds
-    `randseed_path` into `ctx` so the `keyed_join` carries the path (no persistent
-    config port on keyed_join — see Implementation notes). **Sequencing**: the
+    `write-randseed` does not consume `logs_dir` directly — `build-sim-cmd` emits
+    `randseed_path` in `sim_cmd` so the `keyed_join` receives it as a dedicated keyed
+    port (no persistent config port on keyed_join — see Implementation notes). **Sequencing**: the
     env-setup chain is now `prepend-path → ensure-logs → cc-run/sim-run.env_ready`,
     with an additional `check-cwd → ensure-logs._cwd` edge so a bad-CWD invocation
     aborts before any rogue `logs/` is materialised. **Lifecycle**: never auto-cleaned
@@ -191,16 +210,6 @@ informational.
     The CWD-relative half of the "CWD assumptions preserved" Implementation notes
     entry below is now explicit, not silent.
 
-## Open — needs your call
-
-15. **VlogPost quirks: replicate or fix?** rtl_buddy's `VlogPost` lets PASS win over FAIL when
-    both appear, and raises if a `FAIL` line has no matching `ERR:`/`FAT:`. Faithfully copying
-    inherits both. The uvm path is in the separate `parse-uvm-log` and is unaffected.
-
-16. **Sibling graphs.** Plain `test` defaults `expand-runs` to `[None]`. Want me to also
-    design the `randtest` graph (adds `rnd_cnt`/`rnd_rpt`) and the `regression` graph (adds
-    `reg_level`/`start_level` wiring + outer suite loop + per-suite `chdir`)?
-
 ## Deferred (KIV)
 
 17. **Concurrency / shared CWD paths** — *deferred pending an upstream rtl_buddy change* that
@@ -209,10 +218,10 @@ informational.
     `obj_dir_<tag>/`, `test.*` symlinks, `rtl_buddy.log`) go away. Keep `run-process` and the
     sim-side nodes ready to honour per-invocation working dirs.
 
-    **Interim posture (settled 2026-05-31).** Until the upstream change lands, the design
-    serialises the compile/sim region via a process-wide `asyncio.Lock`: a new
-    `serial_acquire` contract on `write-filelist` acquires once per (test, sweep-variant),
-    and the existing `merge` contract on `aggregate-results` gains an optional `release_lock`
+    **Interim posture (settled 2026-05-31; updated 2026-06-05).** Until the upstream change
+    lands, the design serialises the compile/sim region via a process-wide `asyncio.Lock`:
+    a new `serial_acquire` contract on `write-filelist` acquires once per (test,
+    sweep-variant), and the `any` contract on `fan-in` carries an optional `release_lock`
     Config field that releases once per delivered terminal payload. Pre-region nodes still
     parallelise; the mid-region is single-test-at-a-time. Scoped to the plain `test` graph
     (R=1); `randtest`/`regression` need a different release rule. Mechanism, constraints,
@@ -229,9 +238,9 @@ informational.
 
 ## To verify against the framework before building
 
-20. **`merge` contract correctness.** The sketch in [05](05-branching-and-results.md) keeps
+20. **`any` contract correctness.** The sketch in [05](05-branching-and-results.md) keeps
     one in-flight `get()` per open port on `self` so no item is lost between `get_inputs`
-    calls. Review carefully under the real `ContractPort` API — end-sentinel handling and
+    calls. Review carefully under the real `ContractPort` API — `EndSentinel` handling and
     task lifetime are the risk areas.
 
 23. **Async subprocess hardening.** Design finalised in
@@ -254,10 +263,12 @@ informational.
 - **Compile output is persisted to files** (settled 12) as a side effect of the redirect.
 - **Concurrency is structurally available** (deferred 17) — pending an upstream rtl_buddy
   change to per-invocation subdirectories. **Interim**: pre-region runs concurrently;
-  the compile/sim region is held atomic per test by a `serial_acquire`/`merge.release_lock`
-  pair (see item 17 and [05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)).
+  the compile/sim region is held atomic per test by a `serial_acquire`/`any.release_lock`
+  pair on `write-filelist`/`fan-in` (see item 17 and [05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)).
 - **`postproc_path` not executed** (settled 14) — parity with rtl_buddy.
-- **`VlogPost` quirks inherited unless fixed** (open 15).
+- **`VlogPost` quirks corrected in `ParseLogMod`** (settled 15) — word boundary after
+  `PASS`/`FAIL`, FAIL wins over PASS when both appear, safe desc when `ERR:`/`FAT:` is
+  absent. `ParseUvmLogMod` unaffected. See Settled item 15.
 - **`--debug`/`--color` flags not exposed** (settled 11) — logging owned by harness
   `--level`.
 - **`-L/--logs-dir` is a new CLI override** (settled 26). `rtl_buddy` hard-codes
@@ -292,8 +303,9 @@ informational.
 - **`exec`'d preproc/sweep scripts reproduced as-is.** `run-preproc`/`expand-sweep` emit the
   mutated/expanded `TestConfig` in `ctx`, not via hidden global mutation.
 - **`keyed_join` cannot hold a persistent config port** (it joins every port by key). That's
-  why `simv`/`seed`/`log` are folded into `ctx` by the command builders upstream rather than
-  delivered as a config port to the join nodes.
+  why `sim_cmd = {key, seed, log, err, randseed_path}` is a dedicated keyed payload from
+  `sim-build` to the `randseed` join rather than a persistent config port. `simv` needs no
+  port at all — it is set by `build-compile-cmd` and carried in `ctx`.
 - **`discover-config-file` is reusable for the harness's own config.** The harness already
   locates `rtl_comrade_config.yaml` by walking up the tree — worth sharing one implementation.
 

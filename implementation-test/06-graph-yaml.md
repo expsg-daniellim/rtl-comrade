@@ -1,7 +1,7 @@
 # Concrete graph YAML and manifests
 
 A proposed `graphs/test.yaml` plus the manifest entries for the new modules and the new
-`merge` contract. Node ids match [04](04-pipeline-and-contracts.md); payload shapes and
+`any` contract. Node ids match [04](04-pipeline-and-contracts.md); payload shapes and
 ports match [02](02-payload-conventions.md)/[03](03-module-catalog.md).
 
 ## `rtl_comrade_config.yaml` (add the command)
@@ -114,10 +114,11 @@ nodes:
 - { id: route-post,    module: route-post,        contract: default }
 - { id: parse-log,     module: parse-log,         contract: default }
 - { id: parse-uvm-log, module: parse-uvm-log,     contract: default }
-- id: agg
-  module: aggregate-results
-  contract: merge
-  contract_config: { fan_in: result, release_lock: compile-sim }
+- id: fan-in
+  module: fan-in-results
+  contract: any
+  contract_config: { release_lock: compile-sim }
+- { id: agg, module: aggregate-results, contract: default }
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -165,62 +166,62 @@ edges:
 - { src: { node: route-list, port: list }, dst: { node: list-names, port: suite_cfg } }
 - { src: { node: route-list, port: run },  dst: { node: select,     port: suite_cfg } }
 
-# ---- main line: continue-ports (ctx + local work payloads) ----
+# ---- main line: continue-ports (ctx to randseed; test_run after; local work payloads) ----
 - { src: { node: select },                   dst: { node: filter,     port: ctx } }
 - { src: { node: filter,    port: keep },    dst: { node: load-model, port: ctx } }
 - { src: { node: load-model },               dst: { node: sweep,      port: ctx } }
 - { src: { node: sweep },                    dst: { node: preproc,  port: ctx } }
-- { src: { node: preproc },                  dst: { node: gate-pre, port: ctx } }
-- { src: { node: gate-pre,  port: go },      dst: { node: filelist, port: ctx } }
+- { src: { node: preproc },                  dst: { node: gate-pre, port: payload } }
+- { src: { node: gate-pre,  port: go },      dst: { node: filelist,  port: ctx } }
 - { src: { node: filelist,  port: ctx },     dst: { node: cc-build, port: ctx } }
 - { src: { node: filelist,  port: filelist },dst: { node: cc-build, port: filelist } }
 - { src: { node: cc-build,  port: ctx },     dst: { node: cc-int,   port: ctx } }
 - { src: { node: cc-build,  port: command }, dst: { node: cc-run,   port: command } }
 - { src: { node: cc-run },                   dst: { node: cc-int,   port: proc } }
-- { src: { node: cc-int,    port: ok },      dst: { node: gate-comp,port: ctx } }
-- { src: { node: gate-comp, port: go },      dst: { node: runs,     port: ctx } }
+- { src: { node: cc-int,    port: ok },      dst: { node: gate-comp, port: payload } }
+- { src: { node: gate-comp, port: go },      dst: { node: runs,      port: ctx } }
 - { src: { node: runs },                     dst: { node: seed,     port: ctx } }
 - { src: { node: seed,      port: ctx },     dst: { node: sim-build,port: ctx } }
 - { src: { node: seed,      port: seed },    dst: { node: sim-build,port: seed } }
 - { src: { node: sim-build, port: ctx },     dst: { node: randseed,    port: ctx } }
+- { src: { node: sim-build, port: sim_cmd }, dst: { node: randseed,    port: sim_cmd } }
 - { src: { node: sim-build, port: command }, dst: { node: sim-run,     port: command } }
 - { src: { node: sim-build, port: timeout }, dst: { node: sim-run,     port: timeout } }
 - { src: { node: sim-run },                  dst: { node: randseed,    port: proc } }
-- { src: { node: randseed },                 dst: { node: link-latest, port: ctx } }
-- { src: { node: link-latest },              dst: { node: sim-int,     port: ctx } }
-- { src: { node: sim-int,   port: ok },      dst: { node: gate-sim,   port: ctx } }
-- { src: { node: gate-sim,  port: go },      dst: { node: route-post, port: ctx } }
-- { src: { node: route-post,port: plain },   dst: { node: parse-log,     port: ctx } }
-- { src: { node: route-post,port: uvm },     dst: { node: parse-uvm-log, port: ctx } }
+- { src: { node: randseed },                 dst: { node: link-latest, port: test_run } }
+- { src: { node: link-latest },              dst: { node: sim-int,     port: test_run } }
+- { src: { node: sim-int,   port: ok },      dst: { node: gate-sim,    port: payload } }
+- { src: { node: gate-sim,  port: go },      dst: { node: route-post,  port: test_run } }
+- { src: { node: route-post,port: plain },   dst: { node: parse-log,     port: test_run } }
+- { src: { node: route-post,port: uvm },     dst: { node: parse-uvm-log, port: test_run } }
 
-# ---- terminal ports → the merge collector (one input port per source) ----
-- { src: { node: filter,     port: skip },    dst: { node: agg, port: skip } }
-- { src: { node: gate-pre,   port: stop },    dst: { node: agg, port: es_pre } }
-- { src: { node: cc-int,     port: fail },    dst: { node: agg, port: cc_fail } }
-- { src: { node: gate-comp,  port: stop },    dst: { node: agg, port: es_comp } }
-- { src: { node: sim-int,    port: timeout }, dst: { node: agg, port: sim_to } }
-- { src: { node: gate-sim,   port: stop },    dst: { node: agg, port: es_sim } }
-- { src: { node: parse-log },                 dst: { node: agg, port: post_plain } }
-- { src: { node: parse-uvm-log },             dst: { node: agg, port: post_uvm } }
+# ---- terminal ports → fan-in relay (one input port per source; fan-in uses **kwargs) ----
+- { src: { node: filter,     port: skip },    dst: { node: fan-in, port: skip } }
+- { src: { node: gate-pre,   port: stop },    dst: { node: fan-in, port: es_pre } }
+- { src: { node: cc-int,     port: fail },    dst: { node: fan-in, port: cc_fail } }
+- { src: { node: gate-comp,  port: stop },    dst: { node: fan-in, port: es_comp } }
+- { src: { node: sim-int,    port: timeout }, dst: { node: fan-in, port: sim_to } }
+- { src: { node: gate-sim,   port: stop },    dst: { node: fan-in, port: es_sim } }
+- { src: { node: parse-log },                 dst: { node: fan-in, port: post_plain } }
+- { src: { node: parse-uvm-log },             dst: { node: fan-in, port: post_uvm } }
 # ---- per-test config-domain fail ports (see [05 — Log idioms]) ----
-- { src: { node: load-model, port: fail },    dst: { node: agg, port: model_fail } }
-- { src: { node: sweep,      port: fail },    dst: { node: agg, port: sweep_fail } }
-- { src: { node: preproc,    port: fail },    dst: { node: agg, port: preproc_fail } }
-- { src: { node: filelist,   port: fail },    dst: { node: agg, port: filelist_fail } }
-- { src: { node: seed,       port: fail },    dst: { node: agg, port: seed_fail } }
+- { src: { node: load-model, port: fail },    dst: { node: fan-in, port: model_fail } }
+- { src: { node: sweep,      port: fail },    dst: { node: fan-in, port: sweep_fail } }
+- { src: { node: preproc,    port: fail },    dst: { node: fan-in, port: preproc_fail } }
+- { src: { node: filelist,   port: fail },    dst: { node: fan-in, port: filelist_fail } }
+- { src: { node: seed,       port: fail },    dst: { node: fan-in, port: seed_fail } }
+# ---- fan-in relay → aggregate collector ----
+- { src: { node: fan-in }, dst: { node: agg, port: result } }
 ```
 
 Notes:
 
-- `aggregate-results.run(self, result)` has a single module input port. The 13 graph
-  edges below land on **contract-declared** input ports — names defined on `MergeContract`'s
-  Config, not on the module signature. The `fan_in: result` collapses every contract-side
-  input onto `result` before invoking the module. This depends on the harness change
-  called out as a prerequisite in [05](05-branching-and-results.md) (the current harness
-  builds the node's port set strictly from the module's `run()` signature; see
-  `src/rtl_comrade/node.py:122`). Adding a new terminal source means extending
-  `Config.fan_in`'s input list and adding one edge here — the module signature does not
-  change. See [07](07-ambiguities-and-assumptions.md) item 19 for the design history.
+- `fan-in-results.run(self, **inputs)` is non-definite; the harness populates its 13
+  ports from the 13 incoming edges at load time (`graph.py:95-97`). The `any` contract
+  fires on whichever port is ready, one at a time, and delivers `{port_name: payload}`;
+  the module discards the port name and emits `("result", payload)` to `agg`. Adding a
+  new terminal source means one new edge here — no module signature changes. See
+  [07](07-ambiguities-and-assumptions.md) item 19 for the design history.
 - The five `*_fail` ports (`model_fail`, `sweep_fail`, `preproc_fail`, `filelist_fail`,
   `seed_fail`) carry per-test config-domain failures routed via the new `fail` output on
   each of those source modules; see [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -228,17 +229,18 @@ Notes:
   (single run). `randtest` wires it from a `rnd_cnt`-derived CLI edge.
 - `filter`'s `reg_level`/`start_level` are persistent but unwired for `test`; the module's
   Python defaults (`None`) make it a pass-through. The `regression` graph wires them.
-- `cc-int`/`randseed` take only their two keyed ports (`ctx`,`proc`); `simv`, `seed`, and
-  `log` were folded into `ctx` upstream precisely so the joins carry no config port.
+- `cc-int` takes two keyed ports (`ctx`, `proc`); `ctx` carries `simv` set by `cc-build`,
+  so `sim-build` reads it directly from `ctx["simv"]`.
+- `randseed` takes three keyed ports (`ctx`, `proc`, `sim_cmd`) and assembles `test_run`.
+  All post-sim nodes receive `test_run` on a single `default`-contract port.
 - `run-process` writes the `.log`/`.err` files itself (redirect, paths supplied in
   `command`) — there is no separate "write logs" node. `link-latest` only forces symlinks.
 - `--logs-dir` is broadcast as a CLI edge to **four** consumers: `ensure-logs` (creates
   the directory once at startup), and `cc-build` / `sim-build` / `seed` (compose paths
-  inside it). `write-randseed` does **not** take `logs_dir` as a persistent input — the
-  `keyed_join` contract joins every port by key and cannot also carry persistent config;
-  instead, `sim-build` folds `randseed_path` into `ctx` so the join carries the path. The
-  default `"logs"` matches rtl_buddy's hard-coded literal; override is a small Notable
-  divergence (see [07 settled 26](07-ambiguities-and-assumptions.md)).
+  inside it). `write-randseed` does **not** take `logs_dir` as a persistent input — instead
+  `sim-build` pre-composes `randseed_path` (and `log`/`err`) into `sim_cmd`, which
+  `randseed` receives as a keyed port. The default `"logs"` matches rtl_buddy's hard-coded
+  literal; override is a small Notable divergence (see [07 settled 26](07-ambiguities-and-assumptions.md)).
 - `load-model` sits after `filter` so models for skipped tests aren't loaded — a deliberate
   lazy-vs-eager change from rtl_buddy (07, item on model loading).
 
@@ -283,34 +285,32 @@ Notes:
 - file: rtl_test/control.py
   plugins:
   - { name: early-stop-gate,   class_name: EarlyStopGateMod }
+  - { name: fan-in-results,    class_name: FanInResultsMod }
   - { name: aggregate-results, class_name: AggregateResultsMod }
 ```
 
 ## Manifest addition — `contracts/config.yaml`
 
 ```yaml
-- file: merge.py
+- file: any.py
   plugins:
-  - { name: merge, class_name: MergeContract }
+  - { name: any, class_name: AnyContract }
 - file: serial.py
   plugins:
   - { name: serial_acquire, class_name: SerialAcquireContract }
 ```
 
-`merge.py` contains the `MergeContract` sketched in [05](05-branching-and-results.md),
-extended with the optional `release_lock` Config field described in
-[05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture).
-`serial.py` contains `SerialAcquireContract` and the module-level `_LOCKS` registry it shares
-with `MergeContract` for the `release_lock` lookup. **Both `serial_acquire` and `merge`'s
-`release_lock` field are interim** — to be removed once upstream `rtl_buddy` per-test
-artefact dirs land (see [07](07-ambiguities-and-assumptions.md) item 17). The modules
-**reimplement** `rtl_buddy` natively; only the config-schema dataclasses are kept identical,
-so existing `root_config.yaml`/`tests.yaml`/`models.yaml` load drop-in — see
+`any.py` contains `AnyContract` sketched in [05](05-branching-and-results.md), including
+the optional `release_lock` Config field used by the interim shim. `serial.py` contains
+`SerialAcquireContract` and the module-level `_LOCKS` registry. **Both `serial_acquire`
+and `any`'s `release_lock` field are interim** — to be removed once upstream `rtl_buddy`
+per-test artefact dirs land (see [07](07-ambiguities-and-assumptions.md) item 17). The
+modules **reimplement** `rtl_buddy` natively; only the config-schema dataclasses are kept
+identical, so existing `root_config.yaml`/`tests.yaml`/`models.yaml` load drop-in — see
 [07](07-ambiguities-and-assumptions.md) item 1. File grouping is a suggestion.
 
-> **Cross-file lock state.** `SerialAcquireContract` and `MergeContract`'s `release_lock`
-> branch must reach the **same** `_LOCKS` dict at runtime. Put both contracts in `serial.py`
-> and have `MergeContract` import the registry from there (or define the registry in a third
-> shared module both import). Splitting across plugin files that the loader imports
-> separately would give them distinct `_LOCKS` instances and the lock would never actually
-> serialise anything.
+> **Cross-file lock state.** `SerialAcquireContract` and `AnyContract`'s `release_lock`
+> branch must reach the **same** `_LOCKS` dict at runtime. Have `any.py` import
+> `_get_lock` from `serial.py` (or define the registry in a third shared module both
+> import). Splitting across plugin files that the loader imports separately would give
+> them distinct `_LOCKS` instances and the lock would never serialise anything.
