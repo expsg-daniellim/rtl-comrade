@@ -36,6 +36,7 @@ def load_config_file(Config, path:Path, parent:Path=Path()):
 		The deserialized config object.
 	"""
 
+	bind_contextvars(context='harness.load.config')
 	try:
 		with open(parent / path, 'r', encoding='utf-8') as file:
 			config = from_yaml(Config, file.read())
@@ -64,6 +65,8 @@ def load_config_file(Config, path:Path, parent:Path=Path()):
 		log.fatal('yaml.marked', problem=e.problem, **mark_fields,  exc_info=e)
 	except ReaderError as e:
 		log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
+	finally:
+		unbind_contextvars('context')
 
 	return Never  # pragma: no cover
 
@@ -128,7 +131,7 @@ class PluginFileConfig:
 		plugin_name = self.file.with_suffix('').as_posix().replace('/', '.') if self.name is None else f'{namespace}.{self.name}'
 
 		# Bind some logging context
-		bind_contextvars(plugin=plugin_name, file=str(self.file))
+		bind_contextvars(context='harness.load.plugin', plugin=plugin_name, file=str(self.file))
 		try:
 			# Validate plugin file existence
 			if not self.file.is_file():
@@ -226,7 +229,7 @@ def load_plugin_config(path:Path, relative_path:Path=Path()) -> list[PluginFileC
 
 	path = relative_path / path
 
-	bind_contextvars(file=str(path))
+	bind_contextvars(context='harness.load.path', file=str(path))
 	if not path.exists():
 		log.fatal('not_found', file=str(path))
 
@@ -298,7 +301,7 @@ def load_plugins(configs:list[PluginFileConfig], namespace:str='') -> dict[str, 
 	for config in configs:
 		for (name, plugin) in config.load(namespace).items():
 			if name in res:
-				log.fatal('duplicate_definition', file=str(config.file), key=name)
+				log.fatal('duplicate_definition', context='harness.load.plugins', file=str(config.file), key=name)
 			else:
 				res[name] = plugin
 	return res

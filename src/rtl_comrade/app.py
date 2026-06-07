@@ -69,7 +69,7 @@ class App:
 		# Look for config
 		config = search_for_config(args.config_file, Path(os.getcwd()))
 		if config is None:
-			log.fatal('invalid_config', config_name=args.config_file)
+			log.fatal('invalid_config', context='harness.app.config', config_name=args.config_file)
 
 		# Initialise CLI app
 		self.app = typer.Typer(no_args_is_help=True, invoke_without_command=True, callback=self.main)
@@ -78,17 +78,17 @@ class App:
 			try:
 				graph_config = GraphConfig.from_file(config.relative_path / command.path)
 			except UnicodeDecodeError as e:
-				log.fatal('invalid_unicode', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
+				log.fatal('invalid_unicode', context='harness.app.load', reason=e.reason, invalid_slice=e.object[e.start:e.end].decode(encoding=e.encoding or 'utf-8', errors='replace'), exc_info=e)
 			except FileNotFoundError as e:
-				log.fatal('not_found', exc_info=e)
+				log.fatal('not_found', context='harness.app.load', exc_info=e)
 			except IsADirectoryError as e:
-				log.fatal('is_directory', exc_info=e)
+				log.fatal('is_directory', context='harness.app.load', exc_info=e)
 			except PermissionError as e:
-				log.fatal('permission_denied', exc_info=e)
+				log.fatal('permission_denied', context='harness.app.load', exc_info=e)
 			except OSError as e:
-				log.fatal('os_error', err=e.strerror, errno=e.errno, exc_info=e)
+				log.fatal('os_error', context='harness.app.load', err=e.strerror, errno=e.errno, exc_info=e)
 			except SerdeError as e:
-				log.fatal('serde_error', message=str(e), exc_info=e)
+				log.fatal('serde_error', context='harness.app.load', message=str(e), exc_info=e)
 			except MarkedYAMLError as e:
 				mark_fields:dict[str, Any] = {}
 				if e.problem_mark is not None:
@@ -97,9 +97,9 @@ class App:
 					mark_fields['line'] = e.problem_mark.line
 					mark_fields['column'] = e.problem_mark.line
 					mark_fields['pointer'] = e.problem_mark.pointer
-				log.fatal('yaml.marked', problem=e.problem, **mark_fields, exc_info=e)
+				log.fatal('yaml.marked', context='harness.app.load', problem=e.problem, **mark_fields, exc_info=e)
 			except ReaderError as e:
-				log.fatal('yaml.reader', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
+				log.fatal('yaml.reader', context='harness.app.load', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
 			# Register command
 			self.app.command(name, help=command.help, no_args_is_help=len(graph_config.sig.parameters) > 0)(Graph.construct_run(graph_config, self.cleanup))
@@ -121,16 +121,16 @@ class App:
 		except typer.Abort:
 			exit_code = 1
 		except click.MissingParameter as e:
-			log.error('usage_error', message=e.message, param=e.param_hint, param_type=e.param_type)
+			log.error('usage_error', context='harness.app.cli', message=e.message, param=e.param_hint, param_type=e.param_type)
 			exit_code = e.exit_code
 		except click.BadParameter as e:
-			log.error('usage_error', message=e.message, param=e.param_hint)
+			log.error('usage_error', context='harness.app.cli', message=e.message, param=e.param_hint)
 			exit_code = e.exit_code
 		except click.BadOptionUsage as e:
-			log.error('usage_error', message=e.message, option=e.option_name)
+			log.error('usage_error', context='harness.app.cli', message=e.message, option=e.option_name)
 			exit_code = e.exit_code
 		except click.UsageError as e:
-			log.error('usage_error', message=e.message)
+			log.error('usage_error', context='harness.app.cli', message=e.message)
 			exit_code = e.exit_code
 		return exit_code or 0
 

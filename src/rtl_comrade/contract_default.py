@@ -65,7 +65,7 @@ class DefaultContract:
 
 		unknown_ports = [ input_ for input_ in config.persistent_inputs if input_ not in ports ]
 		if len(unknown_ports) > 0:
-			log.fatal('unknown_persistent_ports', port=unknown_ports)
+			log.fatal('unknown_persistent_ports', context='harness.contract.init', port=unknown_ports)
 
 		self.id = id
 		for port in ports.values():
