@@ -9,6 +9,7 @@ from rtl_comrade.config import (
 	GraphConfigDstPort,
 	GraphConfigEdge,
 	GraphConfigNode,
+	GraphConfigSrcCLI,
 	GraphConfigSrcPort,
 )
 
@@ -23,6 +24,8 @@ def test_node_required_fields_only():
 	assert n.config == {}
 	assert n.contract == ""
 	assert n.contract_config == {}
+	assert n.cli_config == {}
+	assert n.cli_contract_config == {}
 
 
 def test_node_full():
@@ -39,6 +42,28 @@ def test_node_full():
 	assert n.config == {"k": 1}
 	assert n.contract == "c1"
 	assert n.contract_config == {"x": 2}
+
+
+def test_node_cli_config():
+	n = from_dict(
+		GraphConfigNode,
+		{
+			"id": "n1",
+			"module": "m1",
+			"cli_config": {
+				"file": {"cli": "input_file", "type": "str", "help": "Input file"},
+			},
+			"cli_contract_config": {
+				"persistent_inputs": {"cli": "persist", "type": "str"},
+			},
+		},
+	)
+	assert "file" in n.cli_config
+	assert isinstance(n.cli_config["file"], GraphConfigSrcCLI)
+	assert n.cli_config["file"].cli == "input_file"
+	assert n.cli_config["file"].type == "str"
+	assert "persistent_inputs" in n.cli_contract_config
+	assert n.cli_contract_config["persistent_inputs"].cli == "persist"
 
 
 # --- GraphConfigSrcPort ---

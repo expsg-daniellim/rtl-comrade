@@ -799,3 +799,242 @@ def test_it20_node_fatal_propagates(logging_handler, tmp_path):
 	with pytest.raises(typer.Exit):
 		Graph.construct_run(config, lambda: cleanup_called.append(True))()
 	assert not cleanup_called
+
+
+# ---------------------------------------------------------------------------
+# IT-21: cli_config supplies module config field at construction time
+# ---------------------------------------------------------------------------
+
+
+def test_it21_cli_config_module(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        from dataclasses import dataclass
+        from serde import serde
+
+        class Src:
+            @serde
+            @dataclass
+            class Config:
+                value: int
+
+            def __init__(self, config):
+                self.config = config
+
+            def run(self):
+                import tests.integration.test_graph_run as t
+                t.SIDE_CHANNEL.append(self.config.value)
+                return None
+    """,
+	)
+
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="src",
+				module="src",
+				cli_config={"value": GraphConfigSrcCLI(cli="val", type="int")},
+			)
+		],
+		edges=[],
+		modules=[tmp_path / "mods.py"],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert "val" in graph_config.sig.parameters
+	Graph.construct_run(graph_config, lambda: None)(val=42)
+	assert SIDE_CHANNEL == [42]
+	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# IT-22: cli_contract_config supplies contract config field at construction time
+# ---------------------------------------------------------------------------
+
+
+def test_it22_cli_contract_config(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        class Src:
+            def run(self):
+                yield 1
+                yield 2
+
+        class Collect:
+            def run(self, x):
+                import tests.integration.test_graph_run as t
+                t.SIDE_CHANNEL.append(x)
+                return None
+    """,
+	)
+	_write_plugin(
+		tmp_path,
+		"contracts.py",
+		"""\
+        from dataclasses import dataclass, field as dc_field
+        from serde import serde
+
+        class Persist:
+            @serde
+            @dataclass
+            class Config:
+                limit: int = 0
+
+            def __init__(self, id, ports, config):
+                self.id = id
+                self.ports = ports
+                self.limit = config.limit
+                self._count = 0
+
+            async def get_inputs(self):
+                from rtl_comrade.api import EndSentinel
+                if self._count >= self.limit:
+                    return EndSentinel(self.id)
+                self._count += 1
+                return {name: await port.get() for name, port in self.ports.items()}
+    """,
+	)
+
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(id="src", module="src"),
+			GraphConfigNode(
+				id="collect",
+				module="collect",
+				contract="persist",
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")},
+			),
+		],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcPort(node="src"),
+				dst=GraphConfigDstPort(node="collect", port=1),
+			)
+		],
+		modules=[tmp_path / "mods.py"],
+		contracts=[tmp_path / "contracts.py"],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert "n" in graph_config.sig.parameters
+	Graph.construct_run(graph_config, lambda: None)(n=1)
+	assert len(SIDE_CHANNEL) == 1
+	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# IT-23: cli_config overrides a static config field (warning, CLI wins)
+# ---------------------------------------------------------------------------
+
+
+def test_it23_cli_config_overrides_static(logging_handler, tmp_path):
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        from dataclasses import dataclass
+        from serde import serde
+
+        class Src:
+            @serde
+            @dataclass
+            class Config:
+                value: int
+
+            def __init__(self, config):
+                self.config = config
+
+            def run(self):
+                import tests.integration.test_graph_run as t
+                t.SIDE_CHANNEL.append(self.config.value)
+                return None
+    """,
+	)
+
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="src",
+				module="src",
+				config={"value": 0},
+				cli_config={"value": GraphConfigSrcCLI(cli="val", type="int")},
+			)
+		],
+		edges=[],
+		modules=[tmp_path / "mods.py"],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	Graph.construct_run(graph_config, lambda: None)(val=99)
+	assert SIDE_CHANNEL == [99]
+
+
+# ---------------------------------------------------------------------------
+# IT-24: blank cli name in cli_config causes fatal error
+# ---------------------------------------------------------------------------
+
+
+def test_it24_blank_cli_name_in_cli_config(logging_handler, tmp_path):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="")},
+			)
+		],
+		edges=[],
+	)
+	with pytest.raises(typer.Exit):
+		GraphConfig.from_file_config(config)
+
+
+# ---------------------------------------------------------------------------
+# IT-25: duplicate cli name across edge CLI and cli_config causes fatal error
+# ---------------------------------------------------------------------------
+
+
+def test_it25_duplicate_cli_name_across_edge_and_config(logging_handler, tmp_path):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="collect",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+			)
+		],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value"),
+				dst=GraphConfigDstPort(node="collect", port=1),
+			)
+		],
+	)
+	with pytest.raises(typer.Exit):
+		GraphConfig.from_file_config(config)
+
+
+# ---------------------------------------------------------------------------
+# IT-26: duplicate cli name across two nodes' cli_config causes fatal error
+# ---------------------------------------------------------------------------
+
+
+def test_it26_duplicate_cli_name_across_nodes(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+			),
+			GraphConfigNode(
+				id="n2",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+			),
+		],
+		edges=[],
+	)
+	with pytest.raises(typer.Exit):
+		GraphConfig.from_file_config(config)

@@ -28,7 +28,27 @@ nodes:
     key: value
   contract_config:           # optional — passed to contract __init__ as config
     key: value
+  cli_config:                # optional — CLI-supplied module config fields
+    <field>: <cli-param>     # field name maps to a CLI parameter descriptor
+  cli_contract_config:       # optional — CLI-supplied contract config fields
+    <field>: <cli-param>     # field name maps to a CLI parameter descriptor
 ```
+
+`<cli-param>` has the same fields as a CLI edge source:
+
+```yaml
+cli: <str>        # required — CLI parameter name (must be a valid Python identifier)
+option: <bool>    # optional — true (default) for --<name> option; false for positional argument
+type: <str>       # optional — primitive type: int, float, bool, str; defaults to str
+default: <value>  # optional — default value; if absent the parameter is required
+help: <str>       # optional — help text shown in --help output
+```
+
+Each `<field>` under `cli_config` or `cli_contract_config` is the name of the corresponding field in the module's or contract's `Config` dataclass. The harness injects the CLI-supplied value into the config dict before calling the node constructor, so the module or contract receives it through the normal serde deserialization path.
+
+If a field name appears in both `config` and `cli_config` (or both `contract_config` and `cli_contract_config`), the CLI value takes precedence and the harness emits a warning at startup.
+
+CLI parameter names (the `cli` field) must be unique across all edges, `cli_config`, and `cli_contract_config` entries in the graph.
 
 ### Path-relative config values
 

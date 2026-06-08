@@ -60,9 +60,15 @@ Produced by `GraphConfig.from_file_config(file_config)`. Not serde-backed; const
 - **Blank CLI name**: a `GraphConfigSrcCLI` edge has `cli: ""`
 - **Duplicate CLI name**: two CLI edges share the same `cli` value
 - **CLI name conflicts with node ID**: the synthetic id `cli-{name}` would collide with an existing node id
+- **Blank CLI name in node config**: a `cli_config` or `cli_contract_config` entry has `cli: ""`
+- **Duplicate CLI name in node config**: a `cli_config` or `cli_contract_config` `cli` value matches any already-registered CLI name (across edges and other nodes)
+- **CLI config field shadows static config** (warning, non-fatal): a key in `cli_config` also appears in the node's static `config` dict; the CLI value will override at construction time
+- **CLI contract config field shadows static config** (warning, non-fatal): same as above for `cli_contract_config` vs `contract_config`
 - **Unused edge source** (warning, non-fatal): `edge.src.node` does not match any known node id; the edge is retained in `GraphConfig.edges` but emits `unused_edges`
 - **Invalid edge destination**: `edge.dst.node` does not match any known node id
 - **Cycle**: calls `validate_acyclic(nodes, edges)` on the node and edge lists; see [validation.md](validation.md)
+
+Node config CLI parameters are appended to the shared `params` list alongside edge CLI parameters; the combined list produces the `sig` consumed by `Graph.construct_run`. The `cli_config` / `cli_contract_config` dicts remain on the `GraphConfigNode` objects in `GraphConfig.nodes`; no separate collection field is added to `GraphConfig`.
 
 Checks that require loaded plugin classes (invalid module/contract names, invalid port names, deadlock) are deferred to `Graph.from_config`; see [graph.md](graph.md).
 

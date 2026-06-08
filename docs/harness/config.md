@@ -31,12 +31,14 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 ## GraphFileConfig Schema
 
 - `modules`, `contracts`: `list[Path]` plugin paths from the YAML file
-- `nodes`: node definitions with `id`, `module`, `config`, `contract`, and `contract_config`
+- `nodes`: node definitions with `id`, `module`, `config`, `contract`, `contract_config`, `cli_config`, and `cli_contract_config`
 - `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
 
 `GraphConfigEdge.src` is a union deserialized with `Untagged` serde tagging; the schema is tried as `GraphConfigSrcPort` first, then `GraphConfigSrcCLI`.
 
-`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string).
+`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string). Used both as edge sources and as values in `GraphConfigNode.cli_config` / `GraphConfigNode.cli_contract_config`.
+
+`GraphConfigNode.cli_config` and `GraphConfigNode.cli_contract_config` are `dict[str, GraphConfigSrcCLI]` where the dict key is the module or contract `Config` field name to inject into, and the value is the CLI parameter descriptor. The file defines `GraphConfigSrcCLI` before `GraphConfigNode` so the field type is directly resolvable at class definition time.
 
 ## Port Conventions
 

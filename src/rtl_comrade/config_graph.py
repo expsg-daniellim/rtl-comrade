@@ -118,6 +118,39 @@ class GraphConfig:
 		if errors:
 			log.fatal('invalid_cli_edges', context='harness.graph_config.validation')
 
+		# Process node config CLI params
+		for (i, node) in enumerate(config.nodes):
+			for (name, param) in node.cli_config.items():
+				if param.cli == '':
+					log.error('blank_cli', context='harness.graph_config.validation', index=i, node=node.id, field=name)
+					errors = True
+					continue
+				if param.cli in clis:
+					log.error('duplicate_cli', context='harness.graph_config.validation', index=i, cli=param.cli)
+					errors = True
+					continue
+				if name in node.config:
+					log.warn('cli_config_override', context='harness.graph_config.validation', node=node.id, field=name)
+				clis.add(param.cli)
+				params.append(param.as_param())
+
+			for (name, param) in node.cli_contract_config.items():
+				if param.cli == '':
+					log.error('blank_cli', context='harness.graph_config.validation', index=i, node=node.id, field=name)
+					errors = True
+					continue
+				if param.cli in clis:
+					log.error('duplicate_cli', context='harness.graph_config.validation', index=i, cli=param.cli)
+					errors = True
+					continue
+				if name in node.contract_config:
+					log.warn('cli_contract_config_override', context='harness.graph_config.validation', node=node.id, field=name)
+				clis.add(param.cli)
+				params.append(param.as_param())
+
+		if errors:
+			log.fatal('invalid_cli_config', context='harness.graph_config.validation')
+
 		# Validate edges
 		all_node_ids = nodes | {port_name for port_name, _ in cli_srcs}
 		unused_edges = [ edge for edge in edges if edge.src.node not in all_node_ids ]

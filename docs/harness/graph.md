@@ -30,8 +30,8 @@ This file is the top-level harness coordinator. It turns config data into a runn
 
 ## Key Entry Points
 
-- `Graph.from_config(config)`: construct the runtime graph from an already-loaded `GraphConfig`
-- `Graph.construct_run(config, cleanup)`: static method; returns a closure whose signature matches `config.sig`; when invoked with CLI kwargs, constructs the `Graph` via `from_config`, injects values into CLI nodes, runs the graph, then calls `cleanup()`
+- `Graph.from_config(config, cli_kwargs=None)`: construct the runtime graph from an already-loaded `GraphConfig`; `cli_kwargs` is a dict of resolved CLI kwarg values passed from the `construct_run` closure; node `cli_config` and `cli_contract_config` entries are applied to the static config dicts before each `Node` is constructed
+- `Graph.construct_run(config, cleanup)`: static method; returns a closure whose signature matches `config.sig`; when invoked with CLI kwargs, constructs the `Graph` via `from_config` (passing the kwargs for config patching), injects data-flow values into CLI nodes, runs the graph, then calls `cleanup()`
 
 ## Place In The System
 
@@ -51,6 +51,7 @@ It is also the main fail-fast boundary of the harness. This is where obviously b
 - for modules with non-definite inputs, `Graph.from_config` pre-builds a port mapping from the incoming edges before constructing the node; this is passed as the `ports` override parameter to `Node.__init__`
 - node tasks are launched together via `asyncio.gather(...)`; if any node raises `typer.Exit`, it propagates out of the gather immediately
 - `GraphConfigSrcCLI` edges are normalised into `GraphConfig.cli_srcs` and `GraphConfig.sig` during `GraphConfig.from_file_config`; the corresponding virtual `ModuleCLI` nodes are created from `cli_srcs` during `Graph.from_config`; each injects one value into one destination port
+- node `cli_config` and `cli_contract_config` entries are also normalised into `GraphConfig.sig` during `from_file_config`; at construction time in `Graph.from_config`, their CLI kwarg values are merged into the node's config/contract_config dicts before `Node()` is instantiated, so the module or contract receives them through the normal serde deserialization path
 - error-level and critical-level logs emitted during graph assembly intentionally participate in the harness failure model: `ERROR` defers failure until the run ends, while `CRITICAL` aborts immediately
 
 ## Validation Philosophy

@@ -45,7 +45,7 @@ class Graph:
 		self.cli_nodes = []
 
 	@staticmethod
-	def from_config(config:GraphConfig) -> Graph:
+	def from_config(config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Graph:
 		"""Construct a runnable graph from an already-parsed GraphConfig.
 
 		Args:
@@ -56,6 +56,8 @@ class Graph:
 		"""
 
 		graph = Graph()
+		if cli_kwargs is None:
+			cli_kwargs = {}
 
 		# Dynamically load plugins
 		bind_contextvars(context='harness.load.module')
@@ -95,6 +97,14 @@ class Graph:
 				ports = None
 				if not module_mappings[node.module].structure.definite_inputs:
 					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id })
+
+				for name, param in node.cli_config.items():
+					if param.cli in cli_kwargs:
+						node.config[name] = cli_kwargs[param.cli]
+
+				for name, param in node.cli_contract_config.items():
+					if param.cli in cli_kwargs:
+						node.contract_config[name] = cli_kwargs[param.cli]
 
 				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
 				graph.nodes[node.id] = Node(id=node.id, module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports)
@@ -207,7 +217,7 @@ class Graph:
 
 		def run(**kwargs):
 			# Only construct actual graph when run
-			graph = Graph.from_config(config)
+			graph = Graph.from_config(config, kwargs)
 			async def async_run():
 				for cli_node in graph.cli_nodes:
 					if cli_node.module.cli not in kwargs:

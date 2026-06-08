@@ -16,25 +16,6 @@ PRIMITIVE_TYPES = { 'int': int, 'float': float, 'str': str, 'bool': bool }
 
 @serde
 @dataclass(slots=True, frozen=True)
-class GraphConfigNode:
-	"""One node definition from a graph YAML file.
-
-	Attributes:
-		id: The unique runtime id of the node within the graph.
-		module: The exported module plugin name to instantiate for this node.
-		config: Module-specific configuration passed to the module constructor when supported.
-		contract: The exported contract plugin name for this node, or ``""`` for the default contract.
-		contract_config: Contract-specific configuration passed to the contract constructor when supported.
-	"""
-
-	id: str
-	module: str
-	config: dict = field(default_factory=dict)
-	contract: str = field(default="")
-	contract_config: dict = field(default_factory=dict)
-
-@serde
-@dataclass(slots=True, frozen=True)
 class GraphConfigSrcPort:
 	"""The source side of a graph edge.
 
@@ -53,7 +34,7 @@ class InvalidCLIParameterError(Exception):
 @serde
 @dataclass(slots=True, frozen=True)
 class GraphConfigSrcCLI:
-	"""A CLI argument or option as the source side of a graph edge.
+	"""A CLI argument or option as the source side of a graph edge or a node config field.
 
 	Attributes:
 		cli: The CLI parameter name, used both as the argument/option name and as the virtual node id suffix.
@@ -83,6 +64,29 @@ class GraphConfigSrcCLI:
 			return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
 		except ValueError as e:
 			raise InvalidCLIParameterError(self.cli) from e
+
+@serde
+@dataclass(slots=True, frozen=True)
+class GraphConfigNode:
+	"""One node definition from a graph YAML file.
+
+	Attributes:
+		id: The unique runtime id of the node within the graph.
+		module: The exported module plugin name to instantiate for this node.
+		config: Module-specific configuration passed to the module constructor when supported.
+		contract: The exported contract plugin name for this node, or ``""`` for the default contract.
+		contract_config: Contract-specific configuration passed to the contract constructor when supported.
+		cli_config: CLI parameter descriptors that supply module config fields at construction time.
+		cli_contract_config: CLI parameter descriptors that supply contract config fields at construction time.
+	"""
+
+	id: str
+	module: str
+	config: dict = field(default_factory=dict)
+	contract: str = field(default="")
+	contract_config: dict = field(default_factory=dict)
+	cli_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
+	cli_contract_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
 
 @serde
 @dataclass(slots=True, frozen=True)
