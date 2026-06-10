@@ -4,6 +4,12 @@
 
 Reproduce the behaviour of `rtl_buddy test` as an `rtl-comrade` graph.
 
+> **Source baseline.** This plan mirrors **rtl_buddy `v1.4.0`** (commit
+> `a69d962f5c42f859f320984129cca0435b0cba36`), expected as a sibling checkout at
+> `rtl_buddy/` in the repo root. Every `Source:` / `Compatibility source:` file:line
+> citation across these docs and `specs/` is anchored to that version; if rtl_buddy is
+> updated, re-verify every cited range.
+
 `rtl_buddy test` (traced from `rtl_buddy/src/rtl_buddy/`) does, in one sequential
 in-process pass:
 

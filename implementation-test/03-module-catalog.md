@@ -11,6 +11,13 @@ Conventions: `ctx`, `test_run`, `sim_cmd`, `command`, `proc`, `seed`, `filelist`
 are the payload shapes from [02](02-payload-conventions.md). **Contract** is the recommended pairing
 ([04](04-pipeline-and-contracts.md)).
 
+> **Source citations.** Every module below carries a `Source:` line naming the rtl_buddy
+> file and line range it reimplements. All ranges are anchored to **rtl_buddy `v1.4.0`**
+> (commit `a69d962`; see [00 — Source baseline](00-overview.md)). Ranges bound the *behaviour*
+> mirrored, not the enclosing class. If rtl_buddy is updated, re-verify every cited range.
+> The same citations are propagated into the `specs/` tickets as `Compatibility source:`
+> bullets — keep the two in sync.
+
 ---
 
 ## Setup / config
@@ -25,6 +32,7 @@ are the payload shapes from [02](02-payload-conventions.md). **Contract** is the
 Walk up the directory tree from CWD for a filename, stopping at the git root / filesystem
 root. Generic and reusable (the harness itself locates `rtl_comrade_config.yaml` this way).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/root.py:16-36` — `_discover_root_cfg`, the upward `os.path.dirname` walk bounded by `max_levels`, `log.critical` when nothing is found.
 - **Config:** `filename:str` (e.g. `root_config.yaml`), `max_levels:int = 8`
 - **In:** — (zero-input; runs once)
 - **Out:** default → `Path`
@@ -39,6 +47,7 @@ Emits a `bool` sentinel consumed by `run-process` (`env_ready`), which pins the 
 strictly upstream of every compile/sim subprocess via the harness's data-dependency
 ordering — no race window. No failure path: dict mutation cannot meaningfully fail.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `if not '.' in os.environ["PATH"].split(...)` guard + prepend in `RtlBuddy.__init__` (here lifted from CLI bootstrap into an explicit graph node).
 - **In:** — (zero-input; runs once)
 - **Out:** default → `bool` (always `True`; the receiver only uses it for sequencing)
 - **Log idiom:** none (no failure path). See [07 settled 25](07-ambiguities-and-assumptions.md).
@@ -47,6 +56,7 @@ ordering — no race window. No failure path: dict mutation cannot meaningfully 
 Deserialise the root-config YAML into schema-compatible dataclasses (preserving rtl_buddy
 field names: `rtl-buddy-filetype`, `cfg-rtl-builder`, `cfg-platforms`, …).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/root.py:38-48` — the `RootConfigFile`/`RootRtlField` `@serde` field renames; the `from_yaml(RootConfigFile, ...)` load at `root.py:84-90`.
 - **In:** `path:Path`
 - **Out:** default → `root_cfg`
 - **Log idiom:** `log.critical` on malformed YAML / schema mismatch. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -55,6 +65,7 @@ field names: `rtl-buddy-filetype`, `cfg-rtl-builder`, `cfg-platforms`, …).
 Run `uname` and match it against each platform's `unames`; pick the platform. Side-effecting
 (subprocess), runs once.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/root.py:107-118` — the `subprocess.run(["uname"])` call, the `for platform_cfg … for cfg_uname …` match loop, and the `log.critical` when no platform matches (inside `RootConfig.__init__`).
 - **In:** `root_cfg`
 - **Out:** default → `platform_cfg`
 - **Log idiom:** `log.critical` if no platform's `unames` matches the current host. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -63,6 +74,7 @@ Run `uname` and match it against each platform's `unames`; pick the platform. Si
 Resolve the active builder from the platform (honouring the `--builder` override); critical
 if the named builder is missing.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/platform.py:63-84` — `PlatformConfigFile.initialise`: builder lookup, the `builder_override` branch, and the `log.critical`s when a named builder / verible is absent.
 - **In:** `platform_cfg`, `builder:str = ""`
 - **Out:** default → `builder_cfg`
 - **Log idiom:** `log.critical` if the named builder is missing on the platform. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -74,6 +86,7 @@ the suite directory (matching `rtl_buddy`'s `do_cmd_test`, which never `chdir`s 
 fails fast if the resolved path's parent is not CWD. Emits the resolved `Path` for
 downstream `parse-suite-config`.
 
+- **Source:** No direct rtl_buddy analogue — a new check (Notable divergence, see [07 settled 24](07-ambiguities-and-assumptions.md)). It enforces the CWD convention that `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) silently assumes: that command never `chdir`s, unlike `do_rtl_regression`'s per-suite `os.chdir` at `rtl_buddy.py:404`.
 - **In:** `test_config:str = "tests.yaml"`
 - **Out:** default → `Path` (the resolved suite-config path)
 - **Log idiom:** `log.critical` if (a) `(Path.cwd() / test_config).resolve().parent !=
@@ -99,6 +112,7 @@ cc-run/sim-run`. Idempotent (`mkdir(parents=True, exist_ok=True)`) — accepts n
 absolute `logs_dir`. Not wired in the regression graph (regression `chdir`s per-suite — see
 [08](08-sibling-graphs.md)).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"; if not os.path.exists(...): os.makedirs(...)` block in `VlogSim.__init__` (lifted out of the per-test lazy mkdir into a single setup node; `--logs-dir` override is a Notable divergence, [07 settled 26](07-ambiguities-and-assumptions.md)).
 - **In:** `logs_dir:str = "logs"`, `env_ready:bool = True`, `_cwd:Path`
 - **Out:** default → `bool` (always `True`; only used for sequencing)
 - **Log idiom:** `log.info("logs_dir_ready", path=...)` once; no failure port. `OSError` /
@@ -112,6 +126,7 @@ Deserialise `tests.yaml` into the schema-compatible suite (testbenches + tests),
 test to its testbench (within-file) and recording the suite directory on each test so
 `load-model` can resolve `model_path` later. Model loading is deferred to `load-model`.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__`: `from_yaml(SuiteConfigFile, ...)`, the testbench bind `tbs = {tb.get_name(): tb for tb in data.testbenches}` (`suite.py:40`), and `test.initialise(config_dir, tbs)` (`suite.py:46`). Per-test `initialise` at `config/test.py:320-323`. (Plan B defers `load-model`, which rtl_buddy does eagerly at `test.py:322`.)
 - **In:** `test_config:Path` (resolved by `check-suite-cwd` in test/randtest, or by
   `parse-reg-config` in regression — see [08](08-sibling-graphs.md))
 - **Out:** default → `suite_cfg`
@@ -120,6 +135,7 @@ test to its testbench (within-file) and recording the suite directory on each te
 ### `derive-seed-mode`  · tags: setup · contract: `unit`
 Collapse the two bool flags into one `SeedMode` (`rnd_new` wins, else `DEFAULT`).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:188-194` — the `seed_mode = SeedMode.DEFAULT … if rnd_new: NEW elif rnd_last: REPLAY` block in `do_cmd_test`; the enum is `seed_mode.py:4-7`.
 - **In:** `rnd_new:bool = False`, `rnd_last:bool = False`
 - **Out:** default → `SeedMode`
 
@@ -133,6 +149,7 @@ graph**: the summary is assembled by the `SummaryHandler` logging plugin, which 
 This is the resolution of TODO #15 — git state is recorded as a logging concern, not a
 graph-routed payload, which is what makes it a one-line setup node.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev`: the `git status -sb` / `git log -1 --pretty=%h` subprocess calls and the branch/mod/staged derivation (here emitted as one structured `log.info("git_state", ...)` rather than printed).
 - **In:** — (zero-input; runs once)
 - **Out:** default → `bool` (always `True`; unwired — the node exists only for its `log.info`
   side-effect, so the harness logs `no_destination` at INFO)
@@ -149,6 +166,7 @@ graph-routed payload, which is what makes it a one-line setup node.
 Routes on the `--list` flag (a global mode): `list` → the `list-test-names` terminal,
 `run` → `select-tests`. A pure named-port classifier, so neither downstream needs a guard.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:182-184` — the `if list_tests: typer.echo(...); raise typer.Exit(0)` branch in `do_cmd_test` (here split into a classifier + a separate `list-test-names` terminal).
 - **In:** `suite_cfg`, `list:bool = False`
 - **Out:** `("run", suite_cfg)` | `("list", suite_cfg)`
 
@@ -156,6 +174,7 @@ Routes on the `--list` flag (a global mode): `list` → the `list-test-names` te
 Print the suite's test names. Terminal — emits nothing, so in list-mode the whole pipeline
 drains and exits 0.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:183` — `typer.echo("  ".join(self.suite_cfg.get_test_names()))`; `get_test_names` is `config/suite.py:69-76`.
 - **In:** `suite_cfg`
 - **Out:** none
 
@@ -163,6 +182,7 @@ drains and exits 0.
 Select one test or all (`get_tests(test_name)`) and yield one `ctx` per test, stamping
 `key`. No mode logic — `--list` is handled upstream by `route-list-mode`.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/suite.py:52-67` — `SuiteConfig.get_tests`: returns `[self.tests[test_name]]` for a named test (with `log.critical` if absent) or `self.tests.values()` for all.
 - **In:** `suite_cfg`, `test_name:str = ""`
 - **Out:** default → `ctx` per test
 - **Log idiom:** `log.critical` if `test_name` is given but not found in the suite (matches `rtl_buddy`'s `typer.Abort`). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -182,6 +202,7 @@ so `regression` reuses it. Only the builder *name* is read off `builder_cfg` (se
 [01a](specs/01a-builder-schema.md)); the full object is carried on the port because the
 same `builder_cfg` feeds `cc-build`, `seed`, and `sim-build` downstream.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:349-357` — the `_do_test_suite` level filter (`t_lvl > reg_level` / `t_lvl < start_level` → `_append_skip_results`). Level resolution is `TestConfig.get_reglvl` at `config/test.py:287-299`; the SKIP payload is `SkipResults` at `runner/test_results.py:71-78`.
 - **In:** `ctx`, `builder_cfg`, `reg_level=None`, `start_level=None`
 - **Out:** `("keep", ctx)` | `("skip", result)`
 - **Log idiom:** port-routed `skip` `result`; no log call (SKIP is pass-like via `is_pass()`). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -191,6 +212,7 @@ Load the test's `models.yaml` (resolving `model_path` relative to the suite dir 
 `parse-suite-config`) and attach the `ModelConfig` to `ctx["test"]`. Deferred from suite
 parse so it is per-test and reusable (the `filelist` command needs the same step).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/config/model.py:66-100` — `ModelConfigLoader.__init__` (`from_yaml(ModelConfigFile, ...)`) + `get_model` (name lookup, `model.path` stamp, not-found path). Plan B **raises** here instead of rtl_buddy's `log.critical` so the module can route a per-test FAIL ([07 settled 10](07-ambiguities-and-assumptions.md)).
 - **In:** `ctx`
 - **Out:** `("default", ctx)` (test now carries its model) | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on missing/malformed `models.yaml`; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -199,6 +221,7 @@ parse so it is per-test and reusable (the `filelist` command needs the same step
 Reimplements `_expand_tests_with_sweep`'s `exec` pattern. No sweep → emit the one `ctx`
 unchanged. Else yield one refined `ctx` per produced `TestConfig`.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:264-283` — `_expand_tests_with_sweep`: the no-sweep early return, the `exec(code, ns)` of the sweep script with the `{logger, TestConfig, test_cfg, root_cfg, out_test_cfgs}` namespace, and `return ns["out_test_cfgs"]`.
 - **In:** `ctx`, `root_cfg`
 - **Out:** `("default", ctx)` per variant (key suffixed `#i`) | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on sweep script `exec` crash; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -210,6 +233,7 @@ unchanged. Else yield one refined `ctx` per produced `TestConfig`.
 ### `run-preproc`  · tags: pre · contract: `default` (persistent: `root_cfg`)
 Reimplements `VlogSim.pre`: if the test has a `preproc` script, `exec` it to mutate the test.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:119-139` — `VlogSim.pre`: the no-preproc early return and the `exec(code, ns)` of the preproc script with the `{logger, test_cfg, root_cfg}` namespace.
 - **In:** `ctx`, `root_cfg`
 - **Out:** `("default", ctx)` | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on preproc script `exec` crash; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -222,6 +246,7 @@ don't collide on a shared `run.f`. Emits the `ctx` unchanged **and** the filelis
 second port (both consumed in lockstep by `build-compile-cmd`, which passes
 `filelist["filelist"]` straight to `-f`, so no join and no naming change is needed there).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output` (model + test filelist `_extract`, `_process`, write). Called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93` with `unroll=True, deduplicate=True`. The per-tag `run.{test_tag}.f` name is a Plan B divergence (rtl_buddy hard-codes `"run.f"` at `vlog_sim.py:157`).
 - **In:** `ctx`
 - **Out:** `("ctx", ctx)`, `("filelist", {key, filelist})` | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on filelist generation failure (e.g. unresolved source file); `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -243,6 +268,7 @@ compile log paths into `command` so `run-process` redirects there. Folds `simv` 
 `build_dir` (not needed downstream). Does not `mkdir` — `ensure-logs-dir` has already
 bootstrapped the directory (env_ready chain).
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:141-159` — `VlogSim.compile` argv assembly (`[get_exe()] + get_compile_time_opts(mode) + (["--Mdir", build_dir] if verilator) + plusdefines + ["-f", run.f]`), up to but excluding the `subprocess.run`. Supporting helpers: `_get_build_tag` regex `vlog_sim.py:65`, `_get_build_dir` `:67-71`, `_get_simv_path` verilator switch `:73-80`, `_get_plusdefines` `:107-117`.
 - **In:** `ctx`, `filelist`, `builder_cfg`, `builder_mode:str = "debug"`, `logs_dir:str = "logs"`
 - **Out:** `("ctx", ctx_with_simv)`, `("command", {key, argv, stdout_path, stderr_path})`
 
@@ -256,6 +282,9 @@ and `timed_out` set independently of `rc`. Used as two node instances (compile: 
 sim: with timeout). See [specs/03-run-process.md](specs/03-run-process.md) for the full
 lifecycle and cancellation semantics.
 
+- **Source:**
+  - `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:162-179` — `VlogSim.compile`'s `subprocess.run(run_cmd, capture_output=True)` + `FileNotFoundError` handling (the no-timeout compile leg).
+  - `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:240-281` — `VlogSim.execute`'s `Popen(preexec_fn=os.setpgrp, stdout=…, stderr=…)`, `process.wait(timeout)`, and the timeout→`SIGQUIT`/`rc=4444` block (the with-timeout sim leg). Plan B diverges on signal target + SIGKILL escalation — see [specs/03-run-process.md](specs/03-run-process.md) and [07 settled 23](07-ambiguities-and-assumptions.md).
 - **In:** `command:{key,argv,stdout_path,stderr_path}`, `timeout:float | None = None`, `env_ready:bool = True`
 - **Out:** default → `proc:{key,rc,timed_out,stdout_path,stderr_path}`
 - **Log idiom:** `log.critical` if the subprocess fails to *launch* (binary not on PATH, permission denied) — system-wide condition, not per-test. Non-zero `rc` and `timed_out` are not failures here; they are interpreted downstream by `interpret-compile` / `interpret-sim` as per-test results. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -289,6 +318,7 @@ subprocess `proc` by key. `rc == 0` → emit `ok` (`ctx` unchanged, `simv` alrea
 and logs at ERROR). Takes only the two keyed ports — no config port, since `keyed_join`
 joins *every* port by key.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:63-65` — the `compile_returncode != 0 → CompileFailResults` branch in `TestRunner.run`. The rc check + error dump it interprets is `tools/vlog_sim.py:168-171`; the FAIL payload is `CompileFailResults` at `runner/test_results.py:44-51`.
 - **In:** `ctx`, `proc`
 - **Out:** `("ok", ctx)` | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` (`CompileFailResults`) when `rc != 0`; `log.error` at emission with the compile `rc` and stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -302,6 +332,7 @@ One compiled test → one `ctx` per run-id, yielding a fresh `ctx` with `key` su
 `#run_id` and `run_id` set. For `test`, `run_ids=[None]` → a single passthrough with
 `run_id=None` and key unchanged.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:82-117` — `TestRunner.run_multiple`'s `for run_id in run_ids:` loop (vs the single-run `run` at `:51-80`); the `len(run_ids) == 1 → [run()] else run_multiple` dispatch is `rtl_buddy.py:297-299`. `run_ids` themselves are set in `do_cmd_test` (`rtl_buddy.py:188`, `[None]`).
 - **In:** `ctx`, `run_ids=[None]`
 - **Out:** default → `ctx` per run-id (fresh dict; `run_id` set; key suffixed when `run_id is not None`)
 
@@ -315,6 +346,7 @@ One compiled test → one `ctx` per run-id, yielding a fresh `ctx` with `key` su
 (default `logs/...`, matching rtl_buddy). Emits `ctx` unchanged and the seed payload
 in lockstep so `build-sim-cmd` receives both from the same upstream without a join.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute`'s seed resolution: REPLAY reads `<path>.randseed` with `(FileNotFoundError, ValueError)` handling (`:197-213`), NEW does `random.randrange(1000000)` (`:214-216`), DEFAULT uses `get_seed()` (`:218-219`). Plan B routes REPLAY failure as a per-test FAIL `result` rather than rtl_buddy's inline FAIL-stub-and-return (`:203-212`).
 - **In:** `ctx`, `seed_mode`, `builder_cfg`, `logs_dir:str = "logs"`
 - **Out:** `("ctx", ctx)`, `("seed", {key, seed})` | `("fail", result)` *(REPLAY only)*
 - **Log idiom:** port-routed `fail` `result` in REPLAY mode when `<logs_dir>/<test>[_NNNN].randseed` is missing or malformed; `log.error` at emission with the path. `NEW`/`DEFAULT` modes have no failure path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -327,6 +359,7 @@ Puts log paths into `command` so `run-process` redirects there, and into `sim_cm
 `write-randseed` and the post-sim chain have them without a persistent config port.
 Does not `mkdir` — `ensure-logs-dir` has already done so.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:195,221-235` — `VlogSim.execute` argv assembly (`[_get_simv_path()] + get_run_time_opts(mode, seed) + plusdefines + plusargs`) and `timeout, is_custom = test_cfg.get_timeout()`. `get_timeout` is `config/test.py:210-219`; `get_run_time_opts` (seed appended via `sim_rand_prefix`) is `config/rtl.py:104-123`.
 - **In:** `ctx`, `seed`, `builder_cfg`, `builder_mode`, `logs_dir:str = "logs"`
 - **Out:** `("ctx", ctx)` (unchanged), `("sim_cmd", {key, seed, log, err, randseed_path})`, `("command", {key, argv, stdout_path, stderr_path})`, `("timeout", float)`
 
@@ -344,6 +377,7 @@ from `sim_cmd["seed"]` (plus `HierInstanceSeed.txt` contents when present). Then
 and emits `test_run` — the single post-sim context record consumed by all downstream nodes.
 The directory was created at startup by `ensure-logs-dir`.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:263-269` — the `with open(f"{log_path}.randseed", "w")` block in `VlogSim.execute`: writes the seed and appends `HierInstanceSeed.txt` when `hier_inst_seed` is in the run cmd.
 - **In:** `ctx`, `proc`, `sim_cmd` (3-port `keyed_join`)
 - **Out:** default → `test_run`
 
@@ -352,6 +386,7 @@ Force the stable `test.log`/`test.err`/`test.randseed` symlinks in CWD to this r
 (paths from `test_run`). Runs after `write-randseed` so the `.randseed` target exists.
 Distinct functionality from randseed writing.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:271-273` — the three `force_symlink(f"{log_path}.{ext}", "test.{ext}")` calls in `VlogSim.execute`; the helper `force_symlink` (lexists-then-remove-then-symlink) is `vlog_sim.py:26-30`.
 - **In:** `test_run`
 - **Out:** default → `test_run`
 
@@ -359,6 +394,7 @@ Distinct functionality from randseed writing.
 Pure routing on the joined result: `timed_out` → `timeout` (`SimTimeoutResults`), else `ok`.
 No side-effects — the artifacts were written upstream.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch in `TestRunner.run`. The `rc=4444` sentinel is set in `tools/vlog_sim.py:258-261`; the FAIL payload is `SimTimeoutResults` at `runner/test_results.py:62-69`. Plan B keys on the explicit `timed_out` flag rather than the magic `rc`.
 - **In:** `test_run`
 - **Out:** `("ok", test_run)` | `("timeout", result)`
 - **Log idiom:** port-routed `timeout` `result` (`SimTimeoutResults`) when `timed_out` is set; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -372,6 +408,7 @@ Classifies on `test_run["test"].uvm`: emit `uvm` when a `UVMConfig` is present, 
 `plain`. Pure data classification expressed as a named-port return — not scheduling. This
 is the only place the uvm/plain decision lives.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:293-298` — the `if self.test_cfg.uvm: UvmVlogPost(...) else: VlogPost(...)` dispatch in `VlogSim.post` (here a pure named-port classifier ahead of the two parse nodes).
 - **In:** `test_run`
 - **Out:** `("uvm", test_run)` | `("plain", test_run)`
 
@@ -379,6 +416,7 @@ is the only place the uvm/plain decision lives.
 Reimplements `VlogPost` with corrections (see [07 settled 15](07-ambiguities-and-assumptions.md)):
 the `PASS/FAIL/ERR/FAT` regex scan on `test_run["log"]`. Emits `{key, result}`.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results`: the per-line `^PASS` / `^FAIL` / `^(ERR|FAT):` searches and the `NA`/`FAIL`/`PASS` precedence. Plan B **corrects** the quirks (PASS-after-FAIL override, partial-match `match_err` crash) — see [07 settled 15](07-ambiguities-and-assumptions.md).
 - **In:** `test_run`
 - **Out:** default → `result`
 - **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -389,6 +427,7 @@ Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
 `test_run["log"]` and compare against `test_run["test"].uvm.max_warns`/`max_errors`
 (FATAL must be 0). Emits `{key, result}`.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`: the `UVM Report Summary` regex, the severity-count `finditer`, the missing/invalid-summary FAILs, and the `WARNING <= max_warns and ERROR <= max_errors and FATAL <= 0` PASS rule. Thresholds come from `UVMConfig` (`config/uvm.py:3-19`).
 - **In:** `test_run`
 - **Out:** default → `result`
 - **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -403,6 +442,7 @@ emit `stop` (`EarlyStopResults`); else `go`. Three instances differing only in c
 The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp) or
 `test_run` (gate-sim) without a signature change.
 
+- **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the three `if self.run_depth == RunDepth.{PRE,COMP,SIM}: return EarlyStopResults(...)` checkpoints in `TestRunner.run`. The `RunDepth` enum is `test_runner.py:14-18`; the `--early-stop` flag is `rtl_buddy.py:121`; the payload is `EarlyStopResults` at `runner/test_results.py:53-60`.
 - **In:** `payload`, `early_stop:str = "post"`
 - **Config:** `phase:str` (`pre`|`comp`|`sim`)
 - **Out:** `("go", payload)` | `("stop", result)`
@@ -432,42 +472,54 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 ## Module → rtl_buddy provenance
 
 All modules **reimplement** the rtl_buddy source natively; only the config schema is kept
-identical (07, item 1).
+identical (07, item 1). Paths below are relative to `rtl_buddy/src/rtl_buddy/`, anchored to
+**v1.4.0** (`a69d962`).
 
-| module | reimplements (rtl_buddy source) |
+This table is a **derived at-a-glance index**: it names the *primary* site each module
+mirrors. The per-module `- **Source:**` line above remains authoritative — it carries the
+full set of sites for multi-source modules (e.g. `run-process`, `interpret-compile`/`-sim`,
+`build-compile-cmd`) and the supporting helpers. If the two ever disagree, the inline line
+wins; keep this table in step when a range there changes.
+
+| module | primary rtl_buddy site |
 |---|---|
-| `discover-config-file` | `_discover_root_cfg` upward walk |
-| `prepend-cwd-path` | `rtl_buddy.py:100-102` `os.environ["PATH"]` prepend |
-| `ensure-logs-dir` | `tools/vlog_sim.py:55-59` `output_dir = "logs"` lazy mkdir (lifted to setup) |
-| `parse-root-config` | `RootConfigFile` deserialisation |
-| `select-platform` | `RootConfig` `uname`/platform match |
-| `resolve-builder` | `PlatformConfig.initialise` builder resolution |
-| `parse-suite-config` | `SuiteConfigFile` parse + testbench bind |
-| `load-model` | `ModelConfigLoader.get_model` (per test) |
-| `derive-seed-mode` | `rnd_new/rnd_last` → `SeedMode` in `do_cmd_test` |
-| `route-list-mode` | the `--list` branch in `do_cmd_test` |
-| `list-test-names` | `--list` echo of `get_test_names()` |
-| `select-tests` | `SuiteConfig.get_tests` |
-| `filter-reglvl` | `_do_test_suite` level filter + `SkipResults` |
-| `expand-sweep` | `_expand_tests_with_sweep` |
-| `run-preproc` | `VlogSim.pre` |
-| `write-filelist` | `VlogFilelist.write_output` |
-| `build-compile-cmd` | `VlogSim.compile` argv assembly |
-| `run-process` | `VlogSim.compile`/`execute` subprocess + output redirect |
-| `interpret-compile` | `VlogSim.compile` rc check + `CompileFailResults` |
-| `expand-runs` | `TestRunner.run` vs `run_multiple` run-id loop |
-| `resolve-seed` | `VlogSim.execute` seed resolution (all modes) |
-| `build-sim-cmd` | `VlogSim.execute` argv + timeout |
-| `write-randseed` | `VlogSim.execute` `.randseed` write |
-| `link-latest` | `VlogSim.execute` `test.log`/`.err`/`.randseed` symlink forcing |
-| `interpret-sim` | `VlogSim.execute` timeout check |
-| `route-post` | the `if test.uvm` dispatch inside `VlogSim.post` |
-| `parse-log` | `VlogPost` |
-| `parse-uvm-log` | `UvmVlogPost` |
-| `early-stop-gate` | `RunDepth`/`--early-stop` + `EarlyStopResults` |
-| `git-status` | rtl_buddy git-state capture logged alongside test results |
+| `discover-config-file` | `config/root.py:16-36` — `_discover_root_cfg` |
+| `prepend-cwd-path` | `rtl_buddy.py:100-102` — `RtlBuddy.__init__` PATH prepend |
+| `parse-root-config` | `config/root.py:38-48` — `RootConfigFile` serde (load `:84-90`) |
+| `select-platform` | `config/root.py:107-118` — `uname` / platform match |
+| `resolve-builder` | `config/platform.py:63-84` — `PlatformConfigFile.initialise` |
+| `check-suite-cwd` | *no analogue — new check (cf. `rtl_buddy.py:166-209` vs `do_rtl_regression` `:404`)* |
+| `ensure-logs-dir` | `tools/vlog_sim.py:55-59` — `VlogSim.__init__` `logs/` mkdir |
+| `parse-suite-config` | `config/suite.py:26-50` — `SuiteConfig.__init__` (+ bind) |
+| `derive-seed-mode` | `rtl_buddy.py:188-194` — `do_cmd_test` seed-mode block |
+| `git-status` | `rtl_buddy.py:500-522` — `show_git_rev` |
+| `route-list-mode` | `rtl_buddy.py:182-184` — `do_cmd_test` `--list` branch |
+| `list-test-names` | `rtl_buddy.py:183` + `config/suite.py:69-76` — `get_test_names` |
+| `select-tests` | `config/suite.py:52-67` — `SuiteConfig.get_tests` |
+| `filter-reglvl` | `rtl_buddy.py:349-357` — `_do_test_suite` filter (`get_reglvl` `config/test.py:287-299`) |
+| `load-model` | `config/model.py:66-100` — `ModelConfigLoader` |
+| `expand-sweep` | `rtl_buddy.py:264-283` — `_expand_tests_with_sweep` |
+| `run-preproc` | `tools/vlog_sim.py:119-139` — `VlogSim.pre` |
+| `write-filelist` | `tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output` (`vlog_sim.py:88-93`) |
+| `build-compile-cmd` | `tools/vlog_sim.py:141-159` — `VlogSim.compile` argv |
+| `run-process` | `tools/vlog_sim.py:162-179` + `:240-281` — `compile`/`execute` subprocess |
+| `interpret-compile` | `runner/test_runner.py:63-65` — compile-rc branch (`CompileFailResults` `runner/test_results.py:44-51`) |
+| `expand-runs` | `runner/test_runner.py:82-117` — `run_multiple` run-id loop |
+| `resolve-seed` | `tools/vlog_sim.py:191-219` — `VlogSim.execute` seed resolution |
+| `build-sim-cmd` | `tools/vlog_sim.py:195,221-235` — `VlogSim.execute` argv + timeout |
+| `write-randseed` | `tools/vlog_sim.py:263-269` — `.randseed` write |
+| `link-latest` | `tools/vlog_sim.py:271-273` — `force_symlink` (helper `:26-30`) |
+| `interpret-sim` | `runner/test_runner.py:72-73` — `rc==4444` branch (`SimTimeoutResults` `runner/test_results.py:62-69`) |
+| `route-post` | `tools/vlog_sim.py:293-298` — `VlogSim.post` uvm dispatch |
+| `parse-log` | `tools/vlog_post.py:23-45` — `VlogPost.get_results` |
+| `parse-uvm-log` | `tools/vlog_post.py:58-81` — `UvmVlogPost.get_results` |
+| `early-stop-gate` | `runner/test_runner.py:59-76` — `RunDepth` checkpoints (enum `:14-18`) |
+
+For the rtl_buddy behaviour each Plan B departure leaves behind, see
+[07 — Notable divergences](07-ambiguities-and-assumptions.md).
 
 > `fan-in-results` and `aggregate-results` were removed by the TODO #15 redesign — the
-> `do_cmd_test` summary is now reproduced by the `SummaryHandler` logging plugin and the
-> OR-accumulated exit by per-emission `log.error`. See the note above and
+> `do_cmd_test` summary (`rtl_buddy.py:203-207`) is now reproduced by the `SummaryHandler`
+> logging plugin and the OR-accumulated exit (`rtl_buddy.py:206`) by per-emission
+> `log.error`. See
 > [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).

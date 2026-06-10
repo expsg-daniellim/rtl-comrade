@@ -616,6 +616,41 @@ Deferred as the reference fix.
 
 ### 16. Strengthen source traceability to rtl_buddy
 
+**Status: Resolved (2026-06-10).** All seven steps done, anchored to rtl_buddy **`v1.4.0`**
+(commit `a69d962`, the sibling checkout at `rtl_buddy/`):
+
+1. **Version pinned** — `Source baseline` blockquote added near the top of
+   [`00-overview.md`](implementation-test/00-overview.md) naming the tag, SHA, and expected
+   path.
+2. **Inline per-module citations** — every module entry in
+   [`03-module-catalog.md`](implementation-test/03-module-catalog.md) now carries a
+   `- **Source:**` line with verified file:line ranges (each opened and read, not inferred
+   from method names); multi-site modules (`run-process`, `interpret-compile`/`-sim`,
+   `build-compile-cmd`, etc.) list each site. `check-suite-cwd` records "no direct analogue".
+3. **Provenance table replaced** — the flat bottom table (a second copy of the line ranges)
+   was dropped in favour of a pointer to the inline `Source:` lines as the single source of
+   truth, avoiding drift.
+4. **Propagated into specs** — every module ticket in `specs/04`–`specs/10` (plus
+   `specs/03`) gained a `Compatibility source:` bullet copying the catalog citation;
+   `specs/README.md` carries the anchoring note.
+5. **Non-module sites covered** — CLI flag table in
+   [`01-cli-and-entry.md`](implementation-test/01-cli-and-entry.md) gained an `rtl_buddy src`
+   column (each flag's `do_cmd_test`/`root_options` definition line); payload types in
+   [`02-payload-conventions.md`](implementation-test/02-payload-conventions.md) (`TestConfig`,
+   `ModelConfig`, `SeedMode`, the `TestResults` family) cite their definition sites; the exit
+   code + summary coordination in
+   [`05-branching-and-results.md`](implementation-test/05-branching-and-results.md) cites the
+   `do_cmd_test` summary loop + `exit_code |=` line (the old `MergeContract` this step named
+   was removed by TODOs #4/#15, so the citation targets the surviving logging/exit design).
+6. **Drift anchors** — one-line "re-verify on rtl_buddy update" notes at the top of
+   `03-module-catalog.md` and `specs/README.md`.
+7. **Cross-linked divergences** — each entry under "Notable divergences" in
+   [`07-ambiguities-and-assumptions.md`](implementation-test/07-ambiguities-and-assumptions.md)
+   now cites the rtl_buddy file:line it departs from; the catalog `Source:` lines link forward
+   to the matching Settled/divergence entry where one applies.
+
+The original ticket text is kept below for the record.
+
 Today, rtl_buddy provenance for each module lives only in the single table at the bottom of `03-module-catalog.md` (rows like `| derive-seed-mode | rnd_new/rnd_last → SeedMode in do_cmd_test |`). Those rows name methods but omit file paths, line ranges, and the rtl_buddy version they are anchored to, and they do not propagate into the per-module catalog entries or into the `specs/` implementation tickets where the work is actually done.
 
 Goal: an implementer building any module should, without leaving that module's section, know exactly which rtl_buddy file and line range they must mirror, and which rtl_buddy version the citation is anchored to.

@@ -27,7 +27,7 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 
 | # | Title | Status |
 |---|---|---|
-| 16 | Strengthen source traceability to rtl_buddy | **Open** |
+| 16 | Strengthen source traceability to rtl_buddy | Resolved 2026-06-10 |
 | 17 | Split grouped module specs into per-module tickets | **Open** |
 | 18 | Include module code skeletons inside the spec | **Open** |
 | 19 | Inline the I/O surface block in every module spec | **Open** |

@@ -35,6 +35,8 @@ here → `("stop", {"key": payload["key"], "result": EarlyStopResults(f"Stopped 
 **Failure handling**: routing only; no exception, no `log.error` (a `stop` is a normal
 terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
 
+**Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the `RunDepth` early-stop checkpoints; enum at `test_runner.py:14-18`; `--early-stop` flag at `rtl_buddy.py:121`; `EarlyStopResults` at `runner/test_results.py:53-60`.
+
 ### `modules/rtl_test/setup.py` — `GitStatusMod`
 
 Zero-input `unit` node. `run(self)` shells out to git (`git rev-parse --abbrev-ref HEAD`,
@@ -43,6 +45,8 @@ Zero-input `unit` node. `run(self)` shells out to git (`git rev-parse --abbrev-r
 `git` is unavailable, `log.warning("git_state_unavailable", reason=...)` and emit nothing
 collectable — **never** `log.error`/`log.critical`. Returns `("default", True)`; the port is
 unwired (the node exists only for the side-effect log).
+
+**Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev` (here emitted as one structured `git_state` event rather than printed).
 
 ### `graphs/log/summary.py` — `SummaryHandler` + `drop_summary_events`
 
@@ -64,6 +68,8 @@ The summary is a per-graph logging plugin, wired via the `logging` block in
 Sketches in [05 — The `SummaryHandler` logging plugin](../05-branching-and-results.md#the-summaryhandler-logging-plugin).
 **CRITICAL path**: the handler is added after `LoggingFatalHandler`, so it never observes
 `CRITICAL` and never renders on a fatal abort — acceptable, since no results exist then.
+
+**Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207` — the `do_cmd_test` summary loop (`f"{test_name:<30} {result:<8} {desc:<30}"`) that this handler reproduces out-of-graph; the OR-accumulated exit it replaces is `rtl_buddy.py:206`.
 
 Manifest entries for `EarlyStopGateMod` / `GitStatusMod` per [06](../06-graph-yaml.md);
 `graphs/log/summary.py` is referenced by `path`/`name` in the `logging` block, not a manifest.

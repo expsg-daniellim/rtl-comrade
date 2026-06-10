@@ -9,6 +9,12 @@ Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan.
 extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch for
 `regression`, with the rest of the catalogue reused unchanged.
 
+> **Compatibility sources.** Each module ticket carries a `Compatibility source:` bullet
+> naming the rtl_buddy file:line it mirrors — copied from the inline `Source:` line in
+> [`../03-module-catalog.md`](../03-module-catalog.md). All ranges are anchored to rtl_buddy
+> **`v1.4.0`** (commit `a69d962`; see [`../00`](../00-overview.md)). If rtl_buddy is updated,
+> re-verify every cited range in the catalog and propagate the change here.
+
 ## Priority order
 
 | # | Spec | Depends on | Notes |

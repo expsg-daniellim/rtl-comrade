@@ -16,6 +16,7 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
 - `RoutePostMod` — `(ctx)` → `("uvm", ctx)` if `ctx["test"].uvm is not None` else
   `("plain", ctx)`. `ctx["test"].uvm` is `UVMConfig | None` per spec
   [01b](01b-suite-schema.md). Pure data classifier; no scheduling.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:293-298` — the `if self.test_cfg.uvm:` dispatch in `VlogSim.post`.
 - `ParseLogMod` — re-implements rtl_buddy `VlogPost.get_results()` with three corrections
   ([07 settled 15](../07-ambiguities-and-assumptions.md)): scan `test_run["log"]` line-by-line,
   recording the first match of `re.match(r"PASS\b\s*(.*)", line)`,
@@ -27,6 +28,7 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
   **Failure handling**: FAIL result → `log.error` at emission carrying the matched FAIL
   line and `test_run["log"]` path; PASS/NA does not log. `FileNotFoundError`/`OSError` opening
   `test_run["log"]` → emit FAIL with the exception string as `desc` and call `log.error`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results` (corrected per [07 settled 15](../07-ambiguities-and-assumptions.md)).
 - `ParseUvmLogMod` — reimplements rtl_buddy `UvmVlogPost.get_results()` only: extract the
   UVM Report Summary "Report counts by severity" block; PASS iff `WARNING <=
   ctx["test"].uvm.max_warns and ERROR <= ctx["test"].uvm.max_errors and FATAL == 0`,
@@ -39,6 +41,7 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
   `test_run["log"]` → emit FAIL with the exception string as `desc` and call `log.error`.
   Missing Report Summary block is already handled (FAIL with explicit message); `int()` on
   regex-matched `[0-9]+` cannot raise `ValueError`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`; thresholds from `UVMConfig` (`config/uvm.py:3-19`).
 
 Manifest entries per [06](../06-graph-yaml.md).
 

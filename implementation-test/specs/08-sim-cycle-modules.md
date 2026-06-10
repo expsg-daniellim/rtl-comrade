@@ -20,6 +20,7 @@ In `modules/rtl_test/sim.py`:
 - `ExpandRunsMod` — `(ctx, run_ids:list=[None])` → generator yielding one fresh `ctx`
   per `run_id`, with `ctx["run_id"]` set and key suffixed `#run_id` (when `run_id is not
   None`). For `run_ids=[None]` emits one `ctx` unchanged (key unmodified, `run_id=None`).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:82-117` — `run_multiple`'s run-id loop (vs `run` at `:51-80`); dispatch at `rtl_buddy.py:297-299`.
 - `ResolveSeedMod` — `(ctx, seed_mode, builder_cfg, logs_dir:str="logs")` → integrated
   seed-producer for all three modes:
   - `NEW` → `random.randrange(1_000_000)`
@@ -38,6 +39,7 @@ In `modules/rtl_test/sim.py`:
   include in the catch. FAIL payload's `desc` is `f"Replay seed missing or invalid at
   {path}"` (rtl_buddy parity, `vlog_sim.py:203`). `NEW` and `DEFAULT` modes have no
   failure path.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute` seed resolution (REPLAY `:197-213`, NEW `:214-216`, DEFAULT `:218-219`).
 - `BuildSimCmdMod` — `(ctx, seed, builder_cfg, builder_mode, logs_dir:str="logs")` → assembles
   `[simv_path] + builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]) + plusdefines + plusargs`,
   where `simv_path` is `ctx["simv"]` (set by `build-compile-cmd` — see spec
@@ -62,6 +64,7 @@ In `modules/rtl_test/sim.py`:
   **Failure handling**: `builder_cfg.get_run_time_opts(builder_mode, seed)` calls
   `log.critical` if `builder_mode` is not in `builder_cfg.opts` or the mode's
   `run_time` is `None` — see spec [01a](01a-builder-schema.md). No catching.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:195,221-235` — `VlogSim.execute` argv + `get_timeout`; `get_run_time_opts` at `config/rtl.py:104-123`, `get_timeout` at `config/test.py:210-219`.
 - `WriteRandseedMod` — `(ctx, proc, sim_cmd)`, 3-port `keyed_join`; writes
   `sim_cmd["randseed_path"]` from `sim_cmd["seed"]` (+ `HierInstanceSeed.txt` contents
   if present); assembles and emits `test_run` from `ctx` + `proc` + `sim_cmd`. The
@@ -70,6 +73,7 @@ In `modules/rtl_test/sim.py`:
   key and cannot carry one; instead `sim_cmd` delivers the pre-composed paths as a keyed
   port (see [02 — Shape 2](../02-payload-conventions.md) and
   [07 Implementation notes](../07-ambiguities-and-assumptions.md)).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:263-269` — the `.randseed` write (+ `HierInstanceSeed.txt`) in `VlogSim.execute`.
 - `LinkLatestMod` — `(test_run)` → force CWD symlinks `test.log`/`test.err`/`test.randseed`
   to this run's files (paths from `test_run["log"]`, `test_run["err"]`,
   `test_run["randseed_path"]`); emits `test_run` unchanged. Symlinks themselves are
@@ -79,12 +83,14 @@ In `modules/rtl_test/sim.py`:
   naming (TODO #30) deliberately does **not** rename these; isolating them is the upstream
   per-invocation-subdir change ([07 item 17](../07-ambiguities-and-assumptions.md)). Do not add
   a lock — the `serial_acquire` shim was removed.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:271-273` — the three `force_symlink` calls; helper at `vlog_sim.py:26-30`.
 - `InterpretSimMod` — `(test_run)` → pure routing: `test_run["timed_out"]` →
   `("timeout", {"key", "result": SimTimeoutResults()})`, else `("ok", test_run)`.
   **Failure handling**: routing on `test_run["timed_out"]`; no Python exception is caught.
   The ERROR log at emission of `("timeout", ...)` carries `test_run["key"]`, the
   configured timeout, and `test_run["err"]` (mirrors rtl_buddy's `vlog_sim.py` timeout
   reporting).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch; sentinel set at `tools/vlog_sim.py:258-261`; `SimTimeoutResults` at `runner/test_results.py:62-69`.
 
 Manifest entries per [06](../06-graph-yaml.md).
 

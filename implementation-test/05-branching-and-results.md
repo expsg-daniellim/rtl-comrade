@@ -229,17 +229,20 @@ self-contained mechanisms:
 
 1. **Exit code** is driven by the **per-emission `log.error`** at each failure site (table
    below). A single `ERROR` sets `handler.failure = True`, which the harness turns into a
-   non-zero exit, reproducing `rtl_buddy`'s `exit_code |= 0 if is_pass() else 1` exactly
-   (SKIP/PASS log no `ERROR` and contribute nothing; FAIL/NA — compile fail, timeout,
-   early-stop, unknown — each `log.error` once and force exit 1). This is now the **sole**
-   exit-code driver; the old belt-and-braces `aggregate-results.finalise()` `log.error` is
-   gone with the node.
+   non-zero exit, reproducing `rtl_buddy`'s `exit_code |= 0 if is_pass() else 1`
+   (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:206`) exactly (SKIP/PASS log no `ERROR` and
+   contribute nothing; FAIL/NA — compile fail, timeout, early-stop, unknown — each
+   `log.error` once and force exit 1). This is now the **sole** exit-code driver; the old
+   belt-and-braces `aggregate-results.finalise()` `log.error` is gone with the node.
 2. **Summary table** is rendered by `SummaryHandler.finalise()` from the `test_result` rows
    each terminal site emits (see [Re-convergence](#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)),
-   reproducing `do_cmd_test`'s "Test Results Summary" plus the git stateline.
+   reproducing `do_cmd_test`'s "Test Results Summary" loop
+   (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`) plus the `show_git_rev` stateline
+   (`rtl_buddy.py:500-522`).
 
 `CRITICAL` stays reserved for harness-fatal conditions (missing/malformed `root_config.yaml`,
-missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.Abort`.
+missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.Abort`
+(e.g. `rtl_buddy/src/rtl_buddy/config/root.py:89`, `config/platform.py:67-83`).
 
 ## Log idioms per failure site
 

@@ -29,6 +29,7 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
   Emit `("fail", {"key": ctx["key"], "result": <FAIL payload with `str(e)` and traceback
   summary>})` and call `log.error` at emission with `exc_info=e`. **Notable divergence
   from rtl_buddy**: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:119-139` — `VlogSim.pre`.
 - `WriteFilelistMod` — `(ctx)` → reimplements `VlogFilelist.write_output(unroll=True,
   flatten=False, strip=False, deduplicate=True,
   test_filelist=ctx["test"].get_testbench().get_filelist())` using
@@ -47,6 +48,7 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
   "result": <FAIL payload with `str(e)` in `desc`>})` and call `log.error` at emission
   with the attempted filelist path and the chain of `-F` includes the resolver was
   processing.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output`; called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93`. Per-tag `run.{test_tag}.f` is a Plan B divergence from the hard-coded `"run.f"` (`vlog_sim.py:157`).
 
 Manifest entries per [06](../06-graph-yaml.md).
 

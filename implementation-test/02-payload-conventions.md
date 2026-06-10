@@ -38,6 +38,10 @@ ctx = {
   satisfies this at both join points (`cc-int`, `write-randseed`).
 - **`ctx["test"]` is the live `TestConfig`**, mutated in-place by `run-preproc` /
   `expand-sweep`; `ctx["test"].model` carries the loaded `ModelConfig` after `load-model`.
+  These reimplement rtl_buddy `TestConfig` (`rtl_buddy/src/rtl_buddy/config/test.py:43-302`)
+  and `ModelConfig` (`config/model.py:9-51`); the Plan B field renames are pinned in
+  specs [01b](specs/01b-suite-schema.md) / [01c](specs/01c-model-schema.md). The `seed_mode`
+  payload is the `SeedMode` enum (`rtl_buddy/src/rtl_buddy/seed_mode.py:4-7`).
 - **No `result` field, ever.** Terminal outcomes leave as Shape-3 payloads, removing the
   need for any guard inside modules.
 - Modules forward `ctx` unchanged on their continue-port and read only the fields they use.
@@ -96,7 +100,9 @@ plugin collects those events and renders the table. The `<TestResults>` object i
 
 ## `TestResults` values used at the terminal ports
 
-Reuse `rtl_buddy.runner.test_results`:
+Reuse `rtl_buddy.runner.test_results` (`rtl_buddy/src/rtl_buddy/runner/test_results.py`):
+base `TestResults` + `is_pass` at `:10-33`, `TestPassResults` `:35-42`, `CompileFailResults`
+`:44-51`, `EarlyStopResults` `:53-60`, `SimTimeoutResults` `:62-69`, `SkipResults` `:71-78`.
 
 | terminal port (node) | result | is_pass? | exit contribution |
 |---|---|---|---|

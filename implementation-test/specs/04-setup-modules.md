@@ -22,6 +22,7 @@ In `modules/rtl_test/setup.py`:
   `rtl_buddy/src/rtl_buddy/config/root.py:35`). `PermissionError` from directory listing
   propagates uncaught (becomes harness CRITICAL via the bubbling-SystemExit catch). See
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:16-36` — `_discover_root_cfg`.
 - `PrependCwdPathMod` — prepends `.` to `os.environ["PATH"]` so a CWD-local simulator
   (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors
   `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, which does the same once at CLI
@@ -37,6 +38,7 @@ In `modules/rtl_test/setup.py`:
   the process-wide `os.environ` is safe because `unit` guarantees a single invocation.
   **Failure handling**: none. Dict mutation cannot meaningfully fail; no failure port,
   no log call.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.
 - `ParseRootConfigMod` — reads the path, deserialises into the schema (spec 01); emits
   `root_cfg`.
   **Failure handling**: catch broad `Exception` from the YAML load (mirrors
@@ -44,12 +46,14 @@ In `modules/rtl_test/setup.py`:
   `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O);
   `serde.SerdeError` or `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema /
   dataclass mismatch). Convert to `log.critical(f"failed to load {path}: {e}")`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:38-48` — `RootConfigFile`/`RootRtlField` serde renames; load at `root.py:84-90`.
 - `SelectPlatformMod` — runs `uname` (subprocess), matches against each platform's
   `unames`, picks one; critical-logs if no match; emits `platform_cfg`.
   **Failure handling**: post-loop check — no platform matched → `log.critical(f"cannot
   find cfg-platform for uname {uname}")` (mirrors
   `rtl_buddy/src/rtl_buddy/config/root.py:117-118`). `uname` subprocess failure is
   surprising at this layer; let `FileNotFoundError` propagate.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:107-118` — `uname` subprocess + platform-match loop in `RootConfig.__init__`.
 - `ResolveBuilderMod` — picks the active `RtlBuilderConfig` from `platform_cfg` honouring
   the CLI `builder` override; critical-logs on unknown override; emits `builder_cfg`.
   **Failure handling**: post-lookup check — if `builder` override is non-empty and not in
@@ -57,6 +61,7 @@ In `modules/rtl_test/setup.py`:
   configured builders {sorted(...)}")` (rtl_buddy's `rtl_buddy.py:76-80` raises
   `typer.BadParameter`; Plan B uses log.critical for uniform exit semantics). Empty list
   (`no builders configured`) is also `log.critical` (`root.py:151`).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/platform.py:63-84` — `PlatformConfigFile.initialise`.
 - `CheckSuiteCwdMod` — validates the user-driven CWD convention: `rtl-comrade test` /
   `randtest` must be invoked from the suite directory (matching rtl_buddy's `do_cmd_test`,
   which never `chdir`s — see `rtl_buddy/AGENTS.md` validation example: `cd .../verif &&
@@ -77,6 +82,7 @@ In `modules/rtl_test/setup.py`:
   symlinked CWD passes correctly.
   **Failure handling**: both checks are setup-domain config errors → `log.critical` (see
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site)).
+  **Compatibility source:** no direct rtl_buddy analogue (new check, Notable divergence) — enforces the convention `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) assumes vs `do_rtl_regression`'s `os.chdir` at `rtl_buddy.py:404`.
 - `EnsureLogsDirMod` — bootstraps the CWD-relative artefact directory consumed by
   `cc-run`, `sim-run`, `write-randseed`, and `resolve-seed` (REPLAY). Mirrors
   `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` (`output_dir = "logs"; if not
@@ -104,6 +110,7 @@ In `modules/rtl_test/setup.py`:
   (becomes a harness CRITICAL via the bubbling-SystemExit catch, same idiom as
   `DiscoverConfigFileMod`'s `PermissionError`). No port-routed fail — this is a setup-domain
   config error, not per-test.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"` mkdir in `VlogSim.__init__` (lifted to a setup node).
 
 - `ParseSuiteConfigMod` — reads `test_config:Path` (the resolved path from
   `CheckSuiteCwdMod` in test/randtest graphs, or from `parse-reg-config` in regression),
@@ -123,8 +130,10 @@ In `modules/rtl_test/setup.py`:
   post-check: each `TestConfigFile.tb` must resolve to a defined `TestbenchConfig` —
   unresolved (`KeyError` from `tbs[t.tb]`) → `log.critical(f"test {test.name}
   references unknown testbench {test.tb}")`. Mirrors `rtl_buddy/src/rtl_buddy/config/suite.py:28-50`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__` (parse + testbench bind); per-test `TestConfigFile.initialise` at `config/test.py:320-323`.
 - `DeriveSeedModeMod` — `(rnd_new:bool=False, rnd_last:bool=False)` → `SeedMode` (`rnd_new`
   wins, else `REPLAY` if `rnd_last`, else `DEFAULT`). No failure path.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:188-194` — the seed-mode block in `do_cmd_test`; enum at `seed_mode.py:4-7`.
 
 Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
 

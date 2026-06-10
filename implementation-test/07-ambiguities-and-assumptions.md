@@ -288,8 +288,13 @@ informational.
 ## Notable divergences from rtl_buddy
 
 - **`load-model` is lazy** (settled 8) — broken `models.yaml` in a skipped test no longer
-  errors early.
+  errors early. Departs from rtl_buddy's eager load inside `TestConfigFile.initialise`
+  (`rtl_buddy/src/rtl_buddy/config/test.py:320-323`, which calls `ModelConfigLoader.get_model`
+  while building every `TestConfig`).
 - **Compile output is persisted to files** (settled 12) as a side effect of the redirect.
+  Departs from rtl_buddy's in-memory capture `subprocess.run(run_cmd, capture_output=True)`
+  (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:163`); Plan B redirects stdout/stderr to the
+  `command` paths in `run-process` instead.
 - **Concurrency is structurally available** (deferred 17) — pending the upstream rtl_buddy
   per-invocation-subdir change (the reference fix). **Interim**: artefacts the graph controls
   are named **per-tag** (`write-filelist` writes `run.{test_tag}.f`; `obj_dir`/verilator-`simv`/
@@ -298,15 +303,20 @@ informational.
   shared-CWD artefacts (non-verilator `simv`, `test.*` symlinks, tool-internal files) remain for
   item 17 (see [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
 - **`git-status` is recorded as a logging event** (settled 27) — Plan B includes git-state
-  capture (rtl_buddy logs it alongside results) but routes it through `log.info("git_state")`
-  collected by the `SummaryHandler` plugin, not through the graph. The summary table itself is
-  rendered by that plugin rather than an `aggregate-results` sink.
-- **`postproc_path` not executed** (settled 14) — parity with rtl_buddy.
+  capture (rtl_buddy's `show_git_rev` at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522`) but
+  routes it through `log.info("git_state")` collected by the `SummaryHandler` plugin, not
+  through the graph. The summary table itself is rendered by that plugin (departing from the
+  `do_cmd_test` print loop at `rtl_buddy.py:203-207`) rather than an `aggregate-results` sink.
+- **`postproc_path` not executed** (settled 14) — parity with rtl_buddy, which loads
+  `postproc` (`config/test.py:254-264`, `get_postproc_path`) but never runs it (no caller in
+  `VlogSim.post`, `tools/vlog_sim.py:283-300`).
 - **`VlogPost` quirks corrected in `ParseLogMod`** (settled 15) — word boundary after
   `PASS`/`FAIL`, FAIL wins over PASS when both appear, safe desc when `ERR:`/`FAT:` is
-  absent. `ParseUvmLogMod` unaffected. See Settled item 15.
+  absent. Departs from `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` (PASS overrides
+  FAIL at `:42-43`; the `match_err.group(2)` crash at `:41` when FAIL has no `ERR:`).
+  `ParseUvmLogMod` unaffected. See Settled item 15.
 - **`--debug`/`--color` flags not exposed** (settled 11) — logging owned by harness
-  `--level`.
+  `--level`. Drops rtl_buddy's `root_options` flags at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:116-117`.
 - **`-L/--logs-dir` is a new CLI override** (settled 26). `rtl_buddy` hard-codes
   `"logs"` (`tools/vlog_sim.py:55`); Plan B keeps the same default but accepts a
   user-supplied path. Composition sites (`build-compile-cmd`, `build-sim-cmd`,

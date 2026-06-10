@@ -39,6 +39,7 @@ In `modules/rtl_test/build.py`:
   `log.critical` (immediate `SystemExit(1)`) if `builder_mode` is not in
   `builder_cfg.opts` or the mode's `compile_time` is `None` — see spec
   [01a](01a-builder-schema.md). No catching; system-wide misconfiguration.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:141-159` — `VlogSim.compile` argv assembly; helpers `_get_build_tag`/`_get_build_dir`/`_get_simv_path` at `vlog_sim.py:61-80`, `_get_plusdefines` at `:107-117`.
 - `InterpretCompileMod` — `(ctx, proc)`, with `keyed_join` contract on the node;
   rc == 0 → `("ok", ctx)` unchanged (`ctx["simv"]` already set by `build-compile-cmd`);
   rc != 0 → reads `proc["stderr_path"]`/`stdout_path` and logs at ERROR, then
@@ -47,6 +48,7 @@ In `modules/rtl_test/build.py`:
   ERROR log at emission carries `rc`, `stderr_path`, and a tail of the stderr file
   (mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:170-172`). `OSError` /
   `FileNotFoundError` reading `stderr_path` would be surprising; let it propagate.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:63-65` — the `compile_returncode != 0 → CompileFailResults` branch; rc check at `tools/vlog_sim.py:168-171`; `CompileFailResults` at `runner/test_results.py:44-51`.
 
 Manifest entries per [06](../06-graph-yaml.md).
 

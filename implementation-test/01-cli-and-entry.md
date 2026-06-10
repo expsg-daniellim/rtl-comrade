@@ -21,17 +21,21 @@ are limited to the primitives `int | float | bool | str`.
 `rtl_buddy`'s `test` command (`do_cmd_test`) plus the relevant global options
 (`root_options`) become these CLI edges:
 
-| rtl_buddy arg | flag | type | default | CLI edge `cli` name | feeds node |
-|---|---|---|---|---|---|
-| `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `check-suite-cwd` → `parse-suite-config` |
-| *(none)* | `-L/--logs-dir` | str | `logs` | `logs_dir` | `ensure-logs-dir`, `build-compile-cmd`, `build-sim-cmd`, `resolve-seed` |
-| `test_name` | positional (optional) | str | `""` (= all) | `test_name` | `select-tests` |
-| `list_tests` | `--list` | bool | `false` | `list` | `route-list-mode` |
-| `rnd_new` | `-n/--rnd-new` | bool | `false` | `rnd_new` | `derive-seed-mode` |
-| `rnd_last` | `-l/--rnd-last` | bool | `false` | `rnd_last` | `derive-seed-mode` |
-| `rtl_builder_mode` (global) | `-M/--builder-mode` | str | `debug` | `builder_mode` | `build-compile-cmd`, `build-sim-cmd` |
-| `builder_override` (global) | `-B/--builder` | str | `""` | `builder` | `resolve-builder` |
-| `run_depth` (global) | `-E/--early-stop` | str | `post` | `early_stop` | the `early-stop-gate` nodes |
+All `rtl_buddy src` citations are anchored to rtl_buddy `v1.4.0` (commit `a69d962`; see
+[00 — Source baseline](00-overview.md)). Flags live in `rtl_buddy/src/rtl_buddy/rtl_buddy.py`,
+in either `do_cmd_test` (`:166-173`) or the global `root_options` (`:114-123`).
+
+| rtl_buddy arg | flag | type | default | CLI edge `cli` name | feeds node | rtl_buddy src |
+|---|---|---|---|---|---|---|
+| `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `check-suite-cwd` → `parse-suite-config` | `rtl_buddy.py:167` |
+| *(none)* | `-L/--logs-dir` | str | `logs` | `logs_dir` | `ensure-logs-dir`, `build-compile-cmd`, `build-sim-cmd`, `resolve-seed` | *(new — Notable divergence; `"logs"` literal at `tools/vlog_sim.py:55`)* |
+| `test_name` | positional (optional) | str | `""` (= all) | `test_name` | `select-tests` | `rtl_buddy.py:168` |
+| `list_tests` | `--list` | bool | `false` | `list` | `route-list-mode` | `rtl_buddy.py:169` |
+| `rnd_new` | `-n/--rnd-new` | bool | `false` | `rnd_new` | `derive-seed-mode` | `rtl_buddy.py:171` |
+| `rnd_last` | `-l/--rnd-last` | bool | `false` | `rnd_last` | `derive-seed-mode` | `rtl_buddy.py:172` |
+| `rtl_builder_mode` (global) | `-M/--builder-mode` | str | `debug` | `builder_mode` | `build-compile-cmd`, `build-sim-cmd` | `rtl_buddy.py:119` |
+| `builder_override` (global) | `-B/--builder` | str | `""` | `builder` | `resolve-builder` | `rtl_buddy.py:120` (callback `cb_builder` `:70-81`) |
+| `run_depth` (global) | `-E/--early-stop` | str | `post` | `early_stop` | the `early-stop-gate` nodes | `rtl_buddy.py:121` |
 
 Notes and decisions (see [07](07-ambiguities-and-assumptions.md)):
 

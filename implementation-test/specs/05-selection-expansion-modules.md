@@ -18,9 +18,11 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 - `RouteListModeMod` — `(suite_cfg, list:bool=False)` → emits `("list", suite_cfg)` if
   `list` else `("run", suite_cfg)`. Pure data classifier.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:182-184` — the `if list_tests:` branch in `do_cmd_test`.
 - `ListTestNamesMod` — `(suite_cfg)` → prints `"  ".join(suite_cfg.get_test_names())`
   (spec [01b](01b-suite-schema.md) — returns `list[str]` of test names in declaration
   order) and emits nothing. Terminal sink.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:183` — the `typer.echo` of `get_test_names()`; `get_test_names` at `config/suite.py:69-76`.
 - `SelectTestsMod` — `(suite_cfg: SuiteConfig, test_name:str="")` → calls
   `suite_cfg.get_tests(test_name or None)` (spec [01b](01b-suite-schema.md) — returns
   one-element list or all-tests view) and yields one
@@ -31,6 +33,7 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   `test_name` is supplied and missing (spec [01b — `SuiteConfig`](01b-suite-schema.md)
   — mirrors `rtl_buddy/src/rtl_buddy/config/suite.py:62-63` and `rtl_buddy.py:36`).
   No additional `try/except` needed at the module layer.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/suite.py:52-67` — `SuiteConfig.get_tests`.
 - `FilterRegLvlMod` — `(ctx, builder_cfg, reg_level=None, start_level=None)` →
   `("keep", ctx)` if level inside `[start_level, reg_level]` window (or both `None`),
   else `("skip", {"key": ctx["key"], "result": SkipResults(desc)})`. The per-test
@@ -40,6 +43,7 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   `RtlBuilderConfig` (see spec [01a](01a-builder-schema.md)) because the same
   payload feeds `cc-build`, `seed`, and `sim-build` downstream. No failure path
   (SKIP is a routing decision and is pass-like; no log call).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:349-357` — `_do_test_suite` level filter; `get_reglvl` at `config/test.py:287-299`; `SkipResults` at `runner/test_results.py:71-78`.
 - `LoadModelMod` — `(ctx)` → resolves `resolved = ctx["test"].suite_dir /
   ctx["test"].model_path` (fields per spec [01b](01b-suite-schema.md)), constructs
   `ModelConfigLoader(str(resolved))` (spec [01c](01c-model-schema.md)), calls
@@ -58,6 +62,7 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   aborts the whole run via `logger.critical` inside `ModelConfigLoader`
   (`rtl_buddy/src/rtl_buddy/config/model.py:78-81,100`; [07 settled
   10](../07-ambiguities-and-assumptions.md)).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/model.py:66-100` — `ModelConfigLoader.__init__` + `get_model`.
 - `ExpandSweepMod` — `(ctx, root_cfg)` → branches on
   `ctx["test"].get_sweep_path()` (spec [01b](01b-suite-schema.md) — returns `str |
   None`). If `None`, yield `("default", ctx)` once. Else read the file at that path
@@ -72,6 +77,7 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   "result": <FAIL payload with `str(e)` and traceback summary>})` and call `log.error` at
   emission with `exc_info=e`. **Notable divergence from rtl_buddy**: per-test FAIL vs
   rtl_buddy's `logger.critical → typer.Abort`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:264-283` — `_expand_tests_with_sweep`.
 
 Manifest entries per [06](../06-graph-yaml.md).
 

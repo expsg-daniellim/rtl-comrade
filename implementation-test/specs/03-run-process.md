@@ -70,6 +70,10 @@ return. The states below are exhaustive — anything not on this list is a defec
 `modules/rtl_test/build.py::RunProcessMod`, refined per the Lifecycle above. The
 [03](../03-module-catalog.md) catalog sketch is illustrative; this spec is authoritative.
 
+**Compatibility source:**
+- `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:162-179` — `VlogSim.compile`'s `subprocess.run` + `FileNotFoundError` (no-timeout compile leg).
+- `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:240-281` — `VlogSim.execute`'s `Popen` + `wait(timeout)` + `SIGQUIT`/`rc=4444` block (with-timeout sim leg). Plan B diverges on signal target (process group, not leader) and adds SIGKILL escalation — see the policy below and [07 settled 23](../07-ambiguities-and-assumptions.md).
+
 ### Signal and timeout policy
 
 | step | signal  | target        | grace before next  |
