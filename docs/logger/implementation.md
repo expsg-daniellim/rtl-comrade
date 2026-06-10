@@ -122,6 +122,26 @@ In particular, without its own formatter a handler receives the **raw event `dic
 
 A handler that assumes a pre-rendered string will instead get `str(dict)`.
 
+### End-of-run finalisation with `finalise()`
+
+A handler may expose a `finalise()` method (no arguments). At the end of a run, `App.cleanup` walks the root logger's handlers and calls `finalise()` on every handler that defines one — use it to flush buffers, close files, or write a summary. It is duck-typed: a handler without `finalise` is skipped, so the method is optional.
+
+```python
+import logging
+
+class CaptureHandler(logging.Handler):
+    def emit(self, record):
+        archive(record.msg)
+
+    def finalise(self):
+        flush_archive()
+```
+
+Two limits follow from where `cleanup` runs:
+
+- `finalise()` runs **before** the run's failure check, so it is called whether the run passed or failed (deferred `ERROR`). It is **not** called on a `CRITICAL`-triggered exit, because the harness handler raises `typer.Exit(1)` before `cleanup` is reached — the same reason a handler never observes a `CRITICAL` record (see above). Do not rely on `finalise()` for fatal-path cleanup.
+- It is a per-run hook on a per-run handler: the handler is constructed for that graph run and finalised at its end. See [docs/harness/app.md](../harness/app.md) for the `cleanup` lifecycle.
+
 ## How The Harness Constructs A Plugin
 
 After classification, each plugin is constructed at install time (`LoggingPlugin.construct`, called from `App.setup_logging`). Construction depends on whether the resolved object is a class:

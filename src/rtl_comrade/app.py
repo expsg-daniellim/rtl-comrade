@@ -168,6 +168,11 @@ class App:
 			None.
 		"""
 
+		# Finalise before the failure check so handlers flush even on a failing run.
+		for handler in self.root_logger.handlers:
+			if (finalise := getattr(handler, "finalise", None)) is not None:
+				finalise()
+
 		if self.handler.failure:
 			raise typer.Exit(1)
 

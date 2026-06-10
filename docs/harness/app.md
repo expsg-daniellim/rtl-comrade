@@ -86,9 +86,11 @@ Each subcommand is driven by a closure returned by `Graph.construct_run(config, 
 2. resolves the graph's custom logging via `config.logging.load(config.relative_path)` and installs it via `setup_logging(processors, handlers, config.logging.include_default)`
 3. injects the resolved CLI argument values into the graph's CLI nodes
 4. runs the graph via `asyncio.run`
-5. calls `cleanup()`, which raises `typer.Exit(1)` if `self.handler.failure` is set
+5. calls `cleanup()`, which finalises the root logger's handlers then raises `typer.Exit(1)` if `self.handler.failure` is set
 
 This converts deferred `ERROR`-level log failures into a non-zero process exit code.
+
+`cleanup` first walks `self.root_logger.handlers` and calls a `finalise()` method on every handler that defines one (duck-typed via `getattr`; handlers without it are skipped). This runs **before** the `failure` check so handlers flush even on a failing run. Because a `CRITICAL` record exits via the harness handler before `cleanup` is reached, the finalise pass runs on normal completion and on deferred-`ERROR` exits, but not on a `CRITICAL`-triggered exit. A handler plugin needing an end-of-run flush or close should expose `finalise()`; see [docs/logger/implementation.md](../logger/implementation.md).
 
 ## Logging Lifecycle
 
