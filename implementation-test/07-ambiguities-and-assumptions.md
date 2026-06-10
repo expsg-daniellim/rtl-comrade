@@ -27,11 +27,12 @@ informational.
    post-sim nodes receive `test_run`. The only `keyed_join`s are `cc-int` (2 ports) and
    `randseed` (3 ports). Everywhere else is single-source lockstep on `default`.
 
-3. **`fan-in-results` module + `any` contract for terminal fan-in.** The 13 mutually-exclusive
-   terminal outcomes re-converge through a `fan-in-results` relay module (`**kwargs`,
-   edge-derived ports) paired with a general-purpose `any` contract (forward whichever
-   port is ready; end when all end). No built-in expresses mutually-exclusive exits — see
-   [05](05-branching-and-results.md).
+3. **~~`fan-in-results` module + `any` contract for terminal fan-in~~ — superseded by TODO #15
+   (item 27).** Earlier drafts re-converged the 13 terminal outcomes through a
+   `fan-in-results` relay + `any` contract feeding `aggregate-results`. The TODO #15 redesign
+   removed both nodes: terminal ports are now unwired and the summary is rendered by a
+   per-graph `SummaryHandler` logging plugin. The `any` contract remains specified (spec 02)
+   but unwired. See item 27 and [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
 
 4. **`run-process` redirects to caller-supplied files; emits paths.** stdout/stderr go
    straight to files named in `command`, so partial output survives a SIGQUIT and memory
@@ -55,22 +56,24 @@ informational.
    skipped tests no longer pay for (or fail on) their `models.yaml`.
 
 9. **No scheduling in modules.** Branches are named output ports; correlation lives in
-   `keyed_join`; fan-in lives in the `any` contract (on `fan-in-results`); persistent
-   config lives in the `default` contract. No envelope, no passthrough guards, no `result`
-   field on the main line.
+   `keyed_join`; persistent config lives in the `default` contract. Terminal re-convergence
+   is no longer a contract at all — terminal ports are unwired and the summary lives in a
+   logging handler (item 27). No envelope, no passthrough guards, no `result` field on the
+   main line.
 
-10. **Exit code via logging.** `aggregate-results.finalise()` logs ERROR if any row is not
-    `is_pass()` → harness exits 1 (reproducing rtl_buddy's OR-accumulated exit code). PASS
-    and SKIP contribute nothing. CRITICAL is reserved for fatal config errors (matching
-    `logger.critical` → `typer.Abort`). Per-test config-domain failures (`load-model`
-    missing/malformed, `write-filelist` source-not-found, `expand-sweep` exec crash,
-    `run-preproc` exec crash, `resolve-seed` REPLAY missing/malformed `.randseed`) route
-    via a new `fail` output port to merge and additionally call `log.error` at emission
-    (belt-and-braces — `handler.failure` is set both at the emission site and again at
-    `finalise()`). `run-process` subprocess-launch failure (binary not on PATH, permission
-    denied) is `log.critical` (system-wide, not per-test). Parse-machinery exceptions
-    distinct from FAIL classification are deferred pending item 15. Full per-site table
-    in [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+10. **Exit code via logging** (revised by TODO #15, item 27). The exit code is driven by the
+    **per-emission `log.error`** at each failure site: one ERROR sets `handler.failure` →
+    harness exits 1 (reproducing rtl_buddy's OR-accumulated exit code). This is now the
+    **sole** driver — the old `aggregate-results.finalise()` ERROR is gone with the node.
+    PASS and SKIP log no ERROR and contribute nothing. CRITICAL is reserved for fatal config
+    errors (matching `logger.critical` → `typer.Abort`). Per-test config-domain failures
+    (`load-model` missing/malformed, `write-filelist` source-not-found, `expand-sweep` exec
+    crash, `run-preproc` exec crash, `resolve-seed` REPLAY missing/malformed `.randseed`)
+    emit on a `fail` output port (now **unwired**) and `log.error` once at emission.
+    `run-process` subprocess-launch failure (binary not on PATH, permission denied) is
+    `log.critical` (system-wide, not per-test). Parse-machinery exceptions distinct from FAIL
+    classification are deferred pending item 15. Full per-site table in
+    [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 11. **`--debug`/`--color` dropped.** `rtl-comrade` owns logging via `--level`; only the
     genuinely test-affecting globals (`--builder-mode`, `--builder`, `--early-stop`) survive
@@ -118,9 +121,11 @@ informational.
     when a module's `run()` uses `**kwargs`, the harness populates its port set from graph
     edges at load time. Design: a `fan-in-results` relay module (`run(self, **inputs)`,
     13 edge-derived ports) paired with a general-purpose `any` contract (fire on any
-    single ready port; end when all end). `aggregate-results` retains `run(self, result)`
-    with `default`. No harness change required. Sketch and invariants in
-    [05](05-branching-and-results.md). (Number kept at 19 to preserve cross-references.)
+    single ready port; end when all end). `aggregate-results` retained `run(self, result)`
+    with `default`. No harness change required. **Superseded by TODO #15 (item 27):** both
+    `fan-in-results` and `aggregate-results` were removed; the `any` contract sketch survives
+    in [spec 02](specs/02-any-contract-and-fan-in.md) but is unwired. (Number kept at 19 to
+    preserve cross-references.)
 
 21. **`default` + persistent port with no upstream edge** (settled 2026-06-02). For
     `filter-reglvl`'s `reg_level`/`start_level` and `expand-runs`' `run_ids`, persistent
@@ -210,25 +215,49 @@ informational.
     The CWD-relative half of the "CWD assumptions preserved" Implementation notes
     entry below is now explicit, not silent.
 
+27. **`git-status` recorded + summary rendered by a logging plugin** (settled 2026-06-10;
+    resolves TODO #15). Decision: **include** git state, as a logging concern, not a
+    graph-routed payload. A new [`git-status`](03-module-catalog.md) `unit` setup node calls
+    `log.info("git_state", branch=..., sha=..., dirty=...)` once. The results summary is no
+    longer produced by a graph sink: `fan-in-results` and `aggregate-results` are **removed**,
+    the 13 terminal ports are left **unwired**, each terminal node calls
+    `log.info("test_result", ...)` at emission, and a per-graph **`SummaryHandler`**
+    (`logging.Handler` plugin in `graphs/log/summary.py`, paired with a `drop_summary_events`
+    processor) collects both event kinds and renders the table + git stateline in its
+    `finalise()` teardown hook (`App.cleanup`, landed in commit `624be53`). The exit code is
+    driven solely by per-emission `log.error` (item 10). Rationale, sketches, and the CRITICAL
+    path in [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
+    spec in [10](specs/10-control-aggregate-modules.md). **Knock-on:** supersedes items 3 and
+    19; revises items 9 and 10. It also disturbed the interim parallel-safety shim (whose lock
+    *release* lived on the now-deleted `fan-in` node) — **TODO #30** resolved that by removing
+    the shim entirely in favour of per-tag artefact naming (see Deferred item 17).
+
 ## Deferred (KIV)
 
 17. **Concurrency / shared CWD paths** — *deferred pending an upstream rtl_buddy change* that
-    runs each compile and sim command in its own subdirectory. Once that lands, the
-    collisions that the graph's structural concurrency would otherwise expose (`run.f`,
-    `obj_dir_<tag>/`, `test.*` symlinks, `rtl_buddy.log`) go away. Keep `run-process` and the
-    sim-side nodes ready to honour per-invocation working dirs.
+    runs each compile and sim command in its own subdirectory. This is the **reference fix**:
+    its per-invocation working directories isolate *every* CWD-relative artefact at once
+    (`run.f`, `obj_dir_<tag>/`, `simv`, `test.*` symlinks, `rtl_buddy.log`, and anything the
+    tools write into CWD). It remains on the books even after the interim mitigation below,
+    which is only a graph-local shadow of it. Keep `run-process` and the sim-side nodes ready
+    to honour per-invocation working dirs.
 
-    **Interim posture (settled 2026-05-31; updated 2026-06-05).** Until the upstream change
-    lands, the design serialises the compile/sim region via a process-wide `asyncio.Lock`:
-    a new `serial_acquire` contract on `write-filelist` acquires once per (test,
-    sweep-variant), and the `any` contract on `fan-in` carries an optional `release_lock`
-    Config field that releases once per delivered terminal payload. Pre-region nodes still
-    parallelise; the mid-region is single-test-at-a-time. Scoped to the plain `test` graph
-    (R=1); `randtest`/`regression` need a different release rule. Mechanism, constraints,
-    and removal plan in
-    [05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture).
-    Both contract pieces are **explicitly temporary** and must be removed when this item
-    moves out of Deferred.
+    **Interim posture (settled 2026-05-31; revised 2026-06-05; shim removed → per-tag naming
+    2026-06-10).** The earlier interim design serialised the compile/sim region with a
+    process-wide `asyncio.Lock` (`serial_acquire` on `write-filelist` + `any.release_lock` on
+    `fan-in`). That shim was **removed** (TODO #30): it bought correctness but no parallelism,
+    and TODO #15 deleted its release node. **Replaced by per-tag artefact naming (option B):**
+    `write-filelist` writes `run.{test_tag}.f` (the one shared filename the graph fully
+    controls); `obj_dir_<tag>/`, the verilator `simv`, and the `logs/` paths were already
+    per-tag. So concurrent tests no longer collide on those, with no lock and no loss of
+    concurrency. **Residual covered only by this item's reference fix:** non-verilator `simv`
+    (a fixed `builder_cfg.get_simv()` name the graph can't freely redirect), the `test.*`
+    "latest" symlinks (last-writer-wins), and tool-internal CWD writes — concurrent
+    same-builder runs of a fixed-`simv` builder still rely on the per-subdir change (or running
+    one at a time). Mechanism, the per-tag table, and the residual list in
+    [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
+    The per-tag naming is itself **temporary** — superseded (not just complemented) when this
+    item lands.
 
 18. **Seed mode plumbing** — CLI surface kept as two bool flags (`-n`/`--rnd-new`,
     `-l`/`--rnd-last`) per rtl_buddy parity. Planned direction (KIV): move input validation
@@ -261,10 +290,17 @@ informational.
 - **`load-model` is lazy** (settled 8) — broken `models.yaml` in a skipped test no longer
   errors early.
 - **Compile output is persisted to files** (settled 12) as a side effect of the redirect.
-- **Concurrency is structurally available** (deferred 17) — pending an upstream rtl_buddy
-  change to per-invocation subdirectories. **Interim**: pre-region runs concurrently;
-  the compile/sim region is held atomic per test by a `serial_acquire`/`any.release_lock`
-  pair on `write-filelist`/`fan-in` (see item 17 and [05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)).
+- **Concurrency is structurally available** (deferred 17) — pending the upstream rtl_buddy
+  per-invocation-subdir change (the reference fix). **Interim**: artefacts the graph controls
+  are named **per-tag** (`write-filelist` writes `run.{test_tag}.f`; `obj_dir`/verilator-`simv`/
+  logs already per-tag), so the region runs concurrently without collisions and without a lock.
+  The earlier `serial_acquire`/`any.release_lock` lock shim was **removed** (TODO #30). Residual
+  shared-CWD artefacts (non-verilator `simv`, `test.*` symlinks, tool-internal files) remain for
+  item 17 (see [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
+- **`git-status` is recorded as a logging event** (settled 27) — Plan B includes git-state
+  capture (rtl_buddy logs it alongside results) but routes it through `log.info("git_state")`
+  collected by the `SummaryHandler` plugin, not through the graph. The summary table itself is
+  rendered by that plugin rather than an `aggregate-results` sink.
 - **`postproc_path` not executed** (settled 14) — parity with rtl_buddy.
 - **`VlogPost` quirks corrected in `ParseLogMod`** (settled 15) — word boundary after
   `PASS`/`FAIL`, FAIL wins over PASS when both appear, safe desc when `ERR:`/`FAT:` is

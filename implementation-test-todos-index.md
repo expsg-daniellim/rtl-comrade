@@ -8,7 +8,7 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 |---|---|---|
 | 1 | Enumerate failure modes — and resolve open questions sitting in build tickets | Resolved 2026-05-31 |
 | 2 | Integrate graph failures with `log.fatal` / `log.error` | Resolved 2026-05-31 |
-| 3 | Define the interim strategy for parallel runs | Resolved 2026-05-31 |
+| 3 | Define the interim strategy for parallel runs | Resolved 2026-05-31 (posture replaced by #30: per-tag naming) |
 | 4 | Specify and validate the `any` contract and `fan-in-results` module | Resolved 2026-06-05 |
 | 5 | Finalise `run-process` async + signal semantics | Resolved 2026-05-31 |
 | 6 | Document framework-verification contingencies | Resolved 2026-06-02 |
@@ -20,8 +20,8 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 | 12 | Specify `logs/` directory ownership and lifecycle | Resolved 2026-06-02 |
 | 13 | Decide `VlogPost` quirks — replicate or fix | Resolved 2026-06-05 |
 | 14 | Confirm sibling-graph scope (resolve `07` item 16) | Resolved 2026-06-05 |
-| 15 | Add a `git-status` equivalent — or explicitly de-scope it | **Open** |
-| 30 | Validate the interim parallel-safety shim added by TODO #3 | **Open** |
+| 15 | Add a `git-status` equivalent — or explicitly de-scope it | Resolved 2026-06-10 |
+| 30 | Validate the interim parallel-safety shim added by TODO #3 | Resolved 2026-06-10 (shim removed → per-tag naming; item 17 kept) |
 
 ## Spec polish
 

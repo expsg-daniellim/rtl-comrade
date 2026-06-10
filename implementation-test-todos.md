@@ -59,6 +59,11 @@ the edge list in `06-graph-yaml.md`, and Settled item 10 in `07-ambiguities-and-
 followed. Parse-machinery exceptions (distinct from FAIL classification) are still deferred
 pending TODO #13 (VlogPost quirks).
 
+**Revised by TODO #15 (2026-06-10).** The centralised `aggregate-results.finalise()` ERROR is
+gone with the node; the per-emission `log.error` at each failure site is now the **sole**
+deferred-exit driver (no longer belt-and-braces). The per-site decisions are otherwise
+unchanged. See [05 — Result aggregation and exit code](implementation-test/05-branching-and-results.md#result-aggregation-and-exit-code).
+
 The plan states the principle in three places (`00-overview.md:142`, `05-branching-and-results.md:101-113`, `07-ambiguities-and-assumptions.md:57-60`): `aggregate-results.finalise()` calls `log.error` if any row is not `is_pass()`, and `CRITICAL`/`FATAL` is reserved for unrecoverable config errors. Per `docs/invariants.md:20-21`, `ERROR` defers to a non-zero exit and `CRITICAL`/`FATAL` triggers immediate `SystemExit(1)`.
 
 What is missing is a per-site enumeration. Each module and contract that can fail needs an explicit decision recorded — either in its `03-module-catalog.md` entry or in a new section of `05-branching-and-results.md` — answering one of:
@@ -88,8 +93,15 @@ Cross-reference: Plan A (`test-implementation/20-summary-and-exit-code.md`) enum
 
 ### 3. Define the interim strategy for parallel runs
 
-**Status: Resolved (2026-05-31).** Posture chosen: option (b), a serialising contract on the
-compile/sim region. The hazard is that a concurrent next-test compile would stomp the prior
+> **Superseded by TODO #30 (2026-06-10).** The serialising-contract posture below was
+> **removed**. TODO #15 deleted its release node (`fan-in`), and rather than rebuild the lock,
+> TODO #30 adopted **option (c)-style per-tag artefact naming** instead: `write-filelist` writes
+> `run.{test_tag}.f` and the other artefacts were already per-tag, so the region runs concurrent
+> with no lock. `07` item 17 (upstream per-invocation subdirs) is kept as the reference fix for
+> the residual. The original option-(b) write-up is retained below for the record. See TODO #30.
+
+**Status: Resolved (2026-05-31; posture replaced 2026-06-10 — see banner).** Posture chosen:
+option (b), a serialising contract on the compile/sim region. The hazard is that a concurrent next-test compile would stomp the prior
 test's non-graph-routed build artefacts (`obj_dir_<tag>/`, `simv`, `run.f`) before its sim
 has consumed them. Posture: `write-filelist` acquires a process-wide `asyncio.Lock` per
 (test, sweep-variant); `aggregate-results`' existing `merge` contract releases the same lock
@@ -100,7 +112,8 @@ extension to the existing `merge` contract (`release_lock` Config field). Both a
 dirs land (see `07` item 17). Scoped to the plain `test` graph (R=1); sibling graphs
 (`randtest`, `regression`) need a different release rule and are out of scope here.
 Mechanism, constraints, sketch, and cross-links are in
-[`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture);
+[`05 — Interim CWD-collision posture`](implementation-test/05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)
+(the section that replaced the removed shim write-up);
 node-table update in [`04`](implementation-test/04-pipeline-and-contracts.md) rows 7 and 22;
 graph + manifest wiring in [`06`](implementation-test/06-graph-yaml.md); cross-link from
 [`07`](implementation-test/07-ambiguities-and-assumptions.md) item 17 (kept in Deferred —
@@ -127,8 +140,9 @@ ports via the non-definite-inputs mechanism) paired with a general-purpose `any`
 The redesign eliminates the harness-change prerequisite that was blocking spec 02. All
 design-level work is complete:
 
-1. **Formal description of `any` contract** written in
-   [`05 — Re-convergence`](implementation-test/05-branching-and-results.md#re-convergence-the-fan-in-module-and-any-contract):
+1. **Formal description of `any` contract** (the sketch + invariants now live in
+   [`specs/02`](implementation-test/specs/02-any-contract-and-fan-in.md); a pointer remains at
+   [`05 — The any contract`](implementation-test/05-branching-and-results.md#the-any-contract-retained-currently-unwired)):
    `_pending` task dict state, per-port `EndSentinel` handling, no-loss invariant
    (multi-done-per-wake), drainage order, termination rule, and `release_lock` side-effect.
 2. **Module and test spec** written in
@@ -142,6 +156,13 @@ design-level work is complete:
 
 The `SerialAcquireContract` + `any.release_lock` interim shim is **not** in scope for
 TODO #4 — tracked separately in TODO #30.
+
+**Superseded by TODO #15 (2026-06-10).** The `fan-in-results` module and `aggregate-results`
+sink validated here are **removed**: terminal re-convergence is no longer a graph node, the
+summary is a `SummaryHandler` logging plugin, and the terminal ports are unwired. The `any`
+contract (and its spec/tests in [`specs/02`](implementation-test/specs/02-any-contract-and-fan-in.md))
+is retained as reusable infrastructure but is **no longer wired** in the `test` graph. See
+TODO #15 and [07 item 27](implementation-test/07-ambiguities-and-assumptions.md).
 
 ### 5. Finalise `run-process` async + signal semantics
 
@@ -495,6 +516,52 @@ the `test` graph only throughout).
 
 ### 15. Add a `git-status` equivalent — or explicitly de-scope it
 
+**Status: Resolved (2026-06-10).** Decision: **include** git state — recorded as a *logging*
+concern, not a graph-routed payload. The resolution went further than the minimal question,
+adopting the full redesign worked out in `findings.md`: the results summary leaves the graph
+entirely. Concretely:
+
+- A new [`git-status`](implementation-test/03-module-catalog.md) `unit` setup node calls
+  `log.info("git_state", branch=..., sha=..., dirty=...)` once. No graph routing, no
+  persistent inputs, no payload surgery — which is the whole reason this is now a one-line
+  node rather than the awkward fan-in wiring the original ticket anticipated.
+- `fan-in-results` and `aggregate-results` are **removed**. The 13 terminal ports are left
+  **unwired** (`no_destination` at INFO); each terminal node calls
+  `log.info("test_result", ...)` at emission. A per-graph **`SummaryHandler`**
+  (`logging.Handler` plugin in `graphs/log/summary.py`, paired with a `drop_summary_events`
+  processor) collects `test_result` + `git_state` events and renders the table + git stateline
+  in its `finalise()` teardown hook — which `App.cleanup` now invokes (landed in commit
+  `624be53`, "finalise logging handlers at end of run"; the `findings.md` addendum had
+  *assumed* this hook, and it is now real).
+- The exit code is driven **solely** by the per-emission `log.error` at each failure site
+  (the old `aggregate-results.finalise()` belt-and-braces ERROR is gone).
+
+Design, sketches, and the CRITICAL-path reasoning are in
+[`05 — Re-convergence`](implementation-test/05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
+spec in [`specs/10`](implementation-test/specs/10-control-aggregate-modules.md); graph + logging
+block + manifest in [`06`](implementation-test/06-graph-yaml.md); node rows in
+[`04`](implementation-test/04-pipeline-and-contracts.md); catalog entry +
+`fan-in`/`aggregate` removal in [`03`](implementation-test/03-module-catalog.md);
+[`07`](implementation-test/07-ambiguities-and-assumptions.md) Settled item 27 (supersedes
+items 3, 19; revises 9, 10). Overview, payload conventions, and sibling-graph analysis
+([`00`](implementation-test/00-overview.md), [`02`](implementation-test/02-payload-conventions.md),
+[`08`](implementation-test/08-sibling-graphs.md)) updated to match.
+
+**Knock-on — TODO #30 resolved by removing the shim.** Deleting `fan-in` removed the interim
+parallel-safety shim's lock-*release* site (it lived on the `any` contract's `release_lock`
+field on `fan-in`), leaving the `serial_acquire` *acquire* on `write-filelist` with nothing to
+release it. Rather than relocate the release, **TODO #30 removed the shim entirely** in favour
+of **per-tag artefact naming** (`write-filelist` writes `run.{test_tag}.f`; `obj_dir`/
+verilator-`simv`/logs were already per-tag) — same correctness, no lock, and the region stays
+concurrent. The residual shared-CWD artefacts (non-verilator `simv`, `test.*` symlinks,
+tool-internal files) remain the job of the **upstream per-invocation-subdir change**, which is
+kept on the books as the reference fix (`07` item 17). See TODO #30 and
+[`05 — Interim CWD-collision posture`](implementation-test/05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
+The `any` contract itself is retained as a plain reusable contract but is now unwired in
+`test` ([spec 02](implementation-test/specs/02-any-contract-and-fan-in.md)).
+
+The original investigation and three-way decision below are kept for the record.
+
 Plan B has no `git-status` module. rtl_buddy records git state alongside test results — useful for reproducibility and bug triage. The plan should make a deliberate decision here, not silently drop it.
 
 #### Concrete steps
@@ -509,63 +576,41 @@ A reader can tell at a glance whether git state is recorded with test results, a
 
 ### 30. Validate the interim parallel-safety shim added by TODO #3
 
-TODO #3 introduced `SerialAcquireContract` and an optional `release_lock` field (now on
-`AnyContract` used by the `fan-in` node, following the TODO #4 redesign) as an interim
-shim until upstream `rtl_buddy` per-test artefact directories land. The mechanism is
-described in
-[`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
-and constrained to the plain `test` graph (R=1), but its concurrency properties are
-asserted, not proven. TODO #4 covers the `any` contract's core semantics; this TODO covers
-the shim specifically.
+**Status: Resolved (2026-06-10) — shim removed, not validated.** TODO #15 deleted the `fan-in`
+node that carried the shim's lock *release* (`AnyContract.release_lock`), leaving the
+`serial_acquire` *acquire* on `write-filelist` with nothing to release it. Rather than relocate
+the release and then validate a lock that bought correctness-not-parallelism (it held the lock
+across the whole compile/sim region), the shim was **removed entirely** and replaced with
+**per-tag artefact naming** (decision (B)):
 
-Because the shim is **explicitly temporary** (removed when `07` item 17's upstream change
-lands), this TODO's outputs live in the implementation-test plan and tests only — do not
-promote either piece to `docs/contracts/index.md` as first-class. Treat the validation work
-itself as removable alongside the shim.
+- **`write-filelist` writes `run.{test_tag}.f`** (the one shared filename the graph fully
+  controls) and emits that `Path`; `build-compile-cmd` already passes `filelist["filelist"]`
+  to `-f`, so no edge or downstream change. `obj_dir_<tag>/`, the verilator `simv`, and the
+  `logs/` paths were already per-tag. Concurrent tests therefore no longer collide on
+  graph-named artefacts, **with no lock and no loss of concurrency**.
+- **Deleted:** `SerialAcquireContract`, `contracts/serial.py`, the `_LOCKS` registry, the
+  `release_lock` Config field on `AnyContract` (now a plain contract), the `serial_acquire`
+  wiring on `write-filelist` (reverts to `default`), and the contracts-manifest entry. The
+  planned `test_serial.py` / end-to-end shim-concurrency test are **not** written.
+- **Kept:** `07` item 17 (the upstream per-invocation-subdir change) as the **reference fix**.
+  Per-tag naming is an explicit graph-local *shadow* of it and is itself removed when item 17
+  lands. The residual it cannot name — non-verilator `simv` (fixed `builder_cfg.get_simv()`),
+  the `test.*` "latest" symlinks (last-writer-wins), tool-internal CWD writes — stays with
+  item 17; **do not re-introduce a lock** for it.
 
-#### Concrete steps
-
-1. **Formal description of the acquire side.** Extend
-   [`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
-   with a `SerialAcquireContract` invariants block parallel to the merge one: state held
-   (the shared `_LOCKS` dict, the inherited `DefaultContract` port state), lock acquisition
-   timing relative to upstream `await`, `EndSentinel` short-circuit (no acquire), and
-   interaction with `DefaultContract`'s persistent-input precedence (the lock must not be
-   acquired for invocations that resolve entirely from persistent caches with no consumed
-   work item — verify this matches the design intent).
-2. **Formal description of the release side.** In the same section, document the
-   `release_lock` branch of `AnyContract` (on the `fan-in` node) distinctly from the base
-   contract: one release per delivered payload, none on `EndSentinel`, fail-fast on missing
-   prior acquire, and the pairing invariant ("every acquired item must reach `agg`")
-   repeated from the Constraints block.
-3. **Pairing-arithmetic test.** Add a new test file (`contracts/tests/test_serial.py`) or
-   extend `test_any.py`. Enumerate cases for the spec at
-   [`specs/02-any-contract-and-fan-in.md`](implementation-test/specs/02-any-contract-and-fan-in.md) (or a
-   new sibling spec):
-   - acquire then release through `fan-in` → second acquire blocks until release fires;
-   - acquire then `EndSentinel` (no item reaches `fan-in`) → release never fires, lock is
-     left held (documented as invariant violation; verifies fail-fast surfaces);
-   - `release_lock` configured but no `serial_acquire` upstream → first delivered payload
-     raises `RuntimeError` from `asyncio.Lock.release()`;
-   - shared-state check: instantiate two contracts with the same `lock_name`; confirm
-     they share the same `asyncio.Lock` object via the module-level `_LOCKS` registry.
-4. **End-to-end check.** Inside [`specs/12-end-to-end.md`](implementation-test/specs/12-end-to-end.md),
-   add a smoke case that exercises the shim under concurrency: two tests with overlapping
-   compile/sim regions; assert that the second test's `cc-run` does not start until the
-   first test's terminal result has been delivered to `agg`. This is the actual property
-   the shim exists to provide.
-5. **Removal plan.** Add a one-line "Removal" subsection at the foot of
-   [`05 — Serialising contracts`](implementation-test/05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
-   stating the trigger (upstream `rtl_buddy` per-invocation subdirs lands and `07` item 17
-   moves out of Deferred), the artefacts to delete (`SerialAcquireContract`, the
-   `release_lock` Config field on `AnyContract`, the `_LOCKS` registry, the wiring in
-   `04` rows 7 & 22a and `06`), and the tests added by this TODO that must also be deleted.
+Edits: shim section in [`05`](implementation-test/05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)
+rewritten as "Interim CWD-collision posture — per-tag artefact naming"; `04` node row 7 +
+contract list + subsection; `06` `filelist` node + contracts manifest (no `serial.py`); `03`
+`write-filelist` entry + caveat; `07` item 17 interim posture + Notable divergences + item 27
+knock-on; `specs/02` (`AnyContract` de-`release_lock`'d), `specs/06`/`07`/`08` (per-tag run.f +
+residual notes), `specs/11` (manifest note). See TODO #3 (the shim it introduced) and TODO #15.
 
 #### Acceptance check
 
-The interim shim's correctness is supported by enumerated tests and a written invariant
-that explicitly notes the temporary status and removal plan. No `docs/contracts/index.md`
-entry exists for `serial_acquire` (deliberately — to prevent it from becoming load-bearing).
+The compile/sim region runs concurrently without artefact collisions on any graph-named file,
+with **no** serialising contract. No `serial_acquire`/`serial.py`/`_LOCKS` remain in the plan.
+The residual non-renameable artefacts are documented against `07` item 17, which stays
+Deferred as the reference fix.
 
 ## Spec polish — required to make specs buildable
 

@@ -17,7 +17,7 @@ extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch f
 | 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (extracted from 01 per TODO #9; consumed by 05, 07, 08). |
 | 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (extracted from 01 per TODO #10; consumed by 04, 05, 06, 07, 08, 09). |
 | 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (extracted from 01 per TODO #10; consumed by 05, 06). |
-| 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` + `FanInResultsMod` — the only new framework-level code. |
+| 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` only (plain, reusable; **unwired** in `test`). `FanInResultsMod` removed by TODO #15 — build only if another graph needs it. |
 | 03 | [run-process](03-run-process.md) | — | The reusable subprocess star. |
 | 04 | [setup-modules](04-setup-modules.md) | 01 | Setup chain + suite parse + seed-mode derivation. |
 | 05 | [selection-expansion-modules](05-selection-expansion-modules.md) | 01 | List routing, select, filter, load-model, sweep. |
@@ -25,7 +25,7 @@ extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch f
 | 07 | [compile-cycle-modules](07-compile-cycle-modules.md) | 03 | `build-compile-cmd`, `interpret-compile`. |
 | 08 | [sim-cycle-modules](08-sim-cycle-modules.md) | 03 | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`. |
 | 09 | [post-modules](09-post-modules.md) | 01 | `route-post`, `parse-log`, `parse-uvm-log`. |
-| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) | 02 | `early-stop-gate`, `aggregate-results`. |
+| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) | 01 | `early-stop-gate`, `git-status`, and the `SummaryHandler` logging plugin (replaces `aggregate-results`, TODO #15). |
 | 11 | [graph-and-manifests](11-graph-and-manifests.md) | 02-10 | `graphs/test.yaml`, plugin manifests, `rtl_comrade_config.yaml` entry. |
 | 12 | [end-to-end](12-end-to-end.md) | 11 | Smoke test against a real rtl_buddy suite. |
 

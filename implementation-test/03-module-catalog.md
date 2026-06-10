@@ -123,6 +123,24 @@ Collapse the two bool flags into one `SeedMode` (`rnd_new` wins, else `DEFAULT`)
 - **In:** `rnd_new:bool = False`, `rnd_last:bool = False`
 - **Out:** default → `SeedMode`
 
+### `git-status`  · tags: setup · contract: `unit`
+Record the repository's git state once at run start, for reproducibility and bug triage
+(rtl_buddy logs git state alongside results). Zero-input; reads `git` via subprocess (or
+`subprocess.run(["git", "rev-parse", ...])`) and emits a single structured log event
+`log.info("git_state", branch=..., sha=..., dirty=...)`. It routes **nothing through the
+graph**: the summary is assembled by the `SummaryHandler` logging plugin, which collects the
+`git_state` event (see [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)).
+This is the resolution of TODO #15 — git state is recorded as a logging concern, not a
+graph-routed payload, which is what makes it a one-line setup node.
+
+- **In:** — (zero-input; runs once)
+- **Out:** default → `bool` (always `True`; unwired — the node exists only for its `log.info`
+  side-effect, so the harness logs `no_destination` at INFO)
+- **Log idiom:** `log.info("git_state", ...)` once. Not in a git repo / `git` missing →
+  `log.warning("git_state_unavailable", ...)` and emit nothing collectable; **never**
+  `log.error`/`log.critical` (git state is informational, not a run gate). See
+  [07 settled 27](07-ambiguities-and-assumptions.md).
+
 ---
 
 ## Selection / expansion (fan-out)
@@ -197,15 +215,21 @@ Reimplements `VlogSim.pre`: if the test has a `preproc` script, `exec` it to mut
 - **Log idiom:** port-routed `fail` `result` on preproc script `exec` crash; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `write-filelist`  · tags: compile · contract: `default`
-Reimplements `VlogFilelist.write_output(unroll=True, deduplicate=True)`. Emits the `ctx`
-unchanged **and** the filelist payload on a second port (both consumed in lockstep by
-`build-compile-cmd`, so no join is needed there).
+Reimplements `VlogFilelist.write_output(unroll=True, deduplicate=True)`. Writes the filelist
+to a **per-tag** path `run.{test_tag}.f` (computing `test_tag = re.sub(r"[^A-Za-z0-9_.-]",
+"_", ctx["test"].get_name())`, the same regex `build-compile-cmd` uses) so concurrent tests
+don't collide on a shared `run.f`. Emits the `ctx` unchanged **and** the filelist `Path` on a
+second port (both consumed in lockstep by `build-compile-cmd`, which passes
+`filelist["filelist"]` straight to `-f`, so no join and no naming change is needed there).
 
 - **In:** `ctx`
 - **Out:** `("ctx", ctx)`, `("filelist", {key, filelist})` | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on filelist generation failure (e.g. unresolved source file); `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
-- **Caveat:** `rtl_buddy` writes one `run.f` in CWD → collides under concurrency.
-  Recommend a per-test `run.<tag>.f`; see [07](07-ambiguities-and-assumptions.md).
+- **Concurrency:** the per-tag `run.{test_tag}.f` name is the graph-local interim mitigation
+  (TODO #30) that replaces the removed lock shim. The residual shared-CWD artefacts it cannot
+  rename (non-verilator `simv`, `test.*` symlinks, tool-internal files) wait on the upstream
+  per-invocation-subdir change — see [07 item 17](07-ambiguities-and-assumptions.md) and
+  [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
 
 ---
 
@@ -384,54 +408,26 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 - **Out:** `("go", payload)` | `("stop", result)`
 - **Log idiom:** port-routed `stop` `result` (`EarlyStopResults`); no log call (a normal terminal, not a failure). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
-### `fan-in-results`  · tags: report · contract: **`any`** (`release_lock: compile-sim`)
-Relay module that normalises the 13 mutually-exclusive terminal-result branches onto a
-single `result` output consumed by `aggregate-results`. Uses `**kwargs` so the harness
-populates its ports from graph edges at load time (non-definite-inputs mechanism,
-`graph.py:95-97`). Each call receives exactly one arriving payload; the port name is
-discarded (provenance is already encoded in the payload type). The `any` contract fires on
-whichever port is ready first, one at a time. The `release_lock` field on the contract is
-the release side of the interim parallel-safety shim (see [05 — Serialising contracts](05-branching-and-results.md#serialising-contracts--interim-parallel-safety-posture)
-and TODO #30); it is removed once upstream `rtl_buddy` per-test artefact dirs land.
+### ~~`fan-in-results`~~ / ~~`aggregate-results`~~ — removed (TODO #15)
 
-- **In:** `**inputs` (13 edge-derived ports: `skip`, `es_pre`, `cc_fail`, `es_comp`,
-  `sim_to`, `es_sim`, `post_plain`, `post_uvm`, `model_fail`, `sweep_fail`, `preproc_fail`,
-  `filelist_fail`, `seed_fail`)
-- **Out:** `("result", payload)`
-- **Log idiom:** none (pure relay; no failure path).
-
-```python
-class FanInResultsMod:
-    def run(self, **inputs):
-        _, payload = next(iter(inputs.items()))
-        return ("result", payload)
-```
-
-### `aggregate-results`  · tags: report · contract: `default` + `finalise()`
-The single collector. Receives from `fan-in-results` via the single `result` port.
-`run` accumulates; `finalise` prints the summary and logs `ERROR` if any result is not
-`is_pass()` (harness maps a single ERROR → exit 1, reproducing the OR-accumulated exit
-code).
-
-- **In:** `result`
-- **Out:** none (sink)
-- **Log idiom:** `finalise()` calls `log.error("suite_has_failures", n=...)` once if any accumulated row is not `is_pass()` — the centralised deferred-exit driver. Per-test emission sites also call `log.error` as belt-and-braces against any `finalise()` misfire. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
-
-```python
-class AggregateResultsMod:
-    def __init__(self):
-        self._rows = []
-    def run(self, result):
-        self._rows.append(result)
-    def finalise(self):
-        for r in self._rows:
-            res = r["result"]
-            log.info("test_result", key=r["key"],
-                     result=res.results["result"], desc=res.results["desc"])
-        failed = [ r for r in self._rows if not r["result"].is_pass() ]
-        if failed:
-            log.error("suite_has_failures", n=len(failed))
-```
+> **Removed by the TODO #15 redesign (2026-06-10).** Both nodes are gone. The summary table
+> and the exit code are no longer produced by a graph sink:
+>
+> - **Summary** is rendered by a per-graph `SummaryHandler` (`logging.Handler` plugin in
+>   `log/summary.py`) from the `test_result` rows that each terminal node now logs at
+>   emission, plus the `git_state` event from `git-status`. It renders in its `finalise()`
+>   teardown hook (`App.cleanup`). See
+>   [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
+> - **Exit code** is driven solely by the per-emission `log.error` at each failure site —
+>   the old belt-and-braces `aggregate-results.finalise()` `log.error` is gone.
+> - The 13 terminal ports that used to feed `fan-in-results` are now **unwired** (the
+>   harness logs `no_destination` at INFO); their modules' signatures are unchanged.
+>
+> The `any` contract that `fan-in-results` used is retained as a reusable (plain) contract but
+> has no consumer in the `test` graph. The `SummaryHandler` / `drop_summary_events` plugin is
+> specified in [spec 10](specs/10-control-aggregate-modules.md). (The interim parallel-safety
+> lock shim that once hung off `any.release_lock` was removed entirely by
+> [TODO #30](../implementation-test-todos.md) in favour of per-tag artefact naming.)
 
 ## Module → rtl_buddy provenance
 
@@ -469,5 +465,9 @@ identical (07, item 1).
 | `parse-log` | `VlogPost` |
 | `parse-uvm-log` | `UvmVlogPost` |
 | `early-stop-gate` | `RunDepth`/`--early-stop` + `EarlyStopResults` |
-| `fan-in-results` | no rtl_buddy equivalent (structural relay node) |
-| `aggregate-results` | `do_cmd_test` summary + exit OR + `typer.Exit` |
+| `git-status` | rtl_buddy git-state capture logged alongside test results |
+
+> `fan-in-results` and `aggregate-results` were removed by the TODO #15 redesign — the
+> `do_cmd_test` summary is now reproduced by the `SummaryHandler` logging plugin and the
+> OR-accumulated exit by per-emission `log.error`. See the note above and
+> [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).

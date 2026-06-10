@@ -71,6 +71,14 @@ unroll, `+incdir+`/`+libext+` handling, dedup, and the existence checks are all
 behaviour worth replicating. See `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py` for
 the reference.
 
-Filename caveat from [07 settled 13 / KIV 17]: rtl_buddy writes a single `run.f` in CWD
-per compile; concurrent compiles collide. The upstream rtl_buddy change (per-invocation
-subdirs) will resolve this. Until then, `write-filelist` writes `run.f` literally.
+Filelist filename (TODO #30 / KIV 17): rtl_buddy writes a single `run.f` in CWD per compile,
+so concurrent compiles would collide. `write-filelist` therefore writes a **per-tag** path
+`run.{test_tag}.f`, where `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
+ctx["test"].get_name())` (the same regex `build-compile-cmd` uses — spec 07), and emits that
+`Path` on its `filelist` port. `build-compile-cmd` passes `filelist["filelist"]` straight to
+`-f`, so it needs no change. This per-tag naming is the interim, graph-local mitigation that
+replaced the removed `serial_acquire` lock shim; the broader CWD isolation (non-verilator
+`simv`, symlinks, tool-internal files) is the upstream per-invocation-subdir change
+([07 item 17](../07-ambiguities-and-assumptions.md)), the reference fix that supersedes this
+naming when it lands. See
+[05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).

@@ -32,14 +32,15 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
    which inputs are matched, how branches re-converge) lives in contracts, and **we author
    the contracts the design needs** — contracts are plugins, not framework internals.
 
-3. **Branching is data routing via output ports; re-convergence is a contract.** A stage
+3. **Branching is data routing via output ports; the summary is a logging concern.** A stage
    that produces a terminal outcome (skip, early-stop, compile-fail, timeout, parsed result)
-   emits it on a dedicated output port that routes the item *off the main line* to the
-   result collector. Items that continue stay on the main line. Because terminal items
-   leave, downstream stages never see them — which is why no module needs a guard. The
-   collector fans the mutually-exclusive terminal ports back in via a **`fan-in-results`
-   relay module** paired with a general-purpose **`any` contract** (the built-in joins
-   can't express mutually-exclusive exits; see [05](05-branching-and-results.md)).
+   emits it on a dedicated output port that routes the item *off the main line*. Items that
+   continue stay on the main line. Because terminal items leave, downstream stages never see
+   them — which is why no module needs a guard. There is **no collector node**: each terminal
+   port is left unwired and its module additionally logs a `test_result` event, which a
+   per-graph **`SummaryHandler` logging plugin** collects and renders (with the `git-status`
+   git stateline) in its `finalise()` hook. The exit code is driven by per-emission
+   `log.error`. This is the TODO #15 redesign — see [05](05-branching-and-results.md).
 
 4. **`compile` and `sim` are one reusable module.** `run-process` — `run(self, command,
    timeout=None) -> {rc, timed_out, stdout_path, stderr_path}` — is the single subprocess
@@ -118,20 +119,23 @@ only the ports they declare, and no module contains scheduling.
         ▼          │                                                                  │   │ │
  gate-sim ──go──► ┤         └──stop───────────────────────────────────────────────►  │   │ │
         ▼                                                                             │   │ │
- route-post ─uvm─► parse-uvm-log ─► {key, result} ──────────────────────────────────►┤   │ │
-           └plain► parse-log ─────► {key, result} ──────────────────────────────────►┘   │ │
-                                                                                          │ │
- fan-in-results (any contract) ◄── all terminal ports ──────────────────────────────────────┘ │
-        ▼                                                                                       │
- aggregate-results (default + finalise)                                                          │
-        └─► summary; log.error on any non-pass → exit 1                                     │
-                                                                                            │
- (persistent config fans out from parse-root / resolve-builder / seed-mode / CLI to nodes above)┘
+ route-post ─uvm─► parse-uvm-log ─► {key, result}  (port UNWIRED) + log.info("test_result")
+           └plain► parse-log ─────► {key, result}  (port UNWIRED) + log.info("test_result")
+
+ ── every terminal port above (skip, stop×3, cc fail, timeout, *_fail, parse result) is
+    UNWIRED; each terminal node log.info("test_result", …); failures also log.error (→ exit 1)
+ git-status (setup) ─► log.info("git_state", …)
+
+ SummaryHandler (per-graph logging plugin) ── collects test_result + git_state events,
+        renders the summary table + git stateline in finalise() (App.cleanup, after gather)
+
+ (persistent config fans out from parse-root / resolve-builder / seed-mode / CLI to nodes above)
 ```
 
 `select`, `sweep`, and `runs` are the only fan-out points (generators). `cc-int` and
-`randseed` are the only joins. `fan-in-results` (with the `any` contract) is the only
-fan-in. Everything else is single-input/single-output with a plain `default` contract.
+`randseed` are the only joins. There is **no fan-in node** — the terminal ports are unwired
+and the summary is a logging concern (TODO #15). Everything else is
+single-input/single-output with a plain `default` contract.
 
 ## Why this maps cleanly
 
@@ -143,6 +147,7 @@ fan-in. Everything else is single-input/single-output with a plain `default` con
 | `--early-stop` phase truncation | `early-stop-gate` nodes emitting on `stop` |
 | compile vs sim | one reusable `run-process` module + two command builders |
 | matching async results to their test | `keyed_join` on the correlation key at `cc-int`/`randseed` |
-| collecting all outcomes | `fan-in-results` relay module + `any` contract → `aggregate-results` |
-| OR-accumulated exit code | `aggregate-results.finalise()` → `log.error` (harness maps ERROR → exit 1) |
+| collecting all outcomes | each terminal node `log.info("test_result", …)` → `SummaryHandler` plugin renders the table |
+| OR-accumulated exit code | per-emission `log.error` at each failure site (harness maps ERROR → exit 1) |
+| git state recorded with results | `git-status` setup node `log.info("git_state", …)` → `SummaryHandler` |
 | `RootConfig`/`SuiteConfig` monolithic loaders | reimplemented as atomic setup nodes; config schema preserved |

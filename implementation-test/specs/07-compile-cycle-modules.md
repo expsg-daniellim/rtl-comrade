@@ -73,3 +73,14 @@ Tests in `modules/tests/test_compile_cycle.py`:
 `build-compile-cmd` and carried in `ctx` — `build-sim-cmd` reads it directly. `build_dir`
 is not in `ctx` (not needed downstream). See
 [04 — keyed_join paragraph](../04-pipeline-and-contracts.md).
+
+**Concurrency note (TODO #30 / item 17).** `build_dir = f"obj_dir_{test_tag}"` and the
+verilator `simv = f"{build_dir}/simv"` are already per-tag, so they don't collide across
+concurrent tests. The `-f` filelist is per-tag because `write-filelist` writes
+`run.{test_tag}.f` (spec 06) and this module passes `filelist["filelist"]` through unchanged —
+no edit needed here. **Residual:** for non-verilator builders `simv = builder_cfg.get_simv()`
+is a *fixed configured* name with no per-tag prefix, which the graph can't freely redirect; its
+isolation waits on the upstream per-invocation-subdir change
+([07 item 17](../07-ambiguities-and-assumptions.md)). Do not add a lock for it — the
+`serial_acquire` shim was removed (TODO #30); see
+[05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).

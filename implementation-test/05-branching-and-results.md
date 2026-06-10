@@ -7,10 +7,11 @@ the main line, and how the mutually-exclusive results re-converge through a cust
 ## Each terminal outcome is a named output port
 
 For each test invocation `rtl_buddy` produces **exactly one** terminal result. Each
-producing stage emits it on a dedicated output port that goes to the collector; the
-continue-path goes to the next stage:
+producing stage emits it on a dedicated output port (left **unwired** since the TODO #15
+redesign — see [Re-convergence](#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node))
+and additionally logs a `test_result` row; the continue-path goes to the next stage:
 
-| stage | continue port → next stage | terminal port → `agg` |
+| stage | continue port → next stage | terminal port (unwired; logs `test_result`) |
 |---|---|---|
 | `filter` | `keep` | `skip` (`SkipResults`) |
 | `gate-pre` | `go` | `stop` (`EarlyStopResults`) |
@@ -39,237 +40,224 @@ stream, reproducing `rtl_buddy`. `--early-stop post` (default) means no gate fir
 ## `--list` as an empty stream
 
 `select-tests` with `list=True` prints names and emits nothing. The empty stream
-propagates `EndSentinel` to `agg`, which finalises with zero rows → exit 0. No special
-casing anywhere else.
+propagates `EndSentinel` through every node; no terminal site fires, so `SummaryHandler`
+collects zero `test_result` rows and its `finalise()` is a no-op, no `log.error` fires →
+exit 0. No special casing anywhere else.
 
-## Re-convergence: the fan-in module and `any` contract
+## Re-convergence: the summary is a logging concern, not a graph node
 
-The 13 terminal ports must re-converge at `agg`. A given key reaches exactly one of the 13
-ports; the others never fire for it. The built-in contracts don't fit:
+> **Redesigned (TODO #15, 2026-06-10).** Earlier drafts re-converged the 13 terminal ports
+> at a `fan-in-results` relay feeding an `aggregate-results` sink whose `finalise()` rendered
+> the summary table and drove the exit code. TODO #15 retired that topology: the summary is
+> rendered by a per-graph **logging handler**, so the terminal nodes need no collector and
+> the graph needs no sink. Rationale in [Why the summary left the graph](#why-the-summary-left-the-graph).
 
-- **`branch_aware_join` — no.** It fires a key only when *every* port has seen it (real or
-  `BranchSkip`). Our terminal ports are mutually exclusive per key; the incomplete key
-  stays unresolved forever.
-- **`keyed_join` / `default` (all-ports) — no.** Both assume every port participates per
-  unit of work.
+The 13 terminal ports no longer converge anywhere. Each terminal node does two things at its
+emission site:
 
-The solution is two cooperating pieces:
+1. **emits its `TestResults` on its named output port exactly as before** — but that port is
+   left **unwired**, so the harness logs `no_destination` at INFO and the item simply leaves
+   the graph. No module signature or `definite_emits` change: the module stays graph-agnostic
+   and does not know whether anything listens.
+2. **calls `log.info("test_result", key=..., result=..., desc=...)`** so the summary handler
+   can collect the row. (Previously these rows were emitted only by `aggregate-results.finalise()`;
+   they now move to each terminal site.)
 
-**`fan-in-results` module** — uses `**kwargs` so the harness populates its 13 ports from
-graph edges at load time (non-definite-inputs mechanism, `graph.py:95-97`). The body
-discards the port name and forwards the payload:
+A `git-status` setup node similarly calls `log.info("git_state", branch=..., sha=...,
+dirty=...)` once at run start. A **`SummaryHandler`** — a per-graph `logging.Handler` plugin —
+collects both event kinds and renders the consolidated table (with the git stateline) from
+its `finalise()` teardown hook.
+
+### The `SummaryHandler` logging plugin
+
+The handler attaches **no formatter**, so it receives the raw structured event `dict` as
+`record.msg` (`docs/harness/logging.md` — "a wholly-custom `logging.Handler` inherits only the
+shared preprocessors"). It accumulates `test_result` rows and the single `git_state` event,
+then renders in `finalise()`:
 
 ```python
-class FanInResultsMod:
-    def run(self, **inputs):
-        _, payload = next(iter(inputs.items()))
-        return ("result", payload)
+# log/summary.py
+import logging
+
+class SummaryHandler(logging.Handler):
+    def __init__(self):
+        super().__init__()
+        self._rows = []
+        self._git_state = None
+
+    def emit(self, record):
+        event = record.msg                      # raw event dict; no formatter attached
+        if not isinstance(event, dict):
+            return
+        match event.get("event"):
+            case "test_result":
+                self._rows.append(event)
+            case "git_state":
+                self._git_state = event
+
+    def finalise(self):
+        if not self._rows:                      # nothing to summarise → no-op
+            return
+        if self._git_state is not None:
+            ...                                 # render the git stateline
+        ...                                     # render the consolidated PASS/FAIL/NA table
 ```
 
-**`any` contract** — fires on whichever port is ready first, one delivery per call, and
-propagates `EndSentinel` after all ports have ended:
+`finalise()` is the now-real teardown hook: `App.cleanup` walks the root logger's handlers
+and calls `finalise()` on any that define one, **before** the failure check, so the table
+renders whether the run passed or failed-deferred (`src/rtl_comrade/app.py:171-174`,
+`docs/logger/implementation.md` — "End-of-run finalisation with `finalise()`").
+
+### The paired drop-processor
+
+With `include_default: true` the harness `ConsoleRenderer` would also print every
+`test_result` / `git_state` line, duplicating the table. A processor in the same `logging`
+block raises `structlog.exceptions.DropEvent` on those two events to hide them from the
+console; the `SummaryHandler`, being a separate root handler with its own (empty) chain,
+still receives them (`docs/harness/logging.md` — the `DropEvent` catch is on the harness
+handler's write path only).
 
 ```python
-@dataclass
-class AnyContract:
-    @dataclass(frozen=True)
-    class Config:
-        release_lock: str | None = None
+# log/summary.py
+from structlog.exceptions import DropEvent
 
-    id: str
-    ports: dict[str, ContractPort]
-    config: Config
-    _pending: dict[str, asyncio.Task] = field(default_factory=dict, init=False, repr=False)
-
-    async def get_inputs(self) -> dict[str, Payload] | EndSentinel:
-        for name, port in self.ports.items():
-            if not port.has_ended() and name not in self._pending:
-                self._pending[name] = asyncio.ensure_future(port.get())
-
-        while self._pending:
-            done, _ = await asyncio.wait(self._pending.values(), return_when=asyncio.FIRST_COMPLETED)
-            for name, task in list(self._pending.items()):
-                if task not in done:
-                    continue
-                val = task.result()
-                del self._pending[name]
-                if isinstance(val, EndSentinel):
-                    continue
-                if self.config.release_lock is not None:
-                    _get_lock(self.config.release_lock).release()
-                return {name: val}   # port name surfaced to module; FanInResultsMod discards it
-
-        return EndSentinel(self.id)
+def drop_summary_events(logger, method_name, event_dict):
+    if event_dict.get("event") in ("test_result", "git_state"):
+        raise DropEvent
+    return event_dict
 ```
 
-### Invariants and termination
+Both are wired per-graph in `graphs/test.yaml` (see [06](06-graph-yaml.md)); a graph that
+wants no summary simply omits the `logging` block.
 
-- **State held across calls.** `_pending: dict[str, asyncio.Task]` carries one in-flight
-  `port.get()` task per open port. Tasks created in call N but not returned remain in
-  `_pending` and are honoured in call N+1. Pending tasks are **never cancelled** between
-  calls.
-- **No-loss invariant.** `asyncio.wait(..., FIRST_COMPLETED)` may report several `done`
-  tasks in one wake-up. The contract returns the first non-`EndSentinel` result and leaves
-  the remaining done tasks in `_pending`; on the next call they are returned immediately
-  (already-completed).
-- **Per-port `EndSentinel` handling.** When a port's task resolves to `EndSentinel`, the
-  task is removed from `_pending` and no new task is created for it (`port.has_ended()` is
-  now `True`). Other ports keep being awaited.
-- **Drainage order.** A port's payloads queued before its `EndSentinel` are delivered
-  first, by FIFO at the port.
-- **Termination rule.** `get_inputs()` returns `EndSentinel(self.id)` exactly when every
-  port has emitted its `EndSentinel` and every previously-pending task has resolved
-  (`_pending` is empty and no new tasks can be created).
-- **`release_lock` side-effect** (when configured — interim shim only, see
-  [Serialising contracts](#serialising-contracts--interim-parallel-safety-posture)). Fires
-  once per delivered payload, immediately before the `return`. `EndSentinel` paths do
-  **not** release. Mismatched release (no prior acquire) raises `RuntimeError` from
-  `asyncio.Lock.release()` — fail-fast, no guard.
-- **Cancellation.** Mid-`get_inputs` cancellation by the harness drops in-flight items.
-  This is process-end behaviour, matching every other contract.
+### The CRITICAL path
 
-`any` is broadly reusable for any "deliver the first ready item" fan-in. Register it in
-the contracts manifest (see [06](06-graph-yaml.md)).
+`SummaryHandler` is added to the root logger **after** `LoggingFatalHandler`, which raises
+`typer.Exit(1)` on a `CRITICAL` record before any later handler runs — so the handler never
+observes `CRITICAL` (`docs/harness/logging.md` — "custom handlers never observe `CRITICAL`
+records"). On a `CRITICAL` path the run aborts before `App.cleanup`, so `finalise()` is never
+reached and no table renders. This is acceptable: `CRITICAL` paths (missing/malformed config,
+builder/testbench resolution) abort before any test result exists, and the `if not self._rows:
+return` guard keeps `finalise()` a no-op whenever there is nothing to summarise.
 
-## Serialising contracts — interim parallel-safety posture
+### Why the summary left the graph
 
-> **Temporary measure.** The serialising contracts described in this section exist *only*
-> until the upstream `rtl_buddy` change to per-test (per-invocation) artefact directories
-> lands. Once compile/sim each get their own working directory, the collisions these
-> contracts protect against (next compile stomping the previous test's `obj_dir`, `simv`,
-> `run.f`) disappear, and `write-filelist` returns to plain `default` while `fan-in`'s
-> `any` contract drops its `release_lock` config field. See
-> [07](07-ambiguities-and-assumptions.md) item 17. Do not build further design on top of
-> the shim; treat it as removable.
+The graph never needed a sink node for termination. `graph.py` gathers **all** node
+coroutines (`runs = [node.run() for node in graph.nodes.values()]; await asyncio.gather(*runs)`),
+not a designated sink; each node terminates when its contract returns `EndSentinel`, and a
+node with no outbound edge simply propagates to an empty destination list. `aggregate-results`
+contributed nothing to termination — its only purpose was to provide a `finalise()` callsite
+after all results arrived, which is a *rendering* concern, not a *termination* one. Moving
+rendering to a logging handler removes both `aggregate-results` and the `fan-in-results` relay
+that existed solely to feed it. It also dissolves the original awkwardness that prompted TODO
+#15: `git-status` becomes a plain `log.info` from a setup node, with no graph routing,
+persistent inputs, or payload surgery. Any future cross-cutting run metadata (timing,
+platform, invocation timestamp) follows the same pattern.
+
+### The `any` contract (retained, currently unwired)
+
+The general-purpose **`any` contract** (fire on whichever port is ready first, one delivery
+per call, end when all ports end) was created for `fan-in-results`. With the relay removed it
+has **no consumer in the `test` graph**, but it is retained as a reusable contract. Its
+sketch, invariants, and tests live in [spec 02](specs/02-any-contract-and-fan-in.md);
+correctness review is [07 item 20](07-ambiguities-and-assumptions.md). (It briefly also hosted
+the interim parallel-safety shim's `release_lock` hook; that shim was removed entirely by
+TODO #30 in favour of per-tag artefact naming — see
+[Interim CWD-collision posture](#interim-cwd-collision-posture--per-tag-artefact-naming).)
+
+## Interim CWD-collision posture — per-tag artefact naming
+
+> **Posture (TODO #30, 2026-06-10): name artefacts per-tag; no serialisation.** An earlier
+> draft serialised the compile/sim region with a process-wide `asyncio.Lock`
+> (`serial_acquire` on `write-filelist` + an `any.release_lock` release on `fan-in`). That
+> shim was **removed**: it only ever bought correctness, not parallelism (it held the lock
+> across the whole expensive region), and the TODO #15 redesign deleted its release node. In
+> its place, the graph names the artefacts it controls **per-tag**, so concurrent tests don't
+> collide and the region stays genuinely concurrent. This is an **interim, graph-local subset**
+> of [07](07-ambiguities-and-assumptions.md) item 17 — the upstream per-invocation-subdir
+> change — which remains the **reference fix** and is kept on the books (see "Residual" below).
 
 ### The hazard
 
-A compile produces non-graph-routed artefacts in CWD (`obj_dir_<tag>/`, the `simv` binary,
-and `run.f`) that the *same test's* sim later consumes. The harness launches all node tasks
-concurrently (`asyncio.gather`), so absent any serialisation a second compile can start while
-a previous test's sim has not yet read those artefacts, and stomp them. `sim-build` reads `simv` from `ctx["simv"]` (set by `build-compile-cmd`), but the file on
-disk that the path refers to is shared. The lock makes this region atomic per test.
+A compile produces non-graph-routed artefacts in CWD that the *same test's* sim later
+consumes. The harness launches all node tasks concurrently (`asyncio.gather`), and `cc-run`
+(compile) and `sim-run` (sim) are *different* nodes, so test B's compile can run while test
+A's sim has not yet read its artefacts. The collision is on any **shared-name** artefact.
 
-### Region and lock semantics
+### What the graph names per-tag (collision removed)
 
-- **Region**: from `write-filelist`'s invocation through `aggregate-results`' receipt of that
-  test's terminal result.
-- **Atomicity unit**: one (test, sweep-variant). For the plain `test` graph `expand-runs`
-  defaults to `[None]` (R=1) so each acquire matches exactly one merge release; sibling
-  graphs with R>1 (`randtest`) cannot use this design as-is — see Constraints below.
-- **Lock object**: a single process-wide `asyncio.Lock` per `lock_name`. The plain `test`
-  graph uses one lock named `compile-sim`.
+`build-compile-cmd` already computes `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
+ctx["test"].get_name())` and derives per-tag paths, so most artefacts are already isolated:
 
-### Two contracts share one lock
+| artefact | producer | naming | status |
+|---|---|---|---|
+| `obj_dir_<tag>/` | `build-compile-cmd` (`--Mdir`) | `f"obj_dir_{test_tag}"` | already per-tag |
+| verilator `simv` | compile | `f"obj_dir_{test_tag}/simv"` | already per-tag |
+| compile/sim `.log`/`.err` | `run-process` | `f"{logs_dir}/{test_tag}…"` | already per-tag |
+| `.randseed` | `write-randseed` | `f"{logs_dir}/{test_tag}…"` | already per-tag |
+| **`run.f`** | **`write-filelist`** | **was literal `run.f` → now `run.{test_tag}.f`** | **fixed by (B)** |
 
-The acquire side is a new contract `serial_acquire` on `write-filelist`. The release side
-is the `any` contract on `fan-in`, configured with an optional `release_lock` field. Both
-contracts import the same module-level lock registry from `contracts/serial.py`:
+The only change (B) makes is the filelist: `write-filelist` writes `run.{test_tag}.f` and
+emits that `Path` on its `filelist` port; `build-compile-cmd` already passes
+`filelist["filelist"]` to `-f`, so no edge or downstream change is needed. `write-filelist`
+reverts to the plain `default` contract.
 
-```python
-# contracts/serial.py
-import asyncio
-from dataclasses import dataclass
-from rtl_comrade.api import Payload, EndSentinel, ContractPort
-from rtl_comrade.contract_default import DefaultContract
+### Residual — what only item 17 fixes
 
-# Module-level; survives across contract instantiations because the plugin loader reuses
-# the sys.modules entry (loader.py:156-159).
-_LOCKS: dict[str, asyncio.Lock] = {}
+Per-tag naming closes the filelist collision and confirms the already-per-tag artefacts, but
+it does **not** cover artefacts whose names the graph cannot freely choose:
 
-def _get_lock(name: str) -> asyncio.Lock:
-    if name not in _LOCKS:
-        _LOCKS[name] = asyncio.Lock()
-    return _LOCKS[name]
+- **non-verilator `simv`** — a *fixed configured* name from `builder_cfg.get_simv()` (no
+  `build_dir` prefix; see [01a — Verilator quirk](specs/01a-builder-schema.md)). Redirecting
+  it per-tag needs a builder-specific output-path option, not a rename the graph owns.
+- **`test.log`/`test.err`/`test.randseed` symlinks** — `link-latest` forces fixed "latest"
+  names in CWD; concurrent runs race on them (last-writer-wins; convenience pointers, not
+  corrupting).
+- **anything the simulator/compiler writes into CWD itself** (intermediate files, tool logs).
 
-@dataclass
-class SerialAcquireContract(DefaultContract):
-    """Like default, but acquires a named lock per consumed item before returning."""
-
-    @dataclass(frozen=True)
-    class Config(DefaultContract.Config):
-        lock_name: str = ""
-
-    async def get_inputs(self) -> dict[str, Payload] | EndSentinel:
-        inputs = await super().get_inputs()
-        if isinstance(inputs, EndSentinel):
-            return inputs
-        await _get_lock(self.config.lock_name).acquire()
-        return inputs
-```
-
-The acquire happens *after* default-contract logic has resolved the upstream item and
-*before* the harness calls the module — so a `write-filelist` invocation never starts
-until the lock is free, and the contract only acquires when it has real work to dispatch.
-End-sentinel propagation does not acquire.
-
-The release side is the `AnyContract`'s `Config.release_lock` field (sketch in
-[Re-convergence](#re-convergence-the-fan-in-module-and-any-contract)). On every
-`get_inputs()` call that delivers one payload, the contract releases the named lock once.
-Returning `EndSentinel` does not release.
-
-`asyncio.Lock` releases are not bound to the acquiring task, so the acquire-in-`write-filelist`
-/ release-in-`agg` cross-node handoff is sound.
-
-### Topology consequences
-
-- The pre-region nodes (`select`, `filter`, `load-model`, `sweep`, `preproc`, `gate-pre`)
-  still parallelise across tests; only `write-filelist` onward serialises.
-- The mid-region nodes (`cc-build`, `cc-run`, `cc-int`, `gate-comp`, `runs`, `seed`,
-  `sim-build`, `sim-run`, `randseed`, `link-latest`, `sim-int`, `gate-sim`, `route-post`,
-  `parse-log`, `parse-uvm-log`) do not change contract — the global lock alone is enough
-  to ensure only one test's data is in flight through them at a time.
-- Every per-test failure path inside the region (`cc-int.fail`, `gate-comp.stop`,
-  `seed.fail`, the four pre-region `*.fail` ports that also route into `fan-in`) still
-  reaches `agg` via `fan-in`; the release fires uniformly on every port.
-
-### Constraints
-
-- **Plain `test` graph only (R=1).** Each `serial_acquire` invocation must match exactly
-  one merge release. With R>1, one compile holds the lock while R sim-runs produce R
-  results — only one releases. The other R−1 either orphan the lock or release-too-early.
-  Sibling graphs (`randtest`, `regression`) need a different release rule (e.g. a per-key
-  release counter on the merge side, or a post-`sim-run` release point that holds for all
-  R runs); design deferred until those graphs are built.
-- **Every acquired item must reach `agg`.** The invariant assumed by acquire/release
-  pairing is that any item that crosses `write-filelist` eventually emits one terminal
-  payload into the merge fan-in. If an upstream contract drops items mid-region (e.g.
-  `KeyedJoinContract` returning `EndSentinel` with `incomplete_keys`), those locks leak.
-  Process exit clears them, so this is not a runtime hazard, but future contract changes
-  must preserve the invariant.
-- **Single graph instance per process.** The lock registry is process-wide; running two
-  graphs concurrently in one process would share locks. The harness runs one graph per
-  process so this is moot, but worth recording.
+These are exactly the artefacts that **item 17's per-invocation working directories** isolate
+wholesale, and that reference implementation is materially more complete than this naming
+subset. Until item 17 lands, structural concurrency is safe for verilator builders and the
+filelist; for builders whose `simv` is a fixed name, concurrent same-builder runs still rely
+on item 17 (or running them one at a time). This residual is recorded under item 17 — do not
+re-introduce a lock to paper over it; that path was tried and removed.
 
 ## Result aggregation and exit code
 
-`aggregate-results` accumulates each delivered `result` in `run()` and, in `finalise()`:
+There is no aggregator node. The exit code and the summary are produced by two independent,
+self-contained mechanisms:
 
-1. prints the summary table (`key`/`test_name`, `result`, `desc`), reproducing
-   `do_cmd_test`'s "Test Results Summary";
-2. logs `ERROR` if **any** row is not `is_pass()`. The harness turns a single ERROR into a
+1. **Exit code** is driven by the **per-emission `log.error`** at each failure site (table
+   below). A single `ERROR` sets `handler.failure = True`, which the harness turns into a
    non-zero exit, reproducing `rtl_buddy`'s `exit_code |= 0 if is_pass() else 1` exactly
-   (SKIP/PASS contribute nothing; FAIL/NA — compile fail, timeout, early-stop, unknown —
-   force exit 1).
+   (SKIP/PASS log no `ERROR` and contribute nothing; FAIL/NA — compile fail, timeout,
+   early-stop, unknown — each `log.error` once and force exit 1). This is now the **sole**
+   exit-code driver; the old belt-and-braces `aggregate-results.finalise()` `log.error` is
+   gone with the node.
+2. **Summary table** is rendered by `SummaryHandler.finalise()` from the `test_result` rows
+   each terminal site emits (see [Re-convergence](#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)),
+   reproducing `do_cmd_test`'s "Test Results Summary" plus the git stateline.
 
 `CRITICAL` stays reserved for harness-fatal conditions (missing/malformed `root_config.yaml`,
 missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.Abort`.
 
 ## Log idioms per failure site
 
-Each module and contract that can fail records its idiom here. Three idioms are in play, per
-`docs/invariants.md:14-23` and `docs/harness/logging.md`:
+Each module and contract that can fail records its idiom here. Every terminal site (failure
+or not) additionally emits `log.info("test_result", key=..., result=..., desc=...)` at
+emission so `SummaryHandler` can collect its row; the rows below list only the *failure*
+idiom. Three failure idioms are in play, per `docs/invariants.md:14-23` and
+`docs/harness/logging.md`:
 
 - **`log.critical`** — immediate `SystemExit(1)`. Reserved for unrecoverable setup/config
   failures and harness-internal scheduling errors.
-- **Port-routed `result`** — failure becomes a `result` payload on a dedicated output port,
-  routed via `fan-in-results` to `aggregate-results`. Per-test failures use this idiom.
-- **`log.error` at emission** — paired with port-routed `result` for every per-test FAIL
-  emission site. The deferred-exit flag (`handler.failure`) is set both at emission
-  (immediate operator visibility, belt-and-braces against any merge / `finalise()` misfire)
-  and again at `aggregate-results.finalise()` (centralised summary record).
-- **No log call** — non-failure terminals (SKIP, early-stop) emit a `result` payload for the
-  summary table but do not log.
+- **Unwired `result` port** — the terminal outcome is still returned on the module's named
+  output port (`skip`, `stop`, `fail`, `timeout`, `result`), but the port has no edge, so
+  the harness logs `no_destination` at INFO and the item leaves the graph. No collector.
+- **`log.error` at emission** — fires once at every per-test FAIL emission site and is the
+  **sole** deferred-exit driver (`handler.failure`). There is no second `finalise()` site.
+- **No `log.error`** — non-failure terminals (SKIP, early-stop) emit their `test_result`
+  row but log no `ERROR`, so they do not affect the exit code.
 
 ### Setup / config — `log.critical`
 
@@ -284,9 +272,9 @@ Each module and contract that can fail records its idiom here. Three idioms are 
 | `select-tests` | named test not in suite |
 | `run-process` | subprocess launch failure (binary not on PATH, permission denied) — distinct from non-zero `rc`, which is per-test |
 
-### Per-test failure — port-routed `result` to merge, `log.error` at emission *and* at aggregate
+### Per-test failure — unwired `result` port + `log.error` at emission (sole exit driver) + `log.info("test_result")` row
 
-| Site | Port → payload | Emission log |
+| Site | Port → payload (unwired) | Emission log |
 |---|---|---|
 | `interpret-compile.fail` | `fail` → `CompileFailResults` | `log.error` (compile `rc`, stderr path) |
 | `interpret-sim.timeout` | `timeout` → `SimTimeoutResults` | `log.error` (`timed_out`, stderr path) |
@@ -299,23 +287,25 @@ Each module and contract that can fail records its idiom here. Three idioms are 
 | `resolve-seed.fail` (REPLAY only) | `fail` → FAIL payload | `log.error` (missing/malformed `.randseed` path) |
 
 The bottom five rows are **new failure ports** added to modules that previously had only a
-success path. Topology consequence: `fan-in-results` now has 13 edge-derived input ports
-(up from the original 8). Adding a new terminal source means one new graph edge to
-`fan-in` — neither `fan-in-results`' `**inputs` signature nor `aggregate-results`'
-`run(self, result)` changes.
+success path. Topology consequence: all 13 terminal ports are now **unwired** — there is no
+`fan-in`/`aggregate-results` to receive them (TODO #15 redesign). Adding a new terminal source
+adds no edge; the module just emits its `test_result` row and leaves its port unwired. Every
+failure site emits exactly one `log.error` (the sole exit-code driver) and one
+`log.info("test_result", ...)` (the summary row).
 
-### Per-test non-failure terminals — port-routed `result` to merge, **no log call**
+### Per-test non-failure terminals — unwired `result` port + `log.info("test_result")` row, **no `log.error`**
 
-| Site | Port → payload |
+| Site | Port → payload (unwired) |
 |---|---|
 | `filter-reglvl.skip` | `skip` → `SkipResults` (SKIP is pass-like via `is_pass()`) |
 | `early-stop-gate.stop` (×3 instances) | `stop` → `EarlyStopResults` (normal terminal, not a failure) |
 
-### Centralised exit-driver — `log.error` (deferred non-zero exit)
+### Summary rendering — `SummaryHandler.finalise()` (not an exit driver)
 
-| Site | Trigger | Log call |
+| Site | Trigger | Action |
 |---|---|---|
-| `aggregate-results.finalise()` | any accumulated row not `is_pass()` | `log.error("suite_has_failures", n=...)` once |
+| `SummaryHandler.finalise()` | run end (via `App.cleanup`), if any `test_result` row collected | render the consolidated table + git stateline; **no** `log.error` (exit is driven per-emission above) |
+| `git-status` (setup) | run start | `log.info("git_state", branch=..., sha=..., dirty=...)` once; collected by `SummaryHandler` |
 
 ### Deferred
 

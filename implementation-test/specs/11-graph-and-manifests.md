@@ -10,14 +10,20 @@ subcommand in `rtl_comrade_config.yaml`.
 
 ## Deliverables
 
-- **`graphs/test.yaml`** — verbatim from [06](../06-graph-yaml.md): all 22 nodes, CLI
-  edges (including `test_name` as positional with `option: false, default: ""`), setup
-  chain, persistent-config fan-out, list-mode routing, main-line continue ports, and the
-  eight terminal-port edges into `agg`.
+- **`graphs/test.yaml`** — verbatim from [06](../06-graph-yaml.md): all nodes (including the
+  `git-status` setup node; **no** `fan-in`/`agg` nodes — removed by TODO #15), CLI edges
+  (including `test_name` as positional with `option: false, default: ""`), setup chain,
+  persistent-config fan-out, list-mode routing, main-line continue ports, the **unwired**
+  terminal ports (no edges), and the `logging` block that wires the `SummaryHandler` plugin.
+- **`graphs/log/summary.py`** — the `SummaryHandler` + `drop_summary_events` logging plugin
+  (spec 10), referenced by `path`/`name` from the `logging` block.
 - **`modules/config.yaml`** — full manifest from [06](../06-graph-yaml.md) covering every
-  module from specs 03–10 (`run-process`, the setup chain, selection/expansion, prep,
-  compile cycle, sim cycle, post, control/aggregate).
-- **`contracts/config.yaml`** — `any` and `serial_acquire` registrations from spec 02.
+  module from specs 03–10 (`run-process`, the setup chain incl. `git-status`,
+  selection/expansion, prep, compile cycle, sim cycle, post, control).
+- **`contracts/config.yaml`** — the `any` registration from spec 02 (registered for reuse but
+  **unwired** in `test`). There is **no** `serial_acquire` contract: the interim parallel-safety
+  lock shim was removed (TODO #30) in favour of per-tag artefact naming — see
+  [06](../06-graph-yaml.md) and [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
 - **`rtl_comrade_config.yaml`** — add:
   ```yaml
   commands:
@@ -41,8 +47,8 @@ This spec is mostly assembly — copy [06](../06-graph-yaml.md) faithfully. If a
 node/port name diverged between [03](../03-module-catalog.md) and what got built in specs
 04–10, reconcile here (prefer matching the actual module signatures over the plan).
 
-The 13 terminal edges wire to `fan-in` (a `fan-in-results` node with the `any` contract),
-not directly to `agg`. `fan-in` emits one `result` edge to `agg`, which uses the plain
-`default` contract. `fan-in-results` uses `**kwargs`; the harness populates its port set
-from the 13 incoming edges at load time. See [spec 02](02-any-contract-and-fan-in.md) for the
-`any` contract and module specs.
+The 13 terminal ports are **unwired** (TODO #15) — there is no `fan-in`/`agg` node. Each
+terminal node logs a `test_result` event; the `SummaryHandler` plugin (declared in the
+`logging` block) renders the table in `finalise()`, and per-emission `log.error` drives the
+exit code. `validation.py` reports the unwired ports as `no_destination` at INFO, not errors.
+See [spec 10](10-control-aggregate-modules.md) for the plugin.

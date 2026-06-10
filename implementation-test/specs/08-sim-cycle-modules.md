@@ -73,7 +73,12 @@ In `modules/rtl_test/sim.py`:
 - `LinkLatestMod` — `(test_run)` → force CWD symlinks `test.log`/`test.err`/`test.randseed`
   to this run's files (paths from `test_run["log"]`, `test_run["err"]`,
   `test_run["randseed_path"]`); emits `test_run` unchanged. Symlinks themselves are
-  always placed in CWD, matching rtl_buddy.
+  always placed in CWD, matching rtl_buddy. **Concurrency note (TODO #30 / item 17):** these
+  are fixed "latest" pointer names, so concurrent tests race on them (last-writer-wins). They
+  are convenience pointers, not corrupting — the targets they point to are per-tag. Per-tag
+  naming (TODO #30) deliberately does **not** rename these; isolating them is the upstream
+  per-invocation-subdir change ([07 item 17](../07-ambiguities-and-assumptions.md)). Do not add
+  a lock — the `serial_acquire` shim was removed.
 - `InterpretSimMod` — `(test_run)` → pure routing: `test_run["timed_out"]` →
   `("timeout", {"key", "result": SimTimeoutResults()})`, else `("ok", test_run)`.
   **Failure handling**: routing on `test_run["timed_out"]`; no Python exception is caught.

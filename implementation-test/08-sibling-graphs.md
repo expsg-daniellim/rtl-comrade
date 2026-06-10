@@ -22,8 +22,10 @@ The entire main pipeline carries over with the same contracts and wiring:
 - per-run — `expand-runs`, `resolve-seed`, `build-sim-cmd`, `run-process` (sim),
   `write-randseed`, `link-latest`, `interpret-sim`, `gate-sim`
 - post — `route-post`, `parse-log`, `parse-uvm-log`
-- control — `early-stop-gate`, `aggregate-results`
-- contract — `merge` (the custom non-correlating fan-in)
+- control — `early-stop-gate`
+- summary — the `SummaryHandler` logging plugin (per TODO #15 item 27; replaces the former
+  `fan-in-results` + `aggregate-results` + `any` fan-in). Sibling graphs reuse it by carrying
+  the same `logging` block.
 
 ---
 
@@ -124,8 +126,9 @@ default-resolution lives in one obvious place.
 - Filter wiring: `reg_level`/`start_level` CLI edges connect to the existing
   `filter-reglvl` persistent inputs (which sit unwired in the test graph).
 - Suite stamping: `parse-suite-config` stamps the suite name into each test's identity
-  early, so the correlation key becomes `<suite>/<test>#<sweep>#<run>`. `aggregate-results`
-  then needs no code change to produce per-suite-grouped output.
+  early, so the correlation key becomes `<suite>/<test>#<sweep>#<run>`. The `SummaryHandler`
+  plugin (TODO #15 item 27) then needs no code change to produce per-suite-grouped output —
+  every `test_result` row already carries the suite-prefixed key.
 - `derive-seed-mode` removed; `resolve-seed` receives `seed_mode = DEFAULT` from a small
   constant emitter, *or* takes `seed_mode` as node config rather than a port. (Minor
   decision; either works.)
@@ -148,8 +151,8 @@ default-resolution lives in one obvious place.
    `do_rtl_regression` (`rtl_buddy.py:371-438`) collects every (suite, test) result across
    all suites and at lines 423-435 prints a **single end-of-run table** with `suite_name`
    as the first column (one row per `(suite, test)` pair), via `logger.result(...)`.
-   `aggregate-results.finalise()` already does exactly this — one-shot summarisation at
-   stream end — and with the suite name stamped into the correlation key at
+   `SummaryHandler.finalise()` already does exactly this — one-shot summarisation at
+   run end — and with the suite name stamped into the correlation key at
    `parse-suite-config` (`<suite>/<test>#<sweep>#<run>`), every row carries its suite, the
    summary table groups naturally on that prefix, and the OR-accumulated exit code falls
    out the same way. **No module change needed.**

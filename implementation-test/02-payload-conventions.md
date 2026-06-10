@@ -79,7 +79,7 @@ sim_cmd  = { "key": k, "seed": int, "log": Path,             # sim-build        
 
 These never accumulate. Each is consumed by exactly the next stage(s).
 
-## Shape 3 — result payloads (terminal, route to the collector)
+## Shape 3 — result payloads (terminal; port unwired, row logged)
 
 The single shape every terminal output port emits, regardless of which stage produced it:
 
@@ -87,8 +87,12 @@ The single shape every terminal output port emits, regardless of which stage pro
 result = { "key": k, "result": <TestResults> }
 ```
 
-Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`) and routed
-to one port of `aggregate-results`. See [05](05-branching-and-results.md).
+Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`). Since the
+TODO #15 redesign these ports are **unwired** — there is no `aggregate-results` collector.
+Each terminal node additionally calls `log.info("test_result", key=k,
+result=<TestResults>.results["result"], desc=...["desc"])`; the per-graph `SummaryHandler`
+plugin collects those events and renders the table. The `<TestResults>` object is still built
+(for `is_pass()` classification and the logged fields). See [05](05-branching-and-results.md).
 
 ## `TestResults` values used at the terminal ports
 

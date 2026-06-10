@@ -1,8 +1,8 @@
 # Concrete graph YAML and manifests
 
-A proposed `graphs/test.yaml` plus the manifest entries for the new modules and the new
-`any` contract. Node ids match [04](04-pipeline-and-contracts.md); payload shapes and
-ports match [02](02-payload-conventions.md)/[03](03-module-catalog.md).
+A proposed `graphs/test.yaml` plus the manifest entries for the new modules and the per-graph
+`SummaryHandler` logging plugin. Node ids match [04](04-pipeline-and-contracts.md); payload
+shapes and ports match [02](02-payload-conventions.md)/[03](03-module-catalog.md).
 
 ## `rtl_comrade_config.yaml` (add the command)
 
@@ -36,6 +36,7 @@ nodes:
 - { id: ensure-logs,  module: ensure-logs-dir,    contract: unit }
 - { id: parse-suite,  module: parse-suite-config, contract: unit }
 - { id: seed-mode,    module: derive-seed-mode,   contract: unit }
+- { id: git-status,   module: git-status,         contract: unit }
 
 # --- list mode vs run ---
 - { id: route-list, module: route-list-mode, contract: unit }
@@ -63,10 +64,7 @@ nodes:
   contract: default
   config: { phase: pre }
   contract_config: { persistent_inputs: [ early_stop ] }
-- id: filelist
-  module: write-filelist
-  contract: serial_acquire
-  contract_config: { lock_name: compile-sim }
+- { id: filelist, module: write-filelist, contract: default }   # writes run.<tag>.f (per-tag, TODO #30)
 
 # --- compile (run-process #1) ---
 - id: cc-build
@@ -110,15 +108,18 @@ nodes:
   config: { phase: sim }
   contract_config: { persistent_inputs: [ early_stop ] }
 
-# --- post + aggregate ---
+# --- post (terminal nodes; result ports left unwired, summary via logging plugin) ---
 - { id: route-post,    module: route-post,        contract: default }
 - { id: parse-log,     module: parse-log,         contract: default }
 - { id: parse-uvm-log, module: parse-uvm-log,     contract: default }
-- id: fan-in
-  module: fan-in-results
-  contract: any
-  contract_config: { release_lock: compile-sim }
-- { id: agg, module: aggregate-results, contract: default }
+# (no fan-in / agg nodes — removed by TODO #15; summary is a logging concern, see below)
+
+# --- per-graph logging: render the summary table + git stateline ---
+logging:
+  include_default: true
+  handlers:
+  - { path: log/summary.py, name: drop_summary_events }   # processor: DropEvent on test_result/git_state → hide from console
+  - { path: log/summary.py, name: SummaryHandler }        # logging.Handler: collect rows, render table in finalise()
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -195,36 +196,28 @@ edges:
 - { src: { node: route-post,port: plain },   dst: { node: parse-log,     port: test_run } }
 - { src: { node: route-post,port: uvm },     dst: { node: parse-uvm-log, port: test_run } }
 
-# ---- terminal ports → fan-in relay (one input port per source; fan-in uses **kwargs) ----
-- { src: { node: filter,     port: skip },    dst: { node: fan-in, port: skip } }
-- { src: { node: gate-pre,   port: stop },    dst: { node: fan-in, port: es_pre } }
-- { src: { node: cc-int,     port: fail },    dst: { node: fan-in, port: cc_fail } }
-- { src: { node: gate-comp,  port: stop },    dst: { node: fan-in, port: es_comp } }
-- { src: { node: sim-int,    port: timeout }, dst: { node: fan-in, port: sim_to } }
-- { src: { node: gate-sim,   port: stop },    dst: { node: fan-in, port: es_sim } }
-- { src: { node: parse-log },                 dst: { node: fan-in, port: post_plain } }
-- { src: { node: parse-uvm-log },             dst: { node: fan-in, port: post_uvm } }
-# ---- per-test config-domain fail ports (see [05 — Log idioms]) ----
-- { src: { node: load-model, port: fail },    dst: { node: fan-in, port: model_fail } }
-- { src: { node: sweep,      port: fail },    dst: { node: fan-in, port: sweep_fail } }
-- { src: { node: preproc,    port: fail },    dst: { node: fan-in, port: preproc_fail } }
-- { src: { node: filelist,   port: fail },    dst: { node: fan-in, port: filelist_fail } }
-- { src: { node: seed,       port: fail },    dst: { node: fan-in, port: seed_fail } }
-# ---- fan-in relay → aggregate collector ----
-- { src: { node: fan-in }, dst: { node: agg, port: result } }
+# ---- terminal result ports are UNWIRED (TODO #15) ----
+# The 13 terminal outcomes below have NO edge: filter.skip, gate-pre.stop, cc-int.fail,
+# gate-comp.stop, sim-int.timeout, gate-sim.stop, parse-log.default, parse-uvm-log.default,
+# load-model.fail, sweep.fail, preproc.fail, filelist.fail, seed.fail. Each terminal node
+# logs `log.info("test_result", ...)` at emission; the harness reports `no_destination` at
+# INFO for the unwired port and the item leaves the graph. The SummaryHandler logging plugin
+# (see the `logging` block above) collects the rows and renders the table in finalise().
+# git-status likewise logs `git_state` with no edge.
 ```
 
 Notes:
 
-- `fan-in-results.run(self, **inputs)` is non-definite; the harness populates its 13
-  ports from the 13 incoming edges at load time (`graph.py:95-97`). The `any` contract
-  fires on whichever port is ready, one at a time, and delivers `{port_name: payload}`;
-  the module discards the port name and emits `("result", payload)` to `agg`. Adding a
-  new terminal source means one new edge here — no module signature changes. See
-  [07](07-ambiguities-and-assumptions.md) item 19 for the design history.
-- The five `*_fail` ports (`model_fail`, `sweep_fail`, `preproc_fail`, `filelist_fail`,
-  `seed_fail`) carry per-test config-domain failures routed via the new `fail` output on
-  each of those source modules; see [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **No fan-in / aggregate node.** The 13 terminal ports are unwired; the summary table and
+  git stateline are rendered by the `SummaryHandler` logging plugin (`logging` block above)
+  in its `finalise()` hook, and the exit code is driven by the per-emission `log.error` at
+  each failure site. See [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
+  and [07 settled 27](07-ambiguities-and-assumptions.md). Adding a new terminal source means
+  one new `log.info("test_result", ...)` call — no edge, no module signature change.
+- The five `*_fail` ports (`load-model.fail`, `sweep.fail`, `preproc.fail`, `filelist.fail`,
+  `seed.fail`) carry per-test config-domain failures via the `fail` output on each of those
+  source modules; each `log.error`s once (the sole exit driver) and `log.info`s its
+  `test_result` row. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 - `run_ids` (→ `runs`) is unwired for plain `test`; the module defaults it to `[None]`
   (single run). `randtest` wires it from a `rnd_cnt`-derived CLI edge.
 - `filter`'s `reg_level`/`start_level` are persistent but unwired for `test`; the module's
@@ -258,6 +251,7 @@ Notes:
   - { name: ensure-logs-dir,      class_name: EnsureLogsDirMod }
   - { name: parse-suite-config,   class_name: ParseSuiteConfigMod }
   - { name: derive-seed-mode,     class_name: DeriveSeedModeMod }
+  - { name: git-status,           class_name: GitStatusMod }
   - { name: route-list-mode,      class_name: RouteListModeMod }
   - { name: list-test-names,      class_name: ListTestNamesMod }
   - { name: select-tests,         class_name: SelectTestsMod }
@@ -285,9 +279,17 @@ Notes:
 - file: rtl_test/control.py
   plugins:
   - { name: early-stop-gate,   class_name: EarlyStopGateMod }
-  - { name: fan-in-results,    class_name: FanInResultsMod }
-  - { name: aggregate-results, class_name: AggregateResultsMod }
+  # fan-in-results / aggregate-results removed by TODO #15 — summary is a logging plugin
 ```
+
+## Logging plugin — `graphs/log/summary.py`
+
+Referenced by the `logging` block in `graphs/test.yaml`. Contains the `SummaryHandler`
+(`logging.Handler`) and the `drop_summary_events` processor (sketches in
+[05](05-branching-and-results.md#the-summaryhandler-logging-plugin); spec in
+[specs/10](specs/10-control-aggregate-modules.md)). It is selected by `path`/`name`, not via a
+plugin manifest — per-graph logging entries resolve files relative to the graph file's
+directory (`docs/harness_configs/graph.md`).
 
 ## Manifest addition — `contracts/config.yaml`
 
@@ -295,22 +297,17 @@ Notes:
 - file: any.py
   plugins:
   - { name: any, class_name: AnyContract }
-- file: serial.py
-  plugins:
-  - { name: serial_acquire, class_name: SerialAcquireContract }
 ```
 
-`any.py` contains `AnyContract` sketched in [05](05-branching-and-results.md), including
-the optional `release_lock` Config field used by the interim shim. `serial.py` contains
-`SerialAcquireContract` and the module-level `_LOCKS` registry. **Both `serial_acquire`
-and `any`'s `release_lock` field are interim** — to be removed once upstream `rtl_buddy`
-per-test artefact dirs land (see [07](07-ambiguities-and-assumptions.md) item 17). The
-modules **reimplement** `rtl_buddy` natively; only the config-schema dataclasses are kept
+`any.py` contains `AnyContract` (sketch in [spec 02](specs/02-any-contract-and-fan-in.md)),
+a plain general-purpose contract. **It is registered for reuse but is no longer wired in the
+`test` graph** (its only consumer, `fan-in`, was removed by TODO #15). There is **no**
+`serial.py` / `serial_acquire` contract: the interim parallel-safety lock shim was removed
+(TODO #30) in favour of per-tag artefact naming (`write-filelist` writes `run.<tag>.f`; see
+[05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
+Do not re-introduce a lock for the residual CWD collisions — those are the job of the upstream
+per-invocation-subdir change ([07](07-ambiguities-and-assumptions.md) item 17).
+
+The modules **reimplement** `rtl_buddy` natively; only the config-schema dataclasses are kept
 identical, so existing `root_config.yaml`/`tests.yaml`/`models.yaml` load drop-in — see
 [07](07-ambiguities-and-assumptions.md) item 1. File grouping is a suggestion.
-
-> **Cross-file lock state.** `SerialAcquireContract` and `AnyContract`'s `release_lock`
-> branch must reach the **same** `_LOCKS` dict at runtime. Have `any.py` import
-> `_get_lock` from `serial.py` (or define the registry in a third shared module both
-> import). Splitting across plugin files that the loader imports separately would give
-> them distinct `_LOCKS` instances and the lock would never serialise anything.
