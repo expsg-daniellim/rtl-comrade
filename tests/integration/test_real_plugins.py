@@ -17,7 +17,7 @@ from pathlib import Path
 from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
-from rtl_comrade.loader import load_plugin_config
+from rtl_comrade.loader_plugin import load_plugin_config
 
 _PROJECT_ROOT = Path(__file__).parents[2]
 
@@ -58,5 +58,5 @@ def test_real_plugins_load_and_run(logging_handler, tmp_path):
 		],
 	)
 
-	Graph.construct_run(config, lambda: None)()
+	Graph.construct_run(config, lambda p, h, d: None, lambda: None)()
 	assert not logging_handler.failure

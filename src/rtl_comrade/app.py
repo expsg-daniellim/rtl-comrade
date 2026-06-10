@@ -10,11 +10,13 @@ from serde import serde, field, SerdeError
 from serde.yaml import from_yaml
 from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
+from structlog.stdlib import ProcessorFormatter
 import structlog
 import typer
 
 from .config_graph import GraphConfig
 from .graph import Graph
+from .loader_logger import LoggingPlugin
 from .logging import initialise_logging, HarnessLogger
 
 DEFAULT_RTL_COMRADE_CONFIG_NAME = "rtl_comrade_config.yaml"
@@ -64,7 +66,7 @@ class App:
 		args, _ = parser.parse_known_args()
 
 		# Initialise logging handler
-		self.handler = initialise_logging(LOGGING_LEVELS[args.level])
+		self.handler, self.root_logger = initialise_logging(LOGGING_LEVELS[args.level])
 
 		# Look for config
 		config = search_for_config(args.config_file, Path(os.getcwd()))
@@ -102,7 +104,7 @@ class App:
 				log.fatal('yaml.reader', context='harness.app.load', error_name=e.name, position=e.position, character=e.character, encoding=e.encoding, reason=e.reason, exc_info=e)
 
 			# Register command
-			self.app.command(name, help=command.help, no_args_is_help=len(graph_config.sig.parameters) > 0)(Graph.construct_run(graph_config, self.cleanup))
+			self.app.command(name, help=command.help, no_args_is_help=len(graph_config.sig.parameters) > 0)(Graph.construct_run(graph_config, self.setup_logging, self.cleanup))
 
 	# Dummy callback to reflect variables read by argparse into typer
 	def main(self, ctx:typer.Context, config_file:Annotated[str, typer.Option(help="File name of config file defining command/graphs.")]=DEFAULT_RTL_COMRADE_CONFIG_NAME, level:Annotated[Literal[*list(LOGGING_LEVELS.keys())], typer.Option(case_sensitive=False, help="Logging level.")]="info"):
@@ -133,6 +135,31 @@ class App:
 			log.error('usage_error', context='harness.app.cli', message=e.message)
 			exit_code = e.exit_code
 		return exit_code or 0
+
+	def setup_logging(self, processors:list[LoggingPlugin], handlers:list[LoggingPlugin], include_default:bool):
+		"""Construct and install the resolved processor chain and custom root handlers for a graph run.
+
+		Args:
+			processors: Ordered processor specs to construct into the chain.
+			handlers: Root-handler specs to construct and append to the root logger.
+			include_default: Whether to keep the harness's terminal ConsoleRenderer in the chain.
+
+		Returns:
+			None.
+		"""
+
+		chain = [ spec.construct() for spec in processors ]
+		if include_default:
+			chain.append(structlog.dev.ConsoleRenderer())
+
+		self.handler.render = bool(chain)
+		# Skip rebuilding the formatter when there is no terminal renderer; a processors=[] ProcessorFormatter has nothing to render.
+		if chain:
+			# Derive the foreign chain from the live structlog config (its trailing entry is wrap_for_formatter) so it can't drift from a cached copy.
+			self.handler.setFormatter(ProcessorFormatter(processors=chain, foreign_pre_chain=structlog.get_config()["processors"][:-1]))
+
+		for spec in handlers:
+			self.root_logger.addHandler(spec.construct())
 
 	def cleanup(self):
 		"""Raise ``typer.Exit(1)`` if the graph logged any failure during execution.

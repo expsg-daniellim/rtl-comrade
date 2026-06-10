@@ -30,7 +30,10 @@ When adding a new harness module, add a corresponding test file under `tests/uni
 | `port.py` | `tests/unit/test_port.py` |
 | `structure.py` | `tests/unit/test_structure.py` |
 | `config.py` | `tests/unit/test_config.py` |
-| `loader.py` | `tests/unit/test_loader.py` |
+| `loader_utils.py` | `tests/unit/test_loader_utils.py` |
+| `loader_plugin.py` | `tests/unit/test_loader_plugin.py` |
+| `loader_logger.py` | `tests/unit/test_loader_logger.py` |
+| `logging.py` | `tests/unit/test_logging.py` |
 | `validation.py` | `tests/unit/test_validation.py` |
 | `contract_default.py` | `tests/unit/test_contract_default.py` |
 | `module.py` | `tests/unit/test_module.py` |

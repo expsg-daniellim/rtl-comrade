@@ -80,14 +80,30 @@ The `--level` option accepts any standard Python logging level name (`DEBUG`, `I
 
 ## Graph Execution
 
-Each subcommand is driven by a closure returned by `Graph.construct_run(config, cleanup)`. When the subcommand is invoked, the closure:
+Each subcommand is driven by a closure returned by `Graph.construct_run(config, setup_logging, cleanup)`. When the subcommand is invoked, the closure:
 
 1. constructs the runtime `Graph` from the pre-loaded `GraphConfig` via `Graph.from_config`
-2. injects the resolved CLI argument values into the graph's CLI nodes
-3. runs the graph via `asyncio.run`
-4. calls `cleanup()`, which raises `typer.Exit(1)` if `self.handler.failure` is set
+2. resolves the graph's custom logging via `config.logging.load(config.relative_path)` and installs it via `setup_logging(processors, handlers, config.logging.include_default)`
+3. injects the resolved CLI argument values into the graph's CLI nodes
+4. runs the graph via `asyncio.run`
+5. calls `cleanup()`, which raises `typer.Exit(1)` if `self.handler.failure` is set
 
 This converts deferred `ERROR`-level log failures into a non-zero process exit code.
+
+## Logging Lifecycle
+
+Logging is installed in two stages.
+
+At startup, `App.__init__` calls `initialise_logging(level)` once, which installs the harness `LoggingFatalHandler` on the root logger and returns the handler and the root logger. `App` keeps both (`self.handler`, `self.root_logger`) so it can amend the configuration per graph later. The shared preprocessor chain is read back from `structlog.get_config()["processors"]` when needed, rather than cached on `App`.
+
+Per-graph custom logging is resolved and installed **lazily at graph invocation**, not at startup, mirroring how modules and contracts load at run time. Inside the `run` closure — after `Graph.from_config`, before any node executes — `config.logging.load(config.relative_path)` resolves the graph's `logging` config into the `(processors, handlers)` pair, where `processors`/`handlers` are *unconstructed* specs (the loader imports and classifies but does not instantiate, mirroring how the loader returns module/contract classes for `node.py` to construct). The closure reads `include_default` from `config.logging` and calls `App.setup_logging(processors, handlers, include_default)`, which:
+
+- constructs each spec via `spec.construct()` (`LoggingPlugin.construct` — instantiating a class, deserialising its `Config` and relativising `{graph}` paths, or using a function/instance as-is), then appends the terminal `ConsoleRenderer` when `include_default`;
+- sets `self.handler.render` to `bool(chain)`, so the harness handler writes nothing when there is no terminal renderer;
+- rebuilds the harness handler's `ProcessorFormatter` from the constructed chain (with the foreign pre-chain read from `structlog.get_config()["processors"][:-1]`) when the chain is non-empty;
+- constructs and appends each Handler-type spec to the root logger.
+
+Because resolution happens in the `run` closure, custom logging applies to that single graph run only, and a malformed logging config is reported when the subcommand runs rather than at startup. See [logging.md](logging.md) for the processor/handler model and its two hard constraints, and [loader_logger.md](loader_logger.md) for `LoggingConfig.load` itself.
 
 ## Caveats
 

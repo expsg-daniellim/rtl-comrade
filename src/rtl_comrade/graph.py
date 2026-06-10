@@ -12,7 +12,7 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config_graph import GraphConfig
 from .contract_default import DefaultContract
-from .loader import load_plugins
+from .loader_plugin import load_plugins
 from .logging import HarnessLogger
 from .module import GraphModule
 from .module_cli import ModuleCLI
@@ -201,7 +201,7 @@ class Graph:
 		log.fatal("dummy_run_called", context='harness.graph.cli')
 
 	@staticmethod
-	def construct_run(config:GraphConfig, run_cleanup:Callable[[Any], None]):
+	def construct_run(config:GraphConfig, setup_logging:Callable[[list[Any], list[Any], bool], None], run_cleanup:Callable[[Any], None]):
 		"""Build a callable whose signature matches the graph's CLI parameters.
 
 		The returned callable injects the supplied kwargs into the graph's CLI nodes,
@@ -209,6 +209,7 @@ class Graph:
 		``self.sig`` so that typer can read the parameter list directly.
 
 		Args:
+			setup_logging: Constructs and installs the resolved ``(processors, handlers, include_default)`` for the graph run.
 			run_cleanup: Called after the graph finishes; typically raises ``typer.Exit(1)`` on failure.
 
 		Returns:
@@ -218,6 +219,9 @@ class Graph:
 		def run(**kwargs):
 			# Only construct actual graph when run
 			graph = Graph.from_config(config, kwargs)
+			# Custom logging applies to the run only; resolve lazily after construction, before node execution.
+			processors, handlers = config.logging.load(config.relative_path)
+			setup_logging(processors, handlers, config.logging.include_default)
 			async def async_run():
 				for cli_node in graph.cli_nodes:
 					if cli_node.module.cli not in kwargs:

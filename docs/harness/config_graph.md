@@ -11,7 +11,7 @@ This file defines `GraphConfig`, the normalised intermediate type that sits betw
 - [README.md](README.md)
 - [config.md](config.md) — `GraphFileConfig` and the raw config schema types
 - [graph.md](graph.md)
-- [loader.md](loader.md)
+- [loader_plugin.md](loader_plugin.md)
 
 ## Main Responsibilities
 
@@ -46,11 +46,12 @@ This file defines `GraphConfig`, the normalised intermediate type that sits betw
 Produced by `GraphConfig.from_file_config(file_config)`. Not serde-backed; constructed programmatically.
 
 - `nodes`: copied unchanged from `GraphFileConfig`
-- `modules`, `contracts`: `list[PluginFileConfig]` — produced by calling `load_plugin_configs(paths, relative_path)` on the `Path` objects from `GraphFileConfig`; plugin paths in the YAML are therefore resolved relative to the graph file's directory. See [loader.md](loader.md) for resolution semantics.
+- `modules`, `contracts`: `list[PluginFileConfig]` — produced by calling `load_plugin_configs(paths, relative_path)` on the `Path` objects from `GraphFileConfig`; plugin paths in the YAML are therefore resolved relative to the graph file's directory. See [loader_plugin.md](loader_plugin.md) for resolution semantics.
 - `edges`: only `GraphConfigSrcPort` sources; `GraphConfigSrcCLI` edges from `GraphFileConfig` are replaced with equivalent `GraphConfigSrcPort` edges pointing to synthetic `cli-{name}` node ids
 - `cli_srcs`: `list[tuple[str, GraphConfigSrcCLI]]` — one entry per original CLI edge, in declaration order; each tuple is `(port_name, src)` where `port_name` is the synthetic node id (`cli-{src.cli}`) used in both the replacement edge and the virtual `Node` created by `Graph.from_config`
 - `sig`: `inspect.Signature` built from the CLI sources; consumed by `Graph.construct_run` to expose a typer-compatible function signature
 - `relative_path`: the directory of the graph YAML file; forwarded to each `Node` by `Graph.from_config` so module configs can use the `{graph}` path prefix (see [node.md](node.md))
+- `logging`: `LoggingConfig` — copied unchanged from `GraphFileConfig.logging`; resolved lazily by the `Graph.construct_run` closure via `config.logging.load(relative_path)` when the subcommand runs (see [loader_logger.md](loader_logger.md))
 
 ## Validation in `from_file_config`
 

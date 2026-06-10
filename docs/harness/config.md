@@ -11,7 +11,8 @@ This file defines the serde-backed graph configuration schema consumed by the ha
 - [README.md](README.md)
 - [config_graph.md](config_graph.md) — `GraphConfig`, the normalised intermediate produced from `GraphFileConfig`
 - [graph.md](graph.md)
-- [loader.md](loader.md)
+- [loader_utils.md](loader_utils.md)
+- [loader_logger.md](loader_logger.md) — `LoggingConfig`, the type of the `logging` field
 - [validation.md](validation.md)
 
 ## Main Types
@@ -33,6 +34,7 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 - `modules`, `contracts`: `list[Path]` plugin paths from the YAML file
 - `nodes`: node definitions with `id`, `module`, `config`, `contract`, `contract_config`, `cli_config`, and `cli_contract_config`
 - `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
+- `logging`: `LoggingConfig` (defined in [loader_logger.md](loader_logger.md)) — optional per-graph custom logging configuration; defaults to an empty config. Carried through to `GraphConfig` unchanged. See [logging.md](logging.md) and the [config schema](../harness_configs/graph.md).
 
 `GraphConfigEdge.src` is a union deserialized with `Untagged` serde tagging; the schema is tried as `GraphConfigSrcPort` first, then `GraphConfigSrcCLI`.
 

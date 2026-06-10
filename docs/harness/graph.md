@@ -11,7 +11,8 @@ This file is the top-level harness coordinator. It turns config data into a runn
 - [README.md](README.md)
 - [__main__.md](__main__.md)
 - [config.md](config.md)
-- [loader.md](loader.md)
+- [loader_plugin.md](loader_plugin.md) — `load_plugins`
+- [loader_logger.md](loader_logger.md) — `LoggingConfig.load`
 - [module.md](module.md)
 - [node.md](node.md)
 - [validation.md](validation.md)
@@ -31,7 +32,7 @@ This file is the top-level harness coordinator. It turns config data into a runn
 ## Key Entry Points
 
 - `Graph.from_config(config, cli_kwargs=None)`: construct the runtime graph from an already-loaded `GraphConfig`; `cli_kwargs` is a dict of resolved CLI kwarg values passed from the `construct_run` closure; node `cli_config` and `cli_contract_config` entries are applied to the static config dicts before each `Node` is constructed
-- `Graph.construct_run(config, cleanup)`: static method; returns a closure whose signature matches `config.sig`; when invoked with CLI kwargs, constructs the `Graph` via `from_config` (passing the kwargs for config patching), injects data-flow values into CLI nodes, runs the graph, then calls `cleanup()`
+- `Graph.construct_run(config, setup_logging, cleanup)`: static method; returns a closure whose signature matches `config.sig`; when invoked with CLI kwargs, constructs the `Graph` via `from_config` (passing the kwargs for config patching), resolves the graph's custom logging via `config.logging.load` and installs it via `setup_logging(processors, handlers, config.logging.include_default)`, injects data-flow values into CLI nodes, runs the graph, then calls `cleanup()`
 
 ## Place In The System
 

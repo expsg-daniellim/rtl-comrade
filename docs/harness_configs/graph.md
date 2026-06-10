@@ -13,6 +13,7 @@ modules:    # list of plugin directory paths for module discovery
 contracts:  # list of plugin directory paths for contract discovery
 nodes:      # list of node definitions
 edges:      # list of directed connections between node ports
+logging:    # optional — per-graph custom logging configuration
 ```
 
 `modules` and `contracts` are paths to plugin directories. Each directory is resolved relative to the graph YAML file's own directory and must contain either a `config.yaml` manifest or one or more `.py` files for auto-discovery. See `docs/harness_configs/plugin_manifest.md`.
@@ -95,6 +96,37 @@ edges:
 A CLI edge injects a value supplied on the command line directly into a destination node's input port. The harness creates a virtual `ModuleCLI` node for each distinct `cli` name and wires it to the declared destination. The parameter is surfaced as a subcommand option or argument depending on the `option` field. When `option: false`, the positional argument order matches the declaration order of CLI edges in the `edges` list.
 
 The destination `port` field accepts either a string name matching a `run(...)` parameter name or a 1-based integer index into the parameter list.
+
+## Logging configuration
+
+The optional `logging` block configures per-graph custom logging. It is resolved lazily when the subcommand runs (not at startup) and applies to that run only. See `docs/harness/logging.md` for the full processor/handler model and its two hard constraints, and `docs/logger/implementation.md` for how to write a logging plugin.
+
+```yaml
+logging:
+  include_default: <bool>   # optional — defaults to true
+  handlers:                 # optional — ordered list of custom handler entries
+  - path: <str>             # required — plugin file, resolved relative to the graph file's directory
+    name: <str>             # required — exported callable/class to select from that file
+    config:                 # optional — passed as __init__(config=...) when the class declares a `config` param
+      key: value
+```
+
+Each entry under `handlers` references one exported object selected by `name` from the file at `path`. The harness classifies the resolved object:
+
+- if it is a `logging.Handler` subclass, it is instantiated and appended to the root logger as a full handler;
+- otherwise it must be a **structlog processor** — a callable with signature `(logger, method_name, event_dict)` — which joins the harness handler's formatter chain in list order.
+
+`config` is only consumed when the selected object is a class whose `__init__` declares a `config` parameter; if the class also exposes a `Config` dataclass the config dict is deserialized into it (and `{graph}`-relative `Path` fields are resolved against the graph file's directory, as elsewhere in this schema). Supplying `config` for a function, a pre-built instance, or a class that takes no `config` is a mistake and the harness warns.
+
+`include_default` (default `true`) controls the harness handler's terminal renderer:
+
+- `true`: the harness handler's `ConsoleRenderer` stays terminal; processor entries run before it and must return an event dict.
+- `false`: `ConsoleRenderer` is dropped and the **last** processor entry becomes the terminal renderer (and must return `str`); earlier processors return event dicts. With no processors the harness handler renders nothing.
+
+Two constraints are load-bearing and documented in full in `docs/harness/logging.md`:
+
+- a Handler-type entry is added to the root logger after the harness handler, so it **never observes `CRITICAL` records** — the harness handler raises `typer.Exit(1)` first;
+- a Handler-type entry inherits only the shared preprocessors, **not** the harness handler's `ProcessorFormatter`/`ConsoleRenderer`/`include_default`/`DropEvent` handling; without its own `ProcessorFormatter` it receives the raw event `dict` as `record.msg`.
 
 ## Example
 

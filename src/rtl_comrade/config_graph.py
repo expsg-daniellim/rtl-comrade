@@ -15,7 +15,9 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config import GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from .config import InvalidCLIParameterError
-from .loader import load_config_file, load_plugin_configs, PluginFileConfig
+from .loader_utils import load_config_file
+from .loader_logger import LoggingConfig
+from .loader_plugin import load_plugin_configs, PluginFileConfig
 from .logging import HarnessLogger
 from .validation import validate_acyclic
 
@@ -32,6 +34,7 @@ class GraphConfig:
 		contracts: Plugin paths used to discover contract classes.
 		cli_sources: Original CLI edge sources in declaration order, used to
 			create synthetic CLI nodes and build the graph's CLI signature.
+		logging: Per-graph custom logging configuration.
 	"""
 
 	nodes: list[GraphConfigNode]
@@ -41,6 +44,7 @@ class GraphConfig:
 	cli_srcs: list[tuple[str, GraphConfigSrcCLI]] = field(default_factory=list)
 	sig: Signature = field(default_factory=Signature)
 	relative_path: Path = field(default_factory=Path)
+	logging: LoggingConfig = field(default_factory=LoggingConfig)
 
 	@staticmethod
 	def from_file(path:Path) -> GraphConfig:
@@ -174,5 +178,6 @@ class GraphConfig:
 			modules = load_plugin_configs(config.modules, relative_path),
 			contracts = load_plugin_configs(config.contracts, relative_path),
 			sig=Signature(params),
-			relative_path=relative_path
+			relative_path=relative_path,
+			logging=config.logging
 		)

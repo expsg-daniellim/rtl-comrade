@@ -24,6 +24,7 @@ from rtl_comrade.app import (
 	search_for_config,
 )
 from rtl_comrade.config_graph import GraphConfig
+from rtl_comrade.loader_logger import LoggingPlugin
 
 MINIMAL_CONFIG_YAML = "commands:\n  run:\n    path: graphs/test.yaml\n"
 MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path=Path("graphs/test.yaml"))})
@@ -49,7 +50,7 @@ def reset_logging():
 def _make_app(argv=None, config=None):
 	with patch("rtl_comrade.app.search_for_config", return_value=config or MINIMAL_CONFIG), \
 		 patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()), \
-		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup), \
+		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, setup_logging, cleanup: cleanup), \
 		 patch.object(sys, "argv", argv or ["rtl-comrade"]):
 		return App()
 
@@ -177,7 +178,7 @@ def test_app_custom_config_file_loaded(tmp_path, monkeypatch):
 	monkeypatch.chdir(tmp_path)
 	with patch.object(sys, "argv", ["rtl-comrade", "--config-file", "custom.yaml"]), \
 		 patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()) as mock_from_file, \
-		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup):
+		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, setup_logging, cleanup: cleanup):
 		App()
 	mock_from_file.assert_called_once_with(tmp_path / "my_graph.yaml")
 
@@ -208,7 +209,7 @@ def test_app_subcommand_exits_1_on_graph_failure():
 
 def test_app_subcommand_calls_graph_from_file():
 	with patch("rtl_comrade.app.GraphConfig.from_file", return_value=_mock_config()) as mock_from_file, \
-		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, cleanup: cleanup), \
+		 patch("rtl_comrade.app.Graph.construct_run", side_effect=lambda config, setup_logging, cleanup: cleanup), \
 		 patch("rtl_comrade.app.search_for_config", return_value=MINIMAL_CONFIG), \
 		 patch.object(sys, "argv", ["rtl-comrade"]):
 		App()
@@ -352,3 +353,49 @@ def test_from_file_reader_error_fatal():
 	exc = ReaderError('test', 0, b'\x80', 'utf-8', 'invalid character')
 	with pytest.raises(typer.Exit):
 		_make_app_raises(exc)
+
+
+# ---------------------------------------------------------------------------
+# App.setup_logging — install resolved processor chain and custom handlers
+# ---------------------------------------------------------------------------
+
+
+def _spec(plugin):
+	return LoggingPlugin(plugin=plugin, config={}, relative_path=Path(), name="x")
+
+
+def test_setup_logging_processors_sets_render_and_formatter():
+	from structlog.stdlib import ProcessorFormatter
+	app = _make_app()
+	app.handler.render = False  # start from the opposite state
+	app.setup_logging([_spec(structlog.dev.ConsoleRenderer())], [], include_default=False)
+	assert app.handler.render is True
+	assert isinstance(app.handler.formatter, ProcessorFormatter)
+
+
+def test_setup_logging_include_default_appends_console_renderer():
+	# include_default with no custom processors still yields a rendering chain (the terminal ConsoleRenderer).
+	app = _make_app()
+	app.handler.render = False
+	app.setup_logging([], [], include_default=True)
+	assert app.handler.render is True
+	assert any(isinstance(p, structlog.dev.ConsoleRenderer) for p in app.handler.formatter.processors)
+
+
+def test_setup_logging_empty_processors_disables_render():
+	app = _make_app()
+	app.handler.render = True
+	prev_formatter = app.handler.formatter
+	app.setup_logging([], [], include_default=False)
+	assert app.handler.render is False
+	# With no terminal renderer the formatter is left untouched (no rebuild).
+	assert app.handler.formatter is prev_formatter
+
+
+def test_setup_logging_appends_handlers_to_root():
+	app = _make_app()
+	custom = logging.Handler()
+	before = list(app.root_logger.handlers)
+	app.setup_logging([], [_spec(custom)], include_default=True)
+	assert custom in app.root_logger.handlers
+	assert app.root_logger.handlers[: len(before)] == before

@@ -12,6 +12,8 @@ from typing import Any, Annotated, Literal
 from serde import serde, field, to_dict, Untagged
 import typer
 
+from .loader_logger import LoggingConfig
+
 PRIMITIVE_TYPES = { 'int': int, 'float': float, 'str': str, 'bool': bool }
 
 @serde
@@ -127,9 +129,11 @@ class GraphFileConfig:
 		edges: The directed connections wiring node outputs to node inputs.
 		modules: Plugin paths used to discover module classes.
 		contracts: Plugin paths used to discover contract classes.
+		logging: Per-graph custom logging configuration.
 	"""
 
 	nodes: list[GraphConfigNode]
 	edges: list[GraphConfigEdge]
 	modules: list[Path] = field(default_factory=list)
 	contracts: list[Path] = field(default_factory=list)
+	logging: LoggingConfig = field(default_factory=LoggingConfig)

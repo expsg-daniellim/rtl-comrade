@@ -10,7 +10,7 @@ import typer
 from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
-from rtl_comrade.loader import PluginFileConfig
+from rtl_comrade.loader_plugin import PluginFileConfig
 
 
 def _pfc(path) -> PluginFileConfig:
@@ -48,7 +48,7 @@ def _write_plugin(tmp_path, name, src):
 
 
 def _run_graph(config):
-	Graph.construct_run(config, lambda: None)()
+	Graph.construct_run(config, lambda p, h, d: None, lambda: None)()
 
 
 @pytest.fixture(autouse=True)
@@ -672,7 +672,7 @@ def test_it16_cli_option(logging_handler, tmp_path):
 		modules=[tmp_path / "mods.py"],
 	)
 	graph_config = GraphConfig.from_file_config(config)
-	Graph.construct_run(graph_config, lambda: None)(value=99)
+	Graph.construct_run(graph_config, lambda p, h, d: None, lambda: None)(value=99)
 	assert SIDE_CHANNEL == [99]
 	assert logging_handler.failure is False
 
@@ -704,7 +704,7 @@ def test_it17_missing_cli_kwarg(logging_handler, tmp_path):
 		modules=[tmp_path / "mods.py"],
 	)
 	graph_config = GraphConfig.from_file_config(config)
-	Graph.construct_run(graph_config, lambda: None)()  # 'value' kwarg absent
+	Graph.construct_run(graph_config, lambda p, h, d: None, lambda: None)()  # 'value' kwarg absent
 	assert logging_handler.failure is True
 
 
@@ -797,7 +797,7 @@ def test_it20_node_fatal_propagates(logging_handler, tmp_path):
 	)
 	cleanup_called = []
 	with pytest.raises(typer.Exit):
-		Graph.construct_run(config, lambda: cleanup_called.append(True))()
+		Graph.construct_run(config, lambda p, h, d: None, lambda: cleanup_called.append(True))()
 	assert not cleanup_called
 
 
@@ -843,7 +843,7 @@ def test_it21_cli_config_module(logging_handler, tmp_path):
 	)
 	graph_config = GraphConfig.from_file_config(config)
 	assert "val" in graph_config.sig.parameters
-	Graph.construct_run(graph_config, lambda: None)(val=42)
+	Graph.construct_run(graph_config, lambda p, h, d: None, lambda: None)(val=42)
 	assert SIDE_CHANNEL == [42]
 	assert logging_handler.failure is False
 
@@ -919,7 +919,7 @@ def test_it22_cli_contract_config(logging_handler, tmp_path):
 	)
 	graph_config = GraphConfig.from_file_config(config)
 	assert "n" in graph_config.sig.parameters
-	Graph.construct_run(graph_config, lambda: None)(n=1)
+	Graph.construct_run(graph_config, lambda p, h, d: None, lambda: None)(n=1)
 	assert len(SIDE_CHANNEL) == 1
 	assert logging_handler.failure is False
 
@@ -966,7 +966,7 @@ def test_it23_cli_config_overrides_static(logging_handler, tmp_path):
 		modules=[tmp_path / "mods.py"],
 	)
 	graph_config = GraphConfig.from_file_config(config)
-	Graph.construct_run(graph_config, lambda: None)(val=99)
+	Graph.construct_run(graph_config, lambda p, h, d: None, lambda: None)(val=99)
 	assert SIDE_CHANNEL == [99]
 
 

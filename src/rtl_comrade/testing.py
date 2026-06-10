@@ -49,7 +49,7 @@ def logging_handler():
 	handler.failure = True without raising. Both are reset after each test.
 	"""
 	structlog.reset_defaults()
-	handler = initialise_logging(logging.DEBUG)
+	handler, _ = initialise_logging(logging.DEBUG)
 	yield handler
 	logging.getLogger().handlers.clear()
 	structlog.reset_defaults()
