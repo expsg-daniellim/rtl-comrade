@@ -1,0 +1,31 @@
+# Spec 05b: list-test-names (`ListTestNamesMod`)
+
+**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`SuiteConfig`).
+**References:** [03 — Selection/expansion section](../03-module-catalog.md). Parent index:
+[05 — Selection and expansion modules](05-selection-expansion-modules.md).
+
+## Goal
+
+Print the suite's test names in declaration order — the list-mode terminal sink.
+
+## Deliverables
+
+In `modules/rtl_test/setup.py` (continuing from spec 04):
+
+- `ListTestNamesMod` — `(suite_cfg)` → prints `"  ".join(suite_cfg.get_test_names())`
+  (spec [01b](01b-suite-schema.md) — returns `list[str]` of test names in declaration
+  order) and emits nothing. Terminal sink.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:183` — the `typer.echo` of `get_test_names()`; `get_test_names` at `config/suite.py:69-76`.
+
+Manifest entries per [06](../06-graph-yaml.md).
+
+## Tests
+
+In `modules/tests/test_selection.py`:
+
+- `list-names` prints expected names (declaration order, two-space joined).
+
+## Acceptance criteria
+
+- Tests pass.
+- Prints test names in declaration order and emits nothing (terminal sink).

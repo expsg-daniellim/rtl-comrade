@@ -692,6 +692,22 @@ The work is mechanical but each citation must be verified by reading the cited c
 
 ### 17. Split grouped module specs into per-module tickets
 
+**Status: Resolved (2026-06-10).** Each grouped spec (`specs/04`–`specs/10`) is split into
+one ticket per module/deliverable, with the numbered file kept as a thin index linking to
+its children (preserving every existing cross-reference into `specs/0N-...md`). 31 child
+tickets were created: 04a–04i (9), 05a–05f (6), 06a–06b (2), 07a–07b (2), 08a–08f (6),
+09a–09c (3), 10a–10c (3). Each child carries the standard boilerplate (`Depends on:` /
+`References:` / `Goal` / `Deliverables` / `Tests` / `Acceptance criteria` / `Notes`), the
+module's verbatim failure-handling + `Compatibility source:` blocks, its own test bullets,
+and a per-module acceptance list; cross-module integration acceptance stays on the parent
+index. Shared content was distributed to the right child (e.g. the `exec_hook` helper note
+to 05f/06a, the per-tag-filelist concurrency posture to 06b/07a, the `keyed_join` note to
+07b/08d). `specs/README.md`'s priority table now flags each numbered spec as an index and
+adds a per-module child table with the intra-group dependency notes. Concrete-step (1)
+chose "keep the parent file as a thin index" over removal.
+
+The original ticket text is kept below for the record.
+
 `specs/` tickets currently group 4–6 modules per file (e.g., `specs/08-sim-cycle-modules.md` covers `ExpandRuns`, `ResolveSeed`, `BuildSimCmd`, `WriteRandseed`, `LinkLatest`, `InterpretSim`). This makes work units large, parallelisation graphs coarse, and crowds each module's signature, tests, and constraints into shared space.
 
 #### Concrete steps
@@ -825,9 +841,9 @@ Every spec's Acceptance section is a bullet list referencing concrete artefacts 
 
 #### Concrete steps
 
-1. Commit to a package name (`modules/rtl_test/`) and the final file grouping (which module goes into which file).
+1. Commit to a package name (`modules/rtl_buddy/`) and the final file grouping (which module goes into which file).
 2. Record the mapping in `06-graph-yaml.md` (or a new section in `specs/README.md`).
-3. Pin the plugin manifest namespace (e.g., `rtl_test:derive-seed-mode`) so modules cannot collide with sibling graphs.
+3. Pin the plugin manifest namespace (e.g., `rtl_buddy:derive-seed-mode`) so modules cannot collide with sibling graphs.
 
 #### Acceptance check
 
@@ -835,7 +851,7 @@ Every module spec names exactly one file path, and that file path matches the co
 
 ### 29. Clarify the dataflow diagram
 
-The ASCII diagram in `00-overview.md` mixes main-line and config edges; the layout is visually congested and a few branches collapse into the same column. The node table in `04-pipeline-and-contracts.md` compensates, but a clearer diagram would help reviewers trace the graph at a glance.
+The ASCII diagram in `00-overview.md` mixes main-line and config edges; the layout is visually congested and a few branches collapse into the same column. The node table in `04-pipeline-and-contracts.md` compensates, but a clearer diagram would help reviewers trace the graph at a glance. Consider switching to a Mermaid diagram.
 
 #### Concrete steps
 

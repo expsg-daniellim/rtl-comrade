@@ -1,0 +1,46 @@
+# Spec 09b: parse-log (`ParseLogMod`)
+
+**Depends on:** spec 01 (schema).
+**References:** [03 — Post-processing section](../03-module-catalog.md),
+[07 settled 14, 15](../07-ambiguities-and-assumptions.md). Parent index:
+[09 — Post-processing modules](09-post-modules.md).
+
+## Goal
+
+Re-implement rtl_buddy's `VlogPost.get_results()` (with three corrections) to classify a
+plain sim log into PASS/FAIL/NA.
+
+## Deliverables
+
+In `modules/rtl_test/sim.py` (continuing from spec 08):
+
+- `ParseLogMod` — re-implements rtl_buddy `VlogPost.get_results()` with three corrections
+  ([07 settled 15](../07-ambiguities-and-assumptions.md)): scan `test_run["log"]` line-by-line,
+  recording the first match of `re.match(r"PASS\b\s*(.*)", line)`,
+  `re.match(r"FAIL\b\s*(.*)", line)`, and `re.match(r"(ERR|FAT):\s*(.*)", line)`, then
+  resolve with `if match_fail / elif match_pass / else NA` — FAIL wins; if `match_fail` is
+  set but `match_err` is not, `desc = match_fail.group(1)` (no crash). Default `{"result":
+  "NA", "desc": "test result unknown"}`. Emits `{"key": ctx["key"], "result":
+  TestResults(...)}`.
+  **Failure handling**: FAIL result → `log.error` at emission carrying the matched FAIL
+  line and `test_run["log"]` path; PASS/NA does not log. `FileNotFoundError`/`OSError` opening
+  `test_run["log"]` → emit FAIL with the exception string as `desc` and call `log.error`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results` (corrected per [07 settled 15](../07-ambiguities-and-assumptions.md)).
+
+Manifest entries per [06](../06-graph-yaml.md).
+
+## Tests
+
+In `modules/tests/test_post.py`:
+
+- `parse-log` against fixture logs: clean PASS; clean FAIL with `ERR:`; FAIL+PASS → FAIL
+  (corrected, FAIL wins); FAIL without `ERR:` → FAIL with `desc = fail_line` (no crash);
+  `PASSTHROUGH ...` line → NA (word-boundary fix); result-unknown NA;
+  `FileNotFoundError` on `test_run["log"]` → FAIL.
+
+## Acceptance criteria
+
+- Tests pass.
+- `ParseLogMod`: identical to rtl_buddy `VlogPost` on clean-PASS, clean-FAIL-with-ERR,
+  and NA fixtures; intentionally diverges on FAIL+PASS, FAIL-without-ERR, and
+  word-boundary cases — see [07 settled 15](../07-ambiguities-and-assumptions.md).

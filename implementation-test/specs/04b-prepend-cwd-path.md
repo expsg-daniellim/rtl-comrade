@@ -1,0 +1,58 @@
+# Spec 04b: prepend-cwd-path (`PrependCwdPathMod`)
+
+**Depends on:** spec 01 (schema).
+**References:** [03 — Setup section](../03-module-catalog.md),
+[07 settled 25](../07-ambiguities-and-assumptions.md). Parent index:
+[04 — Setup modules](04-setup-modules.md). Sequencing consumer:
+[spec 03 — run-process](03-run-process.md) (`env_ready`).
+
+## Goal
+
+Prepend `.` to `os.environ["PATH"]` so a CWD-local simulator is discoverable by subsequent
+subprocess invocations, sequenced ahead of every `run-process` call via `env_ready`.
+
+## Deliverables
+
+In `modules/rtl_test/setup.py`:
+
+- `PrependCwdPathMod` — prepends `.` to `os.environ["PATH"]` so a CWD-local simulator
+  (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors
+  `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, which does the same once at CLI
+  bootstrap; here it is an explicit graph node so the responsibility is visible. Zero
+  input ports; runs once via `unit`. Emits `True` on `default`; the value is consumed by
+  `run-process` as a `env_ready` sequencing input (see [07 settled
+  25](../07-ambiguities-and-assumptions.md)).
+  **Behaviour**:
+  1. `path = os.environ.get("PATH", "")`
+  2. If `"." not in path.split(os.pathsep)`: `os.environ["PATH"] = "." + os.pathsep + path`.
+  3. Return `{"default": True}`.
+  Idempotent — re-invocation (or a stale `.` already on PATH) is a no-op. Mutation of
+  the process-wide `os.environ` is safe because `unit` guarantees a single invocation.
+  **Failure handling**: none. Dict mutation cannot meaningfully fail; no failure port,
+  no log call.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.
+
+Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+
+## Tests
+
+In `modules/tests/test_setup.py`:
+
+- With a `PATH` that does not contain `.`, `run()` mutates `os.environ["PATH"]` to start
+  with `. + os.pathsep` and returns `{"default": True}`.
+- With a `PATH` that already starts with `.`, `run()` leaves it unchanged and still
+  returns `{"default": True}` (idempotent).
+- With a `PATH` that contains `.` somewhere in the middle, `run()` leaves it unchanged
+  (not just the head position counts).
+- End-to-end with `run-process` — after `PrependCwdPathMod.run()` fires, a
+  `RunProcessMod.run()` call with `argv=["./local_tool"]` (a script written into the temp
+  CWD with the exec bit set) resolves and executes the binary, where the same call would
+  fail with `FileNotFoundError` if the prepend had not happened. Restore
+  `os.environ["PATH"]` in the test fixture teardown.
+
+## Acceptance criteria
+
+- Tests pass.
+- `PrependCwdPathMod` leaves `os.environ["PATH"]` starting with `.` for the duration of the
+  run (contributes to the setup-only end-to-end graph — see
+  [04 index](04-setup-modules.md#acceptance-criteria)).
