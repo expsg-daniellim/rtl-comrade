@@ -107,13 +107,22 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
 
 ## Tests
 
-In `modules/tests/test_prep.py`:
+In `modules/tests/test_prep.py`. Fixtures: a committed `models.yaml` + testbench filelist
+fixture; `tmp_path` CWD via `monkeypatch.chdir` (so `run.{test_tag}.f` lands in a temp dir);
+a `ctx` fixture carrying a resolved model + testbench; `logging_handler` for the fail paths.
 
-- `write-filelist` produces a syntactically valid `.f` file from a real `models.yaml` +
-  testbench filelist; round-trip parse matches expected entries; `+incdir+` consolidation
-  works.
-- Missing testbench filelist / `get_model() is None` → emits `("fail", ...)` with `str(e)`
-  in `desc` and `log.error`.
+- `ctx` with a real model + testbench filelist → writes `run.{test_tag}.f`, yields `("ctx",
+  ctx)` then `("filelist", {"key", "filelist": <Path>})`; a round-trip parse of the `.f`
+  matches the expected entries and `+incdir+` consolidation is applied.
+- `ctx` whose `test.get_name()` has shell-unsafe chars (e.g. `a/b:c`) → the filelist filename
+  is sanitised to `run.a_b_c.f` (boundary: `test_tag` regex matches `build-compile-cmd`).
+- `ctx` where `ctx["test"].get_model() is None` (load-model did not fire) → `AttributeError`
+  during `-F` resolution → emits `("fail", {"key", "result": <FAIL with str(e)>})`,
+  `log.error`, no abort.
+- `ctx` whose testbench filelist file is missing → `FileNotFoundError` during resolution →
+  emits `("fail", …)`, `log.error`.
+- `ctx` written into a read-only CWD → `PermissionError` on write → emits `("fail", …)`,
+  `log.error` (boundary: write-side error routed like a resolve error).
 
 ## Acceptance criteria
 

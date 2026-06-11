@@ -66,11 +66,14 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Pure function — no fixtures needed.
 
-- `(rnd_new=True, rnd_last=True)` → `NEW` (rnd_new wins).
-- `(rnd_new=False, rnd_last=True)` → `REPLAY`.
-- `(rnd_new=False, rnd_last=False)` → `DEFAULT`.
+- `(rnd_new=True, rnd_last=True)` → emits `("default", SeedMode.NEW)` (`rnd_new` wins over
+  `rnd_last`).
+- `(rnd_new=True, rnd_last=False)` → emits `("default", SeedMode.NEW)`.
+- `(rnd_new=False, rnd_last=True)` → emits `("default", SeedMode.REPLAY)`.
+- `(rnd_new=False, rnd_last=False)` → emits `("default", SeedMode.DEFAULT)`.
+- `()` (both args defaulted) → emits `("default", SeedMode.DEFAULT)` (boundary: default call).
 
 ## Acceptance criteria
 

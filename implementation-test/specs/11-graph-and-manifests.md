@@ -91,6 +91,29 @@ subcommand in `rtl_comrade_config.yaml`.
       help: "Compile and simulate a SystemVerilog/UVM test suite."
   ```
 
+## Tests
+
+Graph-assembly checks in `tests/test_graph_assembly.py` (or similar) — the inputs are the
+committed YAML files, the expected outputs are load/validation outcomes. Fixtures: the
+harness `Graph.from_file` / `validation.py` API; a CLI runner (subprocess or the harness's
+test runner) for the `--help` cases.
+
+- `Graph.from_file("graphs/test.yaml")` → loads without error; every node `class_name`
+  resolves against `modules/config.yaml` and every contract against `contracts/config.yaml`
+  (boundary: no dangling manifest reference).
+- `validation.py` on the loaded graph → reports **no** cycles and **no** overloaded inputs
+  (single-source-per-port holds).
+- `validation.py` on the loaded graph → reports the 13 terminal ports as `no_destination` at
+  INFO, **not** as errors (boundary: unwired-by-design terminal ports).
+- `uv run rtl-comrade --help` → output lists `test` with the help string `"Compile and
+  simulate a SystemVerilog/UVM test suite."`.
+- `uv run rtl-comrade test --help` → output lists every CLI edge (`test_config`, `builder`,
+  `test_name` positional with `option: false, default: ""`, `list`, `rnd_new`, `rnd_last`,
+  `builder_mode`, `early_stop`) with the types/defaults from [06](../06-graph-yaml.md).
+- Regression guard — the assembled graph/manifests contain **no** `fan-in`/`agg` node, **no**
+  `serial_acquire` contract / `serial.py`, and **no** `drop_summary_events` processor (assert
+  their absence; all were removed by TODO #15/#30 and must not reappear).
+
 ## Acceptance criteria
 
 - `uv run rtl-comrade --help` lists `test` with the help string.

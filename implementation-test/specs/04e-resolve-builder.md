@@ -77,9 +77,17 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: a `platform_cfg` fixture with a
+`default_builder` and a `builders` dict; `logging_handler` for the `log.critical` paths.
 
-- Builder resolve honours override; critical on bad name.
+- `builder=""` (no override) with `default_builder` present in `builders` → emits
+  `("default", builders[default_builder])` (empty string falls back to the platform default).
+- `builder="<name>"` override naming a configured builder → emits
+  `("default", builders["<name>"])` (override wins over the default).
+- `builder="<unknown>"` not in `builders` → `builder_cfg is None` → `log.critical` →
+  `pytest.raises(SystemExit)`.
+- `builder=""` with an empty `builders` dict (no builders configured) → lookup yields `None`
+  → `log.critical` → `pytest.raises(SystemExit)` (boundary: empty configured list).
 
 ## Acceptance criteria
 

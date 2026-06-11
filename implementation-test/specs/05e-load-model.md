@@ -94,11 +94,21 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`:
+In `modules/tests/test_selection.py`. Fixtures: a committed `models.yaml` fixture + a `ctx`
+whose `test.suite_dir`/`model_path`/`model_name` point at it; `tmp_path` crafted files for
+the failure cases; `logging_handler` to assert `failure is True` **without** `SystemExit`.
 
-- `load-model` attaches model from a real `models.yaml`.
-- Missing model / unreadable `models.yaml` → emits `("fail", ...)` with `str(e)` in
-  `desc` and `log.error` (no run abort).
+- `ctx` whose `model_name` exists in a real `models.yaml` → emits `("default", ctx)` with
+  `ctx["test"].model` now the resolved `ModelConfig`.
+- `ctx` whose `model_name` is absent from the file → `get_model` raises → emits `("fail",
+  {"key", "result": <FAIL with str(e) in desc>})`, `logging_handler.failure is True`, no
+  `SystemExit` (run continues).
+- `ctx` whose resolved `model_path` does not exist → `ModelConfigLoader.__init__` raises
+  `FileNotFoundError` → emits `("fail", …)`, `log.error`, no abort.
+- `ctx` pointing at a malformed `models.yaml` → parse error → emits `("fail", …)`,
+  `log.error`, no abort (boundary: I/O vs parse vs lookup all route to the same port).
+- Assert across the fail cases that **no** `log.critical`/`SystemExit` fires — the deliberate
+  divergence from rtl_buddy's abort.
 
 ## Acceptance criteria
 

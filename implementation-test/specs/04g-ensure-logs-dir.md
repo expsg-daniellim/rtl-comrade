@@ -97,18 +97,19 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: `tmp_path` + `monkeypatch.chdir` for the CWD;
+`logging_handler` for the failure path.
 
-- With `logs_dir="logs"` and no pre-existing `logs/` → `run()` creates `logs/` under CWD
-  and returns `{"default": True}`.
-- With a pre-existing `logs/` directory → `run()` is a no-op and still returns
-  `{"default": True}` (idempotent, no exception).
-- With `logs_dir="build/logs"` and no pre-existing `build/` → `run()` creates both
-  `build/` and `build/logs/` (verifies `parents=True`).
-- With `logs_dir="/abs/path/logs"` (absolute) → `run()` creates the absolute path;
-  `cc-build` / `sim-build` downstream compose the same prefix.
-- With `logs_dir` pointing into a read-only parent → `PermissionError` propagates uncaught
-  (mirrors the `DiscoverConfigFileMod` PermissionError test).
+- `logs_dir="logs"`, no pre-existing `logs/` → emits `("default", True)` and `logs/` now
+  exists under CWD.
+- `logs_dir="logs"` with a pre-existing `logs/` → emits `("default", True)`, no exception
+  (idempotent via `exist_ok=True`).
+- `logs_dir="build/logs"`, no pre-existing `build/` → emits `("default", True)` and both
+  `build/` and `build/logs/` now exist (boundary: nested, verifies `parents=True`).
+- `logs_dir="/abs/path/logs"` (absolute) → emits `("default", True)` and the absolute path
+  now exists (downstream `cc-build`/`sim-build` compose the same prefix).
+- `logs_dir` pointing into a read-only parent → `mkdir` raises `PermissionError`, propagates
+  uncaught → `pytest.raises(PermissionError)` (mirrors `DiscoverConfigFileMod`).
 
 ## Acceptance criteria
 

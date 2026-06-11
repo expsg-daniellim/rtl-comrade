@@ -34,6 +34,37 @@ documenting any divergences observed.
 - A `KNOWN_DIVERGENCES.md` (or new section in [07](../07-ambiguities-and-assumptions.md))
   recording any behavioural deltas discovered that were not anticipated by the plan.
 
+## Tests
+
+End-to-end parity scenarios, each driving `cd verif && rtl-comrade test …` against the real
+reference suite `../rtl-buddy-proj-template/design/sandbox/verif` and comparing to `rtl_buddy
+test …`. The input is a CLI invocation; the expected output is parity (exit code + per-test
+PASS/FAIL/NA + `desc`) with the reference, plus the named artifacts. Captured artifacts are
+committed under `tests/e2e/`; summary-string **formatting** differences are allowed, per-test
+verdicts are not.
+
+- `rtl-comrade test <passing-test>` → exit `0`, per-test `PASS` matching `rtl_buddy`; `logs/`
+  carries `.log`/`.err`/`.randseed` for the run and the `test.*` symlinks point at the same
+  files (artifact parity).
+- `rtl-comrade test <compile-fail-test>` → non-zero exit and per-test `FAIL` parity; the
+  compile log is persisted (new behaviour, [07 settled 12](../07-ambiguities-and-assumptions.md)).
+- `rtl-comrade test <sim-timeout-test>` → non-zero exit and the SimTimeout verdict parity
+  (the `rc=4444`/`timed_out` path), matching `rtl_buddy`.
+- `rtl-comrade test --list` → prints the suite's test names in declaration order, exit `0`,
+  matching `rtl_buddy test --list`.
+- `rtl-comrade test --early-stop <phase>` for each phase (`pre`/`comp`/`sim`) → exit-code and
+  per-test `NA` "Stopped early at <phase>" parity; one `test_result` per stopped test
+  (boundary: all three phases).
+- **Lazy load-model** — a suite where a *skipped* test references a broken `models.yaml` →
+  the run completes and the skipped test does not trip on the broken model (new behaviour,
+  [07 settled 8](../07-ambiguities-and-assumptions.md)).
+- **ParseLog corrections** — logs exercising FAIL-wins-over-PASS, a `PASSTHROUGH` line, and a
+  FAIL-without-`ERR:` line → verdicts match the corrected behaviour, no crash
+  ([07 settled 15](../07-ambiguities-and-assumptions.md)).
+- **Concurrency divergence (expected)** — scenarios that collide on shared-CWD artefacts are
+  run sequentially or recorded as KIV in `KNOWN_DIVERGENCES.md`; parity is **not** forced with
+  a serialising lock (boundary: known divergence until [07 item 17](../07-ambiguities-and-assumptions.md)).
+
 ## Acceptance criteria
 
 - All five scenarios above match rtl_buddy on exit code and per-test PASS/FAIL/NA.

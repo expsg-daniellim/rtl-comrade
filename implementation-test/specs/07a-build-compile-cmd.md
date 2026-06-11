@@ -117,14 +117,26 @@ In `modules/rtl_test/build.py`:
 
 ## Tests
 
-In `modules/tests/test_compile_cycle.py`:
+In `modules/tests/test_compile_cycle.py`. Fixtures: `builder_cfg` doubles (one verilator
+`exe`, one non-verilator) exposing `get_exe`/`get_simv`/`get_compile_time_opts`; a `ctx`
+fixture (with `test.get_name`/`get_plusdefines`) and a `filelist` dict; `logging_handler`
+for the bad-mode path.
 
-- Argv assembly matches rtl_buddy's `VlogSim.compile` for both verilator and non-verilator
-  builders, with and without plusdefines.
-- `build_dir` and `simv` paths derived correctly per builder type.
-- `logs_dir` is honoured in `command["stdout_path"]` / `stderr_path`: default `"logs"`
-  yields `logs/<test>.compile.log`/`.err` (rtl_buddy parity); a custom `logs_dir`
-  yields the prefixed path.
+- Non-verilator builder, `get_plusdefines()` is `None` → yields `("ctx", ctx_with_simv)` with
+  `ctx["simv"] == builder_cfg.get_simv()`, then `("command", {argv, stdout_path, stderr_path})`
+  where `argv == [exe, *compile_opts, "-f", str(filelist["filelist"])]` (matches `VlogSim.compile`).
+- Verilator builder (`os.path.basename(exe).startswith("verilator")`) → `argv` contains
+  `["--Mdir", "obj_dir_{tag}"]` and `ctx["simv"] == "obj_dir_{tag}/simv"` (boundary: verilator
+  switch derives `simv`/`build_dir` differently).
+- `get_plusdefines()` returns `{"FOO": 1, "BAR": None}` → `argv` contains `"+define+FOO=1"`
+  and `"+define+BAR"` (boundary: `None`-valued define formats without `=`).
+- `logs_dir="custom"` → `command["stdout_path"] == "custom/{tag}.compile.log"` and
+  `stderr_path == "custom/{tag}.compile.err"`; default `"logs"` yields `logs/{tag}.compile.*`
+  (rtl_buddy parity).
+- `ctx["test"].get_name()` has shell-unsafe chars → `test_tag` is sanitised in `build_dir`,
+  verilator `simv`, and both log paths (boundary: `test_tag` regex).
+- `builder_mode` unknown to the builder → `get_compile_time_opts` `log.critical`s →
+  `pytest.raises(SystemExit)` (not caught here — system-wide misconfiguration).
 
 ## Acceptance criteria
 

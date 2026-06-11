@@ -91,10 +91,23 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
 
 ## Tests
 
-In `modules/tests/test_post.py`:
+In `modules/tests/test_post.py`. Fixtures: `tmp_path` UVM log fixtures (varying Report
+Summary counts; one without a summary block); a `test_run` whose `test.uvm` carries
+`max_warns`/`max_errors`; `logging_handler` for the FAIL paths. Compare fixture-by-fixture
+against rtl_buddy `UvmVlogPost`.
 
-- `parse-uvm-log` against fixture logs: zero severities → PASS; over-threshold → FAIL;
-  no-summary → FAIL "Invalid UVM Report Summary".
+- Report Summary with `WARNING=0, ERROR=0, FATAL=0` within thresholds → emits `("default",
+  {result: PASS})`, no log.
+- `WARNING == max_warns` and `ERROR == max_errors`, `FATAL=0` → emits PASS (boundary:
+  inclusive `<=` edge).
+- `ERROR > max_errors` (others within bounds) → emits FAIL with the counts summary in `desc`,
+  `log.error`.
+- `WARNING > max_warns` → emits FAIL, `log.error`.
+- `FATAL == 1` with WARNING/ERROR within thresholds → emits FAIL (boundary: `FATAL == 0` is
+  absolute, not threshold-gated).
+- Log with no Report Summary block → emits FAIL with `desc = "Invalid UVM Report Summary"`,
+  `log.error`.
+- `test_run["log"]` missing → `OSError` caught → emits FAIL with `str(e)` in `desc`, `log.error`.
 
 ## Acceptance criteria
 

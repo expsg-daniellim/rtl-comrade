@@ -995,6 +995,47 @@ Specs need a foot section enumerating what the implementer must NOT do, plus inv
 
 ### 24. Enumerate test cases with input/expected pairs
 
+**Status: Resolved (2026-06-11).** Every module/contract/plugin spec's `## Tests` section now
+enumerates cases in `<input> → <expected output>` form, one per bullet, per concrete step (1).
+Each section covers the three dimensions of step (2) — **every reachable output port** (e.g.
+`keep`/`skip`, `ok`/`fail`, `default`/`fail`), **every failure mode** (the `log.critical`/
+`log.error`/propagate-uncaught idiom per site, cross-referenced to the spec's Algorithm), and
+**boundary values** (zero/empty, inclusive window edges, missing/malformed files, default
+args, tag-regex sanitisation) — and **names the harness fixture** per step (3):
+`run_module_scenario`/`run_contract_scenario`, `tmp_path` + `monkeypatch.chdir`/`setenv`,
+`capsys`, mock-`subprocess`, `logging_handler` (for the `failure`/`pytest.raises(SystemExit)`
+assertions), and `PortTestInput` for the `any` contract's blocking-await branch. The
+acceptance bar (≥4 enumerated cases, or all reachable ports plus boundary inputs, whichever is
+larger) is met in every touched spec.
+
+Scope (confirmed with the user, 2026-06-11):
+- **The 31 per-module child specs** (`04a`–`04i`, `05a`–`05f`, `06a`–`06b`, `07a`–`07b`,
+  `08a`–`08f`, `09a`–`09c`, `10a`–`10c`) — all expanded from their 1–2 happy-path bullets.
+  Trivial classifiers (`05a` route-list-mode, `09a` route-post) reach the bar with an
+  empty-payload / `is not None`-vs-truthiness boundary case rather than padding.
+- **The `any` contract (`02`)** — gained a top-level `## Tests` section in
+  `run_contract_scenario` `port_inputs → expected_outputs` form. Its previously buried test
+  list (a `### contracts/tests/test_any.py` block *inside* Deliverables) was promoted here and
+  the Deliverables subsection trimmed to a pointer, so there is one source of truth; the stress
+  (≥13 ports) and `hypothesis` property tests are retained.
+- **run-process (`03`)** — gained a `## Tests` section enumerating one case per terminal
+  Lifecycle state (normal/non-zero/signal exit, timeout→`rc=4444`, SIGQUIT→SIGKILL escalation,
+  organic-4444 `timed_out` independence, launch-failure `log.critical`, cancellation with no
+  `proc` emit), driven by `await run_module_scenario` with shell-child doubles. Its expectations
+  previously lived only as probes in Acceptance criteria.
+- **Assembly (`11`) and end-to-end (`12`)** — gained `## Tests` sections: `11` enumerates
+  graph-load / `validation.py` (no cycles / no overloaded inputs / `no_destination` at INFO) /
+  `--help` checks plus a removed-node regression guard; `12` enumerates the five CLI parity
+  scenarios against the real reference suite as `invocation → parity-with-rtl_buddy` cases.
+
+Left as already-compliant (the user's call): the three schema specs (`01a`/`01b`/`01c`) already
+carry rich enumerated `## Tests` sections well past four `<input> → <expected>` cases
+(round-trip, every YAML rename, resolution-order tables, validation `ValueError`s, result
+freshness) — no rework. Out of scope: the shared-schema index (`01`, no module tests), the
+parent index files (`04`–`10`) and `specs/README.md` (pure navigation, no `## Tests`).
+
+The original ticket text is kept below for the record.
+
 Tests sections currently list 1–2 bullets per module covering the happy path. Each module should enumerate cases explicitly.
 
 #### Concrete steps

@@ -73,9 +73,18 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: `monkeypatch` on `subprocess.run` to return a
+controlled `uname` (a mock-subprocess double); a `root_cfg` fixture carrying several
+platforms; `logging_handler` for the `log.critical` path.
 
-- Platform select picks correctly under controlled `uname` (mock or skip-if).
+- `uname` matches the first platform's `unames` → emits `("default", <first platform_cfg>)`.
+- `uname` matches only a later platform → emits `("default", <that platform_cfg>)` (iterates
+  in declaration order).
+- `uname` is present in two platforms' `unames` → emits the **first** in declaration order
+  (boundary: first-match wins).
+- `uname` matches no platform → no-match `log.critical` → `pytest.raises(SystemExit)`.
+- `subprocess.run(["uname"])` raises `FileNotFoundError` (no `uname` binary) → propagates
+  uncaught → `pytest.raises(FileNotFoundError)` (boundary: surprising tool-missing error).
 
 ## Acceptance criteria
 

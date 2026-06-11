@@ -121,11 +121,26 @@ In `modules/rtl_test/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`:
+In `modules/tests/test_sim_cycle.py`. Fixtures: a `builder_cfg` double exposing
+`get_run_time_opts(mode, seed=…)`; a `ctx` carrying `simv` and a `test`
+(`get_timeout`/`get_plusargs`/`get_plusdefines`/`get_name`); a `seed` dict; `logging_handler`
+for the bad-mode path.
 
-- `build-sim-cmd` argv matches rtl_buddy `VlogSim.execute`; timeout pulled from test
-  config. `stdout_path`/`stderr_path` in `command` and `log`/`randseed_path` in `sim_cmd`
-  all carry the `logs_dir` prefix (verify with default `"logs"` and a custom value).
+- Default-timeout `ctx`, `get_plusargs()`/`get_plusdefines()` `None` → yields all four ports;
+  `argv == [ctx["simv"], *run_time_opts, ]` (matches `VlogSim.execute`), `sim_cmd` carries
+  `seed`/`log`/`err`/`randseed_path`/`argv`, `command` carries `argv`/`stdout_path`/`stderr_path`,
+  and `("timeout", 60.0)` (the `(60, False)` default).
+- `get_timeout()` returns `(300, True)` (per-test override) → `("timeout", 300.0)` (boundary:
+  custom timeout emitted as `float`).
+- `get_plusargs()` `{"X": 5, "Y": None}` and `get_plusdefines()` `{"D": None}` → `argv`
+  contains `"+X=5"`, `"+Y"`, and `"+define+D"` (boundary: `None`-valued plus formats without `=`).
+- `logs_dir="custom"` → `command["stdout_path"]`/`stderr_path` and `sim_cmd["log"]`/`["err"]`/
+  `["randseed_path"]` all carry the `custom/` prefix; default `"logs"` gives `logs/...` parity.
+- `ctx["run_id"]` set (e.g. `5`) → every path stem includes the `_0005` run suffix (boundary:
+  run-id suffix); `sim_cmd["argv"]` equals `command["argv"]` (so `write-randseed` can run the
+  `hier_inst_seed` membership check).
+- `builder_mode` unknown → `get_run_time_opts` `log.critical`s → `pytest.raises(SystemExit)`
+  (not caught here).
 
 ## Acceptance criteria
 

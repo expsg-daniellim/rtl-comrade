@@ -128,16 +128,24 @@ table renders.
 
 ## Tests
 
-`graphs/tests/test_summary.py` (or alongside the plugin):
+`graphs/tests/test_summary.py` (or alongside the plugin). Fixtures: a fresh
+`SummaryProcessor()` instance per test; hand-built `event_dict`s; `capsys` for the rendered
+table; `pytest.raises(DropEvent)` for the suppression cases. No graph/harness needed.
 
-- feeding N `test_result` events (mix of PASS/SKIP/FAIL/NA) into one instance → `finalise()`
-  renders one table; empty input → `finalise()` is a no-op.
-- `__call__` raises `DropEvent` on `test_result`, and returns every other event — including
-  `git_state` — unchanged (so they survive to the console).
-- accumulation is held on the instance and survives across `__call__` invocations (state
-  persists run-long).
-- the `__call__` signature satisfies the strict processor contract (three positional params
-  with `self` dropped; `method_name: str`; `event_dict` an `EventDict`; returns an `EventDict`).
+- Feed N `test_result` events (mix PASS/SKIP/FAIL/NA) through `__call__`, then `finalise()` →
+  one table rendered with a `key`/`result`/`desc` row per event in arrival order.
+- No events fed → `finalise()` is a no-op, renders nothing (boundary: list-mode / CRITICAL
+  abort before any result).
+- `__call__` on a `test_result` event → `raise DropEvent` and `self._rows` grows by one (row
+  accumulated, console line suppressed).
+- `__call__` on any non-`test_result` event (e.g. `git_state`, a module log) → returns the
+  `event_dict` unchanged, no `DropEvent` (so it survives to `ConsoleRenderer`); no
+  `self._git_state` is kept.
+- State persists across calls on one instance: K `test_result` calls then `finalise()` →
+  renders K rows (accumulation is run-long, instance-held).
+- The `__call__` signature satisfies the strict processor contract: three positional params
+  after `self` (`logger`, `method_name: str`, `event_dict: EventDict`) and it returns an
+  `EventDict` (boundary: contract-shape check, fails at registration otherwise).
 
 ## Acceptance criteria
 

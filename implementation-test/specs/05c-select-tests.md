@@ -75,11 +75,17 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`:
+In `modules/tests/test_selection.py`. Fixtures: a 3-test `suite_cfg` fixture (and an empty
+one); `logging_handler` for the `log.critical` path.
 
-- `select` yields all tests in declaration order.
-- `test_name="foo"` yields only `foo`.
-- Unknown name critical-logs.
+- `(suite_cfg, test_name="")` over a 3-test suite → yields 3 `("default", ctx)` in declaration
+  order, each `ctx == {"key": test.get_name(), "test": test, "run_id": None}`.
+- `(suite_cfg, test_name="foo")` where `foo` exists → yields exactly one `("default", ctx)`
+  for `foo`.
+- `(suite_cfg, test_name="nonexistent")` → `SuiteConfig.get_tests` itself `log.critical`s →
+  `pytest.raises(SystemExit)`.
+- `(empty_suite_cfg, test_name="")` → yields nothing (boundary: empty suite, generator emits
+  zero ctxs).
 
 ## Acceptance criteria
 

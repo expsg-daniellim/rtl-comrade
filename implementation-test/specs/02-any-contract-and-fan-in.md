@@ -102,36 +102,52 @@ consumer.
 
 ### `contracts/tests/test_any.py`
 
-**Behavioural tests** (a 3-port fixture unless noted):
-
-- single item on one port → delivered under that port's name.
-- items interleaved across multiple ports → all delivered, none lost.
-- `EndSentinel` on one port while others still active → continue delivering from the rest.
-- all ports ended → returns `EndSentinel(self.id)`.
-- **no-loss invariant**: two ports ready in the same `asyncio.wait` wake-up — first call
-  returns one, second call returns the other without re-awaiting the port.
-- **drainage order**: a port queued with `[payload, payload, EndSentinel]` delivers both
-  payloads in FIFO order before its sentinel is consumed.
-- **one-at-a-time**: each `get_inputs()` call returns exactly one `{name: payload}` dict,
-  never two.
-
-**Construction-time / misconfiguration tests**: none required — `AnyContract` is a plain
-contract with no `Config` and no `fan_in` mapping to validate.
-
-**Stress test** (≥13 ports): each port produces 100 payloads under
-`asyncio.create_task` with randomised `await asyncio.sleep(0)` interleavings, then emits
-`EndSentinel`. Assertions:
-- exactly `13 × 100` payloads delivered, each exactly once;
-- `get_inputs()` returns `EndSentinel(self.id)` after the last payload and not before.
-
-**Property-based test** (`hypothesis` or equivalent): randomised `(port_count,
-items_per_port, interleaving_seed)` tuples. For each generated case, assert:
-- the multiset of delivered payloads equals the multiset produced upstream;
-- the contract terminates within bounded steps after all ports end.
+Enumerated as `port_inputs → expected_outputs` cases in the [`## Tests`](#tests) section
+below (driven by `run_contract_scenario`).
 
 ### ~~`modules/tests/test_fan_in.py`~~ (removed by TODO #15)
 
 Not built — `FanInResultsMod` is removed.
+
+## Tests
+
+In `contracts/tests/test_any.py`, driven by `run_contract_scenario(AnyContract,
+port_inputs=…, expected_outputs=…)` (the contract-test harness — see
+`docs/contracts/testing.md`). A 3-port fixture (`a`/`b`/`c`) unless noted; `EndSentinel("src")`
+terminates a port; `PortTestInput(value, delay=N)` defers delivery to reach blocking-await
+branches.
+
+**Behavioural cases** (`port_inputs → expected_outputs`):
+
+- `{"a": [1, End], "b": [End], "c": [End]}` → `[{"a": 1}, EndSentinel]` (a single item is
+  delivered under its own port name).
+- `{"a": [1, End], "b": [2, End], "c": [3, End]}` → the three `{name: val}` deliveries (each
+  exactly once, none lost) followed by `EndSentinel` (interleaved across ports).
+- `{"a": [End], "b": [2, End], "c": [3, End]}` → keeps delivering `{"b": 2}`/`{"c": 3}` then
+  `EndSentinel` (an early `EndSentinel` on one port is consumed silently, others still drain).
+- `{"a": [End], "b": [End], "c": [End]}` → `[EndSentinel]` (boundary: all ports already ended →
+  immediate `EndSentinel(self.id)`, no delivery).
+- **No-loss / one-at-a-time** — `{"a": [1, End], "b": [2, End]}` (both pre-loaded, ready in the
+  same `asyncio.wait` wake-up) → `[{"a": 1}, {"b": 2}, EndSentinel]`: the first `get_inputs()`
+  returns exactly one dict, the second returns the other without re-awaiting that port.
+- **Drainage FIFO** — `{"a": [p1, p2, End], "b": [End], "c": [End]}` → `[{"a": p1}, {"a": p2},
+  EndSentinel]` (both payloads in FIFO order before the sentinel is consumed).
+- **Blocking-await** — a required port pre-loaded while a secondary port carries
+  `PortTestInput(9, delay=1)` then `PortTestInput(End, delay=2)` → the deferred `{name: 9}` is
+  still delivered (exercises the `await asyncio.wait` branch unreachable with fully pre-loaded
+  queues).
+
+**Construction-time tests:** none required — `AnyContract` is plain (no `Config`, no `fan_in`
+mapping to validate; `run_contract_scenario` still asserts the structural load-time rules).
+
+**Stress test** (≥13 ports): each port produces 100 payloads under `asyncio.create_task` with
+randomised `await asyncio.sleep(0)` interleavings, then `EndSentinel` → exactly `13 × 100`
+payloads delivered, each once, and `get_inputs()` returns `EndSentinel(self.id)` only after the
+last payload (not flaky across 100 invocations under `pytest -p no:randomly`).
+
+**Property-based test** (`hypothesis` or equivalent): randomised `(port_count, items_per_port,
+interleaving_seed)` over ≥100 cases → the multiset of delivered payloads equals the multiset
+produced upstream, and the contract terminates within bounded steps after all ports end.
 
 ## Acceptance criteria
 

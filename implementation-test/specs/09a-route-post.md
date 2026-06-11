@@ -62,9 +62,15 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
 
 ## Tests
 
-In `modules/tests/test_post.py`:
+In `modules/tests/test_post.py`. Fixtures: `test_run` dicts whose `test.uvm` is a `UVMConfig`
+or `None`. Pure classifier — no `logging_handler`.
 
-- `route-post` routes correctly on `uvm` presence/absence.
+- `test_run["test"].uvm` is a `UVMConfig` → emits `("uvm", test_run)` (the same object).
+- `test_run["test"].uvm is None` → emits `("plain", test_run)`.
+- `test_run["test"].uvm` is a `UVMConfig` with all-zero thresholds (`max_warns=0,
+  max_errors=0`) → still emits `("uvm", test_run)` (boundary: routes on `is not None`, not
+  truthiness — a zero-threshold config is still present).
+- Both ports carry `test_run` through unchanged (identity passthrough, no mutation).
 
 ## Acceptance criteria
 

@@ -61,9 +61,16 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`:
+In `modules/tests/test_selection.py`. Fixtures: `capsys` to capture stdout; `suite_cfg`
+fixtures (multi-test, single-test, empty).
 
-- `list-names` prints expected names (declaration order, two-space joined).
+- A 3-test `suite_cfg` → stdout is the three names two-space joined in declaration order;
+  emits nothing (terminal sink, `expected_emissions={}`).
+- A `suite_cfg` whose names would sort differently from declaration order (e.g. tests defined
+  `zebra`, `alpha`) → stdout is `"zebra  alpha"`, not alphabetised (verifies declaration order).
+- A single-test `suite_cfg` → stdout is just that name with no separator (boundary: one test).
+- An empty `suite_cfg` (no tests) → stdout is an empty line; emits nothing (boundary: empty
+  suite, `"  ".join([])` is `""`).
 
 ## Acceptance criteria
 

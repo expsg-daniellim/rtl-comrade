@@ -60,9 +60,15 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`:
+In `modules/tests/test_selection.py`. Fixtures: a `suite_cfg` fixture (and an empty-suite
+one); pure classifier otherwise.
 
-- `list=True` → emits `("list", suite_cfg)`; `list=False` → emits `("run", suite_cfg)`.
+- `(suite_cfg, list=True)` → emits `("list", suite_cfg)` (the same object, unchanged).
+- `(suite_cfg, list=False)` → emits `("run", suite_cfg)`.
+- `(suite_cfg)` with `list` omitted (default `False`) → emits `("run", suite_cfg)` (boundary:
+  default arg).
+- `(empty_suite_cfg, list=False)` → emits `("run", empty_suite_cfg)` unchanged (boundary: the
+  classifier never inspects suite contents).
 
 ## Acceptance criteria
 

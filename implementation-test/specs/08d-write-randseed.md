@@ -91,14 +91,24 @@ In `modules/rtl_test/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`:
+In `modules/tests/test_sim_cycle.py`. Fixtures: `tmp_path` CWD via `monkeypatch.chdir`;
+`ctx`/`proc`/`sim_cmd` dict fixtures; a `HierInstanceSeed.txt` written into CWD for the
+append cases. Drive `run(ctx, proc, sim_cmd)` directly — the 3-port `keyed_join` is the
+contract's concern.
 
-- `write-randseed` writes to `sim_cmd["randseed_path"]` (not a hard-coded `logs/...`
-  path) — exercise with a custom `logs_dir` end-to-end.
-- `hier_inst_seed` present: with `"hier_inst_seed"` in `sim_cmd["argv"]` and a
-  `HierInstanceSeed.txt` in CWD, the `.randseed` file ends with the seed line **followed by**
-  the `HierInstanceSeed.txt` lines; absent from argv, only the seed line is written and
-  `HierInstanceSeed.txt` is never opened.
+- `sim_cmd["argv"]` without `hier_inst_seed` → writes `sim_cmd["randseed_path"]` with exactly
+  `f"{sim_cmd['seed']}\n"`, and emits `("default", test_run)` joining `ctx`+`proc`+`sim_cmd`
+  (`key`/`test`/`run_id`/`rc`/`timed_out`/`log`/`err`/`randseed_path`).
+- `sim_cmd["randseed_path"]` under a custom `logs_dir` → the file is written at that exact path
+  (boundary: honours the passed path, never a hard-coded `logs/...`).
+- `"hier_inst_seed" in sim_cmd["argv"]` with a `HierInstanceSeed.txt` in CWD → the `.randseed`
+  ends with the seed line **followed by** the `HierInstanceSeed.txt` lines (boundary:
+  conditional append fires).
+- `"hier_inst_seed"` absent from `sim_cmd["argv"]` → only the seed line is written and
+  `HierInstanceSeed.txt` is never opened (assert by leaving the file absent and seeing no error).
+- `"hier_inst_seed" in sim_cmd["argv"]` but no `HierInstanceSeed.txt` in CWD → the unguarded
+  `open` raises `FileNotFoundError`, propagates uncaught → `pytest.raises(FileNotFoundError)`
+  (boundary: rtl_buddy parity, surprising error not swallowed).
 
 ## Acceptance criteria
 

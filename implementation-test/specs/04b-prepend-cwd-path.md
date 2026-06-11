@@ -80,19 +80,22 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: `monkeypatch.setenv("PATH", …)` to control the
+starting value (auto-restored on teardown); `tmp_path` + exec-bit script for the end-to-end
+case.
 
-- With a `PATH` that does not contain `.`, `run()` mutates `os.environ["PATH"]` to start
-  with `. + os.pathsep` and returns `{"default": True}`.
-- With a `PATH` that already starts with `.`, `run()` leaves it unchanged and still
-  returns `{"default": True}` (idempotent).
-- With a `PATH` that contains `.` somewhere in the middle, `run()` leaves it unchanged
-  (not just the head position counts).
-- End-to-end with `run-process` — after `PrependCwdPathMod.run()` fires, a
-  `RunProcessMod.run()` call with `argv=["./local_tool"]` (a script written into the temp
-  CWD with the exec bit set) resolves and executes the binary, where the same call would
-  fail with `FileNotFoundError` if the prepend had not happened. Restore
-  `os.environ["PATH"]` in the test fixture teardown.
+- `PATH` without `.` (e.g. `"/usr/bin:/bin"`) → emits `("default", True)` and
+  `os.environ["PATH"]` becomes `"." + os.pathsep + "/usr/bin:/bin"`.
+- `PATH` already starting with `.` → emits `("default", True)` and `PATH` is unchanged
+  (idempotent at the head).
+- `PATH` with `.` somewhere in the middle (e.g. `"/usr/bin:.:/bin"`) → emits
+  `("default", True)` and `PATH` unchanged (any position counts, not just the head).
+- `PATH` unset entirely (`monkeypatch.delenv("PATH")`) → `os.environ.get("PATH", "")` yields
+  `""` → emits `("default", True)` and `PATH` becomes `"."` (boundary: missing var).
+- End-to-end with `run-process` — after `PrependCwdPathMod.run()` fires, a `RunProcessMod`
+  call with `argv=["local_tool"]` (a script written into the `tmp_path` CWD with the exec bit
+  set) resolves and executes the binary, where the same call before the prepend raises
+  `FileNotFoundError`.
 
 ## Acceptance criteria
 

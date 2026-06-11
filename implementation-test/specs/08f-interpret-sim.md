@@ -70,9 +70,16 @@ In `modules/rtl_test/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`:
+In `modules/tests/test_sim_cycle.py`. Fixtures: a `test_run` dict fixture; `logging_handler`
+for the timeout path.
 
-- `interpret-sim` routes timeout-vs-ok on `test_run["timed_out"]`.
+- `test_run["timed_out"] == False` → emits `("ok", test_run)` unchanged; no log.
+- `test_run["timed_out"] == True` → emits `("timeout", {"key", "result": SimTimeoutResults})`,
+  `logging_handler.failure is True`, and the ERROR log carries `key`/configured-timeout/`err`.
+- `test_run["timed_out"] == True` with `rc == 0` → still routes `("timeout", …)` (boundary:
+  routes on the flag, independent of `rc` — see spec 03's `timed_out`-not-derived-from-`rc`).
+- `test_run["timed_out"] == False` with a non-zero `rc` → still emits `("ok", test_run)`
+  (boundary: rc classification is `parse-log`'s job, not this node's).
 
 ## Acceptance criteria
 

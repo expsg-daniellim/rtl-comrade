@@ -97,12 +97,20 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`:
+In `modules/tests/test_selection.py`. Fixtures: `tmp_path` sweep scripts (valid, raising,
+empty); a `ctx` fixture whose `test.get_sweep_path()` returns the script path or `None`; a
+`root_cfg` fixture; `logging_handler` to assert `failure is True` without `SystemExit`.
 
-- `expand-sweep` with no sweep yields once; with a sweep script yields N (keys suffixed
-  `#i`).
-- A sweep script that raises → emits `("fail", ...)` with `str(e)` in `desc` and
-  `log.error`.
+- `ctx` whose `get_sweep_path()` is `None` → yields `("default", ctx)` exactly once, key
+  unchanged (boundary: no sweep configured).
+- `ctx` with a sweep script that appends 4 variants to `out_test_cfgs` → yields 4
+  `("default", variant_ctx)` with keys `f"{key}#0"`…`#3` and `test` set to each variant.
+- `ctx` with a sweep script that raises (e.g. `raise RuntimeError("boom")`) → yields `("fail",
+  {"key", "result": <FAIL with str(e)>})`, `logging_handler.failure is True`, no `SystemExit`.
+- `ctx` whose sweep path points at a missing file → `FileNotFoundError` reading the script →
+  yields `("fail", …)`, `log.error`, no abort (boundary: read error routed like a script error).
+- `ctx` with a sweep script that leaves `out_test_cfgs` empty → yields nothing on `default`
+  (boundary: zero-variant fan-out).
 
 ## Acceptance criteria
 

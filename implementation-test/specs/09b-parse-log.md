@@ -89,12 +89,22 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
 
 ## Tests
 
-In `modules/tests/test_post.py`:
+In `modules/tests/test_post.py`. Fixtures: `tmp_path` fixture log files (one per case); a
+`test_run` dict whose `log` points at them; `logging_handler` to assert `test_failed` ERROR
+on the non-pass verdicts. Compare against rtl_buddy `VlogPost` on the parity cases.
 
-- `parse-log` against fixture logs: clean PASS; clean FAIL with `ERR:`; FAIL+PASS → FAIL
-  (corrected, FAIL wins); FAIL without `ERR:` → FAIL with `desc = fail_line` (no crash);
-  `PASSTHROUGH ...` line → NA (word-boundary fix); result-unknown NA;
-  `FileNotFoundError` on `test_run["log"]` → FAIL.
+- Log with a `PASS …` line and no FAIL → emits `("default", {result: PASS})`, no log (rtl_buddy
+  parity).
+- Log with a `FAIL …` line and an `ERR: …` line → emits `("default", {result: FAIL})` with
+  `desc` from the ERR group; `logging_handler.failure is True` (rtl_buddy parity).
+- Log with both `FAIL` and `PASS` lines → emits FAIL (correction #1: FAIL wins over PASS).
+- Log with a `FAIL` line but no `ERR:`/`FAT:` → emits FAIL with `desc = match_fail.group(1)`,
+  no crash (correction #2: absent `match_err` is not dereferenced).
+- Log whose only candidate is `PASSTHROUGH …` → emits NA, no log (correction #3: `\b` word
+  boundary, `PASSTHROUGH` is not `PASS`).
+- Log with no PASS/FAIL/ERR lines → emits NA with `desc = "test result unknown"`, no log.
+- `test_run["log"]` points at a missing file → `FileNotFoundError`/`OSError` caught → emits
+  FAIL with `str(e)` in `desc`, `log.error` (boundary: unreadable log routes to FAIL).
 
 ## Acceptance criteria
 

@@ -97,12 +97,19 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
 
 ## Tests
 
-In `modules/tests/test_prep.py`:
+In `modules/tests/test_prep.py`. Fixtures: `tmp_path` preproc scripts (mutating, raising,
+missing); a `ctx` fixture whose `test.get_preproc_path()` returns the script path or `None`;
+a `root_cfg` fixture; `logging_handler` to assert `failure is True` without `SystemExit`.
 
-- `run-preproc` no-op when no script.
-- `run-preproc` mutates `test.pa`/`test.pd`/`test.timeout` when script sets them.
-- A preproc script that raises → emits `("fail", ...)` with `str(e)` in `desc` and
-  `log.error`.
+- `ctx` whose `get_preproc_path()` is `None` → emits `("default", ctx)` exactly once, `ctx`
+  unchanged (boundary: no preproc configured).
+- `ctx` with a script that calls `test_cfg.set_plusarg`/`set_plusdefine`/`set_timeout` →
+  emits `("default", ctx)` with `ctx["test"].pa`/`pd`/`timeout` reflecting the in-place
+  mutations.
+- `ctx` with a script that raises (e.g. `raise ValueError("boom")`) → emits `("fail", {"key",
+  "result": <FAIL with str(e)>})`, `logging_handler.failure is True`, no `SystemExit`.
+- `ctx` whose preproc path points at a missing file → `FileNotFoundError` reading the script →
+  emits `("fail", …)`, `log.error`, no abort (boundary: read error routed like a script error).
 
 ## Acceptance criteria
 

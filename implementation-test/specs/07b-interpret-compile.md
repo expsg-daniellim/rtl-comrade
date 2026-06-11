@@ -78,11 +78,19 @@ In `modules/rtl_test/build.py`:
 
 ## Tests
 
-In `modules/tests/test_compile_cycle.py`:
+In `modules/tests/test_compile_cycle.py`. Fixtures: `ctx` (carrying `simv`) and `proc`
+(`rc`/`stdout_path`/`stderr_path`) dicts; a `tmp_path` stderr file with known content;
+`logging_handler` for the fail path. Drive `run(ctx, proc)` directly — the `keyed_join` is
+the contract's concern.
 
-- `interpret-compile` ok-path passes ctx through.
-- `interpret-compile` fail-path emits `CompileFailResults` and an ERROR-level log entry
-  with stderr content.
+- `proc["rc"] == 0` → emits `("ok", ctx)` unchanged (`ctx["simv"]` preserved); no log.
+- `proc["rc"] == 2` with a stderr file → emits `("fail", {"key", "result": CompileFailResults})`,
+  `logging_handler.failure is True`, and the ERROR log carries `rc`/`stderr_path`/the stderr tail.
+- `proc["rc"] == -11` (signal-style non-zero) → still routes `("fail", …)` (boundary: any
+  non-zero rc is a compile failure, not just positive codes).
+- `proc["rc"] != 0` with `stderr_path` pointing at a missing file → reading the tail raises
+  `FileNotFoundError`, which propagates uncaught → `pytest.raises(FileNotFoundError)` (boundary:
+  surprising I/O error is not swallowed).
 
 ## Acceptance criteria
 

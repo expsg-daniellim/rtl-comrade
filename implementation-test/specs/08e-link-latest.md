@@ -72,10 +72,18 @@ In `modules/rtl_test/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`:
+In `modules/tests/test_sim_cycle.py`. Fixtures: `tmp_path` CWD via `monkeypatch.chdir`; a
+`test_run` dict carrying `log`/`err`/`randseed_path`. No `logging_handler` (no failure path).
 
-- `link-latest` forces symlinks atomically (use `os.replace` or unlink+symlink ordering)
-  and emits `test_run` unchanged.
+- Fresh CWD, no existing `test.*` links → after `run()`, `test.log`/`test.err`/`test.randseed`
+  are symlinks pointing at `test_run["log"]`/`["err"]`/`["randseed_path"]`; emits
+  `("default", test_run)` unchanged.
+- Pre-existing `test.*` symlinks pointing at an earlier run → force-replaced to this run's
+  files (boundary: existing link replaced atomically, not appended-to or errored).
+- A pre-existing `test.log` that is a dangling symlink (target deleted) → still replaced
+  cleanly to the new target (boundary: broken link).
+- Two sequential invocations with different `test_run` paths → the links end pointing at the
+  second run's files (last-writer-wins), and each call returns its own `test_run` unchanged.
 
 ## Acceptance criteria
 

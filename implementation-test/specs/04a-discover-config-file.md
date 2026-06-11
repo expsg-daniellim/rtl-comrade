@@ -92,9 +92,20 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: `tmp_path` nested dirs + `monkeypatch.chdir`
+to control CWD; `Config(filename="root_config.yaml", max_levels=…)`; `logging_handler` for
+the `log.critical` paths.
 
-- Discovery walks up to find a fixture `root_config.yaml`; stops at depth limit.
+- CWD already holds `root_config.yaml` → emits `("default", cwd / "root_config.yaml")` on the
+  first iteration (boundary: depth 0).
+- File sits `N` levels up with no `.git` between (e.g. `tmp_path/a/b` is CWD, file in
+  `tmp_path`) → walk ascends and emits `("default", tmp_path / "root_config.yaml")`.
+- A `.git` dir sits between CWD and the file → walk stops at the git boundary, file never
+  reached → not-found `log.critical` → `pytest.raises(SystemExit)` (`logging_handler`).
+- File absent within the depth limit (`max_levels=2`, file 3 levels up) → loop exhausts →
+  not-found `log.critical` → `pytest.raises(SystemExit)` (boundary: `max_levels` exhausted).
+- A directory in the walk raises `PermissionError` on `.is_file()` (monkeypatch
+  `Path.is_file`) → propagates uncaught → `pytest.raises(PermissionError)`.
 
 ## Acceptance criteria
 

@@ -75,9 +75,20 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `root_config.yaml`
+fixture for the happy path; `tmp_path` files for the malformed cases; `logging_handler` for
+the `log.critical` paths.
 
-- Parse round-trips an unmodified rtl_buddy `root_config.yaml`.
+- A valid `root_config.yaml` path → emits `("default", RootConfig)`; every field round-trips
+  equal to the equivalent rtl_buddy `RootConfig` over the same YAML.
+- Path to a nonexistent file → `FileNotFoundError` caught → `log.critical` →
+  `pytest.raises(SystemExit)`.
+- Path to a malformed-YAML file (`tmp_path` with unparseable text) → `yaml.YAMLError` caught
+  → `log.critical` → `pytest.raises(SystemExit)`.
+- Path to schema-mismatched YAML (required field missing / wrong type) → `TypeError`/`KeyError`
+  caught → `log.critical` → `pytest.raises(SystemExit)`.
+- Path to a directory rather than a file → `IsADirectoryError` caught → `log.critical` →
+  `pytest.raises(SystemExit)` (boundary: I/O-class error).
 
 ## Acceptance criteria
 

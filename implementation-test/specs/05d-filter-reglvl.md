@@ -81,11 +81,20 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`:
+In `modules/tests/test_selection.py`. Fixtures: a `ctx` fixture whose `test.get_reglvl(name)`
+returns a controlled int; a `builder_cfg` fixture with `get_name()`. No `logging_handler`
+needed (SKIP is not an error).
 
-- `filter` keep/skip routing matches rtl_buddy `_do_test_suite` level-filter logic
-  (both `None` → keep; level inside window → keep; level outside window → skip with
-  `SkipResults`).
+- `(ctx, builder_cfg, reg_level=None, start_level=None)`, any `lvl` → emits `("keep", ctx)`
+  (both bounds `None` keeps every test).
+- `lvl` strictly inside `[start_level, reg_level]` (e.g. `lvl=3`, window `[1, 5]`) → emits
+  `("keep", ctx)`.
+- `lvl == reg_level` and `lvl == start_level` (window edges) → emits `("keep", ctx)`
+  (boundary: window is inclusive, `> / <` are strict).
+- `lvl > reg_level` (e.g. `lvl=6`, `reg_level=5`) → emits `("skip", {"key": ctx["key"],
+  "result": SkipResults})` (boundary: above the upper bound).
+- `lvl < start_level` (e.g. `lvl=0`, `start_level=1`) → emits `("skip", {"key": ctx["key"],
+  "result": SkipResults})` (boundary: below the lower bound).
 
 ## Acceptance criteria
 

@@ -85,16 +85,22 @@ In `modules/rtl_test/setup.py`:
 
 ## Tests
 
-In `modules/tests/test_setup.py`:
+In `modules/tests/test_setup.py`. Fixtures: `tmp_path` + `monkeypatch.chdir` to set CWD and
+lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical` paths.
 
-- `tests.yaml` in CWD → emits resolved Path; bare filename matching
-  `Path.cwd() / "tests.yaml"`.
-- `-c /abs/elsewhere/tests.yaml` → `log.critical` with CWD-mismatch message.
-- `-c ../sibling/tests.yaml` → `log.critical` (parent is not CWD).
-- `-c subdir/tests.yaml` → `log.critical` (parent is a subdir of CWD, not CWD).
-- Missing file in CWD → `log.critical` with not-found message.
-- CWD itself is a symlink (e.g., `/tmp/link → /tmp/real`) and `tests.yaml` sits in
-  `/tmp/real` → passes (both `.resolve()` calls collapse to the same realpath).
+- `test_config="tests.yaml"` with the file present in CWD → emits `("default", resolved)`
+  where `resolved == (Path.cwd() / "tests.yaml").resolve()`.
+- `test_config="/abs/elsewhere/tests.yaml"` (absolute, outside CWD) → CWD-mismatch
+  `log.critical` → `pytest.raises(SystemExit)`.
+- `test_config="../sibling/tests.yaml"` → resolved parent is not CWD → CWD-mismatch
+  `log.critical` → `pytest.raises(SystemExit)`.
+- `test_config="subdir/tests.yaml"` → resolved parent is a subdir of CWD, not CWD →
+  CWD-mismatch `log.critical` → `pytest.raises(SystemExit)`.
+- `test_config="tests.yaml"` with no such file in CWD → missing-file `log.critical` →
+  `pytest.raises(SystemExit)`.
+- CWD is itself a symlink (`/tmp/link → /tmp/real`) and `tests.yaml` sits in `/tmp/real` →
+  emits `("default", resolved)` (boundary: both `.resolve()` calls collapse to the same
+  realpath, so a symlinked CWD still passes).
 
 ## Acceptance criteria
 

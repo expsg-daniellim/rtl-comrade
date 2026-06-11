@@ -106,13 +106,23 @@ In `modules/rtl_test/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`:
+In `modules/tests/test_sim_cycle.py`. Fixtures: `tmp_path` CWD via `monkeypatch.chdir` for
+the `.randseed` files; `monkeypatch` on `random.randrange` to pin the NEW value; a `ctx`
+fixture (`test.get_name`, `run_id`); a `builder_cfg` with `get_seed`; `logging_handler` for
+the REPLAY-fail path.
 
-- `resolve-seed` covers all three modes; REPLAY round-trips a written `.randseed`.
-- `resolve-seed` REPLAY honours `logs_dir`: write `.randseed` under a custom
-  `logs_dir="custom_logs"`, then resolve-seed REPLAY with the same `logs_dir` reads it
-  back. The REPLAY-missing fail path quotes the `logs_dir`-prefixed path in the FAIL
-  payload's `desc`.
+- `seed_mode=NEW` → yields `("ctx", ctx)` then `("seed", {"key", "seed"})` with `seed ==`
+  the pinned `random.randrange(1_000_000)` value (assert `0 <= seed < 1_000_000`).
+- `seed_mode=DEFAULT` → yields `ctx` + `seed` with `seed == builder_cfg.get_seed()`.
+- `seed_mode=REPLAY` with a written `.randseed` (under `logs_dir`, with the `run_id` suffix) →
+  reads it back, yields `ctx` + `seed` equal to the written integer (round-trip).
+- `seed_mode=REPLAY` with `logs_dir="custom_logs"` → writes/reads under that dir; the path
+  is composed from the persistent `logs_dir`, not a hard-coded `logs/`.
+- `seed_mode=REPLAY` with a missing `.randseed` → `FileNotFoundError` → yields `("fail",
+  {"key", "result"})` whose `desc` is `f"Replay seed missing or invalid at {path}"` and quotes
+  the `logs_dir`-prefixed path, `logging_handler.failure is True`, no `SystemExit`.
+- `seed_mode=REPLAY` with a `.randseed` whose first line is not an int → `ValueError` →
+  yields `("fail", …)`, `log.error` (boundary: malformed file routes like a missing one).
 
 ## Acceptance criteria
 

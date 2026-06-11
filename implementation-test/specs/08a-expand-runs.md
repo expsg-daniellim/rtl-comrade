@@ -66,10 +66,18 @@ In `modules/rtl_test/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`:
+In `modules/tests/test_sim_cycle.py`. Fixtures: a `ctx` fixture. Pure generator — no
+`logging_handler` needed.
 
-- `expand-runs` defaults `[None]` → single passthrough (key unmodified, `run_id=None`).
-- Explicit `[1,2,3]` → 3 ctxs with correct keys (suffixed `#run_id`).
+- `(ctx, run_ids=[None])` (default) → yields a single `("default", ctx)` with key unmodified
+  and `run_id=None` (boundary: default passthrough).
+- `(ctx, run_ids=[1, 2, 3])` → yields 3 ctxs with keys `key#1`/`key#2`/`key#3` and
+  `run_id` set to `1`/`2`/`3` respectively.
+- `(ctx, run_ids=[0])` → yields one ctx with key `key#0`, `run_id=0` (boundary: `0` is not
+  `None`, so it is suffixed — confirms the `is None` test, not falsiness).
+- `(ctx, run_ids=[])` → yields nothing (boundary: empty list).
+- Inbound `ctx` is not mutated in place — each yielded dict is a fresh copy (assert the
+  original `ctx["key"]`/`run_id` are untouched after iterating).
 
 ## Acceptance criteria
 

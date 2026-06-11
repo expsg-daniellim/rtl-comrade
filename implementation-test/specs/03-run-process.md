@@ -235,6 +235,36 @@ Append to the `- file: rtl_test/build.py` block in `modules/config.yaml` (opened
   - { name: run-process, class_name: RunProcessMod }
 ```
 
+## Tests
+
+In `modules/tests/test_run_process.py` (async tests via `await run_module_scenario(...)`).
+Fixtures: `tmp_path` for the `stdout_path`/`stderr_path` redirect files; real shell children
+(`["sh", "-c", "…"]`) as the mock subprocess; `logging_handler` for the launch-failure path; an
+`asyncio` task wrapper for the cancellation case; `os.waitpid(-1, os.WNOHANG)` after return to
+assert no orphaned children. One terminal Lifecycle state per case (the list is exhaustive).
+
+- `command` with `argv=["sh","-c","echo hi; exit 0"]`, `timeout=None` → emits `("default",
+  {key, rc: 0, timed_out: False, stdout_path, stderr_path})`; the `stdout_path` file contains
+  `hi` (Lifecycle 2a, normal exit).
+- `argv=["sh","-c","exit 7"]` → `rc: 7, timed_out: False`, **no** log (a non-zero `rc` is not a
+  failure at this layer — `interpret-*` classifies it downstream).
+- A child killed by a signal externally → `rc: -<signum>` (negative, POSIX convention),
+  `timed_out: False` (Lifecycle 2a externally-killed sub-case).
+- `argv=["sh","-c","echo partial; sleep 5"]`, `timeout=0.1` → `rc: 4444, timed_out: True`; the
+  already-written `partial` line is preserved in `stdout_path`, and `os.waitpid(-1, WNOHANG)`
+  finds no stale children (Lifecycle 2b → 3a; process-group reap).
+- `argv=["sh","-c","trap '' QUIT; sleep 30"]`, `timeout=0.1` → SIGKILL escalation completes
+  within `_TIMEOUT_GRACE_S + ε` of the timeout; `rc: 4444, timed_out: True` (boundary: SIGQUIT
+  ignored → SIGKILL escalation in step 3a).
+- A monkeypatched child whose `returncode` is `4444` on a **normal** exit → `timed_out: False`
+  (boundary: `timed_out` is set at the return site, never derived from `rc == 4444`, so an
+  organic 4444 is not misclassified).
+- `argv=["./nonexistent-binary"]` → `create_subprocess_exec` raises `FileNotFoundError` →
+  launch-failure `log.critical` → `pytest.raises(SystemExit)` (Failure case (a)).
+- Wrap `run()` in a task and cancel it while the child sleeps → the child is SIGKILLed and
+  reaped under `asyncio.shield`, `CancelledError` re-raises, **no** `proc` payload is emitted,
+  partial stdout on disk is preserved, and no zombies remain (Lifecycle 2c → 3b).
+
 ## Acceptance criteria
 
 - All tests above pass.

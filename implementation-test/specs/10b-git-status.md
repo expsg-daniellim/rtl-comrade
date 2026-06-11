@@ -84,10 +84,20 @@ only for the side-effect log).
 
 ## Tests
 
-`modules/tests/test_control.py`:
+`modules/tests/test_control.py`. Fixtures: `tmp_path` initialised as a git repo (shell `git
+init` + a commit) via `monkeypatch.chdir`; `logging_handler` to inspect emitted events and
+assert `failure is False` throughout.
 
-- `GitStatusMod` in a temp git repo emits `git_state` with branch/sha/dirty; outside a repo
-  emits `git_state_unavailable` at WARNING and no ERROR/CRITICAL.
+- Clean git repo → emits `("default", True)` and one `log.info("git_state", branch=…, sha=…,
+  dirty=False)`; no WARNING/ERROR.
+- Git repo with an uncommitted change → `git_state` event with `dirty=True` (boundary: dirty
+  flag from `git status --porcelain`).
+- CWD outside any git repo (`git rev-parse` exits non-zero) → `CalledProcessError` caught →
+  emits `("default", True)` and `log.warning("git_state_unavailable", …)`; **no**
+  ERROR/CRITICAL, `logging_handler.failure is False`.
+- `git` binary unavailable (monkeypatch `subprocess.run` to raise `FileNotFoundError`) → caught
+  → emits `("default", True)` and `log.warning("git_state_unavailable", …)`; no ERROR/CRITICAL
+  (boundary: tool missing must not fail the run).
 
 ## Acceptance criteria
 

@@ -98,10 +98,23 @@ terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md
 
 ## Tests
 
-`modules/tests/test_control.py`:
+`modules/tests/test_control.py`. Fixtures: `Config(phase=…)`; `payload` dicts in both `ctx`
+and `test_run` shapes (the module reads only `payload["key"]`); `logging_handler` to capture
+the INFO `test_result` event and confirm no `failure`. Order is `pre < comp < sim < post`;
+stop iff `order.index(early_stop) <= order.index(phase)`.
 
-- Gate routing matches expected ordering across all four `early_stop` values for each of the
-  three `phase` configurations; a `stop` also emits one `test_result` event at INFO.
+- Parametrised matrix — all three `phase` values × all four `early_stop` values (`pre`/`comp`/
+  `sim`/`post`) → `("go", payload)` when `early_stop` is strictly after `phase`, else `("stop",
+  {"key", "result": EarlyStopResults})`. Exercises both ports for every `phase`.
+- `phase="comp", early_stop="comp"` (own-phase) → `("stop", …)` (boundary: inclusive `<=` —
+  a gate stops at its own checkpoint) and emits exactly one `log.info("test_result",
+  result="NA", desc="Stopped early at comp")`.
+- `phase="comp", early_stop="post"` (default) → `("go", payload)` and emits **no**
+  `test_result` event (boundary: the default `post` never stops any phase).
+- A `stop` emits no `log.error`/`log.critical` — `logging_handler.failure` stays `False` (a
+  stop is a normal terminal, not a failure).
+- `payload` agnosticism: a `ctx`-shaped payload at `phase="pre"` and a `test_run`-shaped
+  payload at `phase="sim"` both route purely on `payload["key"]`.
 
 ## Acceptance criteria
 
