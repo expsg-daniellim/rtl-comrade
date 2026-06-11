@@ -92,6 +92,31 @@ def only_errors(logger, method_name: str, event_dict: MutableMapping[str, Any]) 
 
 When a processor raises `DropEvent`, the event reaches neither the terminal renderer nor any later processor in the chain, and the harness handler drops the record silently rather than surfacing a logging error. Dropping output does **not** affect failure tracking: an `ERROR` event still flips the failure flag and a `CRITICAL` event still exits, because that bookkeeping lives on the harness handler outside the formatter chain (see [logging.md](../harness/logging.md)).
 
+### End-of-run finalisation with `finalise()`
+
+A processor may expose a `finalise()` method (no arguments). At the end of a run, `App.cleanup` finalises the run's processors (then its handlers) and calls `finalise()` on every one that defines it — use it for a processor that accumulates state across the run, such as one that counts events in `__call__` and writes a summary at the end. It is duck-typed: a processor whose `finalise` is missing or not callable is skipped, so the method is optional. The same end-of-run timing limits apply as for handlers — see *End-of-run finalisation* under [Handlers](#handlers) below.
+
+Unlike a handler, a processor has no `emit`; it observes each event through its `__call__` (returning the event dict so the chain continues) and flushes in `finalise`.
+
+```python
+from __future__ import annotations
+from typing import Any
+from collections.abc import MutableMapping
+
+class EventCounter:
+    def __init__(self):
+        self.count = 0
+
+    def __call__(self, logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        self.count += 1
+        return event_dict
+
+    def finalise(self):
+        print(f"saw {self.count} events")
+
+counter = EventCounter()   # reference `name: counter` from the graph YAML
+```
+
 ## Handlers
 
 A handler entry is a full `logging.Handler` subclass, appended to the root logger:
@@ -124,7 +149,7 @@ A handler that assumes a pre-rendered string will instead get `str(dict)`.
 
 ### End-of-run finalisation with `finalise()`
 
-A handler may expose a `finalise()` method (no arguments). At the end of a run, `App.cleanup` walks the root logger's handlers and calls `finalise()` on every handler that defines one — use it to flush buffers, close files, or write a summary. It is duck-typed: a handler without `finalise` is skipped, so the method is optional.
+A handler may expose a `finalise()` method (no arguments). At the end of a run, `App.cleanup` walks the root logger's handlers and calls `finalise()` on every handler that defines one — use it to flush buffers, close files, or write a summary. It is duck-typed: a handler whose `finalise` is missing or not callable is skipped, so the method is optional.
 
 ```python
 import logging

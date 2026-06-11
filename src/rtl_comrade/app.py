@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+import itertools
 import logging
 import os
 from pathlib import Path
@@ -67,6 +68,7 @@ class App:
 
 		# Initialise logging handler
 		self.handler, self.root_logger = initialise_logging(LOGGING_LEVELS[args.level])
+		self.processors:list = []
 
 		# Look for config
 		config = search_for_config(args.config_file, Path(os.getcwd()))
@@ -148,15 +150,16 @@ class App:
 			None.
 		"""
 
-		chain = [ spec.construct() for spec in processors ]
+		# Keep the constructed chain so cleanup can finalise processors if need be
+		self.processors = [ spec.construct() for spec in processors ]
 		if include_default:
-			chain.append(structlog.dev.ConsoleRenderer())
+			self.processors.append(structlog.dev.ConsoleRenderer())
 
-		self.handler.render = bool(chain)
+		self.handler.render = bool(self.processors)
 		# Skip rebuilding the formatter when there is no terminal renderer; a processors=[] ProcessorFormatter has nothing to render.
-		if chain:
+		if self.processors:
 			# Derive the foreign chain from the live structlog config (its trailing entry is wrap_for_formatter) so it can't drift from a cached copy.
-			self.handler.setFormatter(ProcessorFormatter(processors=chain, foreign_pre_chain=structlog.get_config()["processors"][:-1]))
+			self.handler.setFormatter(ProcessorFormatter(processors=self.processors, foreign_pre_chain=structlog.get_config()["processors"][:-1]))
 
 		for spec in handlers:
 			self.root_logger.addHandler(spec.construct())
@@ -168,9 +171,9 @@ class App:
 			None.
 		"""
 
-		# Finalise before the failure check so handlers flush even on a failing run.
-		for handler in self.root_logger.handlers:
-			if (finalise := getattr(handler, "finalise", None)) is not None:
+		# Finalise before the failure check so handlers/processors flush even on a failing run.
+		for logger in itertools.chain(self.processors, self.root_logger.handlers):
+			if callable(finalise := getattr(logger, "finalise", None)):
 				finalise()
 
 		if self.handler.failure:

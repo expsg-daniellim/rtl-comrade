@@ -86,11 +86,11 @@ Each subcommand is driven by a closure returned by `Graph.construct_run(config, 
 2. resolves the graph's custom logging via `config.logging.load(config.relative_path)` and installs it via `setup_logging(processors, handlers, config.logging.include_default)`
 3. injects the resolved CLI argument values into the graph's CLI nodes
 4. runs the graph via `asyncio.run`
-5. calls `cleanup()`, which finalises the root logger's handlers then raises `typer.Exit(1)` if `self.handler.failure` is set
+5. calls `cleanup()`, which finalises the run's processors and the root logger's handlers then raises `typer.Exit(1)` if `self.handler.failure` is set
 
 This converts deferred `ERROR`-level log failures into a non-zero process exit code.
 
-`cleanup` first walks `self.root_logger.handlers` and calls a `finalise()` method on every handler that defines one (duck-typed via `getattr`; handlers without it are skipped). This runs **before** the `failure` check so handlers flush even on a failing run. Because a `CRITICAL` record exits via the harness handler before `cleanup` is reached, the finalise pass runs on normal completion and on deferred-`ERROR` exits, but not on a `CRITICAL`-triggered exit. A handler plugin needing an end-of-run flush or close should expose `finalise()`; see [docs/logger/implementation.md](../logger/implementation.md).
+`cleanup` first walks the run's processors (`self.processors`, stored by `setup_logging`) and then `self.root_logger.handlers`, calling a `finalise()` method on every plugin that defines one (duck-typed via `getattr`; a plugin whose `finalise` is missing or not callable is skipped). This runs **before** the `failure` check so plugins flush even on a failing run. Because a `CRITICAL` record exits via the harness handler before `cleanup` is reached, the finalise pass runs on normal completion and on deferred-`ERROR` exits, but not on a `CRITICAL`-triggered exit. A processor or handler plugin needing an end-of-run flush or close should expose `finalise()`; see [docs/logger/implementation.md](../logger/implementation.md).
 
 ## Logging Lifecycle
 
@@ -100,7 +100,7 @@ At startup, `App.__init__` calls `initialise_logging(level)` once, which install
 
 Per-graph custom logging is resolved and installed **lazily at graph invocation**, not at startup, mirroring how modules and contracts load at run time. Inside the `run` closure — after `Graph.from_config`, before any node executes — `config.logging.load(config.relative_path)` resolves the graph's `logging` config into the `(processors, handlers)` pair, where `processors`/`handlers` are *unconstructed* specs (the loader imports and classifies but does not instantiate, mirroring how the loader returns module/contract classes for `node.py` to construct). The closure reads `include_default` from `config.logging` and calls `App.setup_logging(processors, handlers, include_default)`, which:
 
-- constructs each spec via `spec.construct()` (`LoggingPlugin.construct` — instantiating a class, deserialising its `Config` and relativising `{graph}` paths, or using a function/instance as-is), then appends the terminal `ConsoleRenderer` when `include_default`;
+- constructs each spec via `spec.construct()` (`LoggingPlugin.construct` — instantiating a class, deserialising its `Config` and relativising `{graph}` paths, or using a function/instance as-is) and appends the terminal `ConsoleRenderer` when `include_default`, keeping the resulting chain on `self.processors` for end-of-run finalisation (the `ConsoleRenderer` has no `finalise` and is skipped there);
 - sets `self.handler.render` to `bool(chain)`, so the harness handler writes nothing when there is no terminal renderer;
 - rebuilds the harness handler's `ProcessorFormatter` from the constructed chain (with the foreign pre-chain read from `structlog.get_config()["processors"][:-1]`) when the chain is non-empty;
 - constructs and appends each Handler-type spec to the root logger.

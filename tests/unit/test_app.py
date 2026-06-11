@@ -399,3 +399,79 @@ def test_setup_logging_appends_handlers_to_root():
 	app.setup_logging([], [_spec(custom)], include_default=True)
 	assert custom in app.root_logger.handlers
 	assert app.root_logger.handlers[: len(before)] == before
+
+
+# ---------------------------------------------------------------------------
+# App.cleanup — finalise the run's processors and handlers
+# ---------------------------------------------------------------------------
+
+
+class _CountingProcessor:
+	def __init__(self):
+		self.finalised = False
+
+	def __call__(self, logger, method_name, event_dict):
+		return event_dict
+
+	def finalise(self):
+		self.finalised = True
+
+
+class _FinaliseHandler(logging.Handler):
+	def __init__(self):
+		super().__init__()
+		self.finalised = False
+
+	def finalise(self):
+		self.finalised = True
+
+
+def test_setup_logging_stores_constructed_chain():
+	app = _make_app()
+	proc = _CountingProcessor()
+	app.setup_logging([_spec(proc)], [], include_default=True)
+	# The store is the constructed chain — the user processor (the live instance in the formatter) plus the terminal ConsoleRenderer.
+	assert proc in app.processors
+	assert proc in app.handler.formatter.processors
+	assert any(isinstance(p, structlog.dev.ConsoleRenderer) for p in app.processors)
+
+
+def test_cleanup_finalises_processors():
+	app = _make_app()
+	proc = _CountingProcessor()
+	app.setup_logging([_spec(proc)], [], include_default=True)
+	app.cleanup()
+	assert proc.finalised is True
+
+
+def test_cleanup_skips_processor_without_finalise():
+	app = _make_app()
+	def proc(logger, method_name, event_dict):
+		return event_dict
+	app.setup_logging([_spec(proc)], [], include_default=True)
+	app.cleanup()  # a processor with no finalise is skipped, not an error
+
+
+def test_cleanup_skips_non_callable_finalise():
+	app = _make_app()
+	class _BadProcessor:
+		finalise = "not_a_function"
+		def __call__(self, logger, method_name, event_dict):
+			return event_dict
+	class _BadHandler(logging.Handler):
+		finalise = "not_a_function"
+	app.setup_logging([_spec(_BadProcessor())], [_spec(_BadHandler())], include_default=True)
+	app.cleanup()  # a non-callable finalise attribute is ignored, not invoked
+
+
+def test_cleanup_finalises_processors_and_handlers_before_failure_check():
+	app = _make_app()
+	proc = _CountingProcessor()
+	handler = _FinaliseHandler()
+	app.setup_logging([_spec(proc)], [_spec(handler)], include_default=True)
+	app.handler.failure = True
+	# Finalisation runs before the failure check, so both flush even though cleanup then exits non-zero.
+	with pytest.raises(typer.Exit):
+		app.cleanup()
+	assert proc.finalised is True
+	assert handler.finalised is True
