@@ -20,7 +20,15 @@ in `modules/rtl_test/build.py`; tests in `modules/tests/test_compile_cycle.py`.
 | [07a](07a-build-compile-cmd.md) | `BuildCompileCmdMod` | Assemble compile argv; fold `simv` into `ctx`. |
 | [07b](07b-interpret-compile.md) | `InterpretCompileMod` | Route on rc (`keyed_join`); emit `CompileFailResults`. |
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — these modules append to the `rtl_test/build.py` block in `modules/config.yaml`
+opened by the prep chain ([`06a`](06a-run-preproc.md)). `run-process` is registered by its own
+spec [`03`](03-run-process.md):
+
+```yaml
+  - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
+  - { name: run-process,       class_name: RunProcessMod }   # spec 03
+  - { name: interpret-compile, class_name: InterpretCompileMod }
+```
 
 ## Acceptance criteria
 

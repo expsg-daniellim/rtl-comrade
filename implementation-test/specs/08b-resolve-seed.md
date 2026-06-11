@@ -80,7 +80,12 @@ In `modules/rtl_test/sim.py`:
   failure path.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute` seed resolution (REPLAY `:197-213`, NEW `:214-216`, DEFAULT `:218-219`).
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: resolve-seed, class_name: ResolveSeedMod }
+```
 
 ## Tests
 

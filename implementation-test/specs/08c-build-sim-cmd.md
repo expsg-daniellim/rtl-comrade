@@ -85,7 +85,12 @@ In `modules/rtl_test/sim.py`:
   `run_time` is `None` — see spec [01a](01a-builder-schema.md). No catching.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:195,221-235` — `VlogSim.execute` argv + `get_timeout`; `get_run_time_opts` at `config/rtl.py:104-123`, `get_timeout` at `config/test.py:210-219`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: build-sim-cmd, class_name: BuildSimCmdMod }
+```
 
 ## Tests
 

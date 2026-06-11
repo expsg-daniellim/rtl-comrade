@@ -64,7 +64,12 @@ In `modules/rtl_test/setup.py`:
   no log call.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: prepend-cwd-path, class_name: PrependCwdPathMod }
+```
 
 ## Tests
 

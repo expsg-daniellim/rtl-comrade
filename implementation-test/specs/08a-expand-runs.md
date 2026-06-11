@@ -48,7 +48,14 @@ In `modules/rtl_test/sim.py`:
   None`). For `run_ids=[None]` emits one `ctx` unchanged (key unmodified, `run_id=None`).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:82-117` — `run_multiple`'s run-id loop (vs `run` at `:51-80`); dispatch at `rtl_buddy.py:297-299`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — this module opens the `rtl_test/sim.py` block in `modules/config.yaml`
+(later appended to by `08b`–`08f`, `09a`–`09c`):
+
+```yaml
+- file: rtl_test/sim.py
+  plugins:
+  - { name: expand-runs, class_name: ExpandRunsMod }
+```
 
 ## Tests
 

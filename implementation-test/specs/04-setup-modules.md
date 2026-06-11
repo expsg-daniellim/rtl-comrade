@@ -25,7 +25,25 @@ in `modules/rtl_test/setup.py`; tests in `modules/tests/test_setup.py`.
 | [04h](04h-parse-suite-config.md) | `ParseSuiteConfigMod` | Deserialise `tests.yaml` → `suite_cfg`. |
 | [04i](04i-derive-seed-mode.md) | `DeriveSeedModeMod` | Map the two CLI booleans → `SeedMode`. |
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — these nine modules open the `rtl_test/setup.py` block in `modules/config.yaml`
+(each child ticket carries its own line). The selection/expansion chain (`05a`–`05f`) and
+`git-status` ([`10b`](10b-git-status.md)) append to the **same** block — append, don't re-create:
+
+```yaml
+- file: rtl_test/setup.py
+  plugins:
+  - { name: discover-config-file, class_name: DiscoverConfigFileMod }
+  - { name: prepend-cwd-path,     class_name: PrependCwdPathMod }
+  - { name: parse-root-config,    class_name: ParseRootConfigMod }
+  - { name: select-platform,      class_name: SelectPlatformMod }
+  - { name: resolve-builder,      class_name: ResolveBuilderMod }
+  - { name: check-suite-cwd,      class_name: CheckSuiteCwdMod }
+  - { name: ensure-logs-dir,      class_name: EnsureLogsDirMod }
+  - { name: parse-suite-config,   class_name: ParseSuiteConfigMod }
+  - { name: derive-seed-mode,     class_name: DeriveSeedModeMod }
+  # + route-list-mode, list-test-names, select-tests, filter-reglvl, load-model,
+  #   expand-sweep (05a-05f) and git-status (10b)
+```
 
 ## Acceptance criteria
 

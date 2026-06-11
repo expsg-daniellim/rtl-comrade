@@ -54,7 +54,12 @@ In `modules/rtl_test/sim.py`:
   a lock — the `serial_acquire` shim was removed.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:271-273` — the three `force_symlink` calls; helper at `vlog_sim.py:26-30`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: link-latest, class_name: LinkLatestMod }
+```
 
 ## Tests
 

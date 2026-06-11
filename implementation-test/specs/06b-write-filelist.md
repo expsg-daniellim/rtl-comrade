@@ -78,7 +78,12 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
   processing.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output`; called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93`. Per-tag `run.{test_tag}.f` is a Plan B divergence from the hard-coded `"run.f"` (`vlog_sim.py:157`).
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/build.py` block in `modules/config.yaml`
+(opened by [`06a`](06a-run-preproc.md); append, don't re-create):
+
+```yaml
+  - { name: write-filelist, class_name: WriteFilelistMod }
+```
 
 ## Tests
 

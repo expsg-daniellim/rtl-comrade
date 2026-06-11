@@ -53,7 +53,12 @@ In `modules/rtl_test/sim.py`:
   reporting).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch; sentinel set at `tools/vlog_sim.py:258-261`; `SimTimeoutResults` at `runner/test_results.py:62-69`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: interpret-sim, class_name: InterpretSimMod }
+```
 
 ## Tests
 

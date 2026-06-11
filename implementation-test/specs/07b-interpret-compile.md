@@ -59,7 +59,12 @@ In `modules/rtl_test/build.py`:
   `FileNotFoundError` reading `stderr_path` would be surprising; let it propagate.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:63-65` — the `compile_returncode != 0 → CompileFailResults` branch; rc check at `tools/vlog_sim.py:168-171`; `CompileFailResults` at `runner/test_results.py:44-51`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/build.py` block in `modules/config.yaml`
+(opened by [`06a`](06a-run-preproc.md); append, don't re-create):
+
+```yaml
+  - { name: interpret-compile, class_name: InterpretCompileMod }
+```
 
 ## Tests
 

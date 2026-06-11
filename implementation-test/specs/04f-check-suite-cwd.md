@@ -71,7 +71,12 @@ In `modules/rtl_test/setup.py`:
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site)).
   **Compatibility source:** no direct rtl_buddy analogue (new check, Notable divergence) — enforces the convention `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) assumes vs `do_rtl_regression`'s `os.chdir` at `rtl_buddy.py:404`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: check-suite-cwd, class_name: CheckSuiteCwdMod }
+```
 
 ## Tests
 

@@ -48,7 +48,12 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
   [01b](01b-suite-schema.md). Pure data classifier; no scheduling.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:293-298` — the `if self.test_cfg.uvm:` dispatch in `VlogSim.post`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: route-post, class_name: RoutePostMod }
+```
 
 ## Tests
 

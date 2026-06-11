@@ -50,7 +50,12 @@ In `modules/rtl_test/setup.py`:
   wins, else `REPLAY` if `rnd_last`, else `DEFAULT`). No failure path.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:188-194` — the seed-mode block in `do_cmd_test`; enum at `seed_mode.py:4-7`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: derive-seed-mode, class_name: DeriveSeedModeMod }
+```
 
 ## Tests
 

@@ -31,8 +31,8 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 | 17 | Split grouped module specs into per-module tickets | Resolved 2026-06-10 |
 | 18 | Include module code skeletons inside the spec | Resolved 2026-06-10 (10c tracked in #31) |
 | 19 | Inline the I/O surface block in every module spec | Resolved 2026-06-10 (10c tracked in #31) |
-| 20 | Add a "Before you start" reading list to every spec | **Open** (logging-plugin category folded in by #31, 2026-06-11) |
-| 21 | Inline file path and manifest entries in each spec | **Open** |
+| 20 | Add a "Before you start" reading list to every spec | Resolved 2026-06-11 (remaining categories completed under #32) |
+| 21 | Inline file path and manifest entries in each spec | Resolved 2026-06-11 |
 | 22 | Expand each module's algorithm into numbered implementation steps | **Open** |
 | 23 | Add a "Constraints" section to every spec | **Open** |
 | 24 | Enumerate test cases with input/expected pairs | **Open** |
@@ -40,6 +40,7 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 | 26 | Add forward-reference notes between specs that share a file | **Open** |
 | 27 | Expand "Acceptance criteria" to enumerate observable behaviour | **Open** |
 | 31 | Bring the logging-plugin spec (10c) to the same buildable standard | Resolved 2026-06-11 |
+| 32 | Decide and add "Before you start" reading lists for the non-module/contract/logging specs | Resolved 2026-06-11 |
 
 ## Cosmetic
 

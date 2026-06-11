@@ -67,7 +67,12 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
   regex-matched `[0-9]+` cannot raise `ValueError`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`; thresholds from `UVMConfig` (`config/uvm.py:3-19`).
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: parse-uvm-log, class_name: ParseUvmLogMod }
+```
 
 ## Tests
 

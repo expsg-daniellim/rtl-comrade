@@ -59,7 +59,12 @@ In `modules/rtl_test/sim.py`:
   [07 Implementation notes](../07-ambiguities-and-assumptions.md)).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:263-269` — the `.randseed` write (+ `HierInstanceSeed.txt`) in `VlogSim.execute`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: write-randseed, class_name: WriteRandseedMod }
+```
 
 ## Tests
 

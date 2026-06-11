@@ -883,6 +883,32 @@ reading-list rule explicitly covers logging plugins.
 
 ### 21. Inline file path and manifest entries in each spec
 
+**Status: Resolved (2026-06-11).** Every bare `Manifest entries per [06]` reference in `specs/` is
+replaced with the exact `modules/config.yaml` addition inlined into the spec (verbatim from
+[06](implementation-test/06-graph-yaml.md)). Concretely:
+
+- **Per-module child tickets** (`03`, `04a`–`04i`, `05a`–`05f`, `06a`–`06b`, `07a`–`07b`,
+  `08a`–`08f`, `09a`–`09c`, `10a`, `10b`) each carry a `**Manifest**` block with the single
+  `- { name: …, class_name: …Mod }` line for that module, naming the `- file: rtl_test/<file>.py`
+  block it joins. The `.py` target file path is already stated at the head of each Deliverables
+  section. `03-run-process.md` had no manifest line at all — one was added.
+- **Shared-file forward references** (concrete-step 3): the four `modules/config.yaml` file blocks
+  are each shared across specs, so every block names its *opener* and its *appenders*.
+  `rtl_test/setup.py` is opened by [`04a`] and appended by `04b`–`04i` / `05a`–`05f` / `10b`;
+  `rtl_test/build.py` opened by [`06a`], appended by `06b` / `07a` / `03` / `07b`;
+  `rtl_test/sim.py` opened by [`08a`], appended by `08b`–`08f` / `09a`–`09c`;
+  `rtl_test/control.py` is a single-entry block (`10a`). Opener tickets show the `- file:` header;
+  appenders show only the indented plugin line with an "append, don't re-create" note.
+- **Index specs** (`04`–`10`) carry the consolidated file-block view for their children, flagging
+  which sibling chains append to the same block.
+- **Assembly spec** (`11`) inlines the full `modules/config.yaml` (all four blocks) and the
+  `contracts/config.yaml` `any` entry, so the manifest-owner spec is self-contained too.
+- **Non-manifest entries** left as explicit non-manifest notes: `10c` (`SummaryProcessor` — a
+  logging plugin referenced by `path`/`name`, not a manifest) and `02` (already inlined the
+  `contracts/config.yaml` `any` block). No `serial_acquire` contract exists (removed by TODO #30).
+
+The original ticket text is kept below for the record.
+
 Specs currently say "Manifest entries per [06]" — the implementer must open `06-graph-yaml.md` to find the manifest line for each module. Move the exact additions into the spec.
 
 #### Concrete steps

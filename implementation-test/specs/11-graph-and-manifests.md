@@ -29,13 +29,60 @@ subcommand in `rtl_comrade_config.yaml`.
   terminal ports (no edges), and the `logging` block that wires the `SummaryProcessor` plugin.
 - **`graphs/log/summary.py`** — the `SummaryProcessor` logging plugin (a single structlog
   processor; spec 10), referenced by `path`/`name` from the `logging` block.
-- **`modules/config.yaml`** — full manifest from [06](../06-graph-yaml.md) covering every
-  module from specs 03–10 (`run-process`, the setup chain incl. `git-status`,
-  selection/expansion, prep, compile cycle, sim cycle, post, control).
+- **`modules/config.yaml`** — full manifest covering every module from specs 03–10
+  (`run-process`, the setup chain incl. `git-status`, selection/expansion, prep, compile cycle,
+  sim cycle, post, control). The four file blocks each child spec contributes to (verbatim from
+  [06](../06-graph-yaml.md)):
+  ```yaml
+  - file: rtl_test/setup.py
+    plugins:
+    - { name: discover-config-file, class_name: DiscoverConfigFileMod }
+    - { name: prepend-cwd-path,     class_name: PrependCwdPathMod }
+    - { name: parse-root-config,    class_name: ParseRootConfigMod }
+    - { name: select-platform,      class_name: SelectPlatformMod }
+    - { name: resolve-builder,      class_name: ResolveBuilderMod }
+    - { name: check-suite-cwd,      class_name: CheckSuiteCwdMod }
+    - { name: ensure-logs-dir,      class_name: EnsureLogsDirMod }
+    - { name: parse-suite-config,   class_name: ParseSuiteConfigMod }
+    - { name: derive-seed-mode,     class_name: DeriveSeedModeMod }
+    - { name: git-status,           class_name: GitStatusMod }
+    - { name: route-list-mode,      class_name: RouteListModeMod }
+    - { name: list-test-names,      class_name: ListTestNamesMod }
+    - { name: select-tests,         class_name: SelectTestsMod }
+    - { name: filter-reglvl,        class_name: FilterRegLvlMod }
+    - { name: load-model,           class_name: LoadModelMod }
+    - { name: expand-sweep,         class_name: ExpandSweepMod }
+  - file: rtl_test/build.py
+    plugins:
+    - { name: run-preproc,       class_name: RunPreprocMod }
+    - { name: write-filelist,    class_name: WriteFilelistMod }
+    - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
+    - { name: run-process,       class_name: RunProcessMod }
+    - { name: interpret-compile, class_name: InterpretCompileMod }
+  - file: rtl_test/sim.py
+    plugins:
+    - { name: expand-runs,       class_name: ExpandRunsMod }
+    - { name: resolve-seed,      class_name: ResolveSeedMod }
+    - { name: build-sim-cmd,     class_name: BuildSimCmdMod }
+    - { name: write-randseed,    class_name: WriteRandseedMod }
+    - { name: link-latest,       class_name: LinkLatestMod }
+    - { name: interpret-sim,     class_name: InterpretSimMod }
+    - { name: route-post,        class_name: RoutePostMod }
+    - { name: parse-log,         class_name: ParseLogMod }
+    - { name: parse-uvm-log,     class_name: ParseUvmLogMod }
+  - file: rtl_test/control.py
+    plugins:
+    - { name: early-stop-gate,   class_name: EarlyStopGateMod }
+  ```
 - **`contracts/config.yaml`** — the `any` registration from spec 02 (registered for reuse but
   **unwired** in `test`). There is **no** `serial_acquire` contract: the interim parallel-safety
   lock shim was removed (TODO #30) in favour of per-tag artefact naming — see
   [06](../06-graph-yaml.md) and [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
+  ```yaml
+  - file: any.py
+    plugins:
+    - { name: any, class_name: AnyContract }
+  ```
 - **`rtl_comrade_config.yaml`** — add:
   ```yaml
   commands:

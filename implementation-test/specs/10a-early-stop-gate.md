@@ -71,7 +71,14 @@ terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the `RunDepth` early-stop checkpoints; enum at `test_runner.py:14-18`; `--early-stop` flag at `rtl_buddy.py:121`; `EarlyStopResults` at `runner/test_results.py:53-60`.
 
-Manifest entries for `EarlyStopGateMod` per [06](../06-graph-yaml.md).
+**Manifest** — `EarlyStopGateMod` is the only plugin in the `rtl_test/control.py` block of
+`modules/config.yaml`:
+
+```yaml
+- file: rtl_test/control.py
+  plugins:
+  - { name: early-stop-gate, class_name: EarlyStopGateMod }
+```
 
 ## Tests
 

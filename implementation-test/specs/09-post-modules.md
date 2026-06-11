@@ -19,7 +19,14 @@ in `modules/rtl_test/sim.py` (continuing from spec 08); tests in
 | [09b](09b-parse-log.md) | `ParseLogMod` | Parse a plain sim log → `TestResults`. |
 | [09c](09c-parse-uvm-log.md) | `ParseUvmLogMod` | Parse a UVM Report Summary → `TestResults`. |
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — these three modules append to the `rtl_test/sim.py` block in `modules/config.yaml`
+opened by the sim chain ([`08a`](08a-expand-runs.md)):
+
+```yaml
+  - { name: route-post,    class_name: RoutePostMod }
+  - { name: parse-log,     class_name: ParseLogMod }
+  - { name: parse-uvm-log, class_name: ParseUvmLogMod }
+```
 
 ## Acceptance criteria
 

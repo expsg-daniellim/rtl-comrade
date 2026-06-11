@@ -61,7 +61,12 @@ only for the side-effect log).
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev` (here emitted as one structured `git_state` event rather than printed).
 
-Manifest entries for `GitStatusMod` per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: git-status, class_name: GitStatusMod }
+```
 
 ## Tests
 

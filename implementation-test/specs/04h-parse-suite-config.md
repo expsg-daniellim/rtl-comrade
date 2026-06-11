@@ -67,7 +67,12 @@ In `modules/rtl_test/setup.py`:
   references unknown testbench {test.tb}")`. Mirrors `rtl_buddy/src/rtl_buddy/config/suite.py:28-50`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__` (parse + testbench bind); per-test `TestConfigFile.initialise` at `config/test.py:320-323`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: parse-suite-config, class_name: ParseSuiteConfigMod }
+```
 
 ## Tests
 

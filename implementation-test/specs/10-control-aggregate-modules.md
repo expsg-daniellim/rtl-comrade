@@ -21,8 +21,11 @@ This spec is split into one ticket per deliverable — build them as independent
 | [10b](10b-git-status.md) | `GitStatusMod` | `modules/rtl_test/setup.py` | Record git state as a structured log event. |
 | [10c](10c-summary-handler.md) | `SummaryProcessor` | `graphs/log/summary.py` | Accumulate `test_result` rows (results only) and render the summary table. |
 
-Manifest entries for `EarlyStopGateMod` / `GitStatusMod` per [06](../06-graph-yaml.md);
-`graphs/log/summary.py` is referenced by `path`/`name` in the `logging` block, not a manifest.
+**Manifest** — each child ticket carries its exact `modules/config.yaml` line: `EarlyStopGateMod`
+opens the `rtl_test/control.py` block ([`10a`](10a-early-stop-gate.md)); `GitStatusMod` appends to
+the `rtl_test/setup.py` block ([`10b`](10b-git-status.md)). `graphs/log/summary.py` (the
+`SummaryProcessor`, [`10c`](10c-summary-handler.md)) is referenced by `path`/`name` in the
+`logging` block, **not** a manifest.
 
 ## Acceptance criteria
 

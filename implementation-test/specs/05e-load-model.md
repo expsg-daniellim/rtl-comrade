@@ -72,7 +72,12 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   10](../07-ambiguities-and-assumptions.md)).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/model.py:66-100` — `ModelConfigLoader.__init__` + `get_model`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: load-model, class_name: LoadModelMod }
+```
 
 ## Tests
 

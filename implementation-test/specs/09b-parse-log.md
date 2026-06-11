@@ -63,7 +63,12 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
   `test_run["log"]` → emit FAIL with the exception string as `desc` and call `log.error`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results` (corrected per [07 settled 15](../07-ambiguities-and-assumptions.md)).
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+(opened by [`08a`](08a-expand-runs.md); append, don't re-create):
+
+```yaml
+  - { name: parse-log, class_name: ParseLogMod }
+```
 
 ## Tests
 

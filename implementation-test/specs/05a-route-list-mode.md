@@ -46,7 +46,12 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   `list` else `("run", suite_cfg)`. Pure data classifier.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:182-184` — the `if list_tests:` branch in `do_cmd_test`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: route-list-mode, class_name: RouteListModeMod }
+```
 
 ## Tests
 

@@ -46,7 +46,12 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   order) and emits nothing. Terminal sink.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:183` — the `typer.echo` of `get_test_names()`; `get_test_names` at `config/suite.py:69-76`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: list-test-names, class_name: ListTestNamesMod }
+```
 
 ## Tests
 

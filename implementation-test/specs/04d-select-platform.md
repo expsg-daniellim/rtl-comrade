@@ -53,7 +53,12 @@ In `modules/rtl_test/setup.py`:
   surprising at this layer; let `FileNotFoundError` propagate.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:107-118` — `uname` subprocess + platform-match loop in `RootConfig.__init__`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: select-platform, class_name: SelectPlatformMod }
+```
 
 ## Tests
 

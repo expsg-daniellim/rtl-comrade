@@ -69,7 +69,14 @@ In `modules/rtl_test/setup.py`:
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:16-36` — `_discover_root_cfg`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — this module opens the `rtl_test/setup.py` block in `modules/config.yaml`
+(later appended to by `04b`–`04i`, `05a`–`05f`, `10b`):
+
+```yaml
+- file: rtl_test/setup.py
+  plugins:
+  - { name: discover-config-file, class_name: DiscoverConfigFileMod }
+```
 
 ## Tests
 

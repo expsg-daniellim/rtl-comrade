@@ -70,7 +70,14 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
   from rtl_buddy**: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:119-139` — `VlogSim.pre`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — this module opens the `rtl_test/build.py` block in `modules/config.yaml`
+(later appended to by `06b`, `07a`, `03`, `07b`):
+
+```yaml
+- file: rtl_test/build.py
+  plugins:
+  - { name: run-preproc, class_name: RunPreprocMod }
+```
 
 ## Tests
 

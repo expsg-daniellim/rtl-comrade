@@ -20,7 +20,16 @@ in `modules/rtl_test/build.py` (continuing from spec 03); tests in
 | [06a](06a-run-preproc.md) | `RunPreprocMod` | Optional preprocessing hook (mutates `ctx["test"]`). |
 | [06b](06b-write-filelist.md) | `WriteFilelistMod` | Generate the per-tag `run.{test_tag}.f`. |
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — these two modules open the `rtl_test/build.py` block in `modules/config.yaml`; the
+compile cycle (`07a`, [`03`](03-run-process.md), `07b`) appends to the same block:
+
+```yaml
+- file: rtl_test/build.py
+  plugins:
+  - { name: run-preproc,    class_name: RunPreprocMod }
+  - { name: write-filelist, class_name: WriteFilelistMod }
+  # + build-compile-cmd (07a), run-process (03), interpret-compile (07b)
+```
 
 ## Acceptance criteria
 

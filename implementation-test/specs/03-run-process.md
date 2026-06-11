@@ -226,6 +226,15 @@ data-dependency ordering pins the PATH mutation strictly upstream of every subpr
 The Python default `True` keeps the module testable in isolation and the graph valid if
 no env-setup node is wired.
 
+### Manifest
+
+Append to the `- file: rtl_test/build.py` block in `modules/config.yaml` (opened by
+[`06a`](06a-run-preproc.md); append, don't re-create):
+
+```yaml
+  - { name: run-process, class_name: RunProcessMod }
+```
+
 ## Acceptance criteria
 
 - All tests above pass.

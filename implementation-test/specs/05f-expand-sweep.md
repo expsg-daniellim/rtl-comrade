@@ -72,7 +72,12 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   rtl_buddy's `logger.critical → typer.Abort`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:264-283` — `_expand_tests_with_sweep`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: expand-sweep, class_name: ExpandSweepMod }
+```
 
 ## Tests
 

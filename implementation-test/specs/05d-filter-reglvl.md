@@ -60,7 +60,12 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   (SKIP is a routing decision and is pass-like; no log call).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:349-357` — `_do_test_suite` level filter; `get_reglvl` at `config/test.py:287-299`; `SkipResults` at `runner/test_results.py:71-78`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: filter-reglvl, class_name: FilterRegLvlMod }
+```
 
 ## Tests
 

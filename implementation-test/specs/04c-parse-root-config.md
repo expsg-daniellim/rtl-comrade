@@ -54,7 +54,12 @@ In `modules/rtl_test/setup.py`:
   dataclass mismatch). Convert to `log.critical(f"failed to load {path}: {e}")`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:38-48` — `RootConfigFile`/`RootRtlField` serde renames; load at `root.py:84-90`.
 
-Manifest entries in `modules/config.yaml` per [06 — Manifest additions](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: parse-root-config, class_name: ParseRootConfigMod }
+```
 
 ## Tests
 

@@ -25,7 +25,20 @@ in `modules/rtl_test/sim.py`; tests in `modules/tests/test_sim_cycle.py`.
 | [08e](08e-link-latest.md) | `LinkLatestMod` | Force the `test.*` symlinks. |
 | [08f](08f-interpret-sim.md) | `InterpretSimMod` | Route on timeout. |
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — these six modules open the `rtl_test/sim.py` block in `modules/config.yaml`; the
+post chain (`09a`–`09c`) appends to the same block:
+
+```yaml
+- file: rtl_test/sim.py
+  plugins:
+  - { name: expand-runs,    class_name: ExpandRunsMod }
+  - { name: resolve-seed,   class_name: ResolveSeedMod }
+  - { name: build-sim-cmd,  class_name: BuildSimCmdMod }
+  - { name: write-randseed, class_name: WriteRandseedMod }
+  - { name: link-latest,    class_name: LinkLatestMod }
+  - { name: interpret-sim,  class_name: InterpretSimMod }
+  # + route-post, parse-log, parse-uvm-log (09a-09c)
+```
 
 ## Acceptance criteria
 

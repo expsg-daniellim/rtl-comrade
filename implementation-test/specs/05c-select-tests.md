@@ -55,7 +55,12 @@ In `modules/rtl_test/setup.py` (continuing from spec 04):
   No additional `try/except` needed at the module layer.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/suite.py:52-67` — `SuiteConfig.get_tests`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+(opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
+
+```yaml
+  - { name: select-tests, class_name: SelectTestsMod }
+```
 
 ## Tests
 

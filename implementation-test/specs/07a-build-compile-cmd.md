@@ -86,7 +86,12 @@ In `modules/rtl_test/build.py`:
   [01a](01a-builder-schema.md). No catching; system-wide misconfiguration.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:141-159` — `VlogSim.compile` argv assembly; helpers `_get_build_tag`/`_get_build_dir`/`_get_simv_path` at `vlog_sim.py:61-80`, `_get_plusdefines` at `:107-117`.
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — append to the `- file: rtl_test/build.py` block in `modules/config.yaml`
+(opened by [`06a`](06a-run-preproc.md); append, don't re-create):
+
+```yaml
+  - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
+```
 
 ## Tests
 

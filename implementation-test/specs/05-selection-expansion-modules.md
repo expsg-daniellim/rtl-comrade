@@ -25,7 +25,18 @@ in `modules/rtl_test/setup.py` (continuing from spec 04); tests in
 | [05e](05e-load-model.md) | `LoadModelMod` | Lazily attach the `ModelConfig`. |
 | [05f](05f-expand-sweep.md) | `ExpandSweepMod` | Expand into N sweep variants. |
 
-Manifest entries per [06](../06-graph-yaml.md).
+**Manifest** — these six modules append to the `rtl_test/setup.py` block in `modules/config.yaml`
+opened by the setup chain ([`04a`](04a-discover-config-file.md)); each child ticket carries its
+own line (append, don't re-create the block):
+
+```yaml
+  - { name: route-list-mode, class_name: RouteListModeMod }
+  - { name: list-test-names, class_name: ListTestNamesMod }
+  - { name: select-tests,    class_name: SelectTestsMod }
+  - { name: filter-reglvl,   class_name: FilterRegLvlMod }
+  - { name: load-model,      class_name: LoadModelMod }
+  - { name: expand-sweep,    class_name: ExpandSweepMod }
+```
 
 ## Acceptance criteria
 
