@@ -43,6 +43,18 @@ class ResolveBuilderMod:
         return ("default", builder_cfg)
 ```
 
+## Algorithm
+
+1. Pick the name: `name = builder or platform_cfg.default_builder` — the CLI override wins; an
+   empty string falls back to the platform default.
+2. Look it up: `builder_cfg = platform_cfg.builders.get(name)`.
+3. If found, emit `("default", builder_cfg)`.
+4. **Failure — unknown / none configured.** If `builder_cfg is None` (the named builder is not
+   in the platform's configured list, or no builders are configured at all):
+   `log.critical(f"named builder {name} not in configured builders
+   {sorted(platform_cfg.builders)}")` (harness exits 1). rtl_buddy raises
+   `typer.BadParameter`; Plan B uses `log.critical` for uniform exit semantics.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -75,3 +87,11 @@ In `modules/tests/test_setup.py`:
 - Produces the correct `builder_cfg` value (honouring the `builder` override) from a real
   rtl_buddy `root_config.yaml` fixture (contributes to the setup-only end-to-end graph —
   see [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract; emit on the string-literal `default` port.
+- The CLI `builder` override wins; an empty string falls back to `platform_cfg.default_builder`.
+- Unknown override or no builders configured → `log.critical` (harness exit 1). Use
+  `log.critical` (not rtl_buddy's `typer.BadParameter`) so exit semantics stay uniform with the
+  rest of the setup chain.

@@ -52,6 +52,22 @@ class ExpandSweepMod:
             yield ("default", { **ctx, "key": f"{ctx['key']}#{i}", "test": variant })
 ```
 
+## Algorithm
+
+1. Branch on the sweep path: `sweep = ctx["test"].get_sweep_path()` (spec 01b → `str | None`).
+   If `None`, yield `("default", ctx)` once and return — no sweep configured.
+2. Read the script and execute it in a fresh namespace: `ns = {"logger": logger, "TestConfig":
+   TestConfig, "test_cfg": ctx["test"], "root_cfg": root_cfg, "out_test_cfgs": []}`, then
+   `exec(compile(code, sweep, "exec"), ns)` (reuse the shared `exec_hook` helper — see Notes;
+   matches rtl_buddy's `_expand_tests_with_sweep` namespace).
+3. Fan out: for each variant `TestConfig` accumulated in `ns["out_test_cfgs"]`, yield
+   `("default", {**ctx, "key": f"{ctx['key']}#{i}", "test": variant})`.
+4. **Failure — script error.** Wrap the read + `exec` (step 2) in `try/except Exception`: any
+   exception raised inside the user script, plus `FileNotFoundError`/`PermissionError` reading
+   the script → emit `("fail", {"key": ctx["key"], "result": <FAIL with str(e) + traceback
+   summary>})` and `log.error(..., exc_info=e)`. Notable divergence: per-test FAIL vs
+   rtl_buddy's `logger.critical → typer.Abort`.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):
@@ -93,6 +109,18 @@ In `modules/tests/test_selection.py`:
 - Tests pass.
 - Both output ports (`default`, `fail`) are exercised; a sweep script multiplies one
   fixture test by 4, and a raising script routes a per-test FAIL.
+
+## Constraints
+
+- No sweep configured (`get_sweep_path()` is `None`) → yield `("default", ctx)` exactly once.
+- Fan out one `("default", variant_ctx)` per `TestConfig` in `ns["out_test_cfgs"]`, keys
+  suffixed `#i`.
+- Catch broad `Exception` around the read + `exec` (user-script errors plus
+  `FileNotFoundError`/`PermissionError`) → emit `("fail", {key, result: <FAIL with str(e) +
+  traceback>})` on the **unwired** `fail` port and `log.error(..., exc_info=e)`. Per-test FAIL,
+  **not** `log.critical`/abort (divergence from rtl_buddy's `typer.Abort`).
+- Reuse the shared `exec_hook(path, namespace)` helper — do **not** copy-paste the
+  `exec`-with-namespace pattern from `run-preproc`.
 
 ## Notes
 

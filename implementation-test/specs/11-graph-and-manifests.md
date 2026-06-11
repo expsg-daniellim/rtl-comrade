@@ -100,6 +100,19 @@ subcommand in `rtl_comrade_config.yaml`.
 - Graph loads without validation errors — `Graph.from_file("graphs/test.yaml")` succeeds.
 - `validation.py` reports no cycles or overloaded inputs.
 
+## Constraints
+
+- Copy [06](../06-graph-yaml.md) **verbatim**; if a node/port name drifted between
+  [03](../03-module-catalog.md) and what specs 04–10 actually built, reconcile **toward the
+  built module signatures**, not the plan.
+- The 13 terminal ports stay **unwired** — do **not** add a `fan-in`/`agg` node (removed by
+  TODO #15). `validation.py` reports them as `no_destination` at INFO, **not** errors.
+- Register the `any` contract for reuse but leave it **unwired** in `test`. There is **no**
+  `serial_acquire` contract / `serial.py` (TODO #30 removed the shim).
+- The summary is wired only via the `logging` block (`graphs/log/summary.py` → `SummaryProcessor`);
+  it is **not** a module manifest entry, and there is **no** separate `drop_summary_events`.
+- The assembled graph must load with no cycles and no overloaded inputs (single-source-per-port).
+
 ## Notes
 
 This spec is mostly assembly — copy [06](../06-graph-yaml.md) faithfully. If any

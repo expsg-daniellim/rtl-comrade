@@ -45,6 +45,21 @@ class CheckSuiteCwdMod:
         return ("default", resolved)
 ```
 
+## Algorithm
+
+1. Resolve the configured path against CWD: `resolved = (Path.cwd() / test_config).resolve()`
+   and `cwd = Path.cwd().resolve()`. Both `.resolve()` calls follow symlinks symmetrically, so
+   a `tests.yaml` symlink inside a symlinked CWD still compares equal.
+2. **Failure — outside the suite dir.** If `resolved.parent != cwd`:
+   `log.critical(f"test_config {test_config!r} resolves to {resolved}, which is not in the
+   current directory ({cwd}). Run rtl-comrade test from the suite directory.")` — catches
+   `-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`, and `-c subdir/tests.yaml`,
+   which would otherwise parse but silently mistarget `logs/`, `run.f`, `obj_dir_<tag>/`, and
+   the `test.*` symlinks.
+3. **Failure — missing file.** If `not resolved.is_file()`:
+   `log.critical(f"test_config {test_config!r} not found at {resolved}")`.
+4. Emit `("default", resolved)` for downstream `parse-suite-config`.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -53,20 +68,10 @@ In `modules/rtl_test/setup.py`:
   `randtest` must be invoked from the suite directory (matching rtl_buddy's `do_cmd_test`,
   which never `chdir`s — see `rtl_buddy/AGENTS.md` validation example: `cd .../verif &&
   python -m rtl_buddy test basic`). Takes the CLI `test_config:str` and resolves it
-  against CWD; emits the resolved `Path` that downstream `ParseSuiteConfigMod` consumes.
-  **Behaviour**:
-  1. `resolved = (Path.cwd() / test_config).resolve()`; `cwd = Path.cwd().resolve()`.
-  2. If `resolved.parent != cwd` → `log.critical(f"test_config {test_config!r} resolves
-     to {resolved}, which is not in the current directory ({cwd}). Run rtl-comrade test
-     from the suite directory.")` — catches `-c /abs/elsewhere/tests.yaml`,
-     `-c ../sibling/tests.yaml`, and `-c subdir/tests.yaml`, which would otherwise parse
-     fine but silently mistarget `logs/`, `run.f`, `obj_dir_<tag>/`, and the `test.*`
-     symlinks to the wrong directory.
-  3. If `not resolved.is_file()` → `log.critical(f"test_config {test_config!r} not found
-     at {resolved}")`.
-  4. Emit `resolved` on `default`.
-  Both `.resolve()` calls follow symlinks symmetrically, so a `tests.yaml` symlink in a
-  symlinked CWD passes correctly.
+  against CWD; emits the resolved `Path` that downstream `ParseSuiteConfigMod` consumes. See
+  [Algorithm](#algorithm) for the numbered steps (resolve → CWD-mismatch check → missing-file
+  check → emit). Both `.resolve()` calls follow symlinks symmetrically, so a `tests.yaml`
+  symlink in a symlinked CWD passes correctly.
   **Failure handling**: both checks are setup-domain config errors → `log.critical` (see
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site)).
   **Compatibility source:** no direct rtl_buddy analogue (new check, Notable divergence) — enforces the convention `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) assumes vs `do_rtl_regression`'s `os.chdir` at `rtl_buddy.py:404`.
@@ -97,6 +102,17 @@ In `modules/tests/test_setup.py`:
 - `CheckSuiteCwdMod` aborts fixture runs invoked from outside the suite directory and
   emits the resolved `Path` otherwise (contributes to the setup-only end-to-end graph —
   see [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract; emit the resolved `Path` on the string-literal `default` port.
+- Resolve **both** sides with `.resolve()` (`(Path.cwd() / test_config).resolve()` and
+  `Path.cwd().resolve()`) so symlinks collapse symmetrically — do not compare un-resolved paths.
+- Both failures — `resolved.parent != cwd` (outside the suite dir) and `not resolved.is_file()`
+  (missing) — are setup-domain config errors → `log.critical` (harness exit 1), never a
+  port-routed result.
+- Do **not** wire this node in the regression graph (it `chdir`s per-suite); it is `test`/
+  `randtest` only.
 
 ## Notes
 

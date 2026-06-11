@@ -41,6 +41,14 @@ class InterpretSimMod:
         return ("ok", test_run)
 ```
 
+## Algorithm
+
+1. Branch on the timeout flag: if not `test_run["timed_out"]`, emit `("ok", test_run)`.
+2. **Timeout path.** Otherwise `log.error("sim_timeout", key=test_run["key"],
+   err=test_run["err"])` (also carrying the configured timeout) and emit `("timeout", {"key":
+   test_run["key"], "result": SimTimeoutResults(...)})`. Routing on a flag — no Python exception
+   is caught.
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:
@@ -71,3 +79,11 @@ In `modules/tests/test_sim_cycle.py`:
 - Tests pass.
 - Both output ports (`ok`, `timeout`) are exercised; the timeout path emits
   `SimTimeoutResults` and logs at ERROR.
+
+## Constraints
+
+- Route on `test_run["timed_out"]`: false → `("ok", test_run)`; true → `("timeout", {key,
+  result: SimTimeoutResults()})` on the **unwired** `timeout` port and `log.error` at emission
+  (key, configured timeout, `err` path).
+- This is routing on a flag, **not** a caught Python exception.
+- Use string-literal port names (`ok`/`timeout`); stay graph-agnostic.

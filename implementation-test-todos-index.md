@@ -33,8 +33,8 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 | 19 | Inline the I/O surface block in every module spec | Resolved 2026-06-10 (10c tracked in #31) |
 | 20 | Add a "Before you start" reading list to every spec | Resolved 2026-06-11 (remaining categories completed under #32) |
 | 21 | Inline file path and manifest entries in each spec | Resolved 2026-06-11 |
-| 22 | Expand each module's algorithm into numbered implementation steps | **Open** |
-| 23 | Add a "Constraints" section to every spec | **Open** |
+| 22 | Expand each module's algorithm into numbered implementation steps | Resolved 2026-06-11 (incl. 08c/08d argv-for-hier_inst_seed) |
+| 23 | Add a "Constraints" section to every spec | Resolved 2026-06-11 (literal "every spec" scope, per user) |
 | 24 | Enumerate test cases with input/expected pairs | **Open** |
 | 25 | Spell out filename and format placeholders | **Open** |
 | 26 | Add forward-reference notes between specs that share a file | **Open** |

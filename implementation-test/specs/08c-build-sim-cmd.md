@@ -34,7 +34,7 @@ contract:          default
 persistent_inputs: [builder_cfg, builder_mode, logs_dir]
 inputs:            ctx, seed, builder_cfg, builder_mode, logs_dir:str = "logs"
 outputs:           ctx     → ctx
-                   sim_cmd → {key, seed, log, err, randseed_path}
+                   sim_cmd → {key, seed, log, err, randseed_path, argv}
                    command → {key, argv, stdout_path, stderr_path}
                    timeout → float | None
 ```
@@ -48,12 +48,35 @@ class BuildSimCmdMod:
         stem = f"{logs_dir}/{ctx['test'].get_name()}{run_suffix(ctx)}"
         log_path, err_path, rs_path = f"{stem}.log", f"{stem}.err", f"{stem}.randseed"
         yield ("ctx", ctx)
-        yield ("sim_cmd", { "key": ctx["key"], "seed": seed["seed"],
-                            "log": log_path, "err": err_path, "randseed_path": rs_path })
+        yield ("sim_cmd", { "key": ctx["key"], "seed": seed["seed"], "log": log_path,
+                            "err": err_path, "randseed_path": rs_path, "argv": argv })
         yield ("command", { "key": ctx["key"], "argv": argv,
                             "stdout_path": log_path, "stderr_path": err_path })
         yield ("timeout", float(timeout))
 ```
+
+## Algorithm
+
+1. Take the compiled simv from ctx: `simv = ctx["simv"]` (set by `build-compile-cmd`).
+2. Build plusdefines from `ctx["test"].get_plusdefines()` exactly as in `build-compile-cmd`,
+   and plusargs from `ctx["test"].get_plusargs()` (spec 01b → `dict | None`): each entry
+   `f"+{k}={v}"`, or `f"+{k}"` when `v is None`.
+3. Assemble the argv: `[simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]),
+   *plusdefines, *plusargs]`. `get_run_time_opts` already appends `sim_rand_prefix + str(seed)`
+   internally — do **not** add the seed again.
+4. Resolve the timeout: `(timeout, _is_custom) = ctx["test"].get_timeout()` (spec 01b —
+   `(self.timeout, True)` on a per-test override, else `(60, False)`); emit it as `float`.
+5. Compose the log/randseed paths off one stem `stem =
+   f"{logs_dir}/{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err =
+   f"{stem}.err"`, `randseed_path = f"{stem}.randseed"`. Do not `mkdir(logs_dir)` — already
+   bootstrapped.
+6. Emit in lockstep: `("ctx", ctx)`; `("sim_cmd", {"key": ctx["key"], "seed": seed["seed"],
+   "log": log, "err": err, "randseed_path": randseed_path, "argv": argv})`; `("command",
+   {"key": ctx["key"], "argv": argv, "stdout_path": log, "stderr_path": err})`; `("timeout",
+   float(timeout))`. The `argv` rides `sim_cmd` as well as `command` so the downstream
+   `keyed_join` `write-randseed` can check it for `hier_inst_seed` (spec 08d).
+7. **Failure — bad builder mode.** No catch: `builder_cfg.get_run_time_opts(builder_mode,
+   seed)` `log.critical`s if `builder_mode` is unknown or its `run_time` is `None` (spec 01a).
 
 ## Deliverables
 
@@ -76,10 +99,14 @@ In `modules/rtl_test/sim.py`:
   rtl_buddy; `logs_dir` is a persistent input fed by `--logs-dir`). Also composes
   `randseed_path = f"{logs_dir}/{test_name}[_{run_id:04d}].randseed"`. These paths are
   emitted in `sim_cmd` (not folded into `ctx`) so `write-randseed` receives them as a
-  dedicated keyed port. Does not `mkdir(logs_dir)` — `ensure-logs-dir` has already
+  dedicated keyed port. The assembled `argv` is **also** carried on `sim_cmd` (in addition to
+  `command`) so the downstream `keyed_join` `write-randseed` can perform the
+  `"hier_inst_seed" in argv` membership check rtl_buddy does (spec
+  [08d](08d-write-randseed.md)). Does not `mkdir(logs_dir)` — `ensure-logs-dir` has already
   bootstrapped the directory via the env_ready chain. Emits in lockstep:
-  `("ctx", ctx)` (unchanged), `("sim_cmd", {"key", "seed", "log", "err", "randseed_path"})`,
-  `("command", {"key", "argv", "stdout_path", "stderr_path"})`, `("timeout", float | None)`.
+  `("ctx", ctx)` (unchanged), `("sim_cmd", {"key", "seed", "log", "err", "randseed_path",
+  "argv"})`, `("command", {"key", "argv", "stdout_path", "stderr_path"})`,
+  `("timeout", float | None)`.
   **Failure handling**: `builder_cfg.get_run_time_opts(builder_mode, seed)` calls
   `log.critical` if `builder_mode` is not in `builder_cfg.opts` or the mode's
   `run_time` is `None` — see spec [01a](01a-builder-schema.md). No catching.
@@ -105,3 +132,16 @@ In `modules/tests/test_sim_cycle.py`:
 - Tests pass.
 - All four output ports (`ctx`, `sim_cmd`, `command`, `timeout`) are exercised; argv
   matches rtl_buddy and every log/randseed path carries the `logs_dir` prefix.
+
+## Constraints
+
+- `get_run_time_opts(builder_mode, seed=seed["seed"])` already appends `sim_rand_prefix +
+  str(seed)` internally — **do not add the seed again**.
+- Carry the assembled `argv` on **both** `sim_cmd` and `command` so the downstream `keyed_join`
+  `write-randseed` can run the `"hier_inst_seed" in argv` membership check (spec
+  [08d](08d-write-randseed.md)) — `keyed_join` cannot take a persistent input.
+- Emit log/randseed paths on `sim_cmd` (not folded into `ctx`); compose them from the
+  `logs_dir` persistent input. Do **not** `mkdir(logs_dir)` — `ensure-logs-dir` owns it.
+- Emit `timeout` as `float | None`. Emit all four ports in lockstep via the generator.
+- Do **not** catch `get_run_time_opts` — it `log.critical`s on an unknown mode / `None` opts
+  (spec [01a](01a-builder-schema.md)); system-wide misconfiguration, not per-test.

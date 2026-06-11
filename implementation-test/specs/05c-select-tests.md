@@ -39,6 +39,17 @@ class SelectTestsMod:
             yield ("default", { "key": t.get_name(), "test": t, "run_id": None })
 ```
 
+## Algorithm
+
+1. Resolve the selection: `suite_cfg.get_tests(test_name or None)` (spec 01b — a one-element
+   list when `test_name` is given, the all-tests view when empty).
+2. For each `TestConfig` returned, yield `("default", {"key": test.get_name(), "test": test,
+   "run_id": None})` — one `ctx` per selected test. `--list` is handled upstream, so there is
+   no mode logic here.
+3. **Failure — unknown test name.** No `try/except` at this layer: when `test_name` is supplied
+   but absent, `SuiteConfig.get_tests` itself calls `log.critical(f"test_name {test_name} not
+   found in suite {self.path}")` (spec 01b).
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):
@@ -75,3 +86,11 @@ In `modules/tests/test_selection.py`:
 - Tests pass.
 - Streamed end-to-end: a fixture `tests.yaml` with three tests fans out to three `ctx`s
   with correctly-stamped keys.
+
+## Constraints
+
+- Yield one `ctx` per selected `TestConfig` via the generator: `{"key": test.get_name(),
+  "test": test, "run_id": None}`.
+- Do **not** add `--list` mode logic here — list-mode is routed upstream by `route-list-mode`.
+- Do **not** wrap the lookup in `try/except`: an unknown `test_name` makes
+  `SuiteConfig.get_tests` itself `log.critical` (harness exit 1). No port-routed result.

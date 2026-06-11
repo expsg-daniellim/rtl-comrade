@@ -43,6 +43,23 @@ class EnsureLogsDirMod:
         return ("default", True)
 ```
 
+## Algorithm
+
+1. Create the directory idempotently: `Path(logs_dir).mkdir(parents=True, exist_ok=True)` —
+   `exist_ok=True` makes re-runs a no-op; `parents=True` accepts nested paths like
+   `build/logs`. The `_cwd` and `env_ready` inputs are ordering-only — never read or branched
+   on; they exist so the harness sequences this node after `check-suite-cwd` and
+   `prepend-cwd-path`.
+2. Record it for auditability: `log.info("logs_dir_ready",
+   path=str(Path(logs_dir).resolve()))`.
+3. Emit `("default", True)` — a sequencing token chained to `cc-run.env_ready` /
+   `sim-run.env_ready`. The path is **not** stamped into `ctx`; downstream writers
+   (`build-compile-cmd`/`build-sim-cmd`/`resolve-seed`/`write-randseed`) recompose it from the
+   same `logs_dir` persistent input at their use sites.
+4. **Failure — unwritable parent.** A `PermissionError`/`OSError` from `mkdir` is a
+   setup-domain config error, left to propagate uncaught (harness CRITICAL via the
+   bubbling-SystemExit catch, same idiom as `DiscoverConfigFileMod`) — no port-routed fail.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -59,13 +76,8 @@ In `modules/rtl_test/setup.py`:
   sequencing inputs: `env_ready:bool` from `prepend-cwd-path` (so the `$PATH` mutation
   precedes us) and `_cwd:Path` from `check-suite-cwd` (so we never create `logs/` in an
   invalid CWD that the check would have aborted). Zero side-effects on the latter — it
-  is consumed solely for data-edge ordering. Runs once via `unit`.
-  **Behaviour**:
-  1. `Path(logs_dir).mkdir(parents=True, exist_ok=True)` — idempotent; `parents=True`
-     accepts nested paths (e.g., `build/logs`).
-  2. `log.info("logs_dir_ready", path=str(Path(logs_dir).resolve()))` for auditability.
-  3. Return `{"default": True}` so `cc-run.env_ready` and `sim-run.env_ready` can chain
-     off the same sequencing surface as PATH-prepend (see [07 settled 25 / 26](../07-ambiguities-and-assumptions.md)).
+  is consumed solely for data-edge ordering. Runs once via `unit`. See
+  [Algorithm](#algorithm) for the numbered steps.
   Path is **not** resolved-and-stamped into `ctx`. Downstream paths (`logs/<test>.compile.log`,
   `logs/<test>[_NNNN].log`/`.err`/`.randseed`) are composed in `build-compile-cmd` /
   `build-sim-cmd` / `resolve-seed` / `write-randseed` from the same `logs_dir` persistent
@@ -104,6 +116,20 @@ In `modules/tests/test_setup.py`:
 - `EnsureLogsDirMod` leaves the configured `logs_dir` present on disk (default `./logs/`)
   before any later main-line node fires (contributes to the setup-only end-to-end graph —
   see [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract, runs once — create the directory with `Path(logs_dir).mkdir(parents=True,
+  exist_ok=True)` (idempotent; nested paths allowed).
+- `_cwd` and `env_ready` are **ordering-only** inputs — never read, branch on, or mutate them;
+  they exist solely so the harness sequences this node after `check-suite-cwd` and
+  `prepend-cwd-path`.
+- Do **not** stamp the path into `ctx` — downstream writers
+  (`build-compile-cmd`/`build-sim-cmd`/`resolve-seed`/`write-randseed`) recompose it from the
+  same `logs_dir` persistent input at their use sites.
+- `PermissionError`/`OSError` from `mkdir` propagate uncaught (harness CRITICAL) — no
+  port-routed fail; this is a setup-domain error, not per-test.
+- Emit `("default", True)` as a sequencing token only.
 
 ## Notes
 

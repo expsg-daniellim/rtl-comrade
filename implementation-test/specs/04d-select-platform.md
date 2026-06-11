@@ -41,6 +41,17 @@ class SelectPlatformMod:
         log.critical("no_platform_match", uname=uname)
 ```
 
+## Algorithm
+
+1. Run `uname`: `uname = subprocess.run(["uname"], capture_output=True,
+   text=True).stdout.strip()`.
+2. Iterate `root_cfg.platforms` in declaration order; the first platform whose `unames` list
+   contains `uname` is the match — emit `("default", platform_cfg)` and return.
+3. **Failure — no platform matches.** Falling out of the loop means none matched:
+   `log.critical(f"cannot find cfg-platform for uname {uname}")` (harness exits 1). A
+   `FileNotFoundError` from the `uname` subprocess is surprising at this layer and is left to
+   propagate uncaught.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -72,3 +83,12 @@ In `modules/tests/test_setup.py`:
 - Selects the correct platform from a real rtl_buddy `root_config.yaml` fixture under a
   controlled `uname` (contributes to the setup-only end-to-end graph — see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract; emit on the string-literal `default` port.
+- Match in declaration order — the **first** platform whose `unames` list contains the `uname`
+  output wins.
+- No platform matches → `log.critical` (harness exit 1), never a port-routed result. A
+  `FileNotFoundError` from the `uname` subprocess is surprising at this layer — let it propagate
+  uncaught.

@@ -38,6 +38,11 @@ class RouteListModeMod:
         return ("list", suite_cfg) if list else ("run", suite_cfg)
 ```
 
+## Algorithm
+
+1. Branch on the `list` flag: emit `("list", suite_cfg)` when `list` is true, else
+   `("run", suite_cfg)`. Pure classifier — no failure path.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):
@@ -63,3 +68,9 @@ In `modules/tests/test_selection.py`:
 
 - Tests pass.
 - Both output ports (`list`, `run`) are exercised and route on the `list` flag.
+
+## Constraints
+
+- Pure classifier: both ports carry `suite_cfg` unchanged. No failure path, no log call.
+- Emit on string-literal port names (`list`/`run`) so `definite_emits` holds; stay
+  graph-agnostic.

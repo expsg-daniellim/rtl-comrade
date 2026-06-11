@@ -41,6 +41,18 @@ class ParseRootConfigMod:
             log.critical("root_config_load_failed", path=str(path), err=str(e))
 ```
 
+## Algorithm
+
+1. Read the file: `text = path.read_text()`.
+2. Deserialise into the raw schema and wrap it: `raw = from_yaml(RootConfigFile, text)`, then
+   `RootConfig(raw)`.
+3. Emit `("default", RootConfig(raw))`.
+4. **Failure — load/parse/schema error.** Wrap steps 1–2 in `try/except Exception`: file I/O
+   (`FileNotFoundError`/`PermissionError`/`IsADirectoryError`), parse
+   (`serde.SerdeError`/`yaml.YAMLError`), or schema mismatch (`TypeError`/`KeyError`) are all
+   unrecoverable here → `log.critical(f"failed to load {path}: {e}")` (harness exits 1). See
+   Failure handling below for the exception catalogue.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -73,3 +85,11 @@ In `modules/tests/test_setup.py`:
 - Produces a correct `root_cfg` value from a real rtl_buddy `root_config.yaml` fixture
   (contributes to the setup-only end-to-end graph — see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract; emit on the string-literal `default` port.
+- Catch broad `Exception` around the read + deserialise (file I/O, `serde.SerdeError`/
+  `yaml.YAMLError` parse, `TypeError`/`KeyError` schema mismatch) and convert to
+  `log.critical` (harness exit 1) — a setup-domain config error, never a port-routed result.
+- Do **not** demote the failure to `log.error`: a malformed root config is unrecoverable.

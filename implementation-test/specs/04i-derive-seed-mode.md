@@ -42,6 +42,13 @@ class DeriveSeedModeMod:
         return ("default", mode)
 ```
 
+## Algorithm
+
+1. Default `mode = SeedMode.DEFAULT`.
+2. If `rnd_new`, set `SeedMode.NEW` (highest precedence); else if `rnd_last`, set
+   `SeedMode.REPLAY`.
+3. Emit `("default", mode)`. No failure path.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -71,6 +78,13 @@ In `modules/tests/test_setup.py`:
 - Maps the two CLI booleans to the correct `SeedMode` for all three precedence cases
   (contributes to the setup-only end-to-end graph — see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract; emit the `SeedMode` on the string-literal `default` port.
+- Precedence is fixed: `rnd_new` → `NEW` (wins); else `rnd_last` → `REPLAY`; else `DEFAULT`.
+- No failure path — both inputs are booleans with `False` defaults.
+- Keep it small and stateless (KIV item 18 may later absorb it into `resolve-seed`).
 
 ## Notes
 

@@ -48,6 +48,19 @@ class LoadModelMod:
         return ("default", ctx)
 ```
 
+## Algorithm
+
+1. Resolve the model file: `resolved = ctx["test"].suite_dir / ctx["test"].model_path` (fields
+   per spec 01b).
+2. Load it: construct `ModelConfigLoader(str(resolved))` and call
+   `loader.get_model(ctx["test"].model_name)` (spec 01c).
+3. Attach and pass through: `ctx["test"].model = model`; emit `("default", ctx)`.
+4. **Failure — lookup/load miss.** Wrap step 2 in `try/except Exception` (Plan B's loader
+   *raises* rather than `log.critical`-ing — spec 01c): file I/O, parse, schema mismatch, or
+   model-not-in-file → emit `("fail", {"key": ctx["key"], "result": <FAIL with str(e) in
+   desc>})` and `log.error` at emission with the resolved `model_path`. This is the Notable
+   divergence from rtl_buddy: a per-test FAIL keeps the run going where rtl_buddy aborts.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):
@@ -92,3 +105,14 @@ In `modules/tests/test_selection.py`:
 - Tests pass.
 - Both output ports (`default`, `fail`) are exercised; the fail path routes a per-test
   FAIL `result` and logs at ERROR without aborting the run.
+
+## Constraints
+
+- On success attach `ctx["test"].model = the_model` and emit `("default", ctx)`.
+- Catch broad `Exception` from both `ModelConfigLoader(...)` construction and `get_model(...)`
+  (the loader **raises** in Plan B — spec [01c](01c-model-schema.md)) → emit `("fail", {key,
+  result: <FAIL with str(e)>})` on the **unwired** `fail` port and `log.error` at emission with
+  the resolved `model_path`.
+- **Must not** `log.critical` / abort the run — per-test FAIL preserves run continuity; this is
+  the deliberate divergence from rtl_buddy.
+- Use string-literal port names (`default`/`fail`).

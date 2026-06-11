@@ -55,6 +55,18 @@ class DiscoverConfigFileMod:
         log.critical("config_not_found", filename=self.filename)
 ```
 
+## Algorithm
+
+1. Seed the walk at the current directory: `d = Path.cwd()`.
+2. Loop at most `self.max_levels` times. If `(d / self.filename).is_file()`, the file is
+   found — emit `("default", d / self.filename)` and return.
+3. Stop climbing at a boundary: if `(d / ".git").exists()` (git root) or `d == d.parent`
+   (filesystem root), break. Otherwise ascend (`d = d.parent`) and repeat step 2.
+4. **Failure — not found.** Falling out of the loop (depth limit hit, or a boundary reached
+   with no match) is the not-found case: `log.critical(f"{self.filename} not found walking up
+   from CWD")` (harness exits 1). A `PermissionError` raised while listing a directory is not
+   caught — it bubbles to the harness CRITICAL handler.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -90,6 +102,16 @@ In `modules/tests/test_setup.py`:
 - Discovery resolves a fixture `root_config.yaml` from a nested CWD and stops at the
   `max_levels` depth limit (contributes to the setup-only end-to-end graph — see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract, zero-input — runs exactly once.
+- Walk at most `max_levels` (default `8`); stop climbing at a git root (`.git` present) or the
+  filesystem root (`d == d.parent`).
+- Not-found (loop exhausted / boundary reached) → `log.critical` (harness exit 1) — this is a
+  setup-domain config error, never a port-routed result. A `PermissionError` while listing a
+  directory propagates uncaught (becomes harness CRITICAL via the bubbling-`SystemExit` catch).
+- Emit on the string-literal `default` port; stay graph-agnostic.
 
 ## Notes
 

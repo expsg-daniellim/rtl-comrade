@@ -256,6 +256,26 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
   `ctx["test"].get_timeout()`) without forcing the implementer to open
   `rtl_buddy/src/rtl_buddy/config/{suite,test,uvm}.py`.
 
+## Constraints
+
+- Preserve the YAML renames exactly (`reglvl`, `plusargs`→`pa`, `plusdefines`→`pd`,
+  `preproc`/`postproc`/`sweep`→`*_path`, `testbench`→`tb`, `sim_timeout`→`timeout`,
+  `rtl-buddy-filetype`). Do **not** Pythonify the on-disk names.
+- Rename `model` → `model_name` on the **runtime** `TestConfig` only; the raw `TestConfigFile`
+  keeps `model: str` for YAML compatibility.
+- Load the model lazily: `TestConfig.model` is `None` until `load-model` (spec
+  [05e](05e-load-model.md)) fires — do **not** eagerly construct a `ModelConfigLoader` here
+  (the rtl_buddy `initialise`-time `get_model` call is deliberately dropped).
+- `get_reglvl(builder)` resolution order is fixed: builder-keyed dict entry → `default` dict
+  entry → uniform int → `0`. A malformed dict (no builder key and no `default`) must
+  `log.critical`.
+- `get_timeout()` returns `(self.timeout, True)` on a per-test override else
+  `(self.default_timeout, False)`; `default_timeout` is the module-level constant `60`.
+- `get_plusarg`/`get_plusdefine` raise `AttributeError` when `pa`/`pd` is `None` — preserve
+  this; callers must guard with `get_plusargs() is not None` first.
+- `UVMConfig` validation is `ValueError` at construction (see [01](01-shared-schema.md)
+  constraints), not `log.critical`.
+
 ## Notes
 
 YAML `field(rename=...)` targets are the **public surface** for downstream rtl_buddy

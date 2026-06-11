@@ -45,6 +45,18 @@ class FilterRegLvlMod:
         return ("keep", ctx)
 ```
 
+## Algorithm
+
+1. Read the test's level: `lvl = ctx["test"].get_reglvl(builder_cfg.get_name())` — only the
+   builder *name* is needed; the whole `RtlBuilderConfig` rides the persistent port because the
+   same payload feeds `cc-build`/`seed`/`sim-build` downstream.
+2. Test the window: if `reg_level is not None and lvl > reg_level`, or `start_level is not None
+   and lvl < start_level`, the level is outside `[start_level, reg_level]` → emit
+   `("skip", {"key": ctx["key"], "result": SkipResults(desc=...)})`.
+3. Otherwise (inside the window, or both bounds `None`) emit `("keep", ctx)`.
+
+No failure path: SKIP is a pass-like routing decision, not an error, and emits no log call.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):
@@ -79,3 +91,14 @@ In `modules/tests/test_selection.py`:
 
 - Tests pass.
 - Both output ports (`keep`, `skip`) are exercised; the skip path emits `SkipResults`.
+
+## Constraints
+
+- Window test is `[start_level, reg_level]`; when both bounds are `None`, every test is kept.
+- Pass only the builder **name** to `get_reglvl(builder_cfg.get_name())`; the persistent port
+  carries the whole `RtlBuilderConfig` because the same payload feeds `cc-build`/`seed`/
+  `sim-build` downstream.
+- SKIP is a **pass-like routing decision, not a failure** — emit `("skip", {key, result:
+  SkipResults})` with **no** `log.error`/`log.critical`. The `skip` terminal port is unwired
+  (TODO #15); still emit on it.
+- Use string-literal port names (`keep`/`skip`); stay graph-agnostic.

@@ -49,6 +49,21 @@ class ParseUvmLogMod:
         return ("default", { "key": test_run["key"], "result": result })
 ```
 
+## Algorithm
+
+1. Read the thresholds and log: `uvm = test_run["test"].uvm` (non-negative `max_warns` /
+   `max_errors`, validated at deserialisation — not re-checked here); `text =
+   Path(test_run["log"]).read_text()`.
+2. Parse the UVM "Report counts by severity" block into WARNING/ERROR/FATAL counts. A missing
+   Report Summary block is itself a FAIL ("Invalid UVM Report Summary"); `int()` over a
+   regex-matched `[0-9]+` cannot raise.
+3. Verdict: PASS iff `WARNING <= uvm.max_warns and ERROR <= uvm.max_errors and FATAL == 0`,
+   else FAIL with the counts summary in `desc`.
+4. Emit `("default", {"key": test_run["key"], "result": TestResults(...)})`; on a non-pass
+   result `log.error("test_failed", ...)` with the counts and log path; PASS does not log.
+5. **Failure — unreadable log.** Wrap step 1's read in `try/except OSError` →
+   `log.error("parse_uvm_read_failed", ...)` and emit a FAIL result carrying `str(e)` as `desc`.
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py` (continuing from spec 08):
@@ -86,3 +101,14 @@ In `modules/tests/test_post.py`:
 - Tests pass.
 - `ParseUvmLogMod`: fixture-by-fixture comparison against rtl_buddy `UvmVlogPost` on the
   same log files produces identical `TestResults`.
+
+## Constraints
+
+- Verdict: PASS **iff** `WARNING <= max_warns and ERROR <= max_errors and FATAL == 0`; else FAIL
+  with the counts summary in `desc`.
+- A missing Report Summary block is itself a FAIL (`"Invalid UVM Report Summary"`).
+- Do **not** re-validate the thresholds — their non-negative invariant is enforced at YAML
+  deserialisation (spec [01b](01b-suite-schema.md)).
+- A FAIL verdict → `log.error("test_failed", …)` at emission; PASS does not log. Catch
+  `OSError`/`FileNotFoundError` reading the log → FAIL with `str(e)` in `desc` and `log.error`.
+- `int()` over a regex-matched `[0-9]+` cannot raise — no guard needed there.

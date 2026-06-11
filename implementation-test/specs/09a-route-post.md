@@ -39,6 +39,11 @@ class RoutePostMod:
         return ("uvm", test_run) if test_run["test"].uvm is not None else ("plain", test_run)
 ```
 
+## Algorithm
+
+1. Branch on UVM presence: emit `("uvm", test_run)` when `test_run["test"].uvm is not None` (a
+   `UVMConfig`), else `("plain", test_run)`. Pure classifier — no scheduling, no failure path.
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py` (continuing from spec 08):
@@ -65,6 +70,14 @@ In `modules/tests/test_post.py`:
 
 - Tests pass.
 - Both output ports (`uvm`, `plain`) are exercised, routing on `ctx["test"].uvm`.
+
+## Constraints
+
+- Pure classifier on `test_run["test"].uvm is not None` → `("uvm", test_run)` else `("plain",
+  test_run)`. No scheduling, no failure path, no log call.
+- Keep the route-post + two-parser split (atomic-by-function) — do **not** collapse the UVM and
+  plain parsing back into this node.
+- Use string-literal port names (`uvm`/`plain`).
 
 ## Notes
 

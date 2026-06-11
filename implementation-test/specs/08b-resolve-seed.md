@@ -56,6 +56,23 @@ class ResolveSeedMod:
         yield ("seed", { "key": ctx["key"], "seed": seed })
 ```
 
+## Algorithm
+
+1. Branch on `seed_mode`:
+   - `NEW` → `seed = random.randrange(1_000_000)` (upper bound exclusive).
+   - `DEFAULT` → `seed = builder_cfg.get_seed()`.
+   - `REPLAY` → go to step 2.
+2. **REPLAY read.** Compose `path = Path(logs_dir) /
+   f"{ctx['test'].get_name()}{run_suffix(ctx)}.randseed"` and parse `seed =
+   int(Path(path).open().readline().strip())`.
+3. On success (any mode) emit in lockstep: `("ctx", ctx)` then `("seed", {"key": ctx["key"],
+   "seed": seed})`.
+4. **Failure — REPLAY missing/malformed.** REPLAY only: wrap step 2 in `try/except
+   (FileNotFoundError, ValueError, PermissionError)` → `log.error("replay_seed_invalid",
+   key=ctx["key"], path=str(path))`, emit `("fail", {"key": ctx["key"], "result": <FAIL whose
+   desc is f"Replay seed missing or invalid at {path}">})`, and return. `NEW`/`DEFAULT` have no
+   failure path.
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:
@@ -105,5 +122,12 @@ In `modules/tests/test_sim_cycle.py`:
 
 ## Constraints
 
-- `NEW` seed uses `random.randrange(1_000_000)` (upper bound exclusive — matches
-  rtl_buddy).
+- `NEW` seed uses `random.randrange(1_000_000)` (upper bound **exclusive** — matches
+  rtl_buddy); `DEFAULT` uses `builder_cfg.get_seed()` — do not invent a value for either.
+- On success emit `("ctx", ctx)` then `("seed", {key, seed})` in lockstep via the generator.
+- REPLAY only: catch `(FileNotFoundError, ValueError, PermissionError)` around the
+  `int(open(path).readline().strip())` parse → emit `("fail", {key, result: <FAIL>})` on the
+  **unwired** `fail` port and `log.error` at emission with the attempted path. `NEW`/`DEFAULT`
+  have **no** failure path.
+- Compose the REPLAY path from the `logs_dir` persistent input (default `"logs"`); do not
+  hard-code `logs/`.

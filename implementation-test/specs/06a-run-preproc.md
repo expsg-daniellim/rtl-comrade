@@ -49,6 +49,22 @@ class RunPreprocMod:
         return ("default", ctx)
 ```
 
+## Algorithm
+
+1. Branch on the preproc path: `preproc = ctx["test"].get_preproc_path()` (spec 01b → `str |
+   None`). If `None`, emit `("default", ctx)` once and return (rtl_buddy short-circuits the same
+   way).
+2. Read the script and execute it in a fresh namespace: `ns = {"logger": logger, "test_cfg":
+   ctx["test"], "root_cfg": root_cfg}`, then `exec(compile(code, preproc, "exec"), ns)`. The
+   script mutates `ctx["test"]` in place via setters (`set_plusarg`/`set_plusdefine`/
+   `set_timeout`, spec 01b). Reuse the shared `exec_hook` helper (see Notes).
+3. Emit `("default", ctx)` with the mutated test.
+4. **Failure — script error.** Wrap the read + `exec` (step 2) in `try/except Exception` (user
+   script exceptions plus `FileNotFoundError`/`PermissionError` reading the script) → emit
+   `("fail", {"key": ctx["key"], "result": <FAIL with str(e) + traceback summary>})` and
+   `log.error(..., exc_info=e)`. Notable divergence: per-test FAIL vs rtl_buddy's
+   `logger.critical → typer.Abort`.
+
 ## Deliverables
 
 In `modules/rtl_test/build.py` (continuing from spec 03):
@@ -93,6 +109,17 @@ In `modules/tests/test_prep.py`:
 - Tests pass.
 - Both output ports (`default`, `fail`) are exercised; the no-script path passes `ctx`
   through and a script-set mutation is reflected on `ctx["test"]`.
+
+## Constraints
+
+- No preproc configured (`get_preproc_path()` is `None`) → emit `("default", ctx)` exactly once.
+- The script mutates `ctx["test"]` **in place** via setters (`set_plusarg`/`set_plusdefine`/
+  `set_timeout`); pass the mutated `ctx` through on `default`.
+- Catch broad `Exception` around the read + `exec` (user-script errors plus
+  `FileNotFoundError`/`PermissionError`) → emit `("fail", {key, result: <FAIL with str(e) +
+  traceback>})` on the **unwired** `fail` port and `log.error(..., exc_info=e)`. Per-test FAIL,
+  **not** `log.critical`/abort.
+- Reuse the shared `exec_hook` helper (spec [05f](05f-expand-sweep.md)) — do **not** copy-paste.
 
 ## Notes
 

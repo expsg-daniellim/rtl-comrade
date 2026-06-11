@@ -43,6 +43,18 @@ class PrependCwdPathMod:
         return ("default", True)
 ```
 
+## Algorithm
+
+1. Read the current value: `path = os.environ.get("PATH", "")`.
+2. If `"." not in path.split(os.pathsep)`, prepend it: `os.environ["PATH"] = "." + os.pathsep
+   + path`. If `.` is already present anywhere in the list, leave `PATH` untouched
+   (idempotent).
+3. Emit `("default", True)` — a sequencing token only; receivers branch on ordering, not on
+   the boolean.
+
+No failure path: dict mutation cannot meaningfully fail, and `unit` guarantees the single
+invocation that makes the process-wide `os.environ` mutation safe.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:
@@ -53,13 +65,8 @@ In `modules/rtl_test/setup.py`:
   bootstrap; here it is an explicit graph node so the responsibility is visible. Zero
   input ports; runs once via `unit`. Emits `True` on `default`; the value is consumed by
   `run-process` as a `env_ready` sequencing input (see [07 settled
-  25](../07-ambiguities-and-assumptions.md)).
-  **Behaviour**:
-  1. `path = os.environ.get("PATH", "")`
-  2. If `"." not in path.split(os.pathsep)`: `os.environ["PATH"] = "." + os.pathsep + path`.
-  3. Return `{"default": True}`.
-  Idempotent — re-invocation (or a stale `.` already on PATH) is a no-op. Mutation of
-  the process-wide `os.environ` is safe because `unit` guarantees a single invocation.
+  25](../07-ambiguities-and-assumptions.md)). See [Algorithm](#algorithm) for the numbered
+  steps.
   **Failure handling**: none. Dict mutation cannot meaningfully fail; no failure port,
   no log call.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.
@@ -93,3 +100,13 @@ In `modules/tests/test_setup.py`:
 - `PrependCwdPathMod` leaves `os.environ["PATH"]` starting with `.` for the duration of the
   run (contributes to the setup-only end-to-end graph — see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `unit` contract, zero-input — runs exactly once; the single invocation is what makes the
+  process-wide `os.environ["PATH"]` mutation safe. Do **not** wire it for repeated execution.
+- Idempotent: prepend `.` only if it is **not already present anywhere** in the split `PATH`;
+  otherwise leave `PATH` untouched.
+- No failure path — dict mutation cannot meaningfully fail; no failure port, no log call.
+- Emit `("default", True)` as a sequencing token only; the boolean is never branched on by
+  receivers (`run-process`/`ensure-logs-dir` use it purely for edge ordering).

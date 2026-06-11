@@ -54,6 +54,26 @@ class WriteFilelistMod:
         yield ("filelist", { "key": ctx["key"], "filelist": path })
 ```
 
+## Algorithm
+
+1. Derive the per-tag filename: `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
+   ctx["test"].get_name())` (the same regex `build-compile-cmd` uses) and `path =
+   Path(f"run.{test_tag}.f")` — per-tag so concurrent tests don't collide on a shared `run.f`.
+2. Resolve and write the filelist: port `VlogFilelist.write_output(unroll=True, flatten=False,
+   strip=False, deduplicate=True, test_filelist=ctx["test"].get_testbench().get_filelist())`,
+   using `ctx["test"].get_model()` (the `ModelConfig` from `load-model`, with `.filelist` /
+   `.path` per spec 01c) for `-F` include resolution. The option-parsing regex, `-F` recursion
+   with unroll, `+incdir+`/`+libext+` handling, dedup, and existence checks are all faithful to
+   the reference (see Notes / Compatibility source).
+3. On success emit in lockstep: `("ctx", ctx)` then `("filelist", {"key": ctx["key"],
+   "filelist": path})` (consumed by `build-compile-cmd`).
+4. **Failure — resolve/write error.** Wrap step 2 in `try/except Exception`:
+   `FileNotFoundError`/`IsADirectoryError`/`OSError`/`PermissionError` (write), or
+   `KeyError`/`AttributeError` from a missing testbench filelist or `ctx["test"].get_model() is
+   None` (meaning `load-model` did not fire upstream) → emit `("fail", {"key": ctx["key"],
+   "result": <FAIL with str(e) in desc>})` and `log.error` with the attempted path and the chain
+   of `-F` includes the resolver was processing.
+
 ## Deliverables
 
 In `modules/rtl_test/build.py` (continuing from spec 03):
@@ -101,6 +121,20 @@ In `modules/tests/test_prep.py`:
 - The filelist module reproduces the byte-for-byte output of rtl_buddy's `VlogFilelist`
   on the same inputs (modulo ordering if dedup is non-stable).
 - Both output ports (`ctx`/`filelist` on success, `fail`) are exercised.
+
+## Constraints
+
+- Write the per-tag filename `run.{test_tag}.f` (`test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
+  ctx["test"].get_name())`, the same regex `build-compile-cmd` uses) — **never** the bare
+  `run.f`. This per-tag naming is the interim concurrency mitigation; do **not** reintroduce a
+  serialising lock (the `serial_acquire` shim was removed, TODO #30).
+- Use the plain `default` contract (reverted from `serial_acquire`).
+- On success emit `("ctx", ctx)` then `("filelist", {key, filelist: <Path>})` in lockstep via
+  the generator.
+- Catch broad `Exception` from the resolve/write (`OSError`/`PermissionError`/`FileNotFoundError`/
+  `IsADirectoryError`, or `KeyError`/`AttributeError` from a missing testbench filelist or
+  `ctx["test"].get_model() is None`) → emit `("fail", {key, result: <FAIL with str(e)>})` on the
+  **unwired** `fail` port and `log.error` with the attempted path. Per-test FAIL, not abort.
 
 ## Notes
 

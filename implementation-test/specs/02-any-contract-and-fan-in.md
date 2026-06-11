@@ -32,6 +32,22 @@ ended. Broadly reusable; it was originally built for the (now-removed) `fan-in-r
 and replaced the earlier `MergeContract` design, without requiring any harness change. It is
 kept here as reusable infrastructure even though the `test` graph no longer wires it.
 
+## Algorithm — `get_inputs()`
+
+1. **Top up pending reads.** For every port that has not ended and has no in-flight task,
+   schedule one: `self._pending[name] = asyncio.ensure_future(port.get())`. Tasks created in an
+   earlier call that were not yet returned stay in `_pending` — never cancel them, or their item
+   is lost.
+2. **Wait for the first ready port.** While `_pending` is non-empty,
+   `await asyncio.wait(self._pending.values(), return_when=FIRST_COMPLETED)`.
+3. **Drain the wake-up one at a time.** Scan the pending tasks; for each completed one, pop it
+   from `_pending` and read its result. A real payload is returned immediately as `{name: val}`
+   (delivered under the port's own name), leaving any other simultaneously-ready tasks in
+   `_pending` for the next call (the no-loss invariant for multi-done wake-ups). An `EndSentinel`
+   is consumed silently and the scan continues to the next ready port.
+4. **Terminate.** When `_pending` drains to empty (all ports have ended), return
+   `EndSentinel(self.id)`.
+
 ## Deliverables
 
 ### `contracts/any.py` — `AnyContract`
@@ -127,6 +143,20 @@ Not built — `FanInResultsMod` is removed.
   first-class entry listing invariants (mirrored from
   [05](../05-branching-and-results.md#the-any-contract-retained-currently-unwired)) and its
   reusability, per [`docs/creating-documentation.md`](../../docs/creating-documentation.md).
+
+## Constraints
+
+- **Never cancel an in-flight `_pending` task.** A task created in call N but not returned must
+  survive in `_pending` to call N+1 — cancelling it loses that port's item (the no-loss
+  invariant).
+- Return **exactly one** `{name: payload}` per `get_inputs()` call (one delivery at a time);
+  leave any other simultaneously-ready tasks in `_pending`.
+- Deliver each payload under the **port's own name**, not a fixed key.
+- Consume an `EndSentinel` silently and continue scanning; return `EndSentinel(self.id)` **only**
+  once `_pending` is empty (all ports ended). Propagate the sentinel — never synthesise it early
+  or swallow the terminal one (`docs/invariants.md` — EndSentinel).
+- Keep it a **plain** contract: no `Config`, no side-effects. Do **not** reintroduce the removed
+  `release_lock` field or any `_LOCKS` registry (TODO #30 removed the shim).
 
 ## Notes
 

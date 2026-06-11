@@ -54,6 +54,22 @@ class EarlyStopGateMod:
         return ("go", payload)
 ```
 
+## Algorithm
+
+1. Establish the phase ordering `order = ["pre", "comp", "sim", "post"]` (reuse rtl_buddy's
+   `RunDepth` / a small schema equivalent — see Notes), where `self.phase` is this node
+   instance's checkpoint and `early_stop` is the requested depth.
+2. Branch: if `order.index(early_stop) <= order.index(self.phase)`, this run is stopped at or
+   before this checkpoint → emit `("stop", {"key": payload["key"], "result":
+   EarlyStopResults(f"Stopped early at {self.phase}")})` **and** `log.info("test_result",
+   key=payload["key"], result="NA", desc=f"Stopped early at {self.phase}")` (the
+   `SummaryProcessor` collects that event; the `stop` port itself is unwired). Otherwise emit
+   `("go", payload)`.
+
+The module reads only `payload["key"]` and is agnostic to whether `payload` is `ctx`
+(gate-pre/comp) or `test_run` (gate-sim). No failure path — a `stop` is a normal terminal, not
+an error.
+
 ## Deliverables
 
 In `modules/rtl_test/control.py` — `EarlyStopGateMod`:
@@ -92,6 +108,17 @@ terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md
 - Tests pass.
 - Both output ports (`go`, `stop`) are exercised across all four `early_stop` values for
   each `phase`; a `stop` emits one `test_result` event at INFO.
+
+## Constraints
+
+- `Config.phase` is one of `pre`/`comp`/`sim`; the ordering is fixed `pre < comp < sim < post`.
+  Reuse rtl_buddy's `RunDepth` ordering — do **not** ad-hoc string-compare.
+- Stop iff `order.index(early_stop) <= order.index(self.phase)`: emit `("stop", {key, result:
+  EarlyStopResults})` on the **unwired** `stop` port **and** `log.info("test_result",
+  result="NA", desc=…)`. Otherwise emit `("go", payload)`.
+- A `stop` is a **normal terminal, not a failure** — emit **no** `log.error`/`log.critical`.
+- Read only `payload["key"]`; stay agnostic to whether `payload` is `ctx` (gate-pre/comp) or
+  `test_run` (gate-sim). Three node instances differ only by `config.phase`.
 
 ## Notes
 

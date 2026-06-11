@@ -45,6 +45,16 @@ class InterpretCompileMod:
         return ("fail", { "key": ctx["key"], "result": CompileFailResults(...) })
 ```
 
+## Algorithm
+
+1. Branch on the subprocess result (joined to `ctx` by key via `keyed_join`): if `proc["rc"]
+   == 0`, emit `("ok", ctx)` unchanged — `ctx["simv"]` was already set by `build-compile-cmd`.
+2. **Failure — non-zero rc.** Otherwise read a tail of `proc["stderr_path"]`, `log.error` at
+   emission with `rc`/`stderr_path`/the stderr tail, and emit `("fail", {"key": ctx["key"],
+   "result": CompileFailResults(...)})`. This is result routing on `rc`, not a caught Python
+   exception; an `OSError`/`FileNotFoundError` reading `stderr_path` would be surprising and is
+   left to propagate.
+
 ## Deliverables
 
 In `modules/rtl_test/build.py`:
@@ -83,6 +93,16 @@ In `modules/tests/test_compile_cycle.py`:
   `keyed_join`) end-to-end against a real builder produces a non-zero `rc` on a known
   bad source file and surfaces it correctly (see
   [07 index](07-compile-cycle-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- `keyed_join` contract with `key_field: key` — join `ctx` + `proc` by key; this is a join
+  node, not single-source `default`.
+- Route on `proc["rc"]`: `rc == 0` → `("ok", ctx)` unchanged (`ctx["simv"]` already set by
+  `build-compile-cmd`); `rc != 0` → `("fail", {key, result: CompileFailResults()})` on the
+  **unwired** `fail` port and `log.error` at emission (`rc`, `stderr_path`, stderr tail).
+- This is result routing on `rc`, **not** a caught Python exception. An `OSError`/
+  `FileNotFoundError` reading `stderr_path` is surprising — let it propagate.
 
 ## Notes
 

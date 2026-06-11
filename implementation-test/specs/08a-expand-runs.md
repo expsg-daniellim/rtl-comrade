@@ -39,6 +39,13 @@ class ExpandRunsMod:
             yield ("default", { **ctx, "key": key, "run_id": run_id })
 ```
 
+## Algorithm
+
+1. For each `run_id` in `run_ids` (default `[None]`), compute the key: `ctx["key"]` unchanged
+   when `run_id is None`, else `f"{ctx['key']}#{run_id}"`.
+2. Yield `("default", {**ctx, "key": key, "run_id": run_id})` — one fresh `ctx` per run-id.
+   `run_ids=[None]` therefore emits a single passthrough. No failure path.
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:
@@ -68,3 +75,10 @@ In `modules/tests/test_sim_cycle.py`:
 
 - Tests pass.
 - Default `[None]` and an explicit multi-id list both fan out with correctly-stamped keys.
+
+## Constraints
+
+- `run_ids` default `[None]` → a single passthrough (`ctx` unchanged, `run_id=None`); a non-`None`
+  `run_id` suffixes the key `#run_id`.
+- Yield one fresh `ctx` per `run_id` via the generator; do not mutate the inbound `ctx` in place.
+- No failure path. Emit on the string-literal `default` port.

@@ -138,6 +138,22 @@ the schema stays a pure value object.
   `builder_cfg.get_run_time_opts(mode, seed)`, etc.) without forcing the implementer
   to open `rtl_buddy/src/rtl_buddy/config/rtl.py`.
 
+## Constraints
+
+- Preserve the YAML renames exactly (`builder`, `builder-simv`, `sim-rand-seed`,
+  `sim-rand-seed-prefix`, `builder-opts`, `compile-time`, `run-time`). Do **not** Pythonify
+  them — they are the public surface for drop-in `root_config.yaml` loading.
+- `get_compile_time_opts(mode)` / `get_run_time_opts(mode, seed)` must `log.critical`
+  (immediate `SystemExit(1)`) when `mode not in self.opts` or the mode's list is `None` — not
+  a port-routed result (this is system-wide misconfiguration). See
+  [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
+- Both `get_*_opts` must return a **fresh** `list(...)` copy — mutating the return must not
+  corrupt the underlying `self.opts[mode]` lists.
+- `get_run_time_opts` appends `sim_rand_prefix + str(seed)` **only when `seed is not None`**,
+  and only once — callers must **not** add the seed again.
+- Keep the verilator simv switch in **callers** (on `os.path.basename(get_exe())`), never on
+  the schema or on `name` — the schema stays a pure value object.
+
 ## Notes
 
 YAML `field(rename=...)` targets are the **public surface** for downstream rtl_buddy

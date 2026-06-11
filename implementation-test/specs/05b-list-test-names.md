@@ -37,6 +37,12 @@ class ListTestNamesMod:
         print("  ".join(suite_cfg.get_test_names()))   # terminal: emits nothing
 ```
 
+## Algorithm
+
+1. Fetch names in declaration order: `suite_cfg.get_test_names()` (spec 01b → `list[str]`).
+2. Print them two-space-joined: `print("  ".join(...))`. Terminal sink — emits nothing, no
+   failure path.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):
@@ -63,3 +69,9 @@ In `modules/tests/test_selection.py`:
 
 - Tests pass.
 - Prints test names in declaration order and emits nothing (terminal sink).
+
+## Constraints
+
+- Terminal sink: `print("  ".join(suite_cfg.get_test_names()))` — names in declaration order,
+  two-space joined — and **emit nothing** (no output ports).
+- No failure path, no log call.

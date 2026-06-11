@@ -46,6 +46,20 @@ class GitStatusMod:
         return ("default", True)
 ```
 
+## Algorithm
+
+1. Collect git state via three `subprocess.run(..., capture_output=True, text=True,
+   check=True)` calls: `branch` from `git rev-parse --abbrev-ref HEAD`, `sha` from `git
+   rev-parse HEAD`, and `dirty = bool(... "git status --porcelain" ...stdout.strip())`.
+2. Record it once: `log.info("git_state", branch=branch, sha=sha, dirty=dirty)`. The event is
+   not collected by `SummaryProcessor` (results-only), so it falls through to the console and
+   prints at run start.
+3. Emit `("default", True)` — the port is unwired; the node exists only for the side-effect
+   log.
+4. **Failure — not a repo / git absent.** Wrap step 1 in `try/except (CalledProcessError,
+   FileNotFoundError)` → `log.warning("git_state_unavailable", reason=str(e))`. **Never**
+   `log.error`/`log.critical`: missing git state must not fail the run. Step 3 still emits.
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` — `GitStatusMod`:
@@ -80,3 +94,13 @@ only for the side-effect log).
 - Tests pass.
 - In a git repo, emits one `git_state` event (branch/sha/dirty) at INFO; outside a repo,
   emits `git_state_unavailable` at WARNING and never `log.error`/`log.critical`.
+
+## Constraints
+
+- `unit` contract, zero-input — runs once for its `log.info("git_state", …)` side-effect.
+- Catch `(subprocess.CalledProcessError, FileNotFoundError)` (not a repo / `git` absent) →
+  `log.warning("git_state_unavailable", …)`. **Never** `log.error`/`log.critical` — missing git
+  state must not fail or abort the run.
+- `git_state` is **not** collected by `SummaryProcessor` (results-only); it falls through to the
+  console at run start.
+- Emit `("default", True)` — the port is unwired; the node exists only for the log side-effect.

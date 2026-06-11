@@ -46,6 +46,23 @@ class ParseLogMod:
         return ("default", { "key": test_run["key"], "result": result })
 ```
 
+## Algorithm
+
+1. Read the log: `text = Path(test_run["log"]).read_text()`.
+2. Scan line-by-line, recording the first match of each: `re.match(r"PASS\b\s*(.*)", line)`,
+   `re.match(r"FAIL\b\s*(.*)", line)`, and `re.match(r"(ERR|FAT):\s*(.*)", line)`. The `\b` word
+   boundary is correction #3 — a line like `PASSTHROUGH ...` no longer matches PASS.
+3. Resolve the verdict (correction #1 — FAIL wins): `if match_fail` → FAIL; `elif match_pass` →
+   PASS; else NA (`{"result": "NA", "desc": "test result unknown"}`). Correction #2: when
+   `match_fail` is set but `match_err` is not, take `desc = match_fail.group(1)` rather than
+   dereferencing the absent `match_err` (no crash).
+4. Emit `("default", {"key": test_run["key"], "result": TestResults(...)})`. On a non-pass
+   result, `log.error("test_failed", ...)` at emission with the matched FAIL line and the log
+   path; PASS/NA does not log.
+5. **Failure — unreadable log.** Wrap step 1 in `try/except OSError` (incl. `FileNotFoundError`)
+   → `log.error("parse_log_read_failed", ...)` and emit a FAIL result carrying `str(e)` as
+   `desc`.
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py` (continuing from spec 08):
@@ -85,3 +102,14 @@ In `modules/tests/test_post.py`:
 - `ParseLogMod`: identical to rtl_buddy `VlogPost` on clean-PASS, clean-FAIL-with-ERR,
   and NA fixtures; intentionally diverges on FAIL+PASS, FAIL-without-ERR, and
   word-boundary cases — see [07 settled 15](../07-ambiguities-and-assumptions.md).
+
+## Constraints
+
+- Apply the three corrections exactly: FAIL wins over PASS; use the `\b` word boundary
+  (`PASS\b`/`FAIL\b`) so `PASSTHROUGH…` does not match; when `match_fail` is set but `match_err`
+  is not, `desc = match_fail.group(1)` (do **not** dereference the absent `match_err`).
+- Default verdict is NA with `desc = "test result unknown"`.
+- A FAIL verdict → `log.error("test_failed", …)` at emission (the deferred-exit driver); PASS
+  and NA do **not** log.
+- Catch `OSError`/`FileNotFoundError` opening `test_run["log"]` → emit a FAIL `result` carrying
+  `str(e)` as `desc` and `log.error`. Emit on the string-literal `default` port.

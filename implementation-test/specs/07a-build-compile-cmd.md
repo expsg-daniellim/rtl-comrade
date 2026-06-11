@@ -57,6 +57,28 @@ class BuildCompileCmdMod:
                             "stderr_path": f"{logs_dir}/{test_tag}.compile.err" })
 ```
 
+## Algorithm
+
+1. Derive tags and the verilator switch: `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
+   ctx["test"].get_name())`, `exe = builder_cfg.get_exe()`, `is_verilator =
+   os.path.basename(exe).startswith("verilator")`, `build_dir = f"obj_dir_{test_tag}"`, and
+   `simv = f"{build_dir}/simv" if is_verilator else builder_cfg.get_simv()` (the caller-side
+   verilator quirk, spec 01a).
+2. Build the plusdefines list from `ctx["test"].get_plusdefines()` (spec 01b → `dict | None`):
+   when not `None`, format each entry `f"+define+{k}={v}"`, or `f"+define+{k}"` when `v is
+   None`.
+3. Assemble the argv: `[exe, *builder_cfg.get_compile_time_opts(builder_mode)]`, then append
+   `["--Mdir", build_dir]` when `is_verilator`, then `[*plusdefines, "-f",
+   str(filelist["filelist"])]`. Do not `mkdir(logs_dir)` — `ensure-logs-dir` already created it.
+4. Fold `simv` into ctx (`ctx = {**ctx, "simv": simv}`; `build_dir` is not carried — unused
+   downstream) and emit in lockstep: `("ctx", ctx)` then `("command", {"key": ctx["key"],
+   "argv": argv, "stdout_path": f"{logs_dir}/{test_tag}.compile.log", "stderr_path":
+   f"{logs_dir}/{test_tag}.compile.err"})`.
+5. **Failure — bad builder mode.** No catch here:
+   `builder_cfg.get_compile_time_opts(builder_mode)` itself `log.critical`s (immediate exit) if
+   `builder_mode` is unknown or its `compile_time` is `None` (spec 01a) — system-wide
+   misconfiguration, not per-test.
+
 ## Deliverables
 
 In `modules/rtl_test/build.py`:
@@ -112,6 +134,19 @@ In `modules/tests/test_compile_cycle.py`:
 - Wiring `build-compile-cmd` → `run-process` (instance #1) → `interpret-compile` end-to-end
   against a real builder surfaces a non-zero `rc` on a known bad source file (see
   [07 index](07-compile-cycle-modules.md#acceptance-criteria)).
+
+## Constraints
+
+- Detect verilator on `os.path.basename(builder_cfg.get_exe()).startswith("verilator")` (the
+  `exe`, not `name`); `simv = f"{build_dir}/simv"` for verilator else `builder_cfg.get_simv()`.
+- Do **not** `mkdir(logs_dir)` — `ensure-logs-dir` already bootstrapped it.
+- Fold `simv` into `ctx`; do **not** fold `build_dir` (unused downstream).
+- Do **not** catch `get_compile_time_opts(builder_mode)` — it `log.critical`s on an unknown
+  mode / `None` opts (spec [01a](01a-builder-schema.md)); this is system-wide misconfiguration,
+  not per-test.
+- Emit `("ctx", ...)` then `("command", ...)` in lockstep via the generator.
+- `build_dir`/verilator `simv` are already per-tag; do **not** add a lock for the residual
+  non-verilator `simv` (TODO #30) — that waits on [07 item 17](../07-ambiguities-and-assumptions.md).
 
 ## Notes
 

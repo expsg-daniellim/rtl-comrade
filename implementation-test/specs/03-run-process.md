@@ -248,6 +248,25 @@ Append to the `- file: rtl_test/build.py` block in `modules/config.yaml` (opened
 - A reader of this spec can write a slow-sleep fake and exercise every state in the
   Lifecycle section without consulting source.
 
+## Constraints
+
+- `_TIMEOUT_GRACE_S = 5.0` is a **module-level constant** — do **not** expose it as a
+  per-command knob (the per-test `timeout` is the only user-facing dial).
+- `rc = 4444` is set by **this module only**, **only** on the timeout-and-kill path (step 3a);
+  never propagate it from a child.
+- Set `timed_out` explicitly at the return site (step 4), **independent of `rc`** — do **not**
+  derive it from `rc == 4444` (a child that organically exits 4444 must read `timed_out=False`).
+- Signal the **process group** (`os.killpg`), not just the leader: SIGQUIT then SIGKILL
+  escalation on timeout (grace = `_TIMEOUT_GRACE_S`); SIGKILL immediately (no grace) on cancel.
+  Swallow `ProcessLookupError` from `killpg` (exit race); the final `proc.wait()` still reaps.
+- Redirect stdout/stderr to caller-supplied files under `with` — **never** `PIPE` /
+  `communicate()` (bounds memory, preserves partial output across a kill).
+- Launch failure (`FileNotFoundError`/`PermissionError`) → `log.critical` (harness exit 1).
+  A non-zero `rc` or `timed_out=True` is **not** a failure at this layer — downstream
+  `interpret-compile`/`interpret-sim` classify it.
+- On cancellation, do **not** emit a `proc` payload — re-raise `CancelledError` after reaping
+  (shield the reap). `env_ready` is ordering-only: never read or branch on it.
+
 ## Notes
 
 This is the workhorse — both compile and sim are wired instances of this single module

@@ -83,6 +83,21 @@ It accumulates `test_result` and **nothing else**. `git_state` is an ordinary ev
 processor returns unchanged, so it prints via `ConsoleRenderer` at run start like any other
 log line — there is no `self._git_state` and no git rendering here.
 
+## Algorithm
+
+`__call__(logger, method_name, event_dict)` — runs per log event, before `ConsoleRenderer`:
+1. If `event_dict.get("event") == "test_result"`, append the dict to `self._rows` and `raise
+   DropEvent` so the per-event line is suppressed from the console.
+2. Otherwise return `event_dict` unchanged — every other event, including `git_state`, falls
+   through to `ConsoleRenderer`.
+
+`finalise()` — the per-run teardown hook, invoked at run end (after the gather, before the
+failure check):
+3. If `self._rows` is empty (list-mode, or a CRITICAL abort before any result), return — a
+   no-op.
+4. Otherwise render the `key`/`result`/`desc` table from `self._rows`. It drives no exit code
+   (that is the per-emission `log.error` at each failure site).
+
 ## Deliverables
 
 In `graphs/log/summary.py` — a single `SummaryProcessor` class:
@@ -138,6 +153,21 @@ table renders.
 - No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
   `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
   single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
+
+## Constraints
+
+- It is a structlog **processor** (a stateful class instance), **not** a `logging.Handler` — no
+  `run()`, no ports, no module manifest entry. Instantiated once per run, so `self._rows` starts
+  empty each run.
+- Sits **before** `ConsoleRenderer` (non-terminal under `include_default: true`); `__call__`
+  returns an `EventDict`, never a pre-rendered string.
+- Accumulate `test_result` **only** — append the row then `raise DropEvent` to suppress its
+  console line. Return **every other** event (including `git_state`) unchanged. Do **not** keep a
+  `self._git_state` or render git state in the table.
+- `finalise()` renders the table once; it is a **no-op when `self._rows` is empty** (list-mode /
+  CRITICAL abort) and drives **no** exit code (the per-emission `log.error` does).
+- Do **not** add a separate `drop_summary_events` processor — accumulation and suppression live
+  in this one object.
 
 ## Notes
 

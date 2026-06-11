@@ -45,6 +45,20 @@ documenting any divergences observed.
   [07 settled 15](../07-ambiguities-and-assumptions.md).
 - Any unexpected divergence is documented and a follow-up issue opened.
 
+## Constraints
+
+- Validate against the real reference suite `../rtl-buddy-proj-template/design/sandbox/verif`
+  (per `rtl_buddy/AGENTS.md`) — do not substitute a synthetic fixture for the parity claims.
+- Assert **exit-code** and **per-test PASS/FAIL/NA + `desc`** parity across all five scenarios
+  (passing run, compile-fail, sim-timeout, `--list`, `--early-stop` per phase). Summary-string
+  **formatting** differences are allowed; the per-test verdicts are not.
+- Commit the captured artifacts under `tests/e2e/` (or similar), and record any unanticipated
+  delta in `KNOWN_DIVERGENCES.md` / [07](../07-ambiguities-and-assumptions.md) with a follow-up
+  issue.
+- Concurrency divergences are **expected** until [07 item 17](../07-ambiguities-and-assumptions.md)
+  lands — run sequentially or document the affected scenarios as KIV. Do **not** reintroduce a
+  serialising lock to force parity.
+
 ## Notes
 
 Concurrency-related divergences are *expected* until the upstream rtl_buddy

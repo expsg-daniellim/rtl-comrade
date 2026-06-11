@@ -50,6 +50,19 @@ A new package, e.g. `modules/rtl_test/schema/`:
 - `TestResults.is_pass()` matches rtl_buddy semantics exactly (table in [02](../02-payload-conventions.md)).
 - `UVMConfig` rejects negative `max_warns`/`max_errors` at construction.
 
+## Constraints
+
+- Preserve rtl_buddy's YAML field names exactly as `field(rename=...)` targets — keep
+  hyphens and unusual casing (`rtl-buddy-filetype`, `cfg-rtl-builder`, `cfg-platforms`,
+  `cfg-rtl-reg`, `cfg-verible`). Do **not** Pythonify them.
+- `TestResults.is_pass()` must return `True` for `PASS`/`SKIP` only — never for FAIL / NA /
+  timeout / compile-fail / early-stop.
+- `UVMConfig.__post_init__` must raise `ValueError` (not `log.critical`) on a negative
+  `max_warns`/`max_errors`; promoting that to `log.critical` is `parse-suite-config`'s job
+  (spec [04h](04h-parse-suite-config.md)), not this dataclass's.
+- These are pure `@serde` value objects: no `run()`, no ports, no graph awareness, no logging.
+  The harness never loads them directly.
+
 ## Notes
 
 Drop-in field-name compatibility is the contract with downstream users. Do **not** rename

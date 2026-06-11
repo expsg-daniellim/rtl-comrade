@@ -8,6 +8,8 @@ Todos for bringing the `implementation-test/` plan to a buildable, internally co
 
 Items are numbered globally for cross-referencing (e.g., "see TODO #5"). The order within each section reflects rough priority but is not load-bearing — items in the same section can be picked up in parallel where dependencies allow.
 
+> **Note on the index.** `implementation-test-todos-index.md` mirrors the status of every item here. After resolving a todo (or otherwise changing its status), update its row in the index too so the two stay in sync.
+
 > **Note on file:line citations.** All file/line references in this document are anchored to commit `9308c86` at todo-creation time. Re-verify line numbers against the current state of the source files before acting on a citation.
 
 ## Design-level — must resolve before building
@@ -923,6 +925,30 @@ A reader can build and register the module without opening any file other than t
 
 ### 22. Expand each module's algorithm into numbered implementation steps
 
+**Status: Resolved (2026-06-11).** A dedicated `## Algorithm` section was added to every
+module/contract/plugin spec, placed after `## Surface` and before `## Deliverables`, narrating
+the skeleton as numbered steps with **each reachable failure path as its own numbered step**
+(not a parenthetical aside) — concrete steps (1)/(2)/(3). Coverage: the 31 per-module child
+tickets (`04a`–`04i`, `05a`–`05f`, `06a`–`06b`, `07a`–`07b`, `08a`–`08f`, `09a`–`09c`,
+`10a`–`10c`), the `any` contract (`02` — an `## Algorithm — get_inputs()` for the scheduling
+loop), and the `SummaryProcessor` plugin (`10c` — `__call__` / `finalise`). Spec `03`
+(run-process) already carried an exhaustive `## Lifecycle` section that serves this role and was
+left as-is. The inline `**Behaviour:**` numbered lists previously in `04b`/`04f`/`04g` were
+folded into the new section to remove duplication. Out of scope: the schema specs (`01`,
+`01a`–`01c`, which declare serde dataclasses/getters, not module algorithms) and the
+non-module assembly/end-to-end specs (`11`, `12`).
+
+One knock-on design gap surfaced while writing the algorithms and was resolved (your call):
+- **`write-randseed` `HierInstanceSeed.txt` (08d).** rtl_buddy appends `HierInstanceSeed.txt`
+  to the `.randseed` only when `'hier_inst_seed' in run_cmd` (the sim argv), but
+  `WriteRandseedMod` is a `keyed_join` that never received the argv. Decision: carry the full
+  `argv` on the `sim_cmd` keyed port (`build-sim-cmd`, [08c](implementation-test/specs/08c-build-sim-cmd.md))
+  so the join node runs the membership check itself (`keyed_join` cannot take a persistent
+  input). Spec 08c surface/skeleton/deliverables and 08d skeleton/algorithm/deliverables/tests/
+  acceptance updated to match.
+
+The original ticket text is kept below for the record.
+
 Implementation prose is currently one-liner bullets. Anything with branching, file I/O, exception handling, or multi-step state changes should be a numbered step list.
 
 #### Concrete steps
@@ -932,6 +958,32 @@ Implementation prose is currently one-liner bullets. Anything with branching, fi
 3. Failure paths get their own steps — not parenthetical asides.
 
 ### 23. Add a "Constraints" section to every spec
+
+**Status: Resolved (2026-06-11).** A `## Constraints` foot section was added to every
+module/contract/plugin spec, phrased as imperatives per concrete step (3) and covering the three
+content dimensions of step (2): numeric ranges/literals/format widths
+(`random.randrange(1_000_000)` upper-bound-exclusive, `_TIMEOUT_GRACE_S = 5.0`,
+`default_timeout = 60`, `max_levels = 8`, per-tag `run.{test_tag}.f`), the **failure idiom** each
+site follows (`log.critical` vs unwired `result` port + `log.error` at emission vs propagate-uncaught
+vs no-log routing — cross-referenced to [05 — Log idioms](implementation-test/05-branching-and-results.md#log-idioms-per-failure-site)),
+and the **harness invariants** honoured (single-source-per-port, string-literal port names so
+`definite_emits` holds, no graph awareness / emit on the deliberately-unwired terminal ports,
+and `EndSentinel` propagation where it is the module's concern — the `any` contract). Placement:
+after `## Acceptance criteria`, before `## Notes` where present (08b's pre-existing one-bullet
+Constraints was expanded to the same fuller shape).
+
+Scope (confirmed with the user, 2026-06-11): the literal "every spec" reading was adopted —
+all 31 per-module child tickets (`04a`–`04i`, `05a`–`05f`, `06a`–`06b`, `07a`–`07b`, `08a`–`08f`,
+`09a`–`09c`, `10a`–`10c`), the `any` contract (`02`), `run-process` (`03`, whose
+Signal/timeout-policy + `rc=4444` subsections were distilled into a foot recap rather than left
+inline-only), the four schema specs (`01`, `01a`–`01c`, where the constraints are the rename /
+fresh-copy / raise-vs-critical / side-effect invariants), and the two assembly/e2e specs (`11`,
+`12`, where the constraints are assembly-level "copy 06 verbatim; no fan-in/agg; no serial_acquire;
+unwired ports are `no_destination` not errors" and parity-validation rules). The parent index
+files (`04`–`10`) and `specs/README.md` are pure navigation and were left out. This is a wider
+scope than TODO #22's (which excluded `03`/schema/assembly) — the user's call.
+
+The original ticket text is kept below for the record.
 
 Specs need a foot section enumerating what the implementer must NOT do, plus invariants the code must hold. Currently constraints are inferred from prose or from the parent design files.
 

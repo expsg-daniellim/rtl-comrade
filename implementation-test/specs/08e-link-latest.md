@@ -39,6 +39,15 @@ class LinkLatestMod:
         return ("default", test_run)
 ```
 
+## Algorithm
+
+1. Force the three CWD "latest" symlinks to this run's files:
+   `force_symlink(test_run["log"], "test.log")`, `force_symlink(test_run["err"], "test.err")`,
+   `force_symlink(test_run["randseed_path"], "test.randseed")`. `force_symlink` replaces any
+   existing link atomically (unlink+symlink, or `os.replace` of a temp link).
+2. Emit `("default", test_run)` unchanged. No failure path; the links are convenience pointers
+   (last-writer-wins under concurrency — see the concurrency note).
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:
@@ -73,3 +82,12 @@ In `modules/tests/test_sim_cycle.py`:
 - Tests pass.
 - The three `test.*` symlinks point at this run's files and `test_run` passes through
   unchanged.
+
+## Constraints
+
+- Force each `test.log`/`test.err`/`test.randseed` symlink **atomically** (unlink+symlink, or
+  `os.replace` of a temp link) — never leave a half-written link.
+- Symlinks are fixed "latest" pointer names in CWD; concurrent runs race them (last-writer-wins).
+  Do **not** rename them per-tag and do **not** add a lock — isolating them is the upstream
+  per-invocation-subdir change ([07 item 17](../07-ambiguities-and-assumptions.md)).
+- No failure path; emit `("default", test_run)` unchanged.

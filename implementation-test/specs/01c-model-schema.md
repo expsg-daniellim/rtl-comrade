@@ -164,6 +164,20 @@ is the file).
   (spec [06](06-prep-modules.md)) can be written against this spec without opening
   `rtl_buddy/src/rtl_buddy/config/model.py`.
 
+## Constraints
+
+- Preserve the `rtl-buddy-filetype` rename (keep the hyphen); do **not** Pythonify it.
+- `ModelConfigLoader.__init__` and `get_model` must **raise** on I/O / parse / schema error
+  and on a missing model — **not** `log.critical`. This is the deliberate loader-layer
+  divergence from rtl_buddy that lets `LoadModelMod` (spec [05e](05e-load-model.md)) catch and
+  route a per-test FAIL. Do not collapse it back to `log.critical`.
+- `get_model` must mutate `model.path = self.path` in place before returning — preserve this
+  side effect; `write-filelist` (spec [06b](06b-write-filelist.md)) reads `model.path` to
+  resolve `filelist` entries.
+- `get_model_name()` must return `self.name` (the rtl_buddy `self.model_name` bug is fixed).
+- An empty `models:` list is legal (loads fine); any `get_model(...)` against it raises.
+- Pure value/loader objects: no `run()`, no ports, no graph awareness.
+
 ## Notes
 
 YAML `field(rename=...)` targets are the **public surface** for downstream rtl_buddy
