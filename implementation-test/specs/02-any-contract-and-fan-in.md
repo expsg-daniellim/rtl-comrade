@@ -15,6 +15,15 @@ populates ports from edges when `run()` uses `**kwargs`).
 **References:** [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node),
 [07 items 19, 27](../07-ambiguities-and-assumptions.md).
 
+## Before you start
+
+Read `docs/contracts/implementation.md` — the `get_inputs()` interface, the `ContractPort` API
+(`get`/`try_get`/`has_ended`/`has_default`/`state`), the termination rules around
+`EndSentinel`, and contract-owned state; `docs/contracts/index.md` and the per-contract files
+under `contracts/` catalogue the shipped contracts. The `any` contract is a standalone plugin
+(`contracts/any.py`, tests in `contracts/tests/test_any.py`) with no sibling specs appending to
+the same file.
+
 ## Goal
 
 Implement the **`any` contract** — a general-purpose scheduling contract that fires on any

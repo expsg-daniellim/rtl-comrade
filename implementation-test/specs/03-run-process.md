@@ -3,6 +3,18 @@
 **Depends on:** none.
 **References:** [03 — `run-process`](../03-module-catalog.md), [07 settled 4 / open verify 23](../07-ambiguities-and-assumptions.md).
 
+## Before you start
+
+Read `docs/modules/implementation.md` — how the harness infers input ports from the `run(...)`
+signature, the allowed output forms (plain return / named-port tuple / generator), the
+`finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
+are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
+below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
+`a69d962`). This module appends to `modules/rtl_test/build.py`, shared with run-process (`03`),
+the prep modules (`06a`–`06b`, index [06](06-prep-modules.md)), and the compile-cycle modules
+(`07a`–`07b`, index [07](07-compile-cycle-modules.md)); coordinate shared imports and helpers
+with those specs.
+
 ## Goal
 
 The generic async subprocess runner used by both compile and sim cycles. Redirects

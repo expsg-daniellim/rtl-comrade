@@ -3,6 +3,17 @@
 **Depends on:** none.
 **References:** [07 settled 1](../07-ambiguities-and-assumptions.md).
 
+## Before you start
+
+These are `@serde`-decorated dataclasses that the harness never loads directly — a faithful port
+of rtl_buddy's config types, so the authoritative reference is the rtl_buddy `config/*.py` source
+this spec cites (anchored to `v1.4.0`, commit `a69d962`). The in-repo `@serde` idiom — nested
+types and `field(rename=...)` for verbatim YAML field names — is shown by the config-bearing
+example in `docs/modules/implementation.md`; [`02 — payload conventions`](../02-payload-conventions.md)
+holds the canonical type and `is_pass()` table the port must match. All four schema specs (`01`,
+`01a`, `01b`, `01c`) build into the shared `modules/rtl_test/schema/` package — coordinate the
+module layout with the others.
+
 ## Goal
 
 Reimplement the configuration dataclasses and shared types — preserving rtl_buddy's YAML

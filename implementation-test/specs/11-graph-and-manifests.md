@@ -3,6 +3,18 @@
 **Depends on:** specs 02–10 (all contracts + modules).
 **References:** [06 — `graphs/test.yaml`](../06-graph-yaml.md).
 
+## Before you start
+
+Read the harness config-file docs this spec assembles: `docs/harness_configs/graph.md` (nodes,
+edges, node/CLI edge sources, and the "Logging configuration" section that wires the
+`SummaryProcessor` plugin), `docs/harness_configs/plugin_manifest.md` (the module/contract
+`config.yaml` shape), and `docs/harness_configs/rtl_comrade_config.md` (registering the `test`
+subcommand). `docs/harness/validation.md` explains the checks the acceptance criteria rely on
+(cycles, overloaded inputs, `no_destination` at INFO for the unwired terminal ports).
+[`06 — graphs/test.yaml`](../06-graph-yaml.md) is the design source to copy verbatim. This spec
+is the sole owner of `graphs/test.yaml`, `modules/config.yaml`, `contracts/config.yaml`, and the
+`rtl_comrade_config.yaml` entry — no sibling specs append to those files.
+
 ## Goal
 
 Assemble the test graph YAML, finalise plugin manifests, and register the `test`

@@ -770,12 +770,42 @@ outputs: <port> → <type>
 
 ### 20. Add a "Before you start" reading list to every spec
 
-Specs should open with an explicit reading list: harness docs the implementer must read, rtl_buddy source they will mirror, and sibling specs they share state with. Today the implementer is expected to discover this themselves.
+**Status: Resolved (2026-06-11).** Module / contract / logging-plugin categories done here;
+the remaining categories (schema, graph/manifest, end-to-end) and the index/README exemption
+were completed under TODO #32, and step 2 now names a reading list for every category. A
+`## Before you start` section now opens every spec in the module/contract/logging categories
+(inserted after `Depends on:` / `References:`, before `## Goal`):
+
+- **Module specs** (31): `specs/03` plus `04a`–`04i`, `05a`–`05f`, `06a`–`06b`, `07a`–`07b`,
+  `08a`–`08f`, `09a`–`09c`, `10a`, `10b`. Each names `docs/modules/implementation.md` (port
+  inference, output forms, `finalise()`, config-bearing modules) with `modules/io.py` /
+  `modules/funcs.py` as the shipped examples, points at the spec's own **Compatibility source**
+  entry for the rtl_buddy file:line it mirrors (anchored to `v1.4.0`, commit `a69d962`; paired
+  with TODO #16), and names the sibling specs appending to the same `modules/rtl_test/*.py`
+  file (grouped by file: `setup.py`, `build.py`, `sim.py`; `10a` is the sole occupant of
+  `control.py`).
+- **Contract spec** (`specs/02`): names `docs/contracts/implementation.md` (`get_inputs()`,
+  the `ContractPort` API, termination/`EndSentinel`, contract-owned state) and `docs/contracts/index.md`;
+  records that `any` is a standalone `contracts/any.py` plugin with no file-sharing siblings.
+- **Logging-plugin spec** (`specs/10c`): already carried its section (TODO #31).
+
+All cited links resolve inside the repo. The remaining spec categories step 2 never named —
+schema (`01`/`01a`/`01b`/`01c`), graph/manifests (`11`), end-to-end (`12`), the thin parent
+indexes (`04`–`10`), and `specs/README.md` — were handled under **TODO #32** (resolved).
+
+The original ticket text is kept below for the record.
 
 #### Concrete steps
 
 1. Add a `## Before you start` section at the top of each spec (after `Depends on:` / `References:`).
-2. Include: relevant rtl_comrade docs (`docs/modules/implementation.md` for any module spec; `docs/contracts/implementation.md` for any contract spec; `docs/logger/implementation.md` + the "Per-Graph Custom Logging" section of `docs/harness/logging.md` for any logging-plugin spec); the rtl_buddy file path + line range the module mirrors (paired with TODO #16, source traceability); any sibling specs that append to the same file.
+2. Include the relevant rtl_comrade docs per spec category, the rtl_buddy file path + line range the spec mirrors (paired with TODO #16, source traceability), and any sibling specs that append to the same file. Reading list by category:
+   - **module spec** — `docs/modules/implementation.md`
+   - **contract spec** — `docs/contracts/implementation.md` (+ `docs/contracts/index.md`)
+   - **logging-plugin spec** — `docs/logger/implementation.md` + the "Per-Graph Custom Logging" section of `docs/harness/logging.md`
+   - **schema spec** (`01`/`01a`/`01b`/`01c`) — no harness doc loads these serde dataclasses; cite the rtl_buddy `config/*.py` source, the `@serde` idiom in `docs/modules/implementation.md`, and `02-payload-conventions.md` (the canonical type / `is_pass()` table). All four share `modules/rtl_test/schema/`.
+   - **graph/manifest spec** (`11`) — `docs/harness_configs/graph.md`, `docs/harness_configs/plugin_manifest.md`, `docs/harness_configs/rtl_comrade_config.md`, `docs/harness/validation.md`, and `06-graph-yaml.md` (the design source it copies verbatim)
+   - **end-to-end spec** (`12`) — `docs/running.md` + `docs/testing.md` + `rtl_buddy/AGENTS.md` (validation section)
+   - **thin parent indexes** (`04`–`10`) and `specs/README.md` — **exempt** (navigation, not buildable units; each child ticket carries its own reading list).
 3. Every link must resolve inside this repo.
 
 > **Logging-plugin specs (resolved by TODO #31, 2026-06-11):** step 2 originally named only
@@ -931,6 +961,65 @@ Current Acceptance sections are coarse ("Tests pass. End-to-end produces correct
 #### Acceptance check
 
 Every spec's Acceptance section is a bullet list referencing concrete artefacts (port names, files, fixtures), not just "tests pass."
+
+### 32. Decide and add "Before you start" reading lists for the non-module/contract/logging specs
+
+**Status: Resolved (2026-06-11).** Reading lists decided for every remaining category and the
+sections added; TODO #20 step 2 now names a reading list (or exemption) for every spec category.
+
+- **Schema specs** (`01`, `01a`, `01b`, `01c`): no harness doc loads these serde dataclasses —
+  the section cites the rtl_buddy `config/*.py` source each spec already names (anchored
+  `v1.4.0`), the `@serde` idiom in `docs/modules/implementation.md`, and
+  `02-payload-conventions.md` (the canonical type / `is_pass()` table the port must match), and
+  records that all four share the `modules/rtl_test/schema/` package.
+- **Graph / manifests** (`11`): cites `docs/harness_configs/graph.md` (incl. its "Logging
+  configuration" section), `docs/harness_configs/plugin_manifest.md`,
+  `docs/harness_configs/rtl_comrade_config.md`, `docs/harness/validation.md`, and
+  `06-graph-yaml.md`; notes it is the sole owner of the files it assembles.
+- **End-to-end** (`12`): cites `docs/running.md`, `docs/testing.md`, and the already-referenced
+  `rtl_buddy/AGENTS.md` validation section.
+- **Thin parent indexes** (`04`–`10`) and **`specs/README.md`**: **exempted** — they carry no
+  buildable work (navigation only; each child ticket carries its own reading list). The
+  exemption is recorded in TODO #20 step 2 rather than adding a placeholder section.
+
+All cited links resolve inside the repo. The original ticket text is kept below for the record.
+
+TODO #20 added a `## Before you start` reading list to every **module**, **contract**, and
+**logging-plugin** spec. Its step 2 only ever defined reading lists for those three categories,
+so the remaining specs were left without one — and, unlike the three resolved categories, there
+is no obvious doc to name. This ticket is to decide the reading list for each remaining category
+and then add the section, the same way TODO #31 had to fold the logging-plugin category into
+step 2 before `specs/10c` could be filled.
+
+Specs still missing the section, by category:
+
+- **Schema specs** — `01-shared-schema`, `01a-builder-schema`, `01b-suite-schema`,
+  `01c-model-schema`. Candidate reading list: the harness config/serde docs the dataclasses
+  mirror (`docs/harness_configs/index.md` + the relevant child) and the rtl_buddy
+  `config/*.py` types they mirror.
+- **Graph / manifests** — `11-graph-and-manifests`. Candidate: `docs/harness_configs/graph.md`
+  + the modules/contracts manifest docs.
+- **End-to-end test** — `12-end-to-end`. Candidate: `docs/testing.md` + the end-to-end harness
+  docs.
+- **Thin parent indexes** — `04`–`10`. **First decide whether index files need the section at
+  all** (they carry no implementation work — they only link to children). If yes, the natural
+  content is a pointer to the children's reading lists, not a duplicate.
+- **`specs/README.md`** — almost certainly excluded (it is the spec index, not a spec), but
+  record the exclusion explicitly so the rule is closed.
+
+#### Concrete steps
+
+1. For each category above, decide the reading list (or that the category is exempt) and amend
+   TODO #20 step 2 to name it — mirroring the logging-plugin fold-in done by TODO #31.
+2. Add the `## Before you start` section to each non-exempt spec, after `Depends on:` /
+   `References:` and before `## Goal`, matching the wording/placement of the module and contract
+   specs.
+3. Every link must resolve inside this repo.
+
+#### Acceptance check
+
+Every `specs/*.md` either carries a `## Before you start` section or is explicitly recorded as
+exempt, and TODO #20 step 2 names a reading list for every spec category.
 
 ## Cosmetic
 

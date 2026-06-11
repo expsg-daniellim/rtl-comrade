@@ -6,6 +6,16 @@
 [07 item 27](../07-ambiguities-and-assumptions.md). Parent index:
 [10 — Control module, git-status, and the summary logging plugin](10-control-aggregate-modules.md).
 
+## Before you start
+
+Read `docs/modules/implementation.md` — how the harness infers input ports from the `run(...)`
+signature, the allowed output forms (plain return / named-port tuple / generator), the
+`finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
+are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
+below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
+`a69d962`). This module is the sole occupant of `modules/rtl_test/control.py`, so it has no
+sibling specs appending to the same file.
+
 ## Goal
 
 Implement the cross-cutting early-stop gate, reused at three boundaries

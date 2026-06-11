@@ -3,6 +3,15 @@
 **Depends on:** spec 11.
 **References:** [07 — Notable divergences](../07-ambiguities-and-assumptions.md), `rtl_buddy/AGENTS.md` validation section.
 
+## Before you start
+
+Read `docs/running.md` for the invocation syntax this validation drives (`rtl-comrade test` vs
+the reference `rtl_buddy test`) and `docs/testing.md` for the conventions the committed e2e
+artifacts under `tests/` must follow. The reference suite and validation procedure are in
+`rtl_buddy/AGENTS.md` (validation section), already named in **References** above. This spec
+depends on the assembled graph from [`spec 11`](11-graph-and-manifests.md); there are no
+file-sharing siblings.
+
 ## Goal
 
 Validate the assembled `test` graph end-to-end against a real rtl_buddy suite, confirming

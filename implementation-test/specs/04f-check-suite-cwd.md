@@ -5,6 +5,18 @@
 [01 — Where to invoke `rtl-comrade test` from](../01-cli-and-entry.md). Parent index:
 [04 — Setup modules](04-setup-modules.md).
 
+## Before you start
+
+Read `docs/modules/implementation.md` — how the harness infers input ports from the `run(...)`
+signature, the allowed output forms (plain return / named-port tuple / generator), the
+`finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
+are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
+below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
+`a69d962`). This module appends to `modules/rtl_test/setup.py`, shared with the setup chain
+(`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`,
+index [05](05-selection-expansion-modules.md)), and git-status (`10b`); coordinate shared
+imports and helpers with those specs.
+
 ## Goal
 
 Enforce the user-driven CWD convention: `rtl-comrade test` / `randtest` must be invoked

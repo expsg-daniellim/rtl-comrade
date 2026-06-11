@@ -5,6 +5,18 @@
 **References:** [03 — Selection/expansion section](../03-module-catalog.md). Parent index:
 [05 — Selection and expansion modules](05-selection-expansion-modules.md).
 
+## Before you start
+
+Read `docs/modules/implementation.md` — how the harness infers input ports from the `run(...)`
+signature, the allowed output forms (plain return / named-port tuple / generator), the
+`finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
+are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
+below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
+`a69d962`). This module appends to `modules/rtl_test/setup.py`, shared with the setup chain
+(`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`,
+index [05](05-selection-expansion-modules.md)), and git-status (`10b`); coordinate shared
+imports and helpers with those specs.
+
 ## Goal
 
 Expand a test into N sweep variants by executing its sweep script, routing a per-test FAIL

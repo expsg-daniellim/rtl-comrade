@@ -4,6 +4,17 @@
 **References:** [03 — Run expansion section](../03-module-catalog.md). Parent index:
 [08 — Sim-cycle modules](08-sim-cycle-modules.md).
 
+## Before you start
+
+Read `docs/modules/implementation.md` — how the harness infers input ports from the `run(...)`
+signature, the allowed output forms (plain return / named-port tuple / generator), the
+`finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
+are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
+below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
+`a69d962`). This module appends to `modules/rtl_test/sim.py`, shared with the sim-cycle modules
+(`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`, index
+[09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
+
 ## Goal
 
 Fan out a compiled `ctx` into one `ctx` per run-id at the head of the simulate leg.
