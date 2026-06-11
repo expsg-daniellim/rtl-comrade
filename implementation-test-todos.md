@@ -159,7 +159,7 @@ TODO #4 — tracked separately in TODO #30.
 
 **Superseded by TODO #15 (2026-06-10).** The `fan-in-results` module and `aggregate-results`
 sink validated here are **removed**: terminal re-convergence is no longer a graph node, the
-summary is a `SummaryHandler` logging plugin, and the terminal ports are unwired. The `any`
+summary is a `SummaryProcessor` logging plugin, and the terminal ports are unwired. The `any`
 contract (and its spec/tests in [`specs/02`](implementation-test/specs/02-any-contract-and-fan-in.md))
 is retained as reusable infrastructure but is **no longer wired** in the `test` graph. See
 TODO #15 and [07 item 27](implementation-test/07-ambiguities-and-assumptions.md).
@@ -527,12 +527,14 @@ entirely. Concretely:
   node rather than the awkward fan-in wiring the original ticket anticipated.
 - `fan-in-results` and `aggregate-results` are **removed**. The 13 terminal ports are left
   **unwired** (`no_destination` at INFO); each terminal node calls
-  `log.info("test_result", ...)` at emission. A per-graph **`SummaryHandler`**
-  (`logging.Handler` plugin in `graphs/log/summary.py`, paired with a `drop_summary_events`
-  processor) collects `test_result` + `git_state` events and renders the table + git stateline
-  in its `finalise()` teardown hook — which `App.cleanup` now invokes (landed in commit
-  `624be53`, "finalise logging handlers at end of run"; the `findings.md` addendum had
-  *assumed* this hook, and it is now real).
+  `log.info("test_result", ...)` at emission. A per-graph **`SummaryProcessor`** (a single
+  stateful structlog processor in `graphs/log/summary.py` — **not** a `logging.Handler`)
+  accumulates the `test_result` events (**results only**) and renders the table in its
+  `finalise()` teardown hook; it also `DropEvent`s each row so no separate `drop_summary_events`
+  processor is needed. `git_state` is not collected — it falls through to the console.
+  (*Plugin form revised 2026-06-11; the original handler form is described in TODO #31. The
+  redesign assumes the processor-finalisation hook — see
+  [07 item 27](implementation-test/07-ambiguities-and-assumptions.md).*)
 - The exit code is driven **solely** by the per-emission `log.error` at each failure site
   (the old `aggregate-results.finalise()` belt-and-braces ERROR is gone).
 
@@ -718,6 +720,20 @@ The original ticket text is kept below for the record.
 
 ### 18. Include module code skeletons inside the spec
 
+**Status: Resolved (2026-06-10).** Every module spec — `specs/03` (run-process) plus the 30
+per-module child tickets `04a`–`10b` — now carries a `## Surface` section inserted between
+`## Goal` and `## Deliverables`, containing the module's `class …Mod` skeleton: the `run()`
+signature and a minimal body sketch mirroring the catalog
+([`03-module-catalog.md`](implementation-test/03-module-catalog.md)) entry, with `Config`
+shown for the two config-bearing modules (`discover-config-file`, `early-stop-gate`) and
+generators used where a module emits on multiple ports (the harness has no multi-port single
+return — `node.py:218`). The skeleton is labelled the *build view*; the catalog stays the
+*design view*, and the two are to be updated together (step 2). **Out of scope:** `specs/10c`
+(the `SummaryProcessor` logging plugin is a structlog processor, not a graph module with `run()`
+— tracked separately in TODO #31) and `specs/02` (a contract — its reading list is TODO #20's
+concern). Resolved jointly with TODO #19, which shares the same `## Surface` section. The
+original ticket text is kept below.
+
 Module skeletons (`class Foo: def run(self, ...): ...`) currently live only in `03-module-catalog.md`. Build tickets reference them by link, forcing the implementer to flip between two files while writing code.
 
 #### Concrete steps
@@ -726,6 +742,16 @@ Module skeletons (`class Foo: def run(self, ...): ...`) currently live only in `
 2. Treat the catalog version as the design view; the spec version is the build view. Update both when behaviour changes.
 
 ### 19. Inline the I/O surface block in every module spec
+
+**Status: Resolved (2026-06-10).** The same `## Surface` section added for TODO #18 opens
+with a fenced I/O block in the prescribed shape (`contract:` / `inputs:` / `outputs:`),
+extended with: a `config:` line for module `Config` fields (step 2-adjacent); a
+`contract_config:` line wherever the contract itself takes configuration (`keyed_join`'s
+`key_field: key` on `interpret-compile` / `write-randseed`) (step 3); and a
+`persistent_inputs:` line flagging the persistent ports on every `default`-contract module
+(step 2). The block sits immediately before the implementation (`## Deliverables`) in each of
+the 31 module specs (step 1). `specs/10c` / `specs/02` excluded for the same reasons as
+TODO #18 (10c tracked separately in TODO #31). The original ticket text is kept below.
 
 Each module's contract / inputs / outputs surface should appear in its own spec, not only in the catalog. Use a fenced block:
 
@@ -749,8 +775,81 @@ Specs should open with an explicit reading list: harness docs the implementer mu
 #### Concrete steps
 
 1. Add a `## Before you start` section at the top of each spec (after `Depends on:` / `References:`).
-2. Include: relevant rtl_comrade docs (`docs/modules/implementation.md` for any module spec; `docs/contracts/implementation.md` for any contract spec); the rtl_buddy file path + line range the module mirrors (paired with TODO #16, source traceability); any sibling specs that append to the same file.
+2. Include: relevant rtl_comrade docs (`docs/modules/implementation.md` for any module spec; `docs/contracts/implementation.md` for any contract spec; `docs/logger/implementation.md` + the "Per-Graph Custom Logging" section of `docs/harness/logging.md` for any logging-plugin spec); the rtl_buddy file path + line range the module mirrors (paired with TODO #16, source traceability); any sibling specs that append to the same file.
 3. Every link must resolve inside this repo.
+
+> **Logging-plugin specs (resolved by TODO #31, 2026-06-11):** step 2 originally named only
+> "module" and "contract" categories. Logging-plugin specs (`specs/10c`) are a third category,
+> now folded into step 2 above with the reading list `docs/logger/implementation.md` + the
+> "Per-Graph Custom Logging" section of `docs/harness/logging.md`. `specs/10c` already carries
+> this `## Before you start`; apply the same to any future logging-plugin spec.
+
+### 31. Bring the logging-plugin spec (10c) to the same buildable standard
+
+**Status: Resolved (2026-06-11).** All three steps done. **Plugin form revised the same day:**
+the spec was first brought to standard as a `SummaryHandler` (`logging.Handler`) + paired
+`drop_summary_events` processor, then redesigned as a **single stateful `SummaryProcessor`**
+(structlog processor) once it was recognised that the handler was a workaround for the missing
+processor-finalisation hook. The redesign **assumes that harness gap is closed** (see
+[07 item 27](implementation-test/07-ambiguities-and-assumptions.md)). The processor accumulates
+**results only** — `git_state` falls through to the console. Net state of the three steps:
+
+1. **`## Surface` section added to
+   [`specs/10c`](implementation-test/specs/10c-summary-handler.md)**: the build-view skeleton
+   (`class SummaryProcessor` with `__call__` appending `test_result` to `self._rows` and raising
+   `DropEvent`, returning every other event — incl. `git_state` — unchanged; `finalise`
+   rendering the `key`/`result`/`desc` table, a no-op on empty `self._rows`). No separate
+   `drop_summary_events` — the one processor accumulates and drops. Labelled build view with
+   [05 — The `SummaryProcessor` logging plugin](implementation-test/05-branching-and-results.md#the-summaryprocessor-logging-plugin)
+   as the design view (same split as TODO #18).
+2. **Wiring-surface block** added in place of the module I/O block: what it accumulates
+   (`test_result`) vs passes through (`git_state` and all else), chain position (before
+   `ConsoleRenderer`), teardown hook (`finalise()`, per-run), registration (the `logging` block
+   in [`graphs/test.yaml`](implementation-test/06-graph-yaml.md) by `path`/`name`, **not** a
+   module manifest).
+3. **TODO #20 gap closed**: step 2 now names logging-plugin specs as a third reading-list
+   category (`docs/logger/implementation.md` + the "Per-Graph Custom Logging" section of
+   `docs/harness/logging.md`); the forward-reference blockquote under TODO #20 is updated to
+   reflect the fold-in. `specs/10c`'s existing `## Before you start` already resolves to both.
+
+The original ticket text is kept below for the record (it predates the processor redesign and
+still names the handler form).
+
+Mirror TODOs #18, #19, and #20 for [`specs/10c-summary-handler.md`](implementation-test/specs/10c-summary-handler.md)
+— the one buildable ticket that produces a **logging plugin** (`SummaryHandler` +
+`drop_summary_events`) rather than a graph module. TODOs #18/#19 inlined a `## Surface`
+(skeleton + I/O block) into every *module* spec but explicitly skipped 10c, because a
+`logging.Handler` has no `run()`/ports; TODO #20's reading-list step 2 names only "module"
+and "contract" specs, not logging plugins. The net effect is that 10c is the lone buildable
+ticket without an inline skeleton — the exact flip-between-files problem TODOs #18/#19 set out
+to remove, just for a different artefact kind.
+
+#### Concrete steps
+
+1. Add a `## Surface` section to 10c, shaped for a logging plugin rather than a module: the
+   `class SummaryHandler(logging.Handler)` skeleton (`emit(self, record)` collecting
+   `test_result`/`git_state` rows into `self._rows`/`self._git_state`; `finalise(self)`
+   rendering the git stateline + `key`/`result`/`desc` table, a no-op when `self._rows` is
+   empty; drives no exit code) and the `drop_summary_events(logger, method_name, event_dict)`
+   processor signature (raises `structlog.exceptions.DropEvent` on `test_result`/`git_state`).
+   The sketches already live in
+   [`05 — The SummaryHandler logging plugin`](implementation-test/05-branching-and-results.md#the-summaryhandler-logging-plugin)
+   — inline them as the *build view*, with 05 as the *design view* (same split as TODO #18).
+2. In place of the module I/O block, add a small **wiring surface** block: the events consumed
+   (`test_result`, `git_state`), the teardown hook (`finalise()` via `App.cleanup`), how it is
+   registered (the `logging` block in [`graphs/test.yaml`](implementation-test/06-graph-yaml.md)
+   by `path`/`name`, **not** a module manifest), and the handler-ordering invariant (added
+   after `LoggingFatalHandler`, so it never observes `CRITICAL`).
+3. Close the TODO #20 gap: amend TODO #20 step 2 to name logging-plugin specs as a third
+   category whose reading list is `docs/logger/implementation.md` + the "Per-Graph Custom
+   Logging" section of `docs/harness/logging.md`. 10c already carries this `## Before you
+   start` — confirm it resolves, and apply the same to any future logging-plugin spec.
+
+#### Acceptance check
+
+`specs/10c` carries an inline skeleton + wiring-surface block matching the buildability of the
+module specs (a reader can build the plugin without opening `05` or the catalog), and TODO #20's
+reading-list rule explicitly covers logging plugins.
 
 ### 21. Inline file path and manifest entries in each spec
 

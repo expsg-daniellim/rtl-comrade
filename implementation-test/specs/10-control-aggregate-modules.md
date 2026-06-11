@@ -19,7 +19,7 @@ This spec is split into one ticket per deliverable — build them as independent
 |---|---|---|---|
 | [10a](10a-early-stop-gate.md) | `EarlyStopGateMod` | `modules/rtl_test/control.py` | Cross-cutting early-stop gate (3 instances). |
 | [10b](10b-git-status.md) | `GitStatusMod` | `modules/rtl_test/setup.py` | Record git state as a structured log event. |
-| [10c](10c-summary-handler.md) | `SummaryHandler` + `drop_summary_events` | `graphs/log/summary.py` | Render the summary table + git stateline. |
+| [10c](10c-summary-handler.md) | `SummaryProcessor` | `graphs/log/summary.py` | Accumulate `test_result` rows (results only) and render the summary table. |
 
 Manifest entries for `EarlyStopGateMod` / `GitStatusMod` per [06](../06-graph-yaml.md);
 `graphs/log/summary.py` is referenced by `path`/`name` in the `logging` block, not a manifest.
@@ -31,9 +31,11 @@ Manifest entries for `EarlyStopGateMod` / `GitStatusMod` per [06](../06-graph-ya
   all-PASS/SKIP run emits none → exit 0. This reproduces rtl_buddy's
   `exit_code |= 0 if is_pass() else 1` via the per-emission `log.error`, not an aggregator.
 - The summary table content matches what `aggregate-results.finalise()` previously produced
-  (same `key`/`result`/`desc` columns), now with the git stateline prepended.
-- No `fan-in`/`agg` node exists in `graphs/test.yaml`; the `logging` block resolves
-  `graphs/log/summary.py` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
+  (same `key`/`result`/`desc` columns). The table is **results only** — git state is logged
+  separately by `git-status` and falls through to the console, not into the table.
+- No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
+  `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
+  single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
 
 ## Notes
 

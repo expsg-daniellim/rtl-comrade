@@ -9,6 +9,24 @@
 
 Enter the per-test stream: yield one `ctx` per selected `TestConfig`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   suite_cfg, test_name:str = ""
+outputs:  default → ctx   (one per selected test)
+```
+
+```python
+class SelectTestsMod:
+    def run(self, suite_cfg, test_name:str = ""):
+        for t in suite_cfg.get_tests(test_name or None):
+            yield ("default", { "key": t.get_name(), "test": t, "run_id": None })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):

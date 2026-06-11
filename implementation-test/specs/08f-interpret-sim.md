@@ -9,6 +9,27 @@
 Route the sim result on the timeout flag — pass `test_run` through on success, emit
 `SimTimeoutResults` on timeout.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: default
+inputs:   test_run
+outputs:  ok      → test_run
+          timeout → result
+```
+
+```python
+class InterpretSimMod:
+    def run(self, test_run):
+        if test_run["timed_out"]:
+            log.error("sim_timeout", key=test_run["key"], err=test_run["err"])
+            return ("timeout", { "key": test_run["key"], "result": SimTimeoutResults(...) })
+        return ("ok", test_run)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:

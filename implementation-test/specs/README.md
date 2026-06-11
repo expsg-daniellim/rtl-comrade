@@ -31,7 +31,7 @@ extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch f
 | 07 | [compile-cycle-modules](07-compile-cycle-modules.md) (index) | 03 | `build-compile-cmd`, `interpret-compile`. Split into 07a–07b. |
 | 08 | [sim-cycle-modules](08-sim-cycle-modules.md) (index) | 03 | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`. Split into 08a–08f. |
 | 09 | [post-modules](09-post-modules.md) (index) | 01 | `route-post`, `parse-log`, `parse-uvm-log`. Split into 09a–09c. |
-| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) (index) | 01 | `early-stop-gate`, `git-status`, and the `SummaryHandler` logging plugin (replaces `aggregate-results`, TODO #15). Split into 10a–10c. |
+| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) (index) | 01 | `early-stop-gate`, `git-status`, and the `SummaryProcessor` logging plugin (replaces `aggregate-results`, TODO #15). Split into 10a–10c. |
 | 11 | [graph-and-manifests](11-graph-and-manifests.md) | 02-10 | `graphs/test.yaml`, plugin manifests, `rtl_comrade_config.yaml` entry. |
 | 12 | [end-to-end](12-end-to-end.md) | 11 | Smoke test against a real rtl_buddy suite. |
 

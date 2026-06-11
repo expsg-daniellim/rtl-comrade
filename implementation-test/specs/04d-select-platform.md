@@ -8,6 +8,27 @@
 
 Run `uname`, match it against each configured platform, and emit the active `platform_cfg`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   root_cfg
+outputs:  default → platform_cfg
+```
+
+```python
+class SelectPlatformMod:
+    def run(self, root_cfg):
+        uname = subprocess.run(["uname"], capture_output=True, text=True).stdout.strip()
+        for platform_cfg in root_cfg.platforms:
+            if uname in platform_cfg.unames:
+                return ("default", platform_cfg)
+        log.critical("no_platform_match", uname=uname)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

@@ -11,6 +11,26 @@
 Prepend `.` to `os.environ["PATH"]` so a CWD-local simulator is discoverable by subsequent
 subprocess invocations, sequenced ahead of every `run-process` call via `env_ready`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   —  (zero-input; runs once)
+outputs:  default → bool   (always True; receiver uses it only for sequencing)
+```
+
+```python
+class PrependCwdPathMod:
+    def run(self):
+        parts = os.environ.get("PATH", "").split(os.pathsep)
+        if "." not in parts:
+            os.environ["PATH"] = os.pathsep.join(["."] + parts)
+        return ("default", True)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

@@ -144,8 +144,9 @@ Record the repository's git state once at run start, for reproducibility and bug
 (rtl_buddy logs git state alongside results). Zero-input; reads `git` via subprocess (or
 `subprocess.run(["git", "rev-parse", ...])`) and emits a single structured log event
 `log.info("git_state", branch=..., sha=..., dirty=...)`. It routes **nothing through the
-graph**: the summary is assembled by the `SummaryHandler` logging plugin, which collects the
-`git_state` event (see [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)).
+graph**: the `git_state` event falls through the `SummaryProcessor` logging plugin (which
+accumulates results only) to the console, printing at run start (see
+[05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)).
 This is the resolution of TODO #15 — git state is recorded as a logging concern, not a
 graph-routed payload, which is what makes it a one-line setup node.
 
@@ -453,10 +454,11 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 > **Removed by the TODO #15 redesign (2026-06-10).** Both nodes are gone. The summary table
 > and the exit code are no longer produced by a graph sink:
 >
-> - **Summary** is rendered by a per-graph `SummaryHandler` (`logging.Handler` plugin in
->   `log/summary.py`) from the `test_result` rows that each terminal node now logs at
->   emission, plus the `git_state` event from `git-status`. It renders in its `finalise()`
->   teardown hook (`App.cleanup`). See
+> - **Summary** is rendered by a per-graph `SummaryProcessor` (a stateful structlog processor
+>   in `log/summary.py`, **not** a `logging.Handler`) from the `test_result` rows that each
+>   terminal node now logs at emission — **results only**. It renders the table in its
+>   `finalise()` teardown hook. The `git_state` event from `git-status` is not collected; it
+>   falls through to the console. See
 >   [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
 > - **Exit code** is driven solely by the per-emission `log.error` at each failure site —
 >   the old belt-and-braces `aggregate-results.finalise()` `log.error` is gone.
@@ -464,7 +466,7 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 >   harness logs `no_destination` at INFO); their modules' signatures are unchanged.
 >
 > The `any` contract that `fan-in-results` used is retained as a reusable (plain) contract but
-> has no consumer in the `test` graph. The `SummaryHandler` / `drop_summary_events` plugin is
+> has no consumer in the `test` graph. The `SummaryProcessor` plugin is
 > specified in [spec 10](specs/10-control-aggregate-modules.md). (The interim parallel-safety
 > lock shim that once hung off `any.release_lock` was removed entirely by
 > [TODO #30](../implementation-test-todos.md) in favour of per-tag artefact naming.)
@@ -519,7 +521,7 @@ For the rtl_buddy behaviour each Plan B departure leaves behind, see
 [07 — Notable divergences](07-ambiguities-and-assumptions.md).
 
 > `fan-in-results` and `aggregate-results` were removed by the TODO #15 redesign — the
-> `do_cmd_test` summary (`rtl_buddy.py:203-207`) is now reproduced by the `SummaryHandler`
+> `do_cmd_test` summary (`rtl_buddy.py:203-207`) is now reproduced by the `SummaryProcessor`
 > logging plugin and the OR-accumulated exit (`rtl_buddy.py:206`) by per-emission
 > `log.error`. See
 > [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).

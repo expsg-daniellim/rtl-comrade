@@ -8,6 +8,26 @@
 
 Fan out a compiled `ctx` into one `ctx` per run-id at the head of the simulate leg.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract:          default
+persistent_inputs: [run_ids]
+inputs:            ctx, run_ids:list = [None]
+outputs:           default → ctx   (one per run-id; key suffixed #run_id when not None)
+```
+
+```python
+class ExpandRunsMod:
+    def run(self, ctx, run_ids:list = [None]):
+        for run_id in run_ids:
+            key = ctx["key"] if run_id is None else f"{ctx['key']}#{run_id}"
+            yield ("default", { **ctx, "key": key, "run_id": run_id })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:

@@ -40,17 +40,22 @@ stream, reproducing `rtl_buddy`. `--early-stop post` (default) means no gate fir
 ## `--list` as an empty stream
 
 `select-tests` with `list=True` prints names and emits nothing. The empty stream
-propagates `EndSentinel` through every node; no terminal site fires, so `SummaryHandler`
+propagates `EndSentinel` through every node; no terminal site fires, so `SummaryProcessor`
 collects zero `test_result` rows and its `finalise()` is a no-op, no `log.error` fires →
 exit 0. No special casing anywhere else.
 
 ## Re-convergence: the summary is a logging concern, not a graph node
 
-> **Redesigned (TODO #15, 2026-06-10).** Earlier drafts re-converged the 13 terminal ports
-> at a `fan-in-results` relay feeding an `aggregate-results` sink whose `finalise()` rendered
-> the summary table and drove the exit code. TODO #15 retired that topology: the summary is
-> rendered by a per-graph **logging handler**, so the terminal nodes need no collector and
-> the graph needs no sink. Rationale in [Why the summary left the graph](#why-the-summary-left-the-graph).
+> **Redesigned (TODO #15, 2026-06-10; plugin form revised 2026-06-11).** Earlier drafts
+> re-converged the 13 terminal ports at a `fan-in-results` relay feeding an `aggregate-results`
+> sink whose `finalise()` rendered the summary table and drove the exit code. TODO #15 retired
+> that topology: the summary is rendered by a per-graph **logging plugin**, so the terminal
+> nodes need no collector and the graph needs no sink. The plugin is a stateful structlog
+> **processor** (`SummaryProcessor`), revised from an earlier `SummaryHandler` +
+> `drop_summary_events` two-piece form — a processor accumulates *and* suppresses in one
+> object, which is the natural fit (a handler was a workaround for the missing
+> processor-finalisation hook; see [07 item 27](07-ambiguities-and-assumptions.md)). Rationale
+> in [Why the summary left the graph](#why-the-summary-left-the-graph).
 
 The 13 terminal ports no longer converge anywhere. Each terminal node does two things at its
 emission site:
@@ -59,86 +64,71 @@ emission site:
    left **unwired**, so the harness logs `no_destination` at INFO and the item simply leaves
    the graph. No module signature or `definite_emits` change: the module stays graph-agnostic
    and does not know whether anything listens.
-2. **calls `log.info("test_result", key=..., result=..., desc=...)`** so the summary handler
+2. **calls `log.info("test_result", key=..., result=..., desc=...)`** so the summary processor
    can collect the row. (Previously these rows were emitted only by `aggregate-results.finalise()`;
    they now move to each terminal site.)
 
 A `git-status` setup node similarly calls `log.info("git_state", branch=..., sha=...,
-dirty=...)` once at run start. A **`SummaryHandler`** — a per-graph `logging.Handler` plugin —
-collects both event kinds and renders the consolidated table (with the git stateline) from
-its `finalise()` teardown hook.
+dirty=...)` once at run start. The summary plugin's role is **results only** — it accumulates
+`test_result` and nothing else; `git_state` is not collected. A **`SummaryProcessor`** — a
+per-graph structlog processor — accumulates the `test_result` rows and renders the table from
+its `finalise()` teardown hook. `git_state` falls through the processor to the console and
+prints at run start like any other log line.
 
-### The `SummaryHandler` logging plugin
+### The `SummaryProcessor` logging plugin
 
-The handler attaches **no formatter**, so it receives the raw structured event `dict` as
-`record.msg` (`docs/harness/logging.md` — "a wholly-custom `logging.Handler` inherits only the
-shared preprocessors"). It accumulates `test_result` rows and the single `git_state` event,
-then renders in `finalise()`:
-
-```python
-# log/summary.py
-import logging
-
-class SummaryHandler(logging.Handler):
-    def __init__(self):
-        super().__init__()
-        self._rows = []
-        self._git_state = None
-
-    def emit(self, record):
-        event = record.msg                      # raw event dict; no formatter attached
-        if not isinstance(event, dict):
-            return
-        match event.get("event"):
-            case "test_result":
-                self._rows.append(event)
-            case "git_state":
-                self._git_state = event
-
-    def finalise(self):
-        if not self._rows:                      # nothing to summarise → no-op
-            return
-        if self._git_state is not None:
-            ...                                 # render the git stateline
-        ...                                     # render the consolidated PASS/FAIL/NA table
-```
-
-`finalise()` is the now-real teardown hook: `App.cleanup` walks the root logger's handlers
-and calls `finalise()` on any that define one, **before** the failure check, so the table
-renders whether the run passed or failed-deferred (`src/rtl_comrade/app.py:171-174`,
-`docs/logger/implementation.md` — "End-of-run finalisation with `finalise()`").
-
-### The paired drop-processor
-
-With `include_default: true` the harness `ConsoleRenderer` would also print every
-`test_result` / `git_state` line, duplicating the table. A processor in the same `logging`
-block raises `structlog.exceptions.DropEvent` on those two events to hide them from the
-console; the `SummaryHandler`, being a separate root handler with its own (empty) chain,
-still receives them (`docs/harness/logging.md` — the `DropEvent` catch is on the harness
-handler's write path only).
+The plugin is a stateful structlog **processor**, not a `logging.Handler`. It sits in the
+harness handler's formatter chain **before** `ConsoleRenderer` (non-terminal under
+`include_default: true`, so `__call__` returns an `EventDict`). On each `test_result` it does
+both halves of the job in one place — accumulate the row, then raise `DropEvent` to suppress
+the per-event console line that `ConsoleRenderer` would otherwise print. Every other event
+(including `git_state`) is returned unchanged and flows on to `ConsoleRenderer`. The table is
+rendered once in `finalise()`:
 
 ```python
 # log/summary.py
+from __future__ import annotations
+from typing import Any
+from collections.abc import MutableMapping
 from structlog.exceptions import DropEvent
 
-def drop_summary_events(logger, method_name, event_dict):
-    if event_dict.get("event") in ("test_result", "git_state"):
-        raise DropEvent
-    return event_dict
+class SummaryProcessor:
+    def __init__(self):
+        self._rows = []                          # results only; fresh per run
+
+    def __call__(self, logger, method_name: str,
+                 event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+        if event_dict.get("event") == "test_result":
+            self._rows.append(event_dict)        # accumulate
+            raise DropEvent                      # suppress the per-event console line
+        return event_dict                        # everything else (incl. git_state) falls through
+
+    def finalise(self):
+        if not self._rows:                       # nothing to summarise → no-op
+            return
+        ...                                      # render the consolidated PASS/FAIL/NA table
 ```
 
-Both are wired per-graph in `graphs/test.yaml` (see [06](06-graph-yaml.md)); a graph that
-wants no summary simply omits the `logging` block.
+Why a processor and not a handler: the processor *class* holds state across events (that is
+what processor classes are for), sits before `ConsoleRenderer` to intercept-and-accumulate
+result events, and uses `DropEvent` — a processor-only mechanism — to suppress their per-event
+lines in the *same* object. A `logging.Handler` could not raise `DropEvent` against the harness
+handler's output, so a handler form needed a *second* `drop_summary_events` processor; the
+single processor removes that. `finalise()` is the per-run teardown hook the harness invokes at
+run end, **before** the failure check, so the table renders whether the run passed or
+failed-deferred (`docs/logger/implementation.md` — "End-of-run finalisation with `finalise()`",
+extended to processors per [07 item 27](07-ambiguities-and-assumptions.md)).
+
+It is wired per-graph in `graphs/test.yaml` (see [06](06-graph-yaml.md)); a graph that wants no
+summary simply omits the `logging` block.
 
 ### The CRITICAL path
 
-`SummaryHandler` is added to the root logger **after** `LoggingFatalHandler`, which raises
-`typer.Exit(1)` on a `CRITICAL` record before any later handler runs — so the handler never
-observes `CRITICAL` (`docs/harness/logging.md` — "custom handlers never observe `CRITICAL`
-records"). On a `CRITICAL` path the run aborts before `App.cleanup`, so `finalise()` is never
-reached and no table renders. This is acceptable: `CRITICAL` paths (missing/malformed config,
-builder/testbench resolution) abort before any test result exists, and the `if not self._rows:
-return` guard keeps `finalise()` a no-op whenever there is nothing to summarise.
+On a `CRITICAL` record `LoggingFatalHandler` raises `typer.Exit(1)` and the run aborts before
+the per-run teardown runs, so `finalise()` is never reached and no table renders. This is
+acceptable: `CRITICAL` paths (missing/malformed config, builder/testbench resolution) abort
+before any test result exists, and the `if not self._rows: return` guard keeps `finalise()` a
+no-op whenever there is nothing to summarise.
 
 ### Why the summary left the graph
 
@@ -148,7 +138,7 @@ not a designated sink; each node terminates when its contract returns `EndSentin
 node with no outbound edge simply propagates to an empty destination list. `aggregate-results`
 contributed nothing to termination — its only purpose was to provide a `finalise()` callsite
 after all results arrived, which is a *rendering* concern, not a *termination* one. Moving
-rendering to a logging handler removes both `aggregate-results` and the `fan-in-results` relay
+rendering to a logging plugin removes both `aggregate-results` and the `fan-in-results` relay
 that existed solely to feed it. It also dissolves the original awkwardness that prompted TODO
 #15: `git-status` becomes a plain `log.info` from a setup node, with no graph routing,
 persistent inputs, or payload surgery. Any future cross-cutting run metadata (timing,
@@ -234,11 +224,12 @@ self-contained mechanisms:
    contribute nothing; FAIL/NA — compile fail, timeout, early-stop, unknown — each
    `log.error` once and force exit 1). This is now the **sole** exit-code driver; the old
    belt-and-braces `aggregate-results.finalise()` `log.error` is gone with the node.
-2. **Summary table** is rendered by `SummaryHandler.finalise()` from the `test_result` rows
+2. **Summary table** is rendered by `SummaryProcessor.finalise()` from the `test_result` rows
    each terminal site emits (see [Re-convergence](#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)),
    reproducing `do_cmd_test`'s "Test Results Summary" loop
-   (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`) plus the `show_git_rev` stateline
-   (`rtl_buddy.py:500-522`).
+   (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`). The processor accumulates **results
+   only**; the `show_git_rev` git state (`rtl_buddy.py:500-522`) is logged separately by
+   `git-status` and falls through to the console at run start, not into this table.
 
 `CRITICAL` stays reserved for harness-fatal conditions (missing/malformed `root_config.yaml`,
 missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.Abort`
@@ -248,7 +239,7 @@ missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.
 
 Each module and contract that can fail records its idiom here. Every terminal site (failure
 or not) additionally emits `log.info("test_result", key=..., result=..., desc=...)` at
-emission so `SummaryHandler` can collect its row; the rows below list only the *failure*
+emission so `SummaryProcessor` can collect its row; the rows below list only the *failure*
 idiom. Three failure idioms are in play, per `docs/invariants.md:14-23` and
 `docs/harness/logging.md`:
 
@@ -303,12 +294,12 @@ failure site emits exactly one `log.error` (the sole exit-code driver) and one
 | `filter-reglvl.skip` | `skip` → `SkipResults` (SKIP is pass-like via `is_pass()`) |
 | `early-stop-gate.stop` (×3 instances) | `stop` → `EarlyStopResults` (normal terminal, not a failure) |
 
-### Summary rendering — `SummaryHandler.finalise()` (not an exit driver)
+### Summary rendering — `SummaryProcessor.finalise()` (not an exit driver)
 
 | Site | Trigger | Action |
 |---|---|---|
-| `SummaryHandler.finalise()` | run end (via `App.cleanup`), if any `test_result` row collected | render the consolidated table + git stateline; **no** `log.error` (exit is driven per-emission above) |
-| `git-status` (setup) | run start | `log.info("git_state", branch=..., sha=..., dirty=...)` once; collected by `SummaryHandler` |
+| `SummaryProcessor.finalise()` | run end (per-run teardown), if any `test_result` row collected | render the consolidated **results** table; **no** `log.error` (exit is driven per-emission above) |
+| `git-status` (setup) | run start | `log.info("git_state", branch=..., sha=..., dirty=...)` once; falls through to the console (not collected by `SummaryProcessor`) |
 
 ### Deferred
 

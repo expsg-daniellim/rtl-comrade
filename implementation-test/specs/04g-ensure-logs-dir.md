@@ -10,6 +10,27 @@
 Bootstrap the CWD-relative artefact directory (`logs/` by default) once at startup, ahead
 of any subprocess, so no downstream writer needs its own `mkdir`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+`_cwd` is a required ordering-only input (wired from `check-suite-cwd`); the `= None`
+default keeps the signature valid since it follows defaulted ports.
+
+```
+contract: unit
+inputs:   logs_dir:str = "logs", env_ready:bool = True, _cwd:Path
+outputs:  default → bool   (always True; sequencing only)
+```
+
+```python
+class EnsureLogsDirMod:
+    def run(self, logs_dir:str = "logs", env_ready:bool = True, _cwd:Path = None):
+        Path(logs_dir).mkdir(parents=True, exist_ok=True)   # OSError/PermissionError → harness CRITICAL
+        log.info("logs_dir_ready", path=str(Path(logs_dir).resolve()))
+        return ("default", True)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

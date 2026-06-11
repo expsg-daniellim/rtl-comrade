@@ -11,6 +11,40 @@ index: [08 — Sim-cycle modules](08-sim-cycle-modules.md).
 Resolve the per-run seed across all three seed modes, routing a per-test FAIL on a missing
 or malformed REPLAY `.randseed`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+On success the `ctx`/`seed` ports are emitted in lockstep via a generator.
+
+```
+contract:          default
+persistent_inputs: [seed_mode, builder_cfg, logs_dir]
+inputs:            ctx, seed_mode, builder_cfg, logs_dir:str = "logs"
+outputs:           ctx  → ctx
+                   seed → {key, seed}
+                   fail → result   (REPLAY only)
+```
+
+```python
+class ResolveSeedMod:
+    def run(self, ctx, seed_mode, builder_cfg, logs_dir:str = "logs"):
+        if seed_mode == SeedMode.NEW:
+            seed = random.randrange(1_000_000)   # upper bound exclusive
+        elif seed_mode == SeedMode.DEFAULT:
+            seed = builder_cfg.get_seed()
+        else:   # REPLAY
+            path = Path(logs_dir) / f"{ctx['test'].get_name()}{run_suffix(ctx)}.randseed"
+            try:
+                seed = int(Path(path).open().readline().strip())
+            except (FileNotFoundError, ValueError, PermissionError):
+                log.error("replay_seed_invalid", key=ctx["key"], path=str(path))
+                yield ("fail", { "key": ctx["key"], "result": ... })
+                return
+        yield ("ctx", ctx)
+        yield ("seed", { "key": ctx["key"], "seed": seed })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:

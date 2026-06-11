@@ -11,6 +11,39 @@
 Implement the cross-cutting early-stop gate, reused at three boundaries
 (`gate-pre`/`gate-comp`/`gate-sim`).
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+The `payload` port accepts either `ctx` (gate-pre/comp) or `test_run` (gate-sim) — the
+module reads only `payload["key"]`.
+
+```
+contract:          default
+config:            phase:str   (pre | comp | sim)
+persistent_inputs: [early_stop]
+inputs:            payload, early_stop:str = "post"
+outputs:           go   → payload
+                   stop → result
+```
+
+```python
+class EarlyStopGateMod:
+    @serde
+    class Config:
+        phase:str   # "pre" | "comp" | "sim"
+
+    def __init__(self, config):
+        self.phase = config.phase
+
+    def run(self, payload, early_stop:str = "post"):
+        order = ["pre", "comp", "sim", "post"]   # reuse rtl_buddy RunDepth
+        if order.index(early_stop) <= order.index(self.phase):
+            log.info("test_result", key=payload["key"], result="NA", desc=f"Stopped early at {self.phase}")
+            return ("stop", { "key": payload["key"], "result": EarlyStopResults(f"Stopped early at {self.phase}") })
+        return ("go", payload)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/control.py` — `EarlyStopGateMod`:

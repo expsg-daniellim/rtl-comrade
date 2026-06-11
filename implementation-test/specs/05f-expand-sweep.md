@@ -10,6 +10,36 @@
 Expand a test into N sweep variants by executing its sweep script, routing a per-test FAIL
 on script failure.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract:          default
+persistent_inputs: [root_cfg]
+inputs:            ctx, root_cfg
+outputs:           default → ctx   (one per sweep variant; key suffixed #i)
+                   fail    → result
+```
+
+```python
+class ExpandSweepMod:
+    def run(self, ctx, root_cfg):
+        sweep = ctx["test"].get_sweep_path()
+        if sweep is None:
+            yield ("default", ctx)
+            return
+        try:
+            variants = exec_hook(sweep, ctx["test"], root_cfg)   # exec the sweep script → out_test_cfgs
+        except Exception as e:
+            log.error("sweep_failed", key=ctx["key"], exc_info=e)
+            yield ("fail", { "key": ctx["key"], "result": ... })
+            return
+        for i, variant in enumerate(variants):
+            yield ("default", { **ctx, "key": f"{ctx['key']}#{i}", "test": variant })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):

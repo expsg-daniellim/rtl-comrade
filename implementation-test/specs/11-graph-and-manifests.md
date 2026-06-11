@@ -14,9 +14,9 @@ subcommand in `rtl_comrade_config.yaml`.
   `git-status` setup node; **no** `fan-in`/`agg` nodes — removed by TODO #15), CLI edges
   (including `test_name` as positional with `option: false, default: ""`), setup chain,
   persistent-config fan-out, list-mode routing, main-line continue ports, the **unwired**
-  terminal ports (no edges), and the `logging` block that wires the `SummaryHandler` plugin.
-- **`graphs/log/summary.py`** — the `SummaryHandler` + `drop_summary_events` logging plugin
-  (spec 10), referenced by `path`/`name` from the `logging` block.
+  terminal ports (no edges), and the `logging` block that wires the `SummaryProcessor` plugin.
+- **`graphs/log/summary.py`** — the `SummaryProcessor` logging plugin (a single structlog
+  processor; spec 10), referenced by `path`/`name` from the `logging` block.
 - **`modules/config.yaml`** — full manifest from [06](../06-graph-yaml.md) covering every
   module from specs 03–10 (`run-process`, the setup chain incl. `git-status`,
   selection/expansion, prep, compile cycle, sim cycle, post, control).
@@ -48,7 +48,7 @@ node/port name diverged between [03](../03-module-catalog.md) and what got built
 04–10, reconcile here (prefer matching the actual module signatures over the plan).
 
 The 13 terminal ports are **unwired** (TODO #15) — there is no `fan-in`/`agg` node. Each
-terminal node logs a `test_result` event; the `SummaryHandler` plugin (declared in the
-`logging` block) renders the table in `finalise()`, and per-emission `log.error` drives the
-exit code. `validation.py` reports the unwired ports as `no_destination` at INFO, not errors.
+terminal node logs a `test_result` event; the `SummaryProcessor` plugin (declared in the
+`logging` block) accumulates the rows and renders the table in `finalise()`, and per-emission
+`log.error` drives the exit code. `validation.py` reports the unwired ports as `no_destination` at INFO, not errors.
 See [spec 10](10-control-aggregate-modules.md) for the plugin.

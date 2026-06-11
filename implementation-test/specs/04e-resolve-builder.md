@@ -10,6 +10,27 @@
 Pick the active `RtlBuilderConfig` from `platform_cfg`, honouring the CLI `builder`
 override, and emit `builder_cfg`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   platform_cfg, builder:str = ""
+outputs:  default → builder_cfg
+```
+
+```python
+class ResolveBuilderMod:
+    def run(self, platform_cfg, builder:str = ""):
+        name = builder or platform_cfg.default_builder
+        builder_cfg = platform_cfg.builders.get(name)
+        if builder_cfg is None:
+            log.critical("builder_not_found", builder=name)
+        return ("default", builder_cfg)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

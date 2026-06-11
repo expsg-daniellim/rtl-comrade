@@ -10,6 +10,27 @@
 Read the resolved `tests.yaml` path, deserialise it into the suite schema, bind testbenches
 within-file, stamp `suite_dir`, and emit `suite_cfg`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit   (test/randtest; default in regression — see 08)
+inputs:   test_config:Path
+outputs:  default → suite_cfg
+```
+
+```python
+class ParseSuiteConfigMod:
+    def run(self, test_config:Path):
+        try:
+            suite_cfg = SuiteConfig(test_config)   # from_yaml + testbench bind + suite_dir stamp
+        except Exception as e:   # I/O, parse, UVMConfig ValueError, unknown-testbench KeyError
+            log.critical("suite_config_load_failed", path=str(test_config), err=str(e))
+        return ("default", suite_cfg)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

@@ -10,6 +10,33 @@ reads `ctx["test"].get_preproc_path()`).
 Run the optional per-test preprocessing hook that mutates `ctx["test"]` in place before
 filelist generation.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract:          default
+persistent_inputs: [root_cfg]
+inputs:            ctx, root_cfg
+outputs:           default → ctx
+                   fail    → result
+```
+
+```python
+class RunPreprocMod:
+    def run(self, ctx, root_cfg):
+        preproc = ctx["test"].get_preproc_path()
+        if preproc is None:
+            return ("default", ctx)
+        try:
+            exec_hook(preproc, ctx["test"], root_cfg)   # mutates ctx["test"] in place
+        except Exception as e:
+            log.error("preproc_failed", key=ctx["key"], exc_info=e)
+            return ("fail", { "key": ctx["key"], "result": ... })
+        return ("default", ctx)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/build.py` (continuing from spec 03):

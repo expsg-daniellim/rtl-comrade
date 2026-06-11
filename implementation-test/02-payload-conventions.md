@@ -94,9 +94,10 @@ result = { "key": k, "result": <TestResults> }
 Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`). Since the
 TODO #15 redesign these ports are **unwired** — there is no `aggregate-results` collector.
 Each terminal node additionally calls `log.info("test_result", key=k,
-result=<TestResults>.results["result"], desc=...["desc"])`; the per-graph `SummaryHandler`
-plugin collects those events and renders the table. The `<TestResults>` object is still built
-(for `is_pass()` classification and the logged fields). See [05](05-branching-and-results.md).
+result=<TestResults>.results["result"], desc=...["desc"])`; the per-graph `SummaryProcessor`
+plugin accumulates those events (results only) and renders the table. The `<TestResults>`
+object is still built (for `is_pass()` classification and the logged fields). See
+[05](05-branching-and-results.md).
 
 ## `TestResults` values used at the terminal ports
 

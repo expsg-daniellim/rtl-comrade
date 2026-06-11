@@ -11,6 +11,31 @@ fields `suite_dir` / `model_path` / `model_name` / `model`), spec
 Lazily resolve and attach the test's `ModelConfig`, routing a per-test FAIL on lookup or
 load failure rather than aborting the run.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: default
+inputs:   ctx
+outputs:  default → ctx   (test now carries its model)
+          fail    → result
+```
+
+```python
+class LoadModelMod:
+    def run(self, ctx):
+        resolved = ctx["test"].suite_dir / ctx["test"].model_path
+        try:
+            model = ModelConfigLoader(str(resolved)).get_model(ctx["test"].model_name)
+        except Exception as e:   # loader raises (Plan B) on I/O / parse / lookup miss
+            log.error("load_model_failed", key=ctx["key"], model_path=str(resolved), err=str(e))
+            return ("fail", { "key": ctx["key"], "result": ... })
+        ctx["test"].model = model
+        return ("default", ctx)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):

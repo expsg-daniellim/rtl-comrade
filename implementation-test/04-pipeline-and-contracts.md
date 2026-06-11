@@ -43,8 +43,9 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 
 > **No `fan-in`/`agg` rows (TODO #15).** The former rows 22a (`fan-in`) and 22 (`agg`) are
 > removed. The 13 terminal ports are left **unwired** (each terminal node logs a
-> `test_result` row instead), and the summary + git stateline are rendered by the per-graph
-> `SummaryHandler` logging plugin in its `finalise()` hook. See
+> `test_result` row instead), and the summary **results** table is rendered by the per-graph
+> `SummaryProcessor` logging plugin in its `finalise()` hook (git state falls through to the
+> console separately). See
 > [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
 
 Contracts in play: `unit`, `default` (often + `persistent_inputs`), and `keyed_join`
@@ -112,8 +113,8 @@ tool-internal CWD files). Detail in
 ### Re-convergence — removed; the summary is a logging concern
 There is no longer a re-convergence node. The 13 mutually-exclusive terminal-result branches
 are left unwired; each terminal node logs a `test_result` row that the per-graph
-`SummaryHandler` collects and renders in `finalise()`. The `any` contract that previously fed
-`fan-in` is retained (reusable) but unwired in `test`. Details in
+`SummaryProcessor` accumulates (results only) and renders in `finalise()`. The `any` contract
+that previously fed `fan-in` is retained (reusable) but unwired in `test`. Details in
 [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
 and [specs/10](specs/10-control-aggregate-modules.md).
 
@@ -121,7 +122,7 @@ and [specs/10](specs/10-control-aggregate-modules.md).
 
 `select` (suite → N tests), `sweep` (1 test → M variants), `runs` (1 compiled test → R
 runs) are generator modules. Total terminal results = `N×M×R` `test_result` rows collected
-by `SummaryHandler`, matching the row count `rtl_buddy` would print. A test that fails compile
+by `SummaryProcessor`, matching the row count `rtl_buddy` would print. A test that fails compile
 is sealed at `cc-int.fail` *before* `runs`, so it yields exactly one result, not R — no
 special-casing needed, because the failed item simply never enters the run fan-out.
 
@@ -149,6 +150,6 @@ Every node propagates `EndSentinel` (handled by the chosen contracts: `unit` aft
 nodes** (the 13 sites whose result ports are unwired, plus `git-status`), not a single sink.
 `graph.py` gathers every node coroutine via `asyncio.gather`, so when `select` ends the
 sentinel cascades through every branch and all coroutines complete; the summary then renders
-in `SummaryHandler.finalise()`, which `App.cleanup` invokes after the gather (before the
-failure check). No cycles, so `validation.py`'s acyclicity/deadlock checks pass; unwired
+in `SummaryProcessor.finalise()`, the per-run teardown the harness invokes after the gather
+(before the failure check). No cycles, so `validation.py`'s acyclicity/deadlock checks pass; unwired
 output ports are reported as `no_destination` at INFO, not errors.

@@ -65,6 +65,35 @@ return. The states below are exhaustive — anything not on this list is a defec
    "stdout_path": ..., "stderr_path": ... }`. The outer `with`-blocks close the redirect
    files; already-flushed bytes are visible to downstream readers via the paths.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view; the Lifecycle above and this spec are the authoritative
+build view. `env_ready` is an ordering-only persistent input (never read or branched on).
+
+```
+contract: default
+inputs:   command:{key, argv, stdout_path, stderr_path}, timeout:float | None = None, env_ready:bool = True
+outputs:  default → proc:{key, rc, timed_out, stdout_path, stderr_path}
+```
+
+```python
+class RunProcessMod:
+    async def run(self, command:dict, timeout:float | None = None, env_ready:bool = True):
+        with open(command["stdout_path"], "wb") as out, open(command["stderr_path"], "wb") as err:
+            proc = await asyncio.create_subprocess_exec(*command["argv"],
+                     stdout=out, stderr=err, preexec_fn=os.setpgrp)
+            timed_out = False
+            try:
+                await asyncio.wait_for(proc.wait(), timeout)
+                rc = proc.returncode
+            except asyncio.TimeoutError:
+                # Lifecycle step 3a: SIGQUIT to group, grace, SIGKILL escalation
+                rc, timed_out = 4444, True
+        return { "key": command["key"], "rc": rc, "timed_out": timed_out,
+                 "stdout_path": command["stdout_path"], "stderr_path": command["stderr_path"] }
+```
+
 ## Deliverables
 
 `modules/rtl_test/build.py::RunProcessMod`, refined per the Lifecycle above. The

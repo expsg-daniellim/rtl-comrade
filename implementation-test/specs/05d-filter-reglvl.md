@@ -11,6 +11,28 @@
 Route each `ctx` keep/skip based on whether the test's regression level falls inside the
 configured `[start_level, reg_level]` window.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract:          default
+persistent_inputs: [builder_cfg, reg_level, start_level]
+inputs:            ctx, builder_cfg, reg_level=None, start_level=None
+outputs:           keep → ctx
+                   skip → result
+```
+
+```python
+class FilterRegLvlMod:
+    def run(self, ctx, builder_cfg, reg_level = None, start_level = None):
+        lvl = ctx["test"].get_reglvl(builder_cfg.get_name())
+        if (reg_level is not None and lvl > reg_level) or (start_level is not None and lvl < start_level):
+            return ("skip", { "key": ctx["key"], "result": SkipResults(desc=...) })
+        return ("keep", ctx)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):

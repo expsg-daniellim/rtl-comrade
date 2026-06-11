@@ -10,6 +10,31 @@
 Re-implement rtl_buddy's `VlogPost.get_results()` (with three corrections) to classify a
 plain sim log into PASS/FAIL/NA.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: default
+inputs:   test_run
+outputs:  default → result
+```
+
+```python
+class ParseLogMod:
+    def run(self, test_run):
+        try:
+            text = Path(test_run["log"]).read_text()
+        except OSError as e:
+            log.error("parse_log_read_failed", key=test_run["key"], err=str(e))
+            return ("default", { "key": test_run["key"], "result": ... })   # FAIL with str(e)
+        result = scan_pass_fail(text)   # FAIL wins; PASS; else NA
+        if not result.is_pass():
+            log.error("test_failed", key=test_run["key"], log=str(test_run["log"]))
+        return ("default", { "key": test_run["key"], "result": result })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py` (continuing from spec 08):

@@ -11,6 +11,33 @@ reads `ctx["test"].uvm.max_warns` / `.max_errors` — `UVMConfig` lives in 01b).
 Reimplement rtl_buddy's `UvmVlogPost.get_results()` to classify a UVM sim log from its
 Report Summary severity counts.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: default
+inputs:   test_run
+outputs:  default → result
+```
+
+```python
+class ParseUvmLogMod:
+    def run(self, test_run):
+        uvm = test_run["test"].uvm
+        try:
+            text = Path(test_run["log"]).read_text()
+        except OSError as e:
+            log.error("parse_uvm_read_failed", key=test_run["key"], err=str(e))
+            return ("default", { "key": test_run["key"], "result": ... })   # FAIL with str(e)
+        counts = parse_uvm_summary(text)   # missing summary → FAIL
+        result = uvm_verdict(counts, uvm.max_warns, uvm.max_errors)
+        if not result.is_pass():
+            log.error("test_failed", key=test_run["key"], log=str(test_run["log"]))
+        return ("default", { "key": test_run["key"], "result": result })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py` (continuing from spec 08):

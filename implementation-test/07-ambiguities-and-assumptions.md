@@ -31,7 +31,7 @@ informational.
    (item 27).** Earlier drafts re-converged the 13 terminal outcomes through a
    `fan-in-results` relay + `any` contract feeding `aggregate-results`. The TODO #15 redesign
    removed both nodes: terminal ports are now unwired and the summary is rendered by a
-   per-graph `SummaryHandler` logging plugin. The `any` contract remains specified (spec 02)
+   per-graph `SummaryProcessor` logging plugin. The `any` contract remains specified (spec 02)
    but unwired. See item 27 and [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
 
 4. **`run-process` redirects to caller-supplied files; emits paths.** stdout/stderr go
@@ -221,13 +221,30 @@ informational.
     `log.info("git_state", branch=..., sha=..., dirty=...)` once. The results summary is no
     longer produced by a graph sink: `fan-in-results` and `aggregate-results` are **removed**,
     the 13 terminal ports are left **unwired**, each terminal node calls
-    `log.info("test_result", ...)` at emission, and a per-graph **`SummaryHandler`**
-    (`logging.Handler` plugin in `graphs/log/summary.py`, paired with a `drop_summary_events`
-    processor) collects both event kinds and renders the table + git stateline in its
-    `finalise()` teardown hook (`App.cleanup`, landed in commit `624be53`). The exit code is
-    driven solely by per-emission `log.error` (item 10). Rationale, sketches, and the CRITICAL
-    path in [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
-    spec in [10](specs/10-control-aggregate-modules.md). **Knock-on:** supersedes items 3 and
+    `log.info("test_result", ...)` at emission, and a per-graph **`SummaryProcessor`** (a
+    stateful structlog processor in `graphs/log/summary.py` — **not** a `logging.Handler`)
+    accumulates the `test_result` rows (**results only**) and renders the table in its
+    `finalise()` teardown hook. The processor both collects each row and raises `DropEvent` to
+    suppress its per-event console line, so no separate `drop_summary_events` processor is
+    needed. `git_state` is **not** collected by the processor — it falls through to the console
+    and prints at run start. The exit code is driven solely by per-emission `log.error`
+    (item 10). Rationale, sketches, and the CRITICAL path in
+    [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
+    spec in [10](specs/10-control-aggregate-modules.md).
+
+    **Plugin form revised 2026-06-11 (processor, not handler).** The plugin was first specified
+    as a `SummaryHandler` (`logging.Handler`) + a paired `drop_summary_events` processor. That
+    was a workaround for a harness gap: only handlers get an end-of-run hook (`App.cleanup`
+    walks the root logger's *handlers* and calls `finalise()`, per
+    `docs/logger/implementation.md`), so a stateful aggregator that needed to render once at run
+    end was forced into a handler — even though a processor is the right kind (processor classes
+    hold state; a processor sits before `ConsoleRenderer` to intercept-and-accumulate result
+    events; and `DropEvent` — a processor-only mechanism — suppresses their per-event lines in
+    the *same* object, removing the second piece). **The fix is to extend the
+    finalisation hook to processors** (have the per-run teardown call `finalise()` on configured
+    processor instances that define one), not to keep abusing a handler. This redesign **assumes
+    that harness gap is closed**; the plugin is now the single `SummaryProcessor`.
+    **Knock-on:** supersedes items 3 and
     19; revises items 9 and 10. It also disturbed the interim parallel-safety shim (whose lock
     *release* lived on the now-deleted `fan-in` node) — **TODO #30** resolved that by removing
     the shim entirely in favour of per-tag artefact naming (see Deferred item 17).
@@ -304,9 +321,10 @@ informational.
   item 17 (see [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
 - **`git-status` is recorded as a logging event** (settled 27) — Plan B includes git-state
   capture (rtl_buddy's `show_git_rev` at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522`) but
-  routes it through `log.info("git_state")` collected by the `SummaryHandler` plugin, not
-  through the graph. The summary table itself is rendered by that plugin (departing from the
-  `do_cmd_test` print loop at `rtl_buddy.py:203-207`) rather than an `aggregate-results` sink.
+  routes it through `log.info("git_state")`, which falls through to the console (the
+  `SummaryProcessor` plugin accumulates results only), not through the graph. The summary
+  **results** table is rendered by that plugin (departing from the `do_cmd_test` print loop at
+  `rtl_buddy.py:203-207`) rather than an `aggregate-results` sink.
 - **`postproc_path` not executed** (settled 14) — parity with rtl_buddy, which loads
   `postproc` (`config/test.py:254-264`, `get_postproc_path`) but never runs it (no caller in
   `VlogSim.post`, `tools/vlog_sim.py:283-300`).

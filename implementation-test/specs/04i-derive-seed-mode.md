@@ -8,6 +8,28 @@
 
 Derive the `SeedMode` from the two CLI booleans — the trivial seed-mode classifier.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   rnd_new:bool = False, rnd_last:bool = False
+outputs:  default → SeedMode
+```
+
+```python
+class DeriveSeedModeMod:
+    def run(self, rnd_new:bool = False, rnd_last:bool = False):
+        mode = SeedMode.DEFAULT
+        if rnd_new:
+            mode = SeedMode.NEW
+        elif rnd_last:
+            mode = SeedMode.REPLAY
+        return ("default", mode)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

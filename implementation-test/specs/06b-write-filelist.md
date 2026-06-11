@@ -12,6 +12,36 @@
 Reimplement rtl_buddy's `VlogFilelist` to produce the per-test `.f` file consumed by the
 compile leg, writing a per-tag `run.{test_tag}.f` for concurrency safety.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+The two success ports are emitted in lockstep via a generator (one `(port, value)` per
+yield — the harness has no multi-port single return).
+
+```
+contract: default
+inputs:   ctx
+outputs:  ctx      → ctx
+          filelist → {key, filelist}
+          fail     → result
+```
+
+```python
+class WriteFilelistMod:
+    def run(self, ctx):
+        test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", ctx["test"].get_name())
+        path = Path(f"run.{test_tag}.f")
+        try:
+            write_output(path, ctx["test"], unroll=True, deduplicate=True)
+        except Exception as e:
+            log.error("filelist_failed", key=ctx["key"], path=str(path), err=str(e))
+            yield ("fail", { "key": ctx["key"], "result": ... })
+            return
+        yield ("ctx", ctx)
+        yield ("filelist", { "key": ctx["key"], "filelist": path })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/build.py` (continuing from spec 03):

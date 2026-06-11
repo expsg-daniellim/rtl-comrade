@@ -71,7 +71,7 @@ Manifest entry in `contracts/config.yaml`:
 ### ~~`modules/rtl_test/control.py` — `FanInResultsMod`~~ (removed by TODO #15)
 
 The relay module is **not built**. Terminal ports are unwired and the summary is rendered by
-the `SummaryHandler` logging plugin ([spec 10](10-control-aggregate-modules.md)). The
+the `SummaryProcessor` logging plugin ([spec 10](10-control-aggregate-modules.md)). The
 remainder of this deliverable is retained only as the historical design for `any`'s original
 consumer.
 

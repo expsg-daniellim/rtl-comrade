@@ -9,6 +9,25 @@ reads `ctx["test"].uvm`).
 
 Classify the post-processing path: uvm vs plain.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+The payload at this stage is the post-sim `test_run` record ([02 — Shape 1b](../02-payload-conventions.md)).
+
+```
+contract: default
+inputs:   test_run
+outputs:  uvm   → test_run
+          plain → test_run
+```
+
+```python
+class RoutePostMod:
+    def run(self, test_run):
+        return ("uvm", test_run) if test_run["test"].uvm is not None else ("plain", test_run)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py` (continuing from spec 08):

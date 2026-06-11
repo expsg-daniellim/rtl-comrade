@@ -11,6 +11,29 @@
 Write the `.randseed` file and assemble the `test_run` payload — the second `keyed_join`
 node (the sim-side join).
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract:        keyed_join
+contract_config: key_field: key
+inputs:          ctx, proc, sim_cmd   (3-port join by key)
+outputs:         default → test_run
+```
+
+```python
+class WriteRandseedMod:
+    def run(self, ctx, proc, sim_cmd):
+        Path(sim_cmd["randseed_path"]).write_text(f"{sim_cmd['seed']}\n")   # + HierInstanceSeed.txt when present
+        return ("default", {
+            "key": ctx["key"], "test": ctx["test"], "run_id": ctx["run_id"],
+            "rc": proc["rc"], "timed_out": proc["timed_out"],
+            "log": sim_cmd["log"], "err": sim_cmd["err"], "randseed_path": sim_cmd["randseed_path"],
+        })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:

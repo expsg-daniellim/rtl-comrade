@@ -8,6 +8,27 @@
 
 Read the discovered root-config path, deserialise it into the schema, and emit `root_cfg`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   path:Path
+outputs:  default → root_cfg
+```
+
+```python
+class ParseRootConfigMod:
+    def run(self, path:Path):
+        try:
+            raw = from_yaml(RootConfigFile, path.read_text())
+            return ("default", RootConfig(raw))
+        except Exception as e:   # I/O, parse, schema mismatch — all unrecoverable here
+            log.critical("root_config_load_failed", path=str(path), err=str(e))
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

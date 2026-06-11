@@ -11,6 +11,28 @@ Enforce the user-driven CWD convention: `rtl-comrade test` / `randtest` must be 
 from the suite directory. Resolve the CLI `test_config` against CWD and abort early if it
 points elsewhere; emit the resolved `Path` for downstream `parse-suite-config`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   test_config:str = "tests.yaml"
+outputs:  default → Path   (resolved suite-config path)
+```
+
+```python
+class CheckSuiteCwdMod:
+    def run(self, test_config:str = "tests.yaml"):
+        resolved = (Path.cwd() / test_config).resolve()
+        if resolved.parent != Path.cwd().resolve():
+            log.critical("suite_cwd_mismatch", test_config=test_config, resolved=str(resolved))
+        if not resolved.is_file():
+            log.critical("suite_config_missing", test_config=test_config, resolved=str(resolved))
+        return ("default", resolved)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

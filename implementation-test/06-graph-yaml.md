@@ -1,7 +1,7 @@
 # Concrete graph YAML and manifests
 
 A proposed `graphs/test.yaml` plus the manifest entries for the new modules and the per-graph
-`SummaryHandler` logging plugin. Node ids match [04](04-pipeline-and-contracts.md); payload
+`SummaryProcessor` logging plugin. Node ids match [04](04-pipeline-and-contracts.md); payload
 shapes and ports match [02](02-payload-conventions.md)/[03](03-module-catalog.md).
 
 ## `rtl_comrade_config.yaml` (add the command)
@@ -114,12 +114,11 @@ nodes:
 - { id: parse-uvm-log, module: parse-uvm-log,     contract: default }
 # (no fan-in / agg nodes — removed by TODO #15; summary is a logging concern, see below)
 
-# --- per-graph logging: render the summary table + git stateline ---
+# --- per-graph logging: accumulate result rows, render the summary table ---
 logging:
   include_default: true
   handlers:
-  - { path: log/summary.py, name: drop_summary_events }   # processor: DropEvent on test_result/git_state → hide from console
-  - { path: log/summary.py, name: SummaryHandler }        # logging.Handler: collect rows, render table in finalise()
+  - { path: log/summary.py, name: SummaryProcessor }      # processor: collect test_result rows + DropEvent them; render table in finalise(). git_state falls through.
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -201,17 +200,17 @@ edges:
 # gate-comp.stop, sim-int.timeout, gate-sim.stop, parse-log.default, parse-uvm-log.default,
 # load-model.fail, sweep.fail, preproc.fail, filelist.fail, seed.fail. Each terminal node
 # logs `log.info("test_result", ...)` at emission; the harness reports `no_destination` at
-# INFO for the unwired port and the item leaves the graph. The SummaryHandler logging plugin
-# (see the `logging` block above) collects the rows and renders the table in finalise().
-# git-status likewise logs `git_state` with no edge.
+# INFO for the unwired port and the item leaves the graph. The SummaryProcessor logging plugin
+# (see the `logging` block above) accumulates the rows and renders the results table in
+# finalise(). git-status likewise logs `git_state` with no edge — it falls through to the console.
 ```
 
 Notes:
 
-- **No fan-in / aggregate node.** The 13 terminal ports are unwired; the summary table and
-  git stateline are rendered by the `SummaryHandler` logging plugin (`logging` block above)
-  in its `finalise()` hook, and the exit code is driven by the per-emission `log.error` at
-  each failure site. See [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
+- **No fan-in / aggregate node.** The 13 terminal ports are unwired; the summary **results**
+  table is rendered by the `SummaryProcessor` logging plugin (`logging` block above) in its
+  `finalise()` hook, and the exit code is driven by the per-emission `log.error` at
+  each failure site. `git_state` is not part of the table — it falls through to the console. See [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
   and [07 settled 27](07-ambiguities-and-assumptions.md). Adding a new terminal source means
   one new `log.info("test_result", ...)` call — no edge, no module signature change.
 - The five `*_fail` ports (`load-model.fail`, `sweep.fail`, `preproc.fail`, `filelist.fail`,
@@ -284,9 +283,10 @@ Notes:
 
 ## Logging plugin — `graphs/log/summary.py`
 
-Referenced by the `logging` block in `graphs/test.yaml`. Contains the `SummaryHandler`
-(`logging.Handler`) and the `drop_summary_events` processor (sketches in
-[05](05-branching-and-results.md#the-summaryhandler-logging-plugin); spec in
+Referenced by the `logging` block in `graphs/test.yaml`. Contains the single `SummaryProcessor`
+(a stateful structlog processor — **not** a `logging.Handler`; it accumulates `test_result`
+rows, `DropEvent`s them, and renders the results table in `finalise()`; sketch in
+[05](05-branching-and-results.md#the-summaryprocessor-logging-plugin); spec in
 [specs/10](specs/10-control-aggregate-modules.md)). It is selected by `path`/`name`, not via a
 plugin manifest — per-graph logging entries resolve files relative to the graph file's
 directory (`docs/harness_configs/graph.md`).

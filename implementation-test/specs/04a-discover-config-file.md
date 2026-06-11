@@ -9,6 +9,40 @@
 Implement the run-once tree-walk that locates a named config file by walking up from CWD —
 the entry point of the setup chain.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+config:   filename:str, max_levels:int = 8
+inputs:   —  (zero-input; runs once)
+outputs:  default → Path
+```
+
+```python
+class DiscoverConfigFileMod:
+    @serde
+    class Config:
+        filename:str
+        max_levels:int = 8
+
+    def __init__(self, config):
+        self.filename = config.filename
+        self.max_levels = config.max_levels
+
+    def run(self):
+        d = Path.cwd()
+        for _ in range(self.max_levels):
+            if (d / self.filename).is_file():
+                return ("default", d / self.filename)
+            if (d / ".git").exists() or d == d.parent:
+                break
+            d = d.parent
+        log.critical("config_not_found", filename=self.filename)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py`:

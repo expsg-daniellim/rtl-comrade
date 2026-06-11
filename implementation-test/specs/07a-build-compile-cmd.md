@@ -12,6 +12,39 @@ index: [07 — Compile-cycle modules](07-compile-cycle-modules.md).
 Assemble the per-test compile argv (with log paths placed in `command`), fold `simv` into
 `ctx`, and emit the command for `run-process`.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+Both outputs are emitted in lockstep via a generator.
+
+```
+contract:          default
+persistent_inputs: [builder_cfg, builder_mode, logs_dir]
+inputs:            ctx, filelist, builder_cfg, builder_mode:str = "debug", logs_dir:str = "logs"
+outputs:           ctx     → ctx   (with simv folded in)
+                   command → {key, argv, stdout_path, stderr_path}
+```
+
+```python
+class BuildCompileCmdMod:
+    def run(self, ctx, filelist, builder_cfg, builder_mode:str = "debug", logs_dir:str = "logs"):
+        test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", ctx["test"].get_name())
+        exe = builder_cfg.get_exe()
+        is_verilator = os.path.basename(exe).startswith("verilator")
+        build_dir = f"obj_dir_{test_tag}"
+        simv = f"{build_dir}/simv" if is_verilator else builder_cfg.get_simv()
+        argv = [exe, *builder_cfg.get_compile_time_opts(builder_mode)]
+        if is_verilator:
+            argv += ["--Mdir", build_dir]
+        argv += [*plusdefines, "-f", str(filelist["filelist"])]
+        ctx = { **ctx, "simv": simv }
+        yield ("ctx", ctx)
+        yield ("command", { "key": ctx["key"], "argv": argv,
+                            "stdout_path": f"{logs_dir}/{test_tag}.compile.log",
+                            "stderr_path": f"{logs_dir}/{test_tag}.compile.err" })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/build.py`:

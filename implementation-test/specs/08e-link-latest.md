@@ -8,6 +8,26 @@
 
 Force the `test.*` "latest" symlinks in CWD to this run's log/err/randseed files.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: default
+inputs:   test_run
+outputs:  default → test_run
+```
+
+```python
+class LinkLatestMod:
+    def run(self, test_run):
+        force_symlink(test_run["log"], "test.log")
+        force_symlink(test_run["err"], "test.err")
+        force_symlink(test_run["randseed_path"], "test.randseed")
+        return ("default", test_run)
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:

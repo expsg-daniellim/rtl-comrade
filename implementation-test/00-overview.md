@@ -44,9 +44,10 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
    continue stay on the main line. Because terminal items leave, downstream stages never see
    them — which is why no module needs a guard. There is **no collector node**: each terminal
    port is left unwired and its module additionally logs a `test_result` event, which a
-   per-graph **`SummaryHandler` logging plugin** collects and renders (with the `git-status`
-   git stateline) in its `finalise()` hook. The exit code is driven by per-emission
-   `log.error`. This is the TODO #15 redesign — see [05](05-branching-and-results.md).
+   per-graph **`SummaryProcessor` logging plugin** accumulates (results only) and renders as a
+   table in its `finalise()` hook. `git-status` logs its git stateline separately and it falls
+   through to the console. The exit code is driven by per-emission `log.error`. This is the
+   TODO #15 redesign — see [05](05-branching-and-results.md).
 
 4. **`compile` and `sim` are one reusable module.** `run-process` — `run(self, command,
    timeout=None) -> {rc, timed_out, stdout_path, stderr_path}` — is the single subprocess
@@ -132,8 +133,9 @@ only the ports they declare, and no module contains scheduling.
     UNWIRED; each terminal node log.info("test_result", …); failures also log.error (→ exit 1)
  git-status (setup) ─► log.info("git_state", …)
 
- SummaryHandler (per-graph logging plugin) ── collects test_result + git_state events,
-        renders the summary table + git stateline in finalise() (App.cleanup, after gather)
+ SummaryProcessor (per-graph logging plugin) ── accumulates test_result events (results only),
+        renders the summary table in finalise() (per-run teardown, after gather);
+        git_state is not collected — it falls through to the console
 
  (persistent config fans out from parse-root / resolve-builder / seed-mode / CLI to nodes above)
 ```
@@ -153,7 +155,7 @@ single-input/single-output with a plain `default` contract.
 | `--early-stop` phase truncation | `early-stop-gate` nodes emitting on `stop` |
 | compile vs sim | one reusable `run-process` module + two command builders |
 | matching async results to their test | `keyed_join` on the correlation key at `cc-int`/`randseed` |
-| collecting all outcomes | each terminal node `log.info("test_result", …)` → `SummaryHandler` plugin renders the table |
+| collecting all outcomes | each terminal node `log.info("test_result", …)` → `SummaryProcessor` plugin accumulates and renders the table |
 | OR-accumulated exit code | per-emission `log.error` at each failure site (harness maps ERROR → exit 1) |
-| git state recorded with results | `git-status` setup node `log.info("git_state", …)` → `SummaryHandler` |
+| git state recorded | `git-status` setup node `log.info("git_state", …)` → falls through to the console (not in the summary table) |
 | `RootConfig`/`SuiteConfig` monolithic loaders | reimplemented as atomic setup nodes; config schema preserved |

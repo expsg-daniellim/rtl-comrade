@@ -8,6 +8,23 @@
 
 Print the suite's test names in declaration order — the list-mode terminal sink.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract: unit
+inputs:   suite_cfg
+outputs:  none  (terminal sink)
+```
+
+```python
+class ListTestNamesMod:
+    def run(self, suite_cfg):
+        print("  ".join(suite_cfg.get_test_names()))   # terminal: emits nothing
+```
+
 ## Deliverables
 
 In `modules/rtl_test/setup.py` (continuing from spec 04):

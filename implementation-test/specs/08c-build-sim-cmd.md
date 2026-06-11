@@ -12,6 +12,38 @@
 Assemble the per-run sim argv (with log paths in `command` and `seed`/`log`/`randseed_path`
 carried in `sim_cmd`) and the timeout.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+All four outputs are emitted in lockstep via a generator.
+
+```
+contract:          default
+persistent_inputs: [builder_cfg, builder_mode, logs_dir]
+inputs:            ctx, seed, builder_cfg, builder_mode, logs_dir:str = "logs"
+outputs:           ctx     → ctx
+                   sim_cmd → {key, seed, log, err, randseed_path}
+                   command → {key, argv, stdout_path, stderr_path}
+                   timeout → float | None
+```
+
+```python
+class BuildSimCmdMod:
+    def run(self, ctx, seed, builder_cfg, builder_mode, logs_dir:str = "logs"):
+        simv = ctx["simv"]   # set by build-compile-cmd
+        argv = [simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]), *plusdefines, *plusargs]
+        timeout, _is_custom = ctx["test"].get_timeout()
+        stem = f"{logs_dir}/{ctx['test'].get_name()}{run_suffix(ctx)}"
+        log_path, err_path, rs_path = f"{stem}.log", f"{stem}.err", f"{stem}.randseed"
+        yield ("ctx", ctx)
+        yield ("sim_cmd", { "key": ctx["key"], "seed": seed["seed"],
+                            "log": log_path, "err": err_path, "randseed_path": rs_path })
+        yield ("command", { "key": ctx["key"], "argv": argv,
+                            "stdout_path": log_path, "stderr_path": err_path })
+        yield ("timeout", float(timeout))
+```
+
 ## Deliverables
 
 In `modules/rtl_test/sim.py`:

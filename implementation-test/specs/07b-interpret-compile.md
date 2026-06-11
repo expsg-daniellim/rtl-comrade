@@ -11,6 +11,28 @@
 Route the compile result on the subprocess rc — pass `ctx` through on success, emit
 `CompileFailResults` on failure. This is one of the two `keyed_join` nodes.
 
+## Surface
+
+I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
+the catalog is the design view, this is the build view; update both when behaviour changes.
+
+```
+contract:        keyed_join
+contract_config: key_field: key
+inputs:          ctx, proc   (joined by key)
+outputs:         ok   → ctx
+                 fail → result
+```
+
+```python
+class InterpretCompileMod:
+    def run(self, ctx, proc):
+        if proc["rc"] == 0:
+            return ("ok", ctx)   # simv already set by build-compile-cmd
+        log.error("compile_failed", key=ctx["key"], rc=proc["rc"], stderr_path=proc["stderr_path"])
+        return ("fail", { "key": ctx["key"], "result": CompileFailResults(...) })
+```
+
 ## Deliverables
 
 In `modules/rtl_test/build.py`:
