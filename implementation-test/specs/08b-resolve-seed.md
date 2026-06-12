@@ -13,9 +13,10 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/sim.py`, shared with the sim-cycle modules
-(`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`, index
-[09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
+`a69d962`). This module appends to `modules/rtl_test/sim.py`, which is created by spec
+[`08a`](08a-expand-runs.md) — append, do not overwrite. The file is shared with the sim-cycle
+modules (`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`,
+index [09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
 
 ## Goal
 
@@ -64,7 +65,10 @@ class ResolveSeedMod:
    - `REPLAY` → go to step 2.
 2. **REPLAY read.** Compose `path = Path(logs_dir) /
    f"{ctx['test'].get_name()}{run_suffix(ctx)}.randseed"` and parse `seed =
-   int(Path(path).open().readline().strip())`.
+   int(Path(path).open().readline().strip())`. `run_suffix(ctx)` returns `""` when
+   `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) —
+   matching rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 3 reads
+   `logs/my_test_0003.randseed`.
 3. On success (any mode) emit in lockstep: `("ctx", ctx)` then `("seed", {"key": ctx["key"],
    "seed": seed})`.
 4. **Failure — REPLAY missing/malformed.** REPLAY only: wrap step 2 in `try/except
@@ -81,9 +85,12 @@ In `modules/rtl_test/sim.py`:
   seed-producer for all three modes:
   - `NEW` → `random.randrange(1_000_000)`
   - `DEFAULT` → `builder_cfg.get_seed()`
-  - `REPLAY` → reads `f"{logs_dir}/{test_name}[_{run_id:04d}].randseed"` (uses
-    `ctx["run_id"]` for the suffix; `logs_dir` is a persistent input fed by `--logs-dir`,
-    default `"logs"`, matching rtl_buddy `tools/vlog_sim.py:199-203`); on
+  - `REPLAY` → reads `f"{logs_dir}/{test_name}{run_suffix}.randseed"`, where `run_suffix` is
+    `""` when `ctx["run_id"] is None` and `f"_{run_id:04d}"` (the run-id zero-padded to four
+    digits) otherwise — e.g. `logs/my_test.randseed` for a single run, `logs/my_test_0003.randseed`
+    for run-id 3 (path format is rtl_buddy `_get_log_path`, `tools/vlog_sim.py:82-86`; `logs_dir`
+    is a persistent input fed by `--logs-dir`, default `"logs"`, matching rtl_buddy
+    `tools/vlog_sim.py:199-203`); on
     missing/malformed file, emit `("fail", {"key", "result": <FAIL payload>})` and call
     `log.error` at emission with the attempted path. See
     [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).

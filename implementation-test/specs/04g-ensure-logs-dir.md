@@ -12,10 +12,11 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/setup.py`, shared with the setup chain
-(`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`,
-index [05](05-selection-expansion-modules.md)), and git-status (`10b`); coordinate shared
-imports and helpers with those specs.
+`a69d962`). This module appends to `modules/rtl_test/setup.py`, which is created by spec
+[`04a`](04a-discover-config-file.md) — append, do not overwrite. The file is shared with the
+setup chain (`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain
+(`05a`–`05f`, index [05](05-selection-expansion-modules.md)), and git-status (`10b`);
+coordinate shared imports and helpers with those specs.
 
 ## Goal
 
@@ -78,10 +79,22 @@ In `modules/rtl_test/setup.py`:
   invalid CWD that the check would have aborted). Zero side-effects on the latter — it
   is consumed solely for data-edge ordering. Runs once via `unit`. See
   [Algorithm](#algorithm) for the numbered steps.
-  Path is **not** resolved-and-stamped into `ctx`. Downstream paths (`logs/<test>.compile.log`,
-  `logs/<test>[_NNNN].log`/`.err`/`.randseed`) are composed in `build-compile-cmd` /
-  `build-sim-cmd` / `resolve-seed` / `write-randseed` from the same `logs_dir` persistent
-  input, so the path joins happen at the use site.
+  Path is **not** resolved-and-stamped into `ctx`. Downstream paths are composed in
+  `build-compile-cmd` / `build-sim-cmd` / `resolve-seed` / `write-randseed` from the same
+  `logs_dir` persistent input, so the path joins happen at the use site. The two legs name
+  files differently:
+  - **compile leg** (`build-compile-cmd`, spec [07a](07a-build-compile-cmd.md)):
+    `f"{logs_dir}/{test_tag}.compile.log"` and `.compile.err`, where
+    `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test_name)` — the **sanitised** build tag
+    (rtl_buddy `_get_build_tag`, `tools/vlog_sim.py:61-65`). Example: test `my_test` →
+    `logs/my_test.compile.log`.
+  - **sim leg** (`build-sim-cmd` / `resolve-seed` / `write-randseed`, specs
+    [08c](08c-build-sim-cmd.md) / [08b](08b-resolve-seed.md) / [08d](08d-write-randseed.md)):
+    `f"{logs_dir}/{test_name}{run_suffix}.log"`, `.err`, and `.randseed`, off the **raw**
+    `test_name`, where `run_suffix` is `""` when `ctx["run_id"] is None` and
+    `f"_{run_id:04d}"` (the run-id zero-padded to four digits) otherwise — rtl_buddy
+    `_get_log_path` (`tools/vlog_sim.py:82-86`). Examples: a single run of `my_test` →
+    `logs/my_test.log`; run-id 3 → `logs/my_test_0003.randseed`.
   **Failure handling**: `PermissionError` / `OSError` from `mkdir` propagate uncaught
   (becomes a harness CRITICAL via the bubbling-SystemExit catch, same idiom as
   `DiscoverConfigFileMod`'s `PermissionError`). No port-routed fail — this is a setup-domain

@@ -1050,6 +1050,25 @@ Every module has at least four enumerated test cases, or all reachable output po
 
 ### 25. Spell out filename and format placeholders
 
+**Status: Resolved (2026-06-12).** Audited every `specs/` file for filename/format
+placeholders. The load-bearing offenders were the log/randseed naming placeholders
+`logs/<test>[_NNNN].log` (`04g`) and `f"{logs_dir}/{test_name}[_{run_id:04d}]…"`
+(`08b`, `08c`) — the `[…]` brackets hid both the padding width and the conditionality of the
+run-id suffix. All are now spelled out as an explicit rule with an example expansion: the
+suffix is `""` when `ctx["run_id"] is None`, else `f"_{run_id:04d}"` (run-id zero-padded to four
+digits), so e.g. `logs/my_test.log` for a single run and `logs/my_test_0003.randseed` for run-id
+3. Each site now cites the authoritative format source — rtl_buddy `_get_log_path`
+(`tools/vlog_sim.py:82-86`), verified against the source (pairs with TODO #16). `04g` additionally
+disambiguates the two legs: the compile leg names files off the **sanitised** `test_tag`
+(`_get_build_tag`, `vlog_sim.py:61-65`), the sim leg off the **raw** `test_name`. The `test.*`
+symlink shorthand is left as-is where it is overview/index prose pointing at `08e` (which spells
+`test.log`/`test.err`/`test.randseed` in full), but expanded inline in `12`'s acceptance artefact
+list. Remaining `<…>` tokens (`builder="<name>"` in `04e`, `obj_dir_<tag>/` in `04f` prose) are
+config values / shorthand, not filename-format placeholders, and are spelled out at their real use
+sites (`07a`'s `obj_dir_{test_tag}`).
+
+The original ticket text is kept below for the record.
+
 Specs use placeholders like `[_NNNN]` and `<test>` that hide exact format details (padding width, file extensions, hidden-file conventions). Where the format matters, spell it out with an example expansion.
 
 #### Concrete steps
@@ -1059,6 +1078,29 @@ Specs use placeholders like `[_NNNN]` and `<test>` that hide exact format detail
 3. Where the format is set by rtl_buddy, cite the rtl_buddy line that defines it (paired with TODO #16, source traceability).
 
 ### 26. Add forward-reference notes between specs that share a file
+
+**Status: Resolved (2026-06-12).** Each shared Python file's `## Before you start` note in
+`specs/` was made directional, matching the pattern the **Manifest** sections already used for
+`modules/config.yaml`:
+
+- **Creating specs** ([`04a`](implementation-test/specs/04a-discover-config-file.md) → `setup.py`,
+  [`06a`](implementation-test/specs/06a-run-preproc.md) → `build.py`,
+  [`08a`](implementation-test/specs/08a-expand-runs.md) → `sim.py`) now say "**creates** … the
+  file then receives further additions from <appending specs>" (previously they wrongly said
+  "appends to").
+- **Appending specs** (30 specs total across the three groups, incl. `03` which appends to
+  `build.py`) now say "appends to `<file>`, which is created by spec [N] — append, do not
+  overwrite", then list the rest of the sharers.
+- **Sole writers** ([`02`](implementation-test/specs/02-any-contract-and-fan-in.md) `any.py`,
+  [`10a`](implementation-test/specs/10a-early-stop-gate.md) `control.py`,
+  [`10c`](implementation-test/specs/10c-summary-handler.md) `summary.py`) state they are the
+  sole writer (`10c` added per this todo; `02`/`10a` already did). The schema specs
+  (`01`/`01a`/`01b`/`01c`) share the `schema/` **package** but write separate files — already
+  noted.
+- [`specs/README.md`](implementation-test/specs/README.md) gained a **Shared files** section
+  with the create/append table (incl. the `config.yaml` manifest and per-group test files).
+
+The original ticket text is kept below for the record.
 
 When multiple specs add to the same Python file, the spec creating the file should announce which later specs append to it; appending specs should announce what they assume the file already contains. Today dependency direction goes one way (`Depends on:`); the forward direction is uncaptured.
 

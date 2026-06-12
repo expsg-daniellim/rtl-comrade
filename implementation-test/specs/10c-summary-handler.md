@@ -33,7 +33,9 @@ harness handler's formatter chain — it sits **before** `ConsoleRenderer` (non-
 `include_default: true`), so `__call__` returns an `EventDict` and never sees a pre-rendered
 string. It is classified as a processor (not a handler) because it does not subclass
 `logging.Handler`; as a processor *class* it is instantiated once per run, so `self._rows`
-starts empty each run.
+starts empty each run. This module **creates** `graphs/log/summary.py` and is its sole writer
+(spec [11](11-graph-and-manifests.md) only *wires* the plugin into the graph's `logging` block,
+it does not append to the file).
 
 ## Surface
 

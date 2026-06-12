@@ -35,9 +35,9 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 | 21 | Inline file path and manifest entries in each spec | Resolved 2026-06-11 |
 | 22 | Expand each module's algorithm into numbered implementation steps | Resolved 2026-06-11 (incl. 08c/08d argv-for-hier_inst_seed) |
 | 23 | Add a "Constraints" section to every spec | Resolved 2026-06-11 (literal "every spec" scope, per user) |
-| 24 | Enumerate test cases with input/expected pairs | **Open** |
-| 25 | Spell out filename and format placeholders | **Open** |
-| 26 | Add forward-reference notes between specs that share a file | **Open** |
+| 24 | Enumerate test cases with input/expected pairs | Resolved 2026-06-11 (incl. 02/03/11/12; 01a–01c left compliant, per user) |
+| 25 | Spell out filename and format placeholders | Resolved 2026-06-12 |
+| 26 | Add forward-reference notes between specs that share a file | Resolved 2026-06-12 |
 | 27 | Expand "Acceptance criteria" to enumerate observable behaviour | **Open** |
 | 31 | Bring the logging-plugin spec (10c) to the same buildable standard | Resolved 2026-06-11 |
 | 32 | Decide and add "Before you start" reading lists for the non-module/contract/logging specs | Resolved 2026-06-11 |

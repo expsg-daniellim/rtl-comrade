@@ -11,10 +11,12 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/setup.py`, shared with the setup chain
-(`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`,
-index [05](05-selection-expansion-modules.md)), and git-status (`10b`); coordinate shared
-imports and helpers with those specs.
+`a69d962`). This module **creates** `modules/rtl_test/setup.py` — it is the first spec to write the
+file, so establish the shared imports and module-level helpers here. The file then receives
+further additions from the rest of the setup chain (`04b`–`04i`, index
+[04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`, index
+[05](05-selection-expansion-modules.md)), and git-status (`10b`); coordinate shared imports
+and helpers with those specs.
 
 ## Goal
 

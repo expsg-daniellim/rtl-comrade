@@ -30,7 +30,8 @@ documenting any divergences observed.
   - summary string fidelity (allow formatting differences; assert per-test PASS/FAIL/NA
     and `desc` match).
   - artifact parity in `logs/`: `.log`, `.err`, `.randseed` produced for the same runs;
-    `test.*` symlinks point to the same files.
+    the `test.*` symlinks (`test.log` / `test.err` / `test.randseed`, in CWD; spec
+    [08e](08e-link-latest.md)) point to the same files.
 - A `KNOWN_DIVERGENCES.md` (or new section in [07](../07-ambiguities-and-assumptions.md))
   recording any behavioural deltas discovered that were not anticipated by the plan.
 

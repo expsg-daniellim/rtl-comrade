@@ -56,6 +56,29 @@ explicit `Depends on:` lines each child carries: 05f/06a share the `exec_hook` h
 feeds 07a; 07a sets `ctx["simv"]` for 07b and 08c; 08c feeds 08d, which feeds 08e/08f;
 10a/10b emit the events 10c collects.
 
+### Shared files
+
+Several specs write into the same Python file. The **first** spec listed *creates* the file
+(and opens its `modules/config.yaml` manifest block); every other spec *appends* — append, do
+not overwrite. Each spec's `## Before you start` section names its own role; this table is the
+overview. Shared-file ordering does not impose a build order beyond each spec's `Depends on:`
+line — whichever appender runs first must tolerate the file already existing or not.
+
+| File | Created by | Appended by |
+|---|---|---|
+| `modules/rtl_test/setup.py` | [04a](04a-discover-config-file.md) | 04b–04i, 05a–05f, 10b |
+| `modules/rtl_test/build.py` | [06a](06a-run-preproc.md) | 03, 06b, 07a, 07b |
+| `modules/rtl_test/sim.py` | [08a](08a-expand-runs.md) | 08b–08f, 09a–09c |
+| `modules/config.yaml` (manifest) | first spec of each block above | the same specs that append the `.py` |
+
+`modules/rtl_test/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py`
+(02) each have a single writer. The schema specs (01/01a/01b/01c) share the
+`modules/rtl_test/schema/` **package** but write separate files (`builder.py`, `suite.py`,
+`model.py`), so coordinate the package layout, not a single file. Test files are per spec
+group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`,
+`test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that
+group.
+
 Specs 01, 01a, 01b, 01c, 02, and 03 can all run in parallel from the start (01b has a
 type-annotation dependency on 01c but no logic dependency; 02 has no external blocker).
 Specs 04, 05, 06, 09, 10 (and their children) can run

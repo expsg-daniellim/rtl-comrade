@@ -14,9 +14,10 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/sim.py`, shared with the sim-cycle modules
-(`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`, index
-[09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
+`a69d962`). This module appends to `modules/rtl_test/sim.py`, which is created by spec
+[`08a`](08a-expand-runs.md) — append, do not overwrite. The file is shared with the sim-cycle
+modules (`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`,
+index [09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
 
 ## Goal
 
@@ -68,8 +69,10 @@ class BuildSimCmdMod:
    `(self.timeout, True)` on a per-test override, else `(60, False)`); emit it as `float`.
 5. Compose the log/randseed paths off one stem `stem =
    f"{logs_dir}/{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err =
-   f"{stem}.err"`, `randseed_path = f"{stem}.randseed"`. Do not `mkdir(logs_dir)` — already
-   bootstrapped.
+   f"{stem}.err"`, `randseed_path = f"{stem}.randseed"`. `run_suffix(ctx)` returns `""` when
+   `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) —
+   rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 5 → `logs/my_test_0005.log`.
+   Do not `mkdir(logs_dir)` — already bootstrapped.
 6. Emit in lockstep: `("ctx", ctx)`; `("sim_cmd", {"key": ctx["key"], "seed": seed["seed"],
    "log": log, "err": err, "randseed_path": randseed_path, "argv": argv})`; `("command",
    {"key": ctx["key"], "argv": argv, "stdout_path": log, "stderr_path": err})`; `("timeout",
@@ -95,9 +98,12 @@ In `modules/rtl_test/sim.py`:
   `(timeout, is_custom) = ctx["test"].get_timeout()` (spec [01b](01b-suite-schema.md)
   — `(self.timeout, True)` if a per-test override is set, else `(60, False)`); the
   `timeout` value (an `int` seconds) is emitted as a `float | None`. Log paths are
-  `f"{logs_dir}/{test_name}[_{run_id:04d}].log"`/`.err` (default `logs/...`, matching
-  rtl_buddy; `logs_dir` is a persistent input fed by `--logs-dir`). Also composes
-  `randseed_path = f"{logs_dir}/{test_name}[_{run_id:04d}].randseed"`. These paths are
+  `f"{logs_dir}/{test_name}{run_suffix}.log"`/`.err`, where `run_suffix` is `""` when
+  `ctx["run_id"] is None` and `f"_{run_id:04d}"` (run-id zero-padded to four digits) otherwise —
+  e.g. `logs/my_test.log` for a single run, `logs/my_test_0005.log` for run-id 5 (path format is
+  rtl_buddy `_get_log_path`, `tools/vlog_sim.py:82-86`; default `logs/...`; `logs_dir` is a
+  persistent input fed by `--logs-dir`). Also composes
+  `randseed_path = f"{logs_dir}/{test_name}{run_suffix}.randseed"` (same stem). These paths are
   emitted in `sim_cmd` (not folded into `ctx`) so `write-randseed` receives them as a
   dedicated keyed port. The assembled `argv` is **also** carried on `sim_cmd` (in addition to
   `command`) so the downstream `keyed_join` `write-randseed` can perform the
