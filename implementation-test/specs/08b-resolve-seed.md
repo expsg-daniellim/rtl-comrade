@@ -134,8 +134,11 @@ the REPLAY-fail path.
 ## Acceptance criteria
 
 - Tests pass.
-- All three modes produce a seed; the REPLAY-missing path routes a per-test FAIL with the
-  `logs_dir`-prefixed path in `desc` and logs at ERROR.
+- All three output ports exercised: `ctx` forwards `ctx` and `seed` emits `{key, seed}` for
+  each of the three seed modes; the REPLAY-missing case routes the `fail` port with a per-test
+  FAIL carrying the `logs_dir`-prefixed path in `desc` and logs at ERROR.
+- The `modules/config.yaml` manifest entry `{ name: resolve-seed, class_name: ResolveSeedMod }`
+  validates and the harness resolves `resolve-seed` → `ResolveSeedMod`.
 
 ## Constraints
 

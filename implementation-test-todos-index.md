@@ -38,7 +38,7 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 | 24 | Enumerate test cases with input/expected pairs | Resolved 2026-06-11 (incl. 02/03/11/12; 01a–01c left compliant, per user) |
 | 25 | Spell out filename and format placeholders | Resolved 2026-06-12 |
 | 26 | Add forward-reference notes between specs that share a file | Resolved 2026-06-12 |
-| 27 | Expand "Acceptance criteria" to enumerate observable behaviour | **Open** |
+| 27 | Expand "Acceptance criteria" to enumerate observable behaviour | Resolved 2026-06-12 (full conformance pass; 01–01c & 10c left compliant) |
 | 31 | Bring the logging-plugin spec (10c) to the same buildable standard | Resolved 2026-06-11 |
 | 32 | Decide and add "Before you start" reading lists for the non-module/contract/logging specs | Resolved 2026-06-11 |
 

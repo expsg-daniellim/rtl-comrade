@@ -34,5 +34,11 @@ compile cycle (`07a`, [`03`](03-run-process.md), `07b`) appends to the same bloc
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- The filelist module reproduces the byte-for-byte output of rtl_buddy's `VlogFilelist`
-  on the same inputs (modulo ordering if dedup is non-stable).
+- End-to-end against a real rtl_buddy fixture (the reference suite
+  `../rtl-buddy-proj-template/design/sandbox/verif`): `run-preproc` forwards/mutates `ctx`
+  and `write-filelist` reproduces the byte-for-byte output of rtl_buddy's `VlogFilelist` on
+  the same inputs (modulo ordering if dedup is non-stable), with both modules' `fail` ports
+  exercised.
+- Both children's `modules/config.yaml` entries validate and resolve: `run-preproc` →
+  `RunPreprocMod`, `write-filelist` → `WriteFilelistMod` (see
+  [11](11-graph-and-manifests.md#acceptance-criteria)).

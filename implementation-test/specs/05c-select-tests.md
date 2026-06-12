@@ -91,8 +91,13 @@ one); `logging_handler` for the `log.critical` path.
 ## Acceptance criteria
 
 - Tests pass.
-- Streamed end-to-end: a fixture `tests.yaml` with three tests fans out to three `ctx`s
-  with correctly-stamped keys.
+- Output port `default` exercised: a fixture `tests.yaml` with three tests fans out to three
+  `ctx`s with correctly-stamped keys (streamed end-to-end against the reference suite
+  `../rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`).
+- Failure idiom exercised: a supplied `test_name` absent from the suite →
+  `SuiteConfig.get_tests` emits `log.critical` (harness exit 1).
+- The `modules/config.yaml` manifest entry `{ name: select-tests, class_name: SelectTestsMod }`
+  validates and the harness resolves `select-tests` → `SelectTestsMod`.
 
 ## Constraints
 

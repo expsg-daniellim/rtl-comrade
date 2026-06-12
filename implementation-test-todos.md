@@ -1112,6 +1112,31 @@ When multiple specs add to the same Python file, the spec creating the file shou
 
 ### 27. Expand "Acceptance criteria" to enumerate observable behaviour
 
+**Status: Resolved (2026-06-12).** Every `specs/*.md` Acceptance section is now a bullet list
+of observable behaviour — every named output port, every failure idiom (or a note that there
+is none), and, for module/contract specs, the manifest/registry entry that validates and
+resolves — with end-to-end claims naming the rtl_buddy reference suite
+(`../rtl-buddy-proj-template/design/sandbox(/verif)`, per `rtl_buddy/AGENTS.md`) and the
+concrete files/symlinks produced. Scope notes:
+
+- **Module specs** (`03`, `04a`–`04i`, `05a`–`05f`, `06a`/`06b`, `07a`/`07b`, `08a`–`08f`,
+  `09a`–`09c`, `10a`/`10b`): each enumerates its output ports, its failure idioms, and asserts
+  its `modules/config.yaml` entry `{ name, class_name }` validates and resolves to the class.
+- **Index specs** (`04`–`10`): each names the fixture its end-to-end check runs against and
+  asserts every child's manifest entry resolves (pointing at `11`).
+- **Contract `02`**: asserts the `contracts/config.yaml` entry `{ name: any }` validates and
+  resolves (unwired in `graphs/test.yaml` per TODO #15).
+- **`11`** is now the central owner of the "every registered module/contract name resolves to
+  its class" assertion the module specs reference; **`12`** enumerates all five parity
+  scenarios plus the `logs/` artifacts and `test.*` symlinks against the named reference suite.
+- **Left compliant** (no change): schema specs `01`/`01a`–`01c` (dataclasses — no ports or
+  manifest; already cite concrete fixtures and construction-time rejection) and logging plugin
+  `10c` (already asserts the `logging` block resolves `SummaryProcessor` and enumerates its
+  results-only role).
+
+The leading `- Tests pass.` bullet was retained by convention. The original ticket text is
+kept below for the record.
+
 Current Acceptance sections are coarse ("Tests pass. End-to-end produces correct files"). They should enumerate observable behaviours: which output ports, which failure paths, which artefacts produced.
 
 #### Concrete steps

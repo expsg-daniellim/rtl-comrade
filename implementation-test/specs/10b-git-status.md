@@ -103,8 +103,11 @@ assert `failure is False` throughout.
 ## Acceptance criteria
 
 - Tests pass.
-- In a git repo, emits one `git_state` event (branch/sha/dirty) at INFO; outside a repo,
-  emits `git_state_unavailable` at WARNING and never `log.error`/`log.critical`.
+- Output port `default` exercised (emits `True`, sequencing only): in a git repo it emits one
+  `git_state` event (branch/sha/dirty) at INFO; outside a repo it emits
+  `git_state_unavailable` at WARNING and never `log.error`/`log.critical`.
+- The `modules/config.yaml` manifest entry `{ name: git-status, class_name: GitStatusMod }`
+  validates and the harness resolves `git-status` → `GitStatusMod`.
 
 ## Constraints
 

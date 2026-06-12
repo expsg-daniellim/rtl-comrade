@@ -41,8 +41,14 @@ own line (append, don't re-create the block):
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- Streamed end-to-end: a fixture `tests.yaml` with three tests fans out to three `ctx`s
-  with correctly-stamped keys, and a sweep script multiplies one of them by 4.
+- Streamed end-to-end against the reference suite
+  `../rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`: three tests fan out to three
+  `ctx`s with correctly-stamped keys, a sweep script multiplies one of them by 4, and the
+  `route-list-mode`/`filter-reglvl`/`load-model` diversion ports (`list`/`skip`/`fail`) each
+  fire on their respective inputs.
+- Every child's `modules/config.yaml` entry validates and resolves: `route-list-mode`,
+  `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep` each map
+  to their `*Mod` class (see [11](11-graph-and-manifests.md#acceptance-criteria)).
 
 ## Notes
 

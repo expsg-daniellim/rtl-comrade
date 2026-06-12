@@ -68,14 +68,21 @@ verdicts are not.
 
 ## Acceptance criteria
 
-- All five scenarios above match rtl_buddy on exit code and per-test PASS/FAIL/NA.
-- Compile logs are persisted as expected (the new behaviour from [07 settled 12](../07-ambiguities-and-assumptions.md)).
+- All five parity scenarios run against the reference suite
+  `../rtl-buddy-proj-template/design/sandbox/verif` (per `rtl_buddy/AGENTS.md`) match
+  `rtl_buddy` on exit code and per-test PASS/FAIL/NA + `desc`: passing run, compile-fail,
+  sim-timeout, `--list`, and `--early-stop` at each phase (`pre`/`comp`/`sim`).
+- Artifact parity in `logs/`: `.log`/`.err`/`.randseed` produced for the same runs and the
+  `test.log`/`test.err`/`test.randseed` symlinks (in CWD) point at the same files; compile
+  logs are persisted (new behaviour, [07 settled 12](../07-ambiguities-and-assumptions.md)).
 - Lazy `load-model` behaves correctly: skipped tests don't trip on broken `models.yaml`
   (the new behaviour from [07 settled 8](../07-ambiguities-and-assumptions.md)).
 - `ParseLogMod` quirk corrections verified: FAIL wins over PASS, `PASSTHROUGH` does not
   misclassify as PASS, FAIL-without-ERR does not crash — per
   [07 settled 15](../07-ambiguities-and-assumptions.md).
-- Any unexpected divergence is documented and a follow-up issue opened.
+- The captured artifacts are committed under `tests/e2e/`, and any unexpected divergence is
+  recorded in `KNOWN_DIVERGENCES.md` (or [07](../07-ambiguities-and-assumptions.md)) with a
+  follow-up issue opened.
 
 ## Constraints
 

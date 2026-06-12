@@ -93,9 +93,13 @@ In `modules/tests/test_setup.py`. Fixtures: a `platform_cfg` fixture with a
 ## Acceptance criteria
 
 - Tests pass.
-- Produces the correct `builder_cfg` value (honouring the `builder` override) from a real
-  rtl_buddy `root_config.yaml` fixture (contributes to the setup-only end-to-end graph —
-  see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: produces the correct `builder_cfg` value (honouring the
+  `builder` override) from a real rtl_buddy `root_config.yaml` fixture (contributes to the
+  setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idiom exercised: a named builder absent from the platform →
+  `log.critical(f"named builder {name} not in configured builders ...")` (harness exit 1).
+- The `modules/config.yaml` manifest entry `{ name: resolve-builder, class_name: ResolveBuilderMod }`
+  validates and the harness resolves `resolve-builder` → `ResolveBuilderMod`.
 
 ## Constraints
 

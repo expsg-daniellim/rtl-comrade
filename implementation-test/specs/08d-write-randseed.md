@@ -114,8 +114,11 @@ contract's concern.
 ## Acceptance criteria
 
 - Tests pass.
-- Writes `.randseed` to `sim_cmd["randseed_path"]` and emits a single assembled `test_run`
-  joining `ctx` + `proc` + `sim_cmd` by key.
+- Output port `default` exercised: writes `.randseed` to `sim_cmd["randseed_path"]` and emits
+  a single assembled `test_run` joining `ctx` + `proc` + `sim_cmd` by key (3-port `keyed_join`).
+- No port-routed failure path: an `OSError` writing `.randseed` is left to propagate.
+- The `modules/config.yaml` manifest entry `{ name: write-randseed, class_name: WriteRandseedMod }`
+  validates and the harness resolves `write-randseed` → `WriteRandseedMod`.
 - The `HierInstanceSeed.txt` append fires iff `"hier_inst_seed" in sim_cmd["argv"]` (rtl_buddy
   parity, `vlog_sim.py:265-269`).
 

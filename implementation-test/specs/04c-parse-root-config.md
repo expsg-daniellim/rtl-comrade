@@ -94,9 +94,14 @@ the `log.critical` paths.
 ## Acceptance criteria
 
 - Tests pass.
-- Produces a correct `root_cfg` value from a real rtl_buddy `root_config.yaml` fixture
-  (contributes to the setup-only end-to-end graph — see
+- Output port `default` exercised: produces a correct `root_cfg` value from a real rtl_buddy
+  `root_config.yaml` fixture (the reference suite `../rtl-buddy-proj-template/design/sandbox`,
+  per `rtl_buddy/AGENTS.md`) — contributes to the setup-only end-to-end graph (see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idiom exercised: an unreadable / unparseable / schema-mismatched config →
+  `log.critical(f"failed to load {path}: {e}")` (harness exit 1).
+- The `modules/config.yaml` manifest entry `{ name: parse-root-config, class_name: ParseRootConfigMod }`
+  validates and the harness resolves `parse-root-config` → `ParseRootConfigMod`.
 
 ## Constraints
 

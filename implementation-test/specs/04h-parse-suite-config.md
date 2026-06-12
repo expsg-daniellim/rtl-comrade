@@ -114,9 +114,16 @@ the happy path; `tmp_path` crafted YAML for the failure cases; `logging_handler`
 ## Acceptance criteria
 
 - Tests pass.
-- Produces a correct `suite_cfg` value (with bound testbenches and stamped `suite_dir`)
-  from a real rtl_buddy `tests.yaml` fixture (contributes to the setup-only end-to-end
-  graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: produces a correct `suite_cfg` value (with bound
+  testbenches and stamped `suite_dir`) from a real rtl_buddy `tests.yaml` fixture (the
+  reference suite `../rtl-buddy-proj-template/design/sandbox/verif`, per `rtl_buddy/AGENTS.md`)
+  — contributes to the setup-only end-to-end graph (see
+  [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idioms exercised: load/parse/validation errors (incl. `UVMConfig` negative
+  `max_warns`/`max_errors`) and a test referencing an unknown testbench → `log.critical`
+  (harness exit 1).
+- The `modules/config.yaml` manifest entry `{ name: parse-suite-config, class_name: ParseSuiteConfigMod }`
+  validates and the harness resolves `parse-suite-config` → `ParseSuiteConfigMod`.
 
 ## Constraints
 

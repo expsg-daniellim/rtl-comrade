@@ -127,9 +127,13 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` + `monkeypatch.chdir` for
 ## Acceptance criteria
 
 - Tests pass.
-- `EnsureLogsDirMod` leaves the configured `logs_dir` present on disk (default `./logs/`)
-  before any later main-line node fires (contributes to the setup-only end-to-end graph —
-  see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: emits `True` and leaves the configured `logs_dir` present
+  on disk (default `./logs/`) before any later main-line node fires (contributes to the
+  setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idiom exercised: an `OSError`/`PermissionError` creating `logs_dir` bubbles to the
+  harness CRITICAL handler (exit 1).
+- The `modules/config.yaml` manifest entry `{ name: ensure-logs-dir, class_name: EnsureLogsDirMod }`
+  validates and the harness resolves `ensure-logs-dir` → `EnsureLogsDirMod`.
 
 ## Constraints
 

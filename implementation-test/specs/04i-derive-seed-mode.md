@@ -79,9 +79,12 @@ In `modules/tests/test_setup.py`. Pure function — no fixtures needed.
 ## Acceptance criteria
 
 - Tests pass.
-- Maps the two CLI booleans to the correct `SeedMode` for all three precedence cases
-  (contributes to the setup-only end-to-end graph — see
+- Output port `default` exercised: maps the two CLI booleans to the correct `SeedMode` for
+  all three precedence cases (contributes to the setup-only end-to-end graph — see
   [04 index](04-setup-modules.md#acceptance-criteria)).
+- No failure path: every input pair maps to a `SeedMode`; the module never logs an error.
+- The `modules/config.yaml` manifest entry `{ name: derive-seed-mode, class_name: DeriveSeedModeMod }`
+  validates and the harness resolves `derive-seed-mode` → `DeriveSeedModeMod`.
 
 ## Constraints
 

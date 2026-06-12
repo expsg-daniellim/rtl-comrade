@@ -84,7 +84,11 @@ In `modules/tests/test_sim_cycle.py`. Fixtures: a `ctx` fixture. Pure generator 
 ## Acceptance criteria
 
 - Tests pass.
-- Default `[None]` and an explicit multi-id list both fan out with correctly-stamped keys.
+- Output port `default` exercised: default `[None]` emits a single passthrough `ctx`; an
+  explicit multi-id list fans out one `ctx` per run-id with keys suffixed `#run_id`.
+- No failure path.
+- The `modules/config.yaml` manifest entry `{ name: expand-runs, class_name: ExpandRunsMod }`
+  validates and the harness resolves `expand-runs` → `ExpandRunsMod`.
 
 ## Constraints
 

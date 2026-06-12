@@ -39,6 +39,10 @@ the `rtl_test/setup.py` block ([`10b`](10b-git-status.md)). `graphs/log/summary.
 - No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
   `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
   single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
+- `early-stop-gate` exercises both `go`/`stop` ports and `git-status` emits its
+  `git_state`/`git_state_unavailable` events; both resolve from `modules/config.yaml` to
+  `EarlyStopGateMod` / `GitStatusMod`, and the `logging` block resolves `SummaryProcessor`
+  (see [11](11-graph-and-manifests.md#acceptance-criteria)).
 
 ## Notes
 

@@ -76,7 +76,11 @@ or `None`. Pure classifier — no `logging_handler`.
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`uvm`, `plain`) are exercised, routing on `ctx["test"].uvm`.
+- Both output ports (`uvm`, `plain`) are exercised, routing on `ctx["test"].uvm`; each
+  carries `test_run` unchanged.
+- No failure path: pure classifier, no `log` call.
+- The `modules/config.yaml` manifest entry `{ name: route-post, class_name: RoutePostMod }`
+  validates and the harness resolves `route-post` → `RoutePostMod`.
 
 ## Constraints
 

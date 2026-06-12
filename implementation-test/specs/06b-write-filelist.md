@@ -128,9 +128,13 @@ a `ctx` fixture carrying a resolved model + testbench; `logging_handler` for the
 ## Acceptance criteria
 
 - Tests pass.
-- The filelist module reproduces the byte-for-byte output of rtl_buddy's `VlogFilelist`
+- All three output ports exercised: on success `ctx` forwards `ctx` and `filelist` emits
+  `{key, filelist}`; on a resolve/write error the `fail` path routes a per-test FAIL `result`
+  and logs at ERROR.
+- The filelist contents reproduce the byte-for-byte output of rtl_buddy's `VlogFilelist`
   on the same inputs (modulo ordering if dedup is non-stable).
-- Both output ports (`ctx`/`filelist` on success, `fail`) are exercised.
+- The `modules/config.yaml` manifest entry `{ name: write-filelist, class_name: WriteFilelistMod }`
+  validates and the harness resolves `write-filelist` → `WriteFilelistMod`.
 
 ## Constraints
 

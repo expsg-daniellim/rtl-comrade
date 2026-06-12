@@ -278,6 +278,12 @@ assert no orphaned children. One terminal Lifecycle state per case (the list is 
   path runs to completion before `CancelledError` propagates, and no zombies remain.
 - A reader of this spec can write a slow-sleep fake and exercise every state in the
   Lifecycle section without consulting source.
+- Output port `default` exercised: emits `proc:{key, rc, timed_out, stdout_path, stderr_path}`
+  on both clean-exit and timed-out runs; no port-routed failure path (a non-zero `rc` is data,
+  interpreted downstream).
+- The `modules/config.yaml` manifest entry `{ name: run-process, class_name: RunProcessMod }`
+  validates and the harness resolves `run-process` → `RunProcessMod` (shared by the compile
+  and sim cycles).
 
 ## Constraints
 

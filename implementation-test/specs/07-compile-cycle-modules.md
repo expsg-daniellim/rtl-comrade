@@ -34,8 +34,13 @@ spec [`03`](03-run-process.md):
 
 - Each child ticket's tests pass.
 - Wiring `build-compile-cmd` → `run-process` (instance #1) → `interpret-compile` (with
-  `keyed_join`) end-to-end against a real builder produces a non-zero `rc` on a known
-  bad source file and surfaces it correctly.
+  `keyed_join`) end-to-end against a real builder produces a non-zero `rc` on a known bad
+  source file and surfaces it as a `CompileFailResults` on `interpret-compile`'s `fail`
+  port (ERROR logged); a clean source returns through the `ok` port.
+- Each child's `modules/config.yaml` entry validates and resolves: `build-compile-cmd` →
+  `BuildCompileCmdMod`, `interpret-compile` → `InterpretCompileMod`, reusing the shared
+  `run-process` → `RunProcessMod` instance (see
+  [11](11-graph-and-manifests.md#acceptance-criteria)).
 
 ## Notes
 

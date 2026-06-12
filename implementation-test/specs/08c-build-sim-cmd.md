@@ -151,8 +151,12 @@ for the bad-mode path.
 ## Acceptance criteria
 
 - Tests pass.
-- All four output ports (`ctx`, `sim_cmd`, `command`, `timeout`) are exercised; argv
-  matches rtl_buddy and every log/randseed path carries the `logs_dir` prefix.
+- All four output ports (`ctx`, `sim_cmd`, `command`, `timeout`) are exercised in lockstep:
+  `argv` matches rtl_buddy and every log/err/randseed path in `sim_cmd`/`command` carries the
+  `logs_dir` prefix.
+- No port-routed failure path (the sim `rc` is interpreted downstream by `interpret-sim`).
+- The `modules/config.yaml` manifest entry `{ name: build-sim-cmd, class_name: BuildSimCmdMod }`
+  validates and the harness resolves `build-sim-cmd` → `BuildSimCmdMod`.
 
 ## Constraints
 

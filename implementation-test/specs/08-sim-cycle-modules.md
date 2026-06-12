@@ -43,9 +43,13 @@ post chain (`09a`–`09c`) appends to the same block:
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- End-to-end against a real `simv` (or fake): a passing run produces correct log/err/
-  randseed files and symlinks; a sleep-and-timeout run produces `rc=4444` and
-  `interpret-sim` emits `timeout`.
+- End-to-end against a real `simv` (or fake): a passing run produces correct `.log`/`.err`/
+  `.randseed` files under `logs_dir` plus the `test.log`/`test.err`/`test.randseed` symlinks;
+  a sleep-and-timeout run produces `rc=4444` and `interpret-sim` emits on its `timeout` port.
+- Every child's `modules/config.yaml` entry validates and resolves: `expand-runs`,
+  `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim` each map
+  to their `*Mod` class, reusing the shared `run-process` instance (see
+  [11](11-graph-and-manifests.md#acceptance-criteria)).
 
 ## Notes
 

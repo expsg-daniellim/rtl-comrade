@@ -85,8 +85,11 @@ for the timeout path.
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`ok`, `timeout`) are exercised; the timeout path emits
-  `SimTimeoutResults` and logs at ERROR.
+- Both output ports (`ok`, `timeout`) are exercised: `ok` forwards `test_run` on a clean run;
+  the `timeout` path emits `SimTimeoutResults` (the `rc=4444`/`timed_out` case) and logs at
+  ERROR.
+- The `modules/config.yaml` manifest entry `{ name: interpret-sim, class_name: InterpretSimMod }`
+  validates and the harness resolves `interpret-sim` → `InterpretSimMod`.
 
 ## Constraints
 

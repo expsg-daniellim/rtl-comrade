@@ -142,11 +142,15 @@ for the bad-mode path.
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`ctx`, `command`) are exercised; `ctx["simv"]` is set per builder
-  type and `command` carries the `logs_dir`-prefixed log paths.
+- Both output ports (`ctx`, `command`) are exercised in lockstep: `ctx["simv"]` is set per
+  builder type and `command` carries the `logs_dir`-prefixed `stdout_path`/`stderr_path`.
+- No port-routed failure path (the compile `rc` is interpreted downstream by
+  `interpret-compile`).
 - Wiring `build-compile-cmd` → `run-process` (instance #1) → `interpret-compile` end-to-end
   against a real builder surfaces a non-zero `rc` on a known bad source file (see
   [07 index](07-compile-cycle-modules.md#acceptance-criteria)).
+- The `modules/config.yaml` manifest entry `{ name: build-compile-cmd, class_name: BuildCompileCmdMod }`
+  validates and the harness resolves `build-compile-cmd` → `BuildCompileCmdMod`.
 
 ## Constraints
 

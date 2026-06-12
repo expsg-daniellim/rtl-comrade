@@ -112,9 +112,14 @@ the `log.critical` paths.
 ## Acceptance criteria
 
 - Tests pass.
-- Discovery resolves a fixture `root_config.yaml` from a nested CWD and stops at the
-  `max_levels` depth limit (contributes to the setup-only end-to-end graph — see
-  [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: resolves a fixture `root_config.yaml` from a nested CWD
+  and emits its `Path`, stopping at the `max_levels` depth limit (contributes to the
+  setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idiom exercised: no `root_config.yaml` within `max_levels` → `log.critical`
+  (harness exit 1); a `PermissionError` while listing a directory bubbles to the harness
+  CRITICAL handler.
+- The `modules/config.yaml` manifest entry `{ name: discover-config-file, class_name: DiscoverConfigFileMod }`
+  validates and the harness resolves `discover-config-file` → `DiscoverConfigFileMod`.
 
 ## Constraints
 

@@ -159,6 +159,9 @@ produced upstream, and the contract terminates within bounded steps after all po
   first-class entry listing invariants (mirrored from
   [05](../05-branching-and-results.md#the-any-contract-retained-currently-unwired)) and its
   reusability, per [`docs/creating-documentation.md`](../../docs/creating-documentation.md).
+- The contract manifest entry `{ name: any, class_name: AnyContract }` in `contracts/config.yaml`
+  validates and the harness resolves `any` → `AnyContract` (even though `graphs/test.yaml`
+  leaves it unwired per TODO #15).
 
 ## Constraints
 

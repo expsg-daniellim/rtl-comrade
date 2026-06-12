@@ -119,8 +119,10 @@ stop iff `order.index(early_stop) <= order.index(phase)`.
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`go`, `stop`) are exercised across all four `early_stop` values for
-  each `phase`; a `stop` emits one `test_result` event at INFO.
+- Both output ports (`go`, `stop`) are exercised across all four `early_stop` values for each
+  `phase`: `go` forwards the `payload`; a `stop` emits one `test_result` event at INFO.
+- The `modules/config.yaml` manifest entry `{ name: early-stop-gate, class_name: EarlyStopGateMod }`
+  validates and the harness resolves `early-stop-gate` → `EarlyStopGateMod`.
 
 ## Constraints
 

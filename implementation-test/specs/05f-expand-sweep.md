@@ -116,8 +116,11 @@ empty); a `ctx` fixture whose `test.get_sweep_path()` returns the script path or
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`default`, `fail`) are exercised; a sweep script multiplies one
-  fixture test by 4, and a raising script routes a per-test FAIL.
+- Both output ports (`default`, `fail`) are exercised: a sweep script multiplies one fixture
+  test by 4 (one `ctx` per variant, key suffixed `#i`); a raising sweep script routes a
+  per-test FAIL `result` and logs at ERROR.
+- The `modules/config.yaml` manifest entry `{ name: expand-sweep, class_name: ExpandSweepMod }`
+  validates and the harness resolves `expand-sweep` → `ExpandSweepMod`.
 
 ## Constraints
 

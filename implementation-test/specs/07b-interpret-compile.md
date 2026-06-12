@@ -96,12 +96,14 @@ the contract's concern.
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`ok`, `fail`) are exercised; the fail path emits `CompileFailResults`
-  and logs at ERROR.
+- Both output ports (`ok`, `fail`) are exercised: `ok` forwards `ctx` on a zero `rc`; the
+  `fail` path emits `CompileFailResults` and logs at ERROR on a non-zero `rc`.
 - Wiring `build-compile-cmd` → `run-process` (instance #1) → `interpret-compile` (with
   `keyed_join`) end-to-end against a real builder produces a non-zero `rc` on a known
   bad source file and surfaces it correctly (see
   [07 index](07-compile-cycle-modules.md#acceptance-criteria)).
+- The `modules/config.yaml` manifest entry `{ name: interpret-compile, class_name: InterpretCompileMod }`
+  validates and the harness resolves `interpret-compile` → `InterpretCompileMod`.
 
 ## Constraints
 

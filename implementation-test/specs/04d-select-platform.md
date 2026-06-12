@@ -90,9 +90,13 @@ platforms; `logging_handler` for the `log.critical` path.
 ## Acceptance criteria
 
 - Tests pass.
-- Selects the correct platform from a real rtl_buddy `root_config.yaml` fixture under a
-  controlled `uname` (contributes to the setup-only end-to-end graph — see
-  [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: selects the correct `platform_cfg` from a real rtl_buddy
+  `root_config.yaml` fixture under a controlled `uname` (contributes to the setup-only
+  end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idiom exercised: a `uname` matching no configured platform →
+  `log.critical(f"cannot find cfg-platform for uname {uname}")` (harness exit 1).
+- The `modules/config.yaml` manifest entry `{ name: select-platform, class_name: SelectPlatformMod }`
+  validates and the harness resolves `select-platform` → `SelectPlatformMod`.
 
 ## Constraints
 

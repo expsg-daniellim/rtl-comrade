@@ -101,9 +101,12 @@ case.
 ## Acceptance criteria
 
 - Tests pass.
-- `PrependCwdPathMod` leaves `os.environ["PATH"]` starting with `.` for the duration of the
-  run (contributes to the setup-only end-to-end graph — see
-  [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: emits `True` and leaves `os.environ["PATH"]` starting
+  with `.` for the duration of the run (contributes to the setup-only end-to-end graph —
+  see [04 index](04-setup-modules.md#acceptance-criteria)).
+- No failure path: the module always emits and never logs an error.
+- The `modules/config.yaml` manifest entry `{ name: prepend-cwd-path, class_name: PrependCwdPathMod }`
+  validates and the harness resolves `prepend-cwd-path` → `PrependCwdPathMod`.
 
 ## Constraints
 

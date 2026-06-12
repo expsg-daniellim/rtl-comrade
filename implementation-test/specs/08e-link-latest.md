@@ -89,8 +89,11 @@ In `modules/tests/test_sim_cycle.py`. Fixtures: `tmp_path` CWD via `monkeypatch.
 ## Acceptance criteria
 
 - Tests pass.
-- The three `test.*` symlinks point at this run's files and `test_run` passes through
-  unchanged.
+- Output port `default` exercised: the three `test.*` symlinks (`test.log`/`test.err`/
+  `test.randseed`) point at this run's files and `test_run` passes through unchanged.
+- No failure path: the links are convenience pointers.
+- The `modules/config.yaml` manifest entry `{ name: link-latest, class_name: LinkLatestMod }`
+  validates and the harness resolves `link-latest` → `LinkLatestMod`.
 
 ## Constraints
 

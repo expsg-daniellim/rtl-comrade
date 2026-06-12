@@ -113,8 +113,12 @@ against rtl_buddy `UvmVlogPost`.
 ## Acceptance criteria
 
 - Tests pass.
-- `ParseUvmLogMod`: fixture-by-fixture comparison against rtl_buddy `UvmVlogPost` on the
-  same log files produces identical `TestResults`.
+- Output port `default` exercised: a fixture-by-fixture comparison against rtl_buddy
+  `UvmVlogPost` on the same log files produces identical `TestResults`.
+- Failure idioms exercised: a log with no UVM summary → a FAIL `result`; a missing
+  `test_run["log"]` → `OSError` caught → FAIL with `str(e)` in `desc`, `log.error`.
+- The `modules/config.yaml` manifest entry `{ name: parse-uvm-log, class_name: ParseUvmLogMod }`
+  validates and the harness resolves `parse-uvm-log` → `ParseUvmLogMod`.
 
 ## Constraints
 

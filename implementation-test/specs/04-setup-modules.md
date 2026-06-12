@@ -48,12 +48,17 @@ in `modules/rtl_test/setup.py`; tests in `modules/tests/test_setup.py`.
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- An end-to-end "setup-only" graph that wires these nine nodes produces correct
-  `root_cfg`/`builder_cfg`/`suite_cfg` values from real rtl_buddy fixtures, with
-  `CheckSuiteCwdMod` aborting fixture runs invoked from outside the suite directory,
-  `PrependCwdPathMod` leaving `os.environ["PATH"]` starting with `.` for the
-  duration of the run, and `EnsureLogsDirMod` leaving the configured `logs_dir`
-  present on disk (default `./logs/`) before any later main-line node fires.
+- End-to-end "setup-only" graph wiring all nine nodes against the real rtl_buddy reference
+  suite `../rtl-buddy-proj-template/design/sandbox(/verif)` (per `rtl_buddy/AGENTS.md`)
+  produces correct `root_cfg`/`builder_cfg`/`suite_cfg` values, with `CheckSuiteCwdMod`
+  aborting runs invoked from outside the suite directory, `PrependCwdPathMod` leaving
+  `os.environ["PATH"]` starting with `.` for the duration of the run, and `EnsureLogsDirMod`
+  leaving the configured `logs_dir` present on disk (default `./logs/`) before any later
+  main-line node fires.
+- Every child's `modules/config.yaml` entry validates and resolves: `discover-config-file`,
+  `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`,
+  `check-suite-cwd`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode` each map to
+  their `*Mod` class (see [11](11-graph-and-manifests.md#acceptance-criteria)).
 
 ## Notes
 

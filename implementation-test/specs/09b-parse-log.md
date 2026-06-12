@@ -110,9 +110,15 @@ on the non-pass verdicts. Compare against rtl_buddy `VlogPost` on the parity cas
 ## Acceptance criteria
 
 - Tests pass.
-- `ParseLogMod`: identical to rtl_buddy `VlogPost` on clean-PASS, clean-FAIL-with-ERR,
-  and NA fixtures; intentionally diverges on FAIL+PASS, FAIL-without-ERR, and
-  word-boundary cases — see [07 settled 15](../07-ambiguities-and-assumptions.md).
+- Output port `default` exercised: emits a `result` whose verdict is identical to rtl_buddy
+  `VlogPost` on clean-PASS, clean-FAIL-with-ERR, and NA fixtures; intentionally diverges on
+  FAIL+PASS, FAIL-without-ERR, and word-boundary cases — see
+  [07 settled 15](../07-ambiguities-and-assumptions.md). A FAIL result logs at ERROR; PASS/NA
+  does not log.
+- Failure idiom exercised: an unreadable log → `log.error("parse_log_read_failed", ...)` and
+  a FAIL `result` carrying `str(e)` in `desc`.
+- The `modules/config.yaml` manifest entry `{ name: parse-log, class_name: ParseLogMod }`
+  validates and the harness resolves `parse-log` → `ParseLogMod`.
 
 ## Constraints
 

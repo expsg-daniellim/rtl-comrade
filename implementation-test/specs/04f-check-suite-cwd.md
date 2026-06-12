@@ -106,9 +106,13 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical`
 ## Acceptance criteria
 
 - Tests pass.
-- `CheckSuiteCwdMod` aborts fixture runs invoked from outside the suite directory and
-  emits the resolved `Path` otherwise (contributes to the setup-only end-to-end graph —
-  see [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output port `default` exercised: emits the resolved suite-config `Path` when invoked from
+  the suite directory (contributes to the setup-only end-to-end graph — see
+  [04 index](04-setup-modules.md#acceptance-criteria)).
+- Failure idioms exercised: invoked from outside the suite dir → `log.critical` (harness
+  exit 1); the resolved `test_config` not a file → `log.critical`.
+- The `modules/config.yaml` manifest entry `{ name: check-suite-cwd, class_name: CheckSuiteCwdMod }`
+  validates and the harness resolves `check-suite-cwd` → `CheckSuiteCwdMod`.
 
 ## Constraints
 

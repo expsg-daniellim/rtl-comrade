@@ -122,6 +122,9 @@ test runner) for the `--help` cases.
   `builder_mode`, `early_stop`) with correct types/defaults.
 - Graph loads without validation errors — `Graph.from_file("graphs/test.yaml")` succeeds.
 - `validation.py` reports no cycles or overloaded inputs.
+- Every module name registered in `modules/config.yaml` and every contract name in
+  `contracts/config.yaml` resolves to its declared class (this spec is the central owner of
+  the registry-resolvability assertion the module specs 03–10 reference).
 
 ## Constraints
 

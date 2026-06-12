@@ -100,7 +100,10 @@ needed (SKIP is not an error).
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`keep`, `skip`) are exercised; the skip path emits `SkipResults`.
+- Both output ports (`keep`, `skip`) are exercised: `keep` forwards `ctx`, and the `skip`
+  diversion path emits a `SkipResults` `result`.
+- The `modules/config.yaml` manifest entry `{ name: filter-reglvl, class_name: FilterRegLvlMod }`
+  validates and the harness resolves `filter-reglvl` → `FilterRegLvlMod`.
 
 ## Constraints
 

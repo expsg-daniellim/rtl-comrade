@@ -31,11 +31,15 @@ opened by the sim chain ([`08a`](08a-expand-runs.md)):
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
+- `RoutePostMod`: both output ports (`uvm`, `plain`) route on `ctx["test"].uvm`.
 - `ParseUvmLogMod`: fixture-by-fixture comparison against rtl_buddy `UvmVlogPost` on the
   same log files produces identical `TestResults`.
 - `ParseLogMod`: identical to rtl_buddy `VlogPost` on clean-PASS, clean-FAIL-with-ERR,
   and NA fixtures; intentionally diverges on FAIL+PASS, FAIL-without-ERR, and
   word-boundary cases — see [07 settled 15](../07-ambiguities-and-assumptions.md).
+- Every child's `modules/config.yaml` entry validates and resolves: `route-post` →
+  `RoutePostMod`, `parse-log` → `ParseLogMod`, `parse-uvm-log` → `ParseUvmLogMod` (see
+  [11](11-graph-and-manifests.md#acceptance-criteria)).
 
 ## Notes
 

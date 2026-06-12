@@ -76,7 +76,10 @@ fixtures (multi-test, single-test, empty).
 ## Acceptance criteria
 
 - Tests pass.
-- Prints test names in declaration order and emits nothing (terminal sink).
+- Terminal sink: prints test names two-space-joined in declaration order and emits nothing
+  (no output ports, no failure path).
+- The `modules/config.yaml` manifest entry `{ name: list-test-names, class_name: ListTestNamesMod }`
+  validates and the harness resolves `list-test-names` → `ListTestNamesMod`.
 
 ## Constraints
 

@@ -115,8 +115,11 @@ a `root_cfg` fixture; `logging_handler` to assert `failure is True` without `Sys
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`default`, `fail`) are exercised; the no-script path passes `ctx`
-  through and a script-set mutation is reflected on `ctx["test"]`.
+- Both output ports (`default`, `fail`) are exercised: the no-script path passes `ctx`
+  through unchanged, a script-set mutation is reflected on `ctx["test"]`, and a raising
+  preproc script (or read error) routes a per-test FAIL `result` and logs at ERROR.
+- The `modules/config.yaml` manifest entry `{ name: run-preproc, class_name: RunPreprocMod }`
+  validates and the harness resolves `run-preproc` → `RunPreprocMod`.
 
 ## Constraints
 

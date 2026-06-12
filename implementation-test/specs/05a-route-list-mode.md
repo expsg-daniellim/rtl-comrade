@@ -74,7 +74,11 @@ one); pure classifier otherwise.
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`list`, `run`) are exercised and route on the `list` flag.
+- Both output ports (`list`, `run`) are exercised and route on the `list` flag, each carrying
+  `suite_cfg` unchanged.
+- No failure path: pure classifier, no `log` call.
+- The `modules/config.yaml` manifest entry `{ name: route-list-mode, class_name: RouteListModeMod }`
+  validates and the harness resolves `route-list-mode` → `RouteListModeMod`.
 
 ## Constraints
 

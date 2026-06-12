@@ -114,8 +114,11 @@ the failure cases; `logging_handler` to assert `failure is True` **without** `Sy
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`default`, `fail`) are exercised; the fail path routes a per-test
-  FAIL `result` and logs at ERROR without aborting the run.
+- Both output ports (`default`, `fail`) are exercised: `default` forwards `ctx` with its
+  model folded in; the `fail` path routes a per-test FAIL `result` and logs at ERROR without
+  aborting the run.
+- The `modules/config.yaml` manifest entry `{ name: load-model, class_name: LoadModelMod }`
+  validates and the harness resolves `load-model` → `LoadModelMod`.
 
 ## Constraints
 
