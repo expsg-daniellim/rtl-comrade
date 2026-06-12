@@ -17,13 +17,13 @@ This spec is split into one ticket per deliverable — build them as independent
 
 | Ticket | Deliverable | File | What it does |
 |---|---|---|---|
-| [10a](10a-early-stop-gate.md) | `EarlyStopGateMod` | `modules/rtl_test/control.py` | Cross-cutting early-stop gate (3 instances). |
-| [10b](10b-git-status.md) | `GitStatusMod` | `modules/rtl_test/setup.py` | Record git state as a structured log event. |
+| [10a](10a-early-stop-gate.md) | `EarlyStopGateMod` | `modules/rtl_buddy/control.py` | Cross-cutting early-stop gate (3 instances). |
+| [10b](10b-git-status.md) | `GitStatusMod` | `modules/rtl_buddy/setup.py` | Record git state as a structured log event. |
 | [10c](10c-summary-handler.md) | `SummaryProcessor` | `graphs/log/summary.py` | Accumulate `test_result` rows (results only) and render the summary table. |
 
 **Manifest** — each child ticket carries its exact `modules/config.yaml` line: `EarlyStopGateMod`
-opens the `rtl_test/control.py` block ([`10a`](10a-early-stop-gate.md)); `GitStatusMod` appends to
-the `rtl_test/setup.py` block ([`10b`](10b-git-status.md)). `graphs/log/summary.py` (the
+opens the `rtl_buddy/control.py` block ([`10a`](10a-early-stop-gate.md)); `GitStatusMod` appends to
+the `rtl_buddy/setup.py` block ([`10b`](10b-git-status.md)). `graphs/log/summary.py` (the
 `SummaryProcessor`, [`10c`](10c-summary-handler.md)) is referenced by `path`/`name` in the
 `logging` block, **not** a manifest.
 

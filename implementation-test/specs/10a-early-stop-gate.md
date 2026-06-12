@@ -13,7 +13,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module is the sole occupant of `modules/rtl_test/control.py`, so it has no
+`a69d962`). This module is the sole occupant of `modules/rtl_buddy/control.py`, so it has no
 sibling specs appending to the same file.
 
 ## Goal
@@ -72,7 +72,7 @@ an error.
 
 ## Deliverables
 
-In `modules/rtl_test/control.py` — `EarlyStopGateMod`:
+In `modules/rtl_buddy/control.py` — `EarlyStopGateMod`:
 
 `(payload, early_stop:str="post")` with module `Config` containing `phase:str` (one of
 `pre`/`comp`/`sim`). `payload` is `ctx` at `gate-pre`/`gate-comp` and `test_run` at
@@ -87,11 +87,11 @@ terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the `RunDepth` early-stop checkpoints; enum at `test_runner.py:14-18`; `--early-stop` flag at `rtl_buddy.py:121`; `EarlyStopResults` at `runner/test_results.py:53-60`.
 
-**Manifest** — `EarlyStopGateMod` is the only plugin in the `rtl_test/control.py` block of
+**Manifest** — `EarlyStopGateMod` is the only plugin in the `rtl_buddy/control.py` block of
 `modules/config.yaml`:
 
 ```yaml
-- file: rtl_test/control.py
+- file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }
 ```

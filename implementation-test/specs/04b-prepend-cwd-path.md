@@ -13,7 +13,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/setup.py`, which is created by spec
+`a69d962`). This module appends to `modules/rtl_buddy/setup.py`, which is created by spec
 [`04a`](04a-discover-config-file.md) — append, do not overwrite. The file is shared with the
 setup chain (`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain
 (`05a`–`05f`, index [05](05-selection-expansion-modules.md)), and git-status (`10b`);
@@ -58,7 +58,7 @@ invocation that makes the process-wide `os.environ` mutation safe.
 
 ## Deliverables
 
-In `modules/rtl_test/setup.py`:
+In `modules/rtl_buddy/setup.py`:
 
 - `PrependCwdPathMod` — prepends `.` to `os.environ["PATH"]` so a CWD-local simulator
   (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors
@@ -72,7 +72,7 @@ In `modules/rtl_test/setup.py`:
   no log call.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.
 
-**Manifest** — append to the `- file: rtl_test/setup.py` block in `modules/config.yaml`
+**Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml`
 (opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
 
 ```yaml

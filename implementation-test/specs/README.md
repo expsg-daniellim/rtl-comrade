@@ -15,6 +15,36 @@ extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch f
 > **`v1.4.0`** (commit `a69d962`; see [`../00`](../00-overview.md)). If rtl_buddy is updated,
 > re-verify every cited range in the catalog and propagate the change here.
 
+## Module package layout (pinned)
+
+The package name and file grouping below are **pinned**, not a suggestion — every module spec
+names exactly one target file, and that path must match this table. The reimplemented modules
+live in a single package `modules/rtl_buddy/` (distinct from the upstream `rtl_buddy/src/...`
+tree the specs cite as compatibility sources).
+
+| File | Modules (plugin name → class) |
+|---|---|
+| `modules/rtl_buddy/schema/` (package) | config dataclasses only: `builder.py` (01a), `suite.py` (01b), `model.py` (01c), `root.py` (01). No plugins. |
+| `modules/rtl_buddy/setup.py` | `discover-config-file`, `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`, `check-suite-cwd`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode`, `git-status`, `route-list-mode`, `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep` |
+| `modules/rtl_buddy/build.py` | `run-preproc`, `write-filelist`, `build-compile-cmd`, `run-process`, `interpret-compile` |
+| `modules/rtl_buddy/sim.py` | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`, `route-post`, `parse-log`, `parse-uvm-log` |
+| `modules/rtl_buddy/control.py` | `early-stop-gate` |
+| `graphs/log/summary.py` | `SummaryProcessor` logging plugin (per-graph, not a manifest module) |
+| `contracts/any.py` | `any` → `AnyContract` |
+
+The full manifest (`modules/config.yaml`) with every `class_name` is in
+[`../06-graph-yaml.md`](../06-graph-yaml.md#manifest-additions--modulesconfigyaml); the
+[Shared files](#shared-files) table below records create/append order for the multi-writer files.
+
+**Plugin-name scope (no namespace prefix).** Plugin `name:` values are flat strings resolved
+within the `modules/config.yaml` manifest — there is no `rtl_buddy:derive-seed-mode` colon
+syntax (see `docs/harness_configs/plugin_manifest.md`). The harness already keeps the module
+and contract plugin sets structurally disjoint by scoping their `sys.modules` keys with the
+`modules`/`contracts` plugin-set namespace (`docs/harness/loader_utils.md`). Sibling graphs
+(`randtest`, `regression`) **reuse** this same `modules/rtl_buddy/` package rather than
+defining their own, so they share these flat names by design — there is no cross-graph
+collision to prefix against, and none is added.
+
 ## Priority order
 
 | # | Spec | Depends on | Notes |
@@ -66,14 +96,14 @@ line — whichever appender runs first must tolerate the file already existing o
 
 | File | Created by | Appended by |
 |---|---|---|
-| `modules/rtl_test/setup.py` | [04a](04a-discover-config-file.md) | 04b–04i, 05a–05f, 10b |
-| `modules/rtl_test/build.py` | [06a](06a-run-preproc.md) | 03, 06b, 07a, 07b |
-| `modules/rtl_test/sim.py` | [08a](08a-expand-runs.md) | 08b–08f, 09a–09c |
+| `modules/rtl_buddy/setup.py` | [04a](04a-discover-config-file.md) | 04b–04i, 05a–05f, 10b |
+| `modules/rtl_buddy/build.py` | [06a](06a-run-preproc.md) | 03, 06b, 07a, 07b |
+| `modules/rtl_buddy/sim.py` | [08a](08a-expand-runs.md) | 08b–08f, 09a–09c |
 | `modules/config.yaml` (manifest) | first spec of each block above | the same specs that append the `.py` |
 
-`modules/rtl_test/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py`
+`modules/rtl_buddy/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py`
 (02) each have a single writer. The schema specs (01/01a/01b/01c) share the
-`modules/rtl_test/schema/` **package** but write separate files (`builder.py`, `suite.py`,
+`modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`,
 `model.py`), so coordinate the package layout, not a single file. Test files are per spec
 group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`,
 `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that

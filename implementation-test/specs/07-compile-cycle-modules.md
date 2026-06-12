@@ -13,14 +13,14 @@ Build the per-test compile leg: assemble the compile argv (with log paths placed
 route on the rc.
 
 This spec is split into one ticket per module — build them as independent units. Both live
-in `modules/rtl_test/build.py`; tests in `modules/tests/test_compile_cycle.py`.
+in `modules/rtl_buddy/build.py`; tests in `modules/tests/test_compile_cycle.py`.
 
 | Ticket | Module | What it does |
 |---|---|---|
 | [07a](07a-build-compile-cmd.md) | `BuildCompileCmdMod` | Assemble compile argv; fold `simv` into `ctx`. |
 | [07b](07b-interpret-compile.md) | `InterpretCompileMod` | Route on rc (`keyed_join`); emit `CompileFailResults`. |
 
-**Manifest** — these modules append to the `rtl_test/build.py` block in `modules/config.yaml`
+**Manifest** — these modules append to the `rtl_buddy/build.py` block in `modules/config.yaml`
 opened by the prep chain ([`06a`](06a-run-preproc.md)). `run-process` is registered by its own
 spec [`03`](03-run-process.md):
 

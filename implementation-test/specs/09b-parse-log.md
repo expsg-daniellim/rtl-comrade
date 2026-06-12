@@ -12,7 +12,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/sim.py`, which is created by spec
+`a69d962`). This module appends to `modules/rtl_buddy/sim.py`, which is created by spec
 [`08a`](08a-expand-runs.md) — append, do not overwrite. The file is shared with the sim-cycle
 modules (`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`,
 index [09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
@@ -66,7 +66,7 @@ class ParseLogMod:
 
 ## Deliverables
 
-In `modules/rtl_test/sim.py` (continuing from spec 08):
+In `modules/rtl_buddy/sim.py` (continuing from spec 08):
 
 - `ParseLogMod` — re-implements rtl_buddy `VlogPost.get_results()` with three corrections
   ([07 settled 15](../07-ambiguities-and-assumptions.md)): scan `test_run["log"]` line-by-line,
@@ -81,7 +81,7 @@ In `modules/rtl_test/sim.py` (continuing from spec 08):
   `test_run["log"]` → emit FAIL with the exception string as `desc` and call `log.error`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results` (corrected per [07 settled 15](../07-ambiguities-and-assumptions.md)).
 
-**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+**Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`
 (opened by [`08a`](08a-expand-runs.md); append, don't re-create):
 
 ```yaml

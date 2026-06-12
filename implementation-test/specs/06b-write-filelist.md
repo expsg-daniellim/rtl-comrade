@@ -14,7 +14,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/build.py`, which is created by spec
+`a69d962`). This module appends to `modules/rtl_buddy/build.py`, which is created by spec
 [`06a`](06a-run-preproc.md) — append, do not overwrite. The file is shared with run-process
 (`03`), the prep modules (`06a`–`06b`, index [06](06-prep-modules.md)), and the compile-cycle
 modules (`07a`–`07b`, index [07](07-compile-cycle-modules.md)); coordinate shared imports and
@@ -77,7 +77,7 @@ class WriteFilelistMod:
 
 ## Deliverables
 
-In `modules/rtl_test/build.py` (continuing from spec 03):
+In `modules/rtl_buddy/build.py` (continuing from spec 03):
 
 - `WriteFilelistMod` — `(ctx)` → reimplements `VlogFilelist.write_output(unroll=True,
   flatten=False, strip=False, deduplicate=True,
@@ -99,7 +99,7 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
   processing.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output`; called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93`. Per-tag `run.{test_tag}.f` is a Plan B divergence from the hard-coded `"run.f"` (`vlog_sim.py:157`).
 
-**Manifest** — append to the `- file: rtl_test/build.py` block in `modules/config.yaml`
+**Manifest** — append to the `- file: rtl_buddy/build.py` block in `modules/config.yaml`
 (opened by [`06a`](06a-run-preproc.md); append, don't re-create):
 
 ```yaml

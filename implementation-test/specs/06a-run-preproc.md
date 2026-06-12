@@ -12,7 +12,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module **creates** `modules/rtl_test/build.py` — it is the first spec to write the
+`a69d962`). This module **creates** `modules/rtl_buddy/build.py` — it is the first spec to write the
 file, so establish the shared imports and module-level helpers here. The file then receives
 further additions from run-process (`03`), the rest of the prep modules (`06b`, index
 [06](06-prep-modules.md)), and the compile-cycle modules (`07a`–`07b`, index
@@ -68,7 +68,7 @@ class RunPreprocMod:
 
 ## Deliverables
 
-In `modules/rtl_test/build.py` (continuing from spec 03):
+In `modules/rtl_buddy/build.py` (continuing from spec 03):
 
 - `RunPreprocMod` — `(ctx, root_cfg)` → branches on
   `ctx["test"].get_preproc_path()` (spec [01b](01b-suite-schema.md) — returns `str |
@@ -87,11 +87,11 @@ In `modules/rtl_test/build.py` (continuing from spec 03):
   from rtl_buddy**: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:119-139` — `VlogSim.pre`.
 
-**Manifest** — this module opens the `rtl_test/build.py` block in `modules/config.yaml`
+**Manifest** — this module opens the `rtl_buddy/build.py` block in `modules/config.yaml`
 (later appended to by `06b`, `07a`, `03`, `07b`):
 
 ```yaml
-- file: rtl_test/build.py
+- file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc, class_name: RunPreprocMod }
 ```

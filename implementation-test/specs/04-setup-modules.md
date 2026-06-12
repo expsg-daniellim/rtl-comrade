@@ -11,7 +11,7 @@ Implement the run-once setup chain that reimplements rtl_buddy's `RootConfig` /
 logs-directory bootstrap, and the trivial seed-mode derivation.
 
 This spec is split into one ticket per module — build them as independent units. All live
-in `modules/rtl_test/setup.py`; tests in `modules/tests/test_setup.py`.
+in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
 
 | Ticket | Module | What it does |
 |---|---|---|
@@ -25,12 +25,12 @@ in `modules/rtl_test/setup.py`; tests in `modules/tests/test_setup.py`.
 | [04h](04h-parse-suite-config.md) | `ParseSuiteConfigMod` | Deserialise `tests.yaml` → `suite_cfg`. |
 | [04i](04i-derive-seed-mode.md) | `DeriveSeedModeMod` | Map the two CLI booleans → `SeedMode`. |
 
-**Manifest** — these nine modules open the `rtl_test/setup.py` block in `modules/config.yaml`
+**Manifest** — these nine modules open the `rtl_buddy/setup.py` block in `modules/config.yaml`
 (each child ticket carries its own line). The selection/expansion chain (`05a`–`05f`) and
 `git-status` ([`10b`](10b-git-status.md)) append to the **same** block — append, don't re-create:
 
 ```yaml
-- file: rtl_test/setup.py
+- file: rtl_buddy/setup.py
   plugins:
   - { name: discover-config-file, class_name: DiscoverConfigFileMod }
   - { name: prepend-cwd-path,     class_name: PrependCwdPathMod }

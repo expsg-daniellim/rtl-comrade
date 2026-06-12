@@ -11,7 +11,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module **creates** `modules/rtl_test/setup.py` — it is the first spec to write the
+`a69d962`). This module **creates** `modules/rtl_buddy/setup.py` — it is the first spec to write the
 file, so establish the shared imports and module-level helpers here. The file then receives
 further additions from the rest of the setup chain (`04b`–`04i`, index
 [04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`, index
@@ -71,7 +71,7 @@ class DiscoverConfigFileMod:
 
 ## Deliverables
 
-In `modules/rtl_test/setup.py`:
+In `modules/rtl_buddy/setup.py`:
 
 - `DiscoverConfigFileMod` — walks up the dir tree from CWD for a filename (config:
   `filename:str`, `max_levels:int = 8`); stops at git root or filesystem root; emits the
@@ -83,11 +83,11 @@ In `modules/rtl_test/setup.py`:
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:16-36` — `_discover_root_cfg`.
 
-**Manifest** — this module opens the `rtl_test/setup.py` block in `modules/config.yaml`
+**Manifest** — this module opens the `rtl_buddy/setup.py` block in `modules/config.yaml`
 (later appended to by `04b`–`04i`, `05a`–`05f`, `10b`):
 
 ```yaml
-- file: rtl_test/setup.py
+- file: rtl_buddy/setup.py
   plugins:
   - { name: discover-config-file, class_name: DiscoverConfigFileMod }
 ```

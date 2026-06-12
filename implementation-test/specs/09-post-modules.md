@@ -10,7 +10,7 @@ reads `ctx["test"].uvm`; `ParseUvmLogMod` reads `ctx["test"].uvm.max_warns` /
 Implement the log-parse trio: a uvm/plain classifier router and two atomic parsers.
 
 This spec is split into one ticket per module — build them as independent units. All live
-in `modules/rtl_test/sim.py` (continuing from spec 08); tests in
+in `modules/rtl_buddy/sim.py` (continuing from spec 08); tests in
 `modules/tests/test_post.py`.
 
 | Ticket | Module | What it does |
@@ -19,7 +19,7 @@ in `modules/rtl_test/sim.py` (continuing from spec 08); tests in
 | [09b](09b-parse-log.md) | `ParseLogMod` | Parse a plain sim log → `TestResults`. |
 | [09c](09c-parse-uvm-log.md) | `ParseUvmLogMod` | Parse a UVM Report Summary → `TestResults`. |
 
-**Manifest** — these three modules append to the `rtl_test/sim.py` block in `modules/config.yaml`
+**Manifest** — these three modules append to the `rtl_buddy/sim.py` block in `modules/config.yaml`
 opened by the sim chain ([`08a`](08a-expand-runs.md)):
 
 ```yaml

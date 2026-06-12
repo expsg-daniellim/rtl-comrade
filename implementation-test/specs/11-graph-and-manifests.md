@@ -34,7 +34,7 @@ subcommand in `rtl_comrade_config.yaml`.
   sim cycle, post, control). The four file blocks each child spec contributes to (verbatim from
   [06](../06-graph-yaml.md)):
   ```yaml
-  - file: rtl_test/setup.py
+  - file: rtl_buddy/setup.py
     plugins:
     - { name: discover-config-file, class_name: DiscoverConfigFileMod }
     - { name: prepend-cwd-path,     class_name: PrependCwdPathMod }
@@ -52,14 +52,14 @@ subcommand in `rtl_comrade_config.yaml`.
     - { name: filter-reglvl,        class_name: FilterRegLvlMod }
     - { name: load-model,           class_name: LoadModelMod }
     - { name: expand-sweep,         class_name: ExpandSweepMod }
-  - file: rtl_test/build.py
+  - file: rtl_buddy/build.py
     plugins:
     - { name: run-preproc,       class_name: RunPreprocMod }
     - { name: write-filelist,    class_name: WriteFilelistMod }
     - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
     - { name: run-process,       class_name: RunProcessMod }
     - { name: interpret-compile, class_name: InterpretCompileMod }
-  - file: rtl_test/sim.py
+  - file: rtl_buddy/sim.py
     plugins:
     - { name: expand-runs,       class_name: ExpandRunsMod }
     - { name: resolve-seed,      class_name: ResolveSeedMod }
@@ -70,7 +70,7 @@ subcommand in `rtl_comrade_config.yaml`.
     - { name: route-post,        class_name: RoutePostMod }
     - { name: parse-log,         class_name: ParseLogMod }
     - { name: parse-uvm-log,     class_name: ParseUvmLogMod }
-  - file: rtl_test/control.py
+  - file: rtl_buddy/control.py
     plugins:
     - { name: early-stop-gate,   class_name: EarlyStopGateMod }
   ```

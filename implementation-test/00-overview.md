@@ -87,63 +87,125 @@ only the ports they declare, and no module contains scheduling.
 
 ## End-to-end dataflow at a glance
 
+The whole graph in one Mermaid flowchart, rebuilt from the authoritative edge list in
+[`06-graph-yaml.md`](06-graph-yaml.md). Edges are **colour- and style-coded by type** so a
+reviewer can trace any one type without another crossing it:
+
+- **blue, bold** — main-line continue ports (the work spine), each labelled with its payload;
+- **grey, dashed** — the 13 **unwired** terminal ports routing an item *off the main line*
+  (and `git-status`, which falls through to the console);
+- **orange** — setup chain + persistent config broadcasts (`root_cfg`, `builder_cfg`, …);
+- **purple** — env-setup sequencing (`env_ready` / `_cwd`), ordering the `$PATH` prepend and
+  `logs/` `mkdir` upstream of every subprocess;
+- **green** — CLI subcommand options (rounded nodes).
+
+`select`/`sweep`/`runs` are the only fan-out generators; `cc-int`/`randseed` the only joins
+(`keyed_join`). The same node names appear in the [04 node table](04-pipeline-and-contracts.md#node-table).
+
+```mermaid
+flowchart TD
+  route_list["route-list"] -->|run| select["select<br/>(fan-out)"]
+  select -->|ctx| filter["filter"]
+  filter -->|keep| load_model["load-model"]
+  load_model -->|ctx| sweep["sweep<br/>(fan-out)"]
+  sweep -->|ctx| preproc["preproc"]
+  preproc -->|payload| gate_pre["gate-pre"]
+  gate_pre -->|go| filelist["filelist"]
+  filelist -->|"ctx + filelist"| cc_build["cc-build"]
+  cc_build -->|command| cc_run["cc-run<br/>(run-process)"]
+  cc_build -->|ctx| cc_int["cc-int<br/>(keyed_join)"]
+  cc_run -->|proc| cc_int
+  cc_int -->|ok| gate_comp["gate-comp"]
+  gate_comp -->|go| runs["runs<br/>(fan-out)"]
+  runs -->|ctx| seed["seed"]
+  seed -->|"ctx + seed"| sim_build["sim-build"]
+  sim_build -->|"command + timeout"| sim_run["sim-run<br/>(run-process)"]
+  sim_build -->|"ctx + sim_cmd"| randseed["randseed<br/>(keyed_join)"]
+  sim_run -->|proc| randseed
+  randseed -->|test_run| link_latest["link-latest"]
+  link_latest -->|test_run| sim_int["sim-int"]
+  sim_int -->|ok| gate_sim["gate-sim"]
+  gate_sim -->|go| route_post["route-post"]
+  route_post -->|plain| parse_log["parse-log"]
+  route_post -->|uvm| parse_uvm["parse-uvm-log"]
+  route_list -->|list| list_names["list-names<br/>(prints names; exit 0)"]
+
+  filter -.skip.-> TERM["unwired terminal ports<br/>log.info(test_result); fail/timeout also log.error → exit 1<br/>SummaryProcessor renders the table in finalise()"]
+  load_model -.fail.-> TERM
+  sweep -.fail.-> TERM
+  preproc -.fail.-> TERM
+  gate_pre -.stop.-> TERM
+  filelist -.fail.-> TERM
+  cc_int -.fail.-> TERM
+  gate_comp -.stop.-> TERM
+  seed -.fail.-> TERM
+  sim_int -.timeout.-> TERM
+  gate_sim -.stop.-> TERM
+  parse_log -.result.-> TERM
+  parse_uvm -.result.-> TERM
+
+  discover_root["discover-root"] -->|path| parse_root["parse-root"]
+  parse_root -->|root_cfg| select_platform["select-platform"]
+  select_platform -->|platform_cfg| resolve_builder["resolve-builder"]
+  check_cwd["check-cwd"] -->|test_config_path| parse_suite["parse-suite"]
+  parse_root -. root_cfg .-> sweep
+  parse_root -. root_cfg .-> preproc
+  resolve_builder -. builder_cfg .-> filter
+  resolve_builder -. builder_cfg .-> cc_build
+  resolve_builder -. builder_cfg .-> seed
+  resolve_builder -. builder_cfg .-> sim_build
+  seed_mode["seed-mode"] -. seed_mode .-> seed
+  parse_suite -. suite_cfg .-> route_list
+
+  prepend_path["prepend-path"] -->|env_ready| ensure_logs["ensure-logs"]
+  check_cwd -->|_cwd| ensure_logs
+  ensure_logs -->|env_ready| cc_run
+  ensure_logs -->|env_ready| sim_run
+
+  c_test_config(["test_config"]) --> check_cwd
+  c_logs_dir(["logs_dir"]) --> ensure_logs
+  c_logs_dir --> cc_build
+  c_logs_dir --> sim_build
+  c_logs_dir --> seed
+  c_builder(["builder"]) --> resolve_builder
+  c_test_name(["test_name"]) --> select
+  c_list(["list"]) --> route_list
+  c_rnd_new(["rnd_new"]) --> seed_mode
+  c_rnd_last(["rnd_last"]) --> seed_mode
+  c_builder_mode(["builder_mode"]) --> cc_build
+  c_builder_mode --> sim_build
+  c_early_stop(["early_stop"]) --> gate_pre
+  c_early_stop --> gate_comp
+  c_early_stop --> gate_sim
+
+  git_status["git-status"] -. "log git_state (→ console)" .-> GS(["console"])
+
+  classDef fanout fill:#e6f2ff,stroke:#1f6feb;
+  classDef join fill:#fff3cd,stroke:#bf8700;
+  classDef term fill:#f5f5f5,stroke:#888888,stroke-dasharray:4 3;
+  classDef cli fill:#eef7ee,stroke:#2da44e;
+  class select,sweep,runs fanout;
+  class cc_int,randseed join;
+  class TERM term;
+  class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
+
+  %% main-line continue ports (blue)
+  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 stroke:#1f6feb,stroke-width:2px
+  %% terminal routing (grey, dashed via -.->)
+  linkStyle 25,26,27,28,29,30,31,32,33,34,35,36,37 stroke:#6e7781,stroke-width:1px
+  %% setup chain + persistent config (orange)
+  linkStyle 38,39,40,41,42,43,44,45,46,47,48,49 stroke:#bf8700,stroke-width:1.5px
+  %% env sequencing (purple)
+  linkStyle 50,51,52,53 stroke:#8250df,stroke-width:1.5px
+  %% CLI options (green)
+  linkStyle 54,55,56,57,58,59,60,61,62,63,64,65,66,67,68 stroke:#1a7f37,stroke-width:1.5px
+  %% git-status (grey)
+  linkStyle 69 stroke:#6e7781,stroke-width:1px
 ```
- CLI edges ──────────────────────────────────────────────────────────────────────────────┐
- (test_config, test_name, list, rnd_new/rnd_last, builder, builder_mode, early_stop)        │
-                                                                                            │
- discover-root→parse-root→select-platform→resolve-builder ─► builder_cfg ─ persistent ────┐ │
- parse-root ─► root_cfg (persistent) ;  seed-mode ─► seed_mode                            │ │
- parse-suite ─► suite_cfg ─► route-list ──list──► list-names (prints names; exit 0)       │ │
-        │                                                                                 │ │
-        ▼  MAIN LINE carries ctx = {key, test, run_id} → test_run after write-randseed    │ │
- route-list ──run──► select (unit, FAN-OUT) ─► ctx per test                              │ │
-        ▼                                                                                 │ │
- filter ──keep──► load-model ─► ┐   └──skip───────────────────────────────────────────┐  │ │
-        ▼                       │                                                       │  │ │
- sweep (FAN-OUT)                │                                                       │  │ │
-        ▼         │                                                                    │   │ │
- preproc ◄─ root_cfg                                                                   │   │ │
-        ▼         │                                                                    │   │ │
- gate-pre ──go──► ┤         └──stop───────────────────────────────────────────────►   │   │ │
-        ▼         │                                                                  M │   │ │
- filelist ─► (ctx, filelist)                                                         E │   │ │
-        ▼         │                                                                  R │   │ │
- cc-build ◄─ builder_cfg ─► ctx(+simv) ───────┐  + argv ─► cc-run (run-process)       G │   │ │
-        │                                     │                  │ proc{key,rc,...}   E │   │ │
-        └─────────────────────────────────────┴──► cc-int (keyed_join ctx⋈proc)      │   │ │
-                                          ok ─► ctx          fail ──────────────────► ┤   │ │
-        ▼                                                                             │   │ │
- gate-comp ──go──► ┤         └──stop──────────────────────────────────────────────►  │   │ │
-        ▼          │                                                                  │   │ │
- runs (FAN-OUT per run-id) ◄─ run_ids                                                 │   │ │
-        ▼          │                                                                  │   │ │
- resolve-seed ◄─ seed_mode, builder_cfg ─► (ctx, seed)                                │   │ │
-        ▼          │                                                                  │   │ │
- sim-build ◄─ builder_cfg ─► ctx ────────────┐  + command{argv,log paths} ─► sim-run (run-process: redirects to .log/.err)│
-        │                                     │                                │ proc{key,rc,paths}│ │
-        └─────────────────────────────────────┴─► randseed (keyed_join; writes .randseed) ─► link-latest (symlinks) ─► interpret-sim
-                                          ok ─► ctx          timeout ───────────────► ┤   │ │
-        ▼          │                                                                  │   │ │
- gate-sim ──go──► ┤         └──stop───────────────────────────────────────────────►  │   │ │
-        ▼                                                                             │   │ │
- route-post ─uvm─► parse-uvm-log ─► {key, result}  (port UNWIRED) + log.info("test_result")
-           └plain► parse-log ─────► {key, result}  (port UNWIRED) + log.info("test_result")
 
- ── every terminal port above (skip, stop×3, cc fail, timeout, *_fail, parse result) is
-    UNWIRED; each terminal node log.info("test_result", …); failures also log.error (→ exit 1)
- git-status (setup) ─► log.info("git_state", …)
-
- SummaryProcessor (per-graph logging plugin) ── accumulates test_result events (results only),
-        renders the summary table in finalise() (per-run teardown, after gather);
-        git_state is not collected — it falls through to the console
-
- (persistent config fans out from parse-root / resolve-builder / seed-mode / CLI to nodes above)
-```
-
-`select`, `sweep`, and `runs` are the only fan-out points (generators). `cc-int` and
-`randseed` are the only joins. There is **no fan-in node** — the terminal ports are unwired
-and the summary is a logging concern (TODO #15). Everything else is
-single-input/single-output with a plain `default` contract.
+There is **no fan-in node** — the 13 terminal ports are unwired and the summary is a logging
+concern (TODO #15). Apart from the three fan-out generators and the two joins, every node is
+single-input / single-output on a plain `default` contract.
 
 ## Why this maps cleanly
 

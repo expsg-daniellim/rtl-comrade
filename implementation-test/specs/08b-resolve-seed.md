@@ -13,7 +13,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/sim.py`, which is created by spec
+`a69d962`). This module appends to `modules/rtl_buddy/sim.py`, which is created by spec
 [`08a`](08a-expand-runs.md) — append, do not overwrite. The file is shared with the sim-cycle
 modules (`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`,
 index [09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
@@ -79,7 +79,7 @@ class ResolveSeedMod:
 
 ## Deliverables
 
-In `modules/rtl_test/sim.py`:
+In `modules/rtl_buddy/sim.py`:
 
 - `ResolveSeedMod` — `(ctx, seed_mode, builder_cfg, logs_dir:str="logs")` → integrated
   seed-producer for all three modes:
@@ -104,7 +104,7 @@ In `modules/rtl_test/sim.py`:
   failure path.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute` seed resolution (REPLAY `:197-213`, NEW `:214-216`, DEFAULT `:218-219`).
 
-**Manifest** — append to the `- file: rtl_test/sim.py` block in `modules/config.yaml`
+**Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`
 (opened by [`08a`](08a-expand-runs.md); append, don't re-create):
 
 ```yaml

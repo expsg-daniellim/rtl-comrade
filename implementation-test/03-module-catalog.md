@@ -127,7 +127,7 @@ test to its testbench (within-file) and recording the suite directory on each te
 `load-model` can resolve `model_path` later. Model loading is deferred to `load-model`.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__`: `from_yaml(SuiteConfigFile, ...)`, the testbench bind `tbs = {tb.get_name(): tb for tb in data.testbenches}` (`suite.py:40`), and `test.initialise(config_dir, tbs)` (`suite.py:46`). Per-test `initialise` at `config/test.py:320-323`. (Plan B defers `load-model`, which rtl_buddy does eagerly at `test.py:322`.)
-- **In:** `test_config:Path` (resolved by `check-suite-cwd` in test/randtest, or by
+- **In:** `test_config_path:Path` (resolved by `check-suite-cwd` in test/randtest, or by
   `parse-reg-config` in regression — see [08](08-sibling-graphs.md))
 - **Out:** default → `suite_cfg`
 - **Log idiom:** `log.critical` on `tests.yaml` missing/malformed or testbench bind failure. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).

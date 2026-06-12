@@ -93,7 +93,7 @@ Manifest entry in `contracts/config.yaml`:
   - { name: any, class_name: AnyContract }
 ```
 
-### ~~`modules/rtl_test/control.py` — `FanInResultsMod`~~ (removed by TODO #15)
+### ~~`modules/rtl_buddy/control.py` — `FanInResultsMod`~~ (removed by TODO #15)
 
 The relay module is **not built**. Terminal ports are unwired and the summary is rendered by
 the `SummaryProcessor` logging plugin ([spec 10](10-control-aggregate-modules.md)). The

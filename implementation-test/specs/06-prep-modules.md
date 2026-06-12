@@ -12,7 +12,7 @@ Implement the per-test preprocessing hook and filelist generator that sit betwee
 expansion and compile.
 
 This spec is split into one ticket per module — build them as independent units. Both live
-in `modules/rtl_test/build.py` (continuing from spec 03); tests in
+in `modules/rtl_buddy/build.py` (continuing from spec 03); tests in
 `modules/tests/test_prep.py`.
 
 | Ticket | Module | What it does |
@@ -20,11 +20,11 @@ in `modules/rtl_test/build.py` (continuing from spec 03); tests in
 | [06a](06a-run-preproc.md) | `RunPreprocMod` | Optional preprocessing hook (mutates `ctx["test"]`). |
 | [06b](06b-write-filelist.md) | `WriteFilelistMod` | Generate the per-tag `run.{test_tag}.f`. |
 
-**Manifest** — these two modules open the `rtl_test/build.py` block in `modules/config.yaml`; the
+**Manifest** — these two modules open the `rtl_buddy/build.py` block in `modules/config.yaml`; the
 compile cycle (`07a`, [`03`](03-run-process.md), `07b`) appends to the same block:
 
 ```yaml
-- file: rtl_test/build.py
+- file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc,    class_name: RunPreprocMod }
   - { name: write-filelist, class_name: WriteFilelistMod }

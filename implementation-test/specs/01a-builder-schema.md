@@ -12,7 +12,7 @@ this spec cites (anchored to `v1.4.0`, commit `a69d962`). The in-repo `@serde` i
 types and `field(rename=...)` for verbatim YAML field names — is shown by the config-bearing
 example in `docs/modules/implementation.md`; [`02 — payload conventions`](../02-payload-conventions.md)
 holds the canonical type and `is_pass()` table the port must match. All four schema specs (`01`,
-`01a`, `01b`, `01c`) build into the shared `modules/rtl_test/schema/` package — coordinate the
+`01a`, `01b`, `01c`) build into the shared `modules/rtl_buddy/schema/` package — coordinate the
 module layout with the others.
 
 ## Goal
@@ -25,7 +25,7 @@ drop-in (see [07 settled 1](../07-ambiguities-and-assumptions.md)).
 
 ## Deliverables
 
-A single file, e.g. `modules/rtl_test/schema/builder.py`, exporting `RtlBuilderConfig`,
+A single file, `modules/rtl_buddy/schema/builder.py`, exporting `RtlBuilderConfig`,
 `RtlBuilderConfigOpts`, and the `process_opts` helper.
 
 ### `process_opts` deserialiser

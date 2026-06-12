@@ -14,7 +14,7 @@ then write `.randseed` (the second keyed_join), force the `test.*` symlinks, and
 on timeout.
 
 This spec is split into one ticket per module — build them as independent units. All live
-in `modules/rtl_test/sim.py`; tests in `modules/tests/test_sim_cycle.py`.
+in `modules/rtl_buddy/sim.py`; tests in `modules/tests/test_sim_cycle.py`.
 
 | Ticket | Module | What it does |
 |---|---|---|
@@ -25,11 +25,11 @@ in `modules/rtl_test/sim.py`; tests in `modules/tests/test_sim_cycle.py`.
 | [08e](08e-link-latest.md) | `LinkLatestMod` | Force the `test.*` symlinks. |
 | [08f](08f-interpret-sim.md) | `InterpretSimMod` | Route on timeout. |
 
-**Manifest** — these six modules open the `rtl_test/sim.py` block in `modules/config.yaml`; the
+**Manifest** — these six modules open the `rtl_buddy/sim.py` block in `modules/config.yaml`; the
 post chain (`09a`–`09c`) appends to the same block:
 
 ```yaml
-- file: rtl_test/sim.py
+- file: rtl_buddy/sim.py
   plugins:
   - { name: expand-runs,    class_name: ExpandRunsMod }
   - { name: resolve-seed,   class_name: ResolveSeedMod }

@@ -10,7 +10,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module appends to `modules/rtl_test/build.py`, which is created by spec
+`a69d962`). This module appends to `modules/rtl_buddy/build.py`, which is created by spec
 [`06a`](06a-run-preproc.md) — append, do not overwrite. The file is shared with run-process
 (`03`), the prep modules (`06a`–`06b`, index [06](06-prep-modules.md)), and the compile-cycle
 modules (`07a`–`07b`, index [07](07-compile-cycle-modules.md)); coordinate shared imports and
@@ -109,7 +109,7 @@ class RunProcessMod:
 
 ## Deliverables
 
-`modules/rtl_test/build.py::RunProcessMod`, refined per the Lifecycle above. The
+`modules/rtl_buddy/build.py::RunProcessMod`, refined per the Lifecycle above. The
 [03](../03-module-catalog.md) catalog sketch is illustrative; this spec is authoritative.
 
 **Compatibility source:**
@@ -229,7 +229,7 @@ no env-setup node is wired.
 
 ### Manifest
 
-Append to the `- file: rtl_test/build.py` block in `modules/config.yaml` (opened by
+Append to the `- file: rtl_buddy/build.py` block in `modules/config.yaml` (opened by
 [`06a`](06a-run-preproc.md); append, don't re-create):
 
 ```yaml

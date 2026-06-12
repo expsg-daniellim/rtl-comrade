@@ -13,7 +13,7 @@ Implement the list-routing front end, the test stream entry, level filtering, la
 model loading, and sweep expansion.
 
 This spec is split into one ticket per module — build them as independent units. All live
-in `modules/rtl_test/setup.py` (continuing from spec 04); tests in
+in `modules/rtl_buddy/setup.py` (continuing from spec 04); tests in
 `modules/tests/test_selection.py`.
 
 | Ticket | Module | What it does |
@@ -25,7 +25,7 @@ in `modules/rtl_test/setup.py` (continuing from spec 04); tests in
 | [05e](05e-load-model.md) | `LoadModelMod` | Lazily attach the `ModelConfig`. |
 | [05f](05f-expand-sweep.md) | `ExpandSweepMod` | Expand into N sweep variants. |
 
-**Manifest** — these six modules append to the `rtl_test/setup.py` block in `modules/config.yaml`
+**Manifest** — these six modules append to the `rtl_buddy/setup.py` block in `modules/config.yaml`
 opened by the setup chain ([`04a`](04a-discover-config-file.md)); each child ticket carries its
 own line (append, don't re-create the block):
 

@@ -13,7 +13,7 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | S4 | `resolve-builder` | `resolve-builder` | `unit` | `platform_cfg`; CLI `builder` |
 | S4.5 | `check-cwd` | `check-suite-cwd` | `unit` | CLI `test_config` |
 | S4.6 | `ensure-logs` | `ensure-logs-dir` | `unit` | CLI `logs_dir`; `env_ready` (from `prepend-path`); `_cwd` (from `check-cwd`) |
-| S5 | `parse-suite` | `parse-suite-config` | `unit` | `test_config` (from `check-cwd`) |
+| S5 | `parse-suite` | `parse-suite-config` | `unit` | `test_config_path` (from `check-cwd`) |
 | S6 | `seed-mode` | `derive-seed-mode` | `unit` | CLI `rnd_new`,`rnd_last` |
 | S7 | `git-status` | `git-status` | `unit` | — (zero-input; logs `git_state`) |
 | 0 | `route-list` | `route-list-mode` | `unit` | `suite_cfg`; CLI `list` |
@@ -47,6 +47,11 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 > `SummaryProcessor` logging plugin in its `finalise()` hook (git state falls through to the
 > console separately). See
 > [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
+
+The same nodes are drawn in the overview's
+[combined dataflow diagram](00-overview.md#end-to-end-dataflow-at-a-glance), where edges are
+colour- and style-coded by type (main-line / terminal / config / env / CLI) so each can be
+traced without conflict. The authoritative edge list is [`06-graph-yaml.md`](06-graph-yaml.md).
 
 Contracts in play: `unit`, `default` (often + `persistent_inputs`), and `keyed_join`
 (existing). No bespoke contracts: the former `serial_acquire`/`any.release_lock` parallel-safety

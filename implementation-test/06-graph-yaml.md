@@ -142,7 +142,7 @@ edges:
 - { src: { node: discover-root },     dst: { node: parse-root,      port: path } }
 - { src: { node: parse-root },        dst: { node: select-platform, port: root_cfg } }
 - { src: { node: select-platform },   dst: { node: resolve-builder, port: platform_cfg } }
-- { src: { node: check-cwd },         dst: { node: parse-suite,     port: test_config } }
+- { src: { node: check-cwd },         dst: { node: parse-suite,     port: test_config_path } }
 
 # ---- env setup: PATH-prepend + logs/ bootstrap sequenced upstream of every subprocess ----
 # Chain: prepend-path → ensure-logs → cc-run/sim-run. ensure-logs additionally takes the
@@ -239,7 +239,7 @@ Notes:
 ## Manifest additions — `modules/config.yaml`
 
 ```yaml
-- file: rtl_test/setup.py
+- file: rtl_buddy/setup.py
   plugins:
   - { name: discover-config-file, class_name: DiscoverConfigFileMod }
   - { name: prepend-cwd-path,     class_name: PrependCwdPathMod }
@@ -257,14 +257,14 @@ Notes:
   - { name: filter-reglvl,        class_name: FilterRegLvlMod }
   - { name: load-model,           class_name: LoadModelMod }
   - { name: expand-sweep,         class_name: ExpandSweepMod }
-- file: rtl_test/build.py
+- file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc,       class_name: RunPreprocMod }
   - { name: write-filelist,    class_name: WriteFilelistMod }
   - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
   - { name: run-process,       class_name: RunProcessMod }
   - { name: interpret-compile, class_name: InterpretCompileMod }
-- file: rtl_test/sim.py
+- file: rtl_buddy/sim.py
   plugins:
   - { name: expand-runs,       class_name: ExpandRunsMod }
   - { name: resolve-seed,      class_name: ResolveSeedMod }
@@ -275,7 +275,7 @@ Notes:
   - { name: route-post,        class_name: RoutePostMod }
   - { name: parse-log,         class_name: ParseLogMod }
   - { name: parse-uvm-log,     class_name: ParseUvmLogMod }
-- file: rtl_test/control.py
+- file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate,   class_name: EarlyStopGateMod }
   # fan-in-results / aggregate-results removed by TODO #15 — summary is a logging plugin
@@ -310,4 +310,6 @@ per-invocation-subdir change ([07](07-ambiguities-and-assumptions.md) item 17).
 
 The modules **reimplement** `rtl_buddy` natively; only the config-schema dataclasses are kept
 identical, so existing `root_config.yaml`/`tests.yaml`/`models.yaml` load drop-in — see
-[07](07-ambiguities-and-assumptions.md) item 1. File grouping is a suggestion.
+[07](07-ambiguities-and-assumptions.md) item 1. The package name (`modules/rtl_buddy/`) and
+the file grouping above are **pinned**, not a suggestion — see
+[specs/README.md — Module package layout](specs/README.md#module-package-layout-pinned).

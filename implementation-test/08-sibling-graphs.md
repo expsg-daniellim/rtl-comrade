@@ -172,12 +172,13 @@ default-resolution lives in one obvious place.
    between modules and contracts is exactly what makes this possible — `unit` and `default`
    both deliver one dict-of-inputs per invocation in the same shape the module expects, so
    the module is contract-agnostic. The wiring on the input side is what changes: in test,
-   the `test_config` port is fed by a CLI edge; in regression, it's fed by `parse-reg-config`'s
-   default output. The module doesn't care which.
+   the `test_config_path` port is fed by `check-suite-cwd`'s resolved path; in regression, it's
+   fed by `parse-reg-config`'s default output. The module doesn't care which.
 
-   Build-time verification points: confirm the harness allows the `test_config` port to
-   accept a `Path` payload in regression (vs the `str` from the CLI edge in test) — both
-   should hit the same `Path(...)` parsing inside the module; and confirm that the
+   Build-time verification points: confirm the harness handles the `test_config_path` port
+   receiving a resolved `Path` from a `unit` upstream (`check-suite-cwd`) in test and from a
+   `default` upstream (`parse-reg-config`, one per suite) in regression — the same `Path`
+   payload the module parses either way; and confirm that the
    `EndSentinel` propagation from a `default`-contract `parse-suite-config` correctly drains
    the downstream pipeline at end-of-stream (it will, because `default` returns
    `EndSentinel` when its required port ends, which cascades through the rest).

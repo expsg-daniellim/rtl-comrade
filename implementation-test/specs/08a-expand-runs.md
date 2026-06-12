@@ -11,7 +11,7 @@ signature, the allowed output forms (plain return / named-port tuple / generator
 `finalise()` teardown hook, and config-bearing modules; `modules/io.py` and `modules/funcs.py`
 are the shipped examples. Open the rtl_buddy source named in the **Compatibility source** entry
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
-`a69d962`). This module **creates** `modules/rtl_test/sim.py` — it is the first spec to write the file,
+`a69d962`). This module **creates** `modules/rtl_buddy/sim.py` — it is the first spec to write the file,
 so establish the shared imports and module-level helpers here. The file then receives further
 additions from the rest of the sim-cycle modules (`08b`–`08f`, index
 [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`, index
@@ -50,18 +50,18 @@ class ExpandRunsMod:
 
 ## Deliverables
 
-In `modules/rtl_test/sim.py`:
+In `modules/rtl_buddy/sim.py`:
 
 - `ExpandRunsMod` — `(ctx, run_ids:list=[None])` → generator yielding one fresh `ctx`
   per `run_id`, with `ctx["run_id"]` set and key suffixed `#run_id` (when `run_id is not
   None`). For `run_ids=[None]` emits one `ctx` unchanged (key unmodified, `run_id=None`).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:82-117` — `run_multiple`'s run-id loop (vs `run` at `:51-80`); dispatch at `rtl_buddy.py:297-299`.
 
-**Manifest** — this module opens the `rtl_test/sim.py` block in `modules/config.yaml`
+**Manifest** — this module opens the `rtl_buddy/sim.py` block in `modules/config.yaml`
 (later appended to by `08b`–`08f`, `09a`–`09c`):
 
 ```yaml
-- file: rtl_test/sim.py
+- file: rtl_buddy/sim.py
   plugins:
   - { name: expand-runs, class_name: ExpandRunsMod }
 ```
