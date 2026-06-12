@@ -46,5 +46,5 @@ Quick reference. See `implementation-test-todos.md` for full detail on any item.
 
 | # | Title | Status |
 |---|---|---|
-| 28 | Pin the module file-layout and package conventions | **Open** |
-| 29 | Clarify the dataflow diagram | **Open** |
+| 28 | Pin the module file-layout and package conventions | Resolved 2026-06-12 (package pinned to `modules/rtl_buddy/`; step 3 de-scoped — no namespace-prefix feature) |
+| 29 | Clarify the dataflow diagram | Resolved 2026-06-12 (ASCII replaced by one combined Mermaid graph, edges colour-coded by type: main-line/terminal/config/env/CLI; cross-linked from 04) |

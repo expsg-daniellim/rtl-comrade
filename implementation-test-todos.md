@@ -783,7 +783,7 @@ were completed under TODO #32, and step 2 now names a reading list for every cat
   inference, output forms, `finalise()`, config-bearing modules) with `modules/io.py` /
   `modules/funcs.py` as the shipped examples, points at the spec's own **Compatibility source**
   entry for the rtl_buddy file:line it mirrors (anchored to `v1.4.0`, commit `a69d962`; paired
-  with TODO #16), and names the sibling specs appending to the same `modules/rtl_test/*.py`
+  with TODO #16), and names the sibling specs appending to the same `modules/rtl_buddy/*.py`
   file (grouped by file: `setup.py`, `build.py`, `sim.py`; `10a` is the sole occupant of
   `control.py`).
 - **Contract spec** (`specs/02`): names `docs/contracts/implementation.md` (`get_inputs()`,
@@ -804,7 +804,7 @@ The original ticket text is kept below for the record.
    - **module spec** — `docs/modules/implementation.md`
    - **contract spec** — `docs/contracts/implementation.md` (+ `docs/contracts/index.md`)
    - **logging-plugin spec** — `docs/logger/implementation.md` + the "Per-Graph Custom Logging" section of `docs/harness/logging.md`
-   - **schema spec** (`01`/`01a`/`01b`/`01c`) — no harness doc loads these serde dataclasses; cite the rtl_buddy `config/*.py` source, the `@serde` idiom in `docs/modules/implementation.md`, and `02-payload-conventions.md` (the canonical type / `is_pass()` table). All four share `modules/rtl_test/schema/`.
+   - **schema spec** (`01`/`01a`/`01b`/`01c`) — no harness doc loads these serde dataclasses; cite the rtl_buddy `config/*.py` source, the `@serde` idiom in `docs/modules/implementation.md`, and `02-payload-conventions.md` (the canonical type / `is_pass()` table). All four share `modules/rtl_buddy/schema/`.
    - **graph/manifest spec** (`11`) — `docs/harness_configs/graph.md`, `docs/harness_configs/plugin_manifest.md`, `docs/harness_configs/rtl_comrade_config.md`, `docs/harness/validation.md`, and `06-graph-yaml.md` (the design source it copies verbatim)
    - **end-to-end spec** (`12`) — `docs/running.md` + `docs/testing.md` + `rtl_buddy/AGENTS.md` (validation section)
    - **thin parent indexes** (`04`–`10`) and `specs/README.md` — **exempt** (navigation, not buildable units; each child ticket carries its own reading list).
@@ -891,15 +891,15 @@ replaced with the exact `modules/config.yaml` addition inlined into the spec (ve
 
 - **Per-module child tickets** (`03`, `04a`–`04i`, `05a`–`05f`, `06a`–`06b`, `07a`–`07b`,
   `08a`–`08f`, `09a`–`09c`, `10a`, `10b`) each carry a `**Manifest**` block with the single
-  `- { name: …, class_name: …Mod }` line for that module, naming the `- file: rtl_test/<file>.py`
+  `- { name: …, class_name: …Mod }` line for that module, naming the `- file: rtl_buddy/<file>.py`
   block it joins. The `.py` target file path is already stated at the head of each Deliverables
   section. `03-run-process.md` had no manifest line at all — one was added.
 - **Shared-file forward references** (concrete-step 3): the four `modules/config.yaml` file blocks
   are each shared across specs, so every block names its *opener* and its *appenders*.
-  `rtl_test/setup.py` is opened by [`04a`] and appended by `04b`–`04i` / `05a`–`05f` / `10b`;
-  `rtl_test/build.py` opened by [`06a`], appended by `06b` / `07a` / `03` / `07b`;
-  `rtl_test/sim.py` opened by [`08a`], appended by `08b`–`08f` / `09a`–`09c`;
-  `rtl_test/control.py` is a single-entry block (`10a`). Opener tickets show the `- file:` header;
+  `rtl_buddy/setup.py` is opened by [`04a`] and appended by `04b`–`04i` / `05a`–`05f` / `10b`;
+  `rtl_buddy/build.py` opened by [`06a`], appended by `06b` / `07a` / `03` / `07b`;
+  `rtl_buddy/sim.py` opened by [`08a`], appended by `08b`–`08f` / `09a`–`09c`;
+  `rtl_buddy/control.py` is a single-entry block (`10a`). Opener tickets show the `- file:` header;
   appenders show only the indented plugin line with an "append, don't re-create" note.
 - **Index specs** (`04`–`10`) carry the consolidated file-block view for their children, flagging
   which sibling chains append to the same block.
@@ -915,7 +915,7 @@ Specs currently say "Manifest entries per [06]" — the implementer must open `0
 
 #### Concrete steps
 
-1. For each module spec, state the target file path explicitly (e.g., `File: modules/rtl_test/sim.py`).
+1. For each module spec, state the target file path explicitly (e.g., `File: modules/rtl_buddy/sim.py`).
 2. Include the exact YAML to append to `modules/config.yaml` (and the contracts manifest where relevant).
 3. If the file is shared across specs, name which earlier spec creates it and which later specs append to it (see TODO #26, forward-reference notes).
 
@@ -1157,7 +1157,7 @@ sections added; TODO #20 step 2 now names a reading list (or exemption) for ever
   the section cites the rtl_buddy `config/*.py` source each spec already names (anchored
   `v1.4.0`), the `@serde` idiom in `docs/modules/implementation.md`, and
   `02-payload-conventions.md` (the canonical type / `is_pass()` table the port must match), and
-  records that all four share the `modules/rtl_test/schema/` package.
+  records that all four share the `modules/rtl_buddy/schema/` package.
 - **Graph / manifests** (`11`): cites `docs/harness_configs/graph.md` (incl. its "Logging
   configuration" section), `docs/harness_configs/plugin_manifest.md`,
   `docs/harness_configs/rtl_comrade_config.md`, `docs/harness/validation.md`, and
@@ -1211,7 +1211,7 @@ exempt, and TODO #20 step 2 names a reading list for every spec category.
 
 ### 28. Pin the module file-layout and package conventions
 
-`06-graph-yaml.md` suggests grouping modules into `setup.py`, `build.py`, `sim.py`, `control.py` (also implicit in `specs/04-setup-modules.md:13` → `modules/rtl_test/setup.py`). This is described as a "suggestion" rather than a pinned layout, leaving the package shape ambiguous.
+`06-graph-yaml.md` suggests grouping modules into `setup.py`, `build.py`, `sim.py`, `control.py` (also implicit in `specs/04-setup-modules.md:13` → `modules/rtl_buddy/setup.py`). This is described as a "suggestion" rather than a pinned layout, leaving the package shape ambiguous.
 
 #### Concrete steps
 
@@ -1222,6 +1222,26 @@ exempt, and TODO #20 step 2 names a reading list for every spec category.
 #### Acceptance check
 
 Every module spec names exactly one file path, and that file path matches the committed layout.
+
+#### Resolution (2026-06-12)
+
+- **Package name committed: `modules/rtl_buddy/`.** Renamed the package from the interim
+  `rtl_test` across all specs, the `specs/README.md` shared-files table, and the
+  `06-graph-yaml.md` manifest block (148 token occurrences). Upstream compatibility-source
+  citations (`rtl_buddy/src/rtl_buddy/...`) were untouched — they never used the `rtl_test`
+  token, and the new package path stays distinguishable from the upstream tree.
+- **File grouping pinned, not suggested.** Dropped the "File grouping is a suggestion" line in
+  `06-graph-yaml.md` and the "e.g." / "either inlined or split for taste" hedges in the schema
+  specs (01/01a/01b/01c). Each schema spec now names exactly one file; `01b` pins `UVMConfig` +
+  `TestbenchConfig` inlined into `suite.py`.
+- **Mapping recorded** in a new pinned [Module package layout](specs/README.md#module-package-layout-pinned)
+  section in `specs/README.md`, cross-linked from `06-graph-yaml.md`.
+- **Step 3 de-scoped (Document & de-scope).** The harness has no `rtl_buddy:derive-seed-mode`
+  colon-namespace syntax — plugin `name:` values are flat strings in `modules/config.yaml`
+  (`docs/harness_configs/plugin_manifest.md`), already kept disjoint from contracts by the
+  `modules`/`contracts` plugin-set `sys.modules` namespace (`docs/harness/loader_utils.md`).
+  Sibling graphs reuse the same package by design, so there is no cross-graph collision to
+  prefix against. Documented in the new layout section rather than adding a fake prefix.
 
 ### 29. Clarify the dataflow diagram
 
@@ -1236,3 +1256,22 @@ The ASCII diagram in `00-overview.md` mixes main-line and config edges; the layo
 #### Acceptance check
 
 A reviewer can trace any single edge type without visual conflict from another.
+
+#### Resolution (2026-06-12)
+
+- **Replaced the single mixed ASCII block** in `00-overview.md` with one combined Mermaid
+  flowchart, rebuilt from the authoritative edge list in `06-graph-yaml.md`. Rather than
+  splitting into two diagrams, the edge *types* are kept traceable by **colour- and style-coding**
+  every edge (`linkStyle`), with a legend above the chart:
+  - blue/bold = main-line continue ports; grey/dashed = the 13 unwired terminal ports (+ `git-status`);
+    orange = setup chain + persistent config broadcasts; purple = env-setup sequencing
+    (`env_ready`/`_cwd`); green = CLI options (rounded nodes).
+  - Fan-out generators (`select`/`sweep`/`runs`) and joins (`cc-int`/`randseed`) are class-styled.
+- **Acceptance check met without splitting**: any single edge type is followed by its colour,
+  so it can be traced even where it crosses another. (TODO #29 step 1 suggested two diagrams;
+  the user opted for one combined graph instead — the per-type colouring achieves the same
+  no-conflict tracing.)
+- **Validated** with `@mermaid-js/mermaid-cli`: renders clean (70 edges, all `linkStyle`
+  indices in range), and all five edge-type colours confirmed present in the output SVG.
+- **Cross-referenced** the combined diagram from the `04-pipeline-and-contracts.md` node table
+  (and back to `06` as the authoritative edge list).
