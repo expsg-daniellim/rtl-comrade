@@ -4,6 +4,10 @@
 
 [Back to index](index.md)
 
+See also:
+
+- [docs/modules/implementation.md](../modules/implementation.md) — variadic inputs and their effect on port validation
+
 Joins inputs by correlation key like `keyed_join`, but accounts for control-flow branches that intentionally skip some ports. A port carrying `BranchSkip(key=k)` is treated as satisfied for key `k` and omitted from the dict passed to the module. This allows fan-in after `if/else` routing nodes where only one branch executes per item.
 
 ## Config
@@ -49,6 +53,8 @@ def run(self, branch_a=None, branch_b=None, **kwargs):
     result = branch_a or branch_b
     ...
 ```
+
+Note that the `**kwargs` above makes this module non-definite-input: its ports come from the incoming edges rather than the signature, and the harness emits a `non_definite_inputs` warning for the node. Drop `**kwargs` if you want the named ports validated statically.
 
 ## Example use cases
 

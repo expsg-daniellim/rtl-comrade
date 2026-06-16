@@ -52,7 +52,7 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 `Node.__init__` deep-copies the port template from `GraphModule.ports` to give each node instance its own independent queues.
 
 - for modules with definite inputs, `GraphModule.ports` is a fully built `OrderedDict` keyed by parameter name, with `has_default` set from the function signature; the deep-copy is the entire port set
-- for modules with non-definite inputs (variadic or keyword-only), `GraphModule.ports` is empty; `Graph.from_config` builds override ports from the actual incoming edges and passes them to `Node.__init__` via the `ports` parameter, which are merged in after the deep-copy
+- for modules with non-definite inputs (`*args` or `**kwargs` in `run(...)`), `GraphModule.ports` is empty; `Graph.from_config` builds override ports from the actual incoming edges and passes them to `Node.__init__` via the `ports` parameter, which are merged in after the deep-copy. Keyword-only parameters do not trigger this path; they are treated as ordinary definite inputs
 
 The raw `Port` objects are harness-owned runtime queues. Contracts do not receive them directly.
 

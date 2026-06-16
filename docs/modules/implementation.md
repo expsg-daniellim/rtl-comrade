@@ -114,6 +114,35 @@ Here:
 
 The built-in default contract can use such defaults without any upstream edge for that port.
 
+## Variadic Inputs (`*args` / `**kwargs`)
+
+A `run(...)` signature may use `*args` or `**kwargs`. This makes the module's input surface **non-definite**: the harness can no longer derive the port set from the signature alone.
+
+```python
+class MergeMod:
+    def run(self, **kwargs):
+        return sum(int(v) for v in kwargs.values())
+```
+
+Consequences for a non-definite-input module:
+
+- the harness builds the port set from the **incoming edges** in the graph YAML, not from the `run(...)` signature — each edge destination port becomes an input the contract can read
+- `*args` and `**kwargs` themselves are not turned into ports; only the edge destination names are
+- the harness emits a `non_definite_inputs` warning for the node at load time
+- destination-port validation is weaker, because the harness cannot prove the full input set; an unknown string destination port is accepted rather than rejected
+
+Named parameters declared alongside the variadic one still behave normally:
+
+```python
+class MergeMod:
+    def run(self, key, **kwargs):
+        ...
+```
+
+Here `key` is a definite, signature-derived port; the extra ports arrive via edges and reach the module through `**kwargs`.
+
+Keyword-only parameters (those after a bare `*`) do **not** make a module non-definite — they are ordinary ports, default-capable if they carry a Python default.
+
 ## Allowed `run(...)` Forms
 
 The harness supports several output styles.
@@ -372,5 +401,6 @@ nodes:
 
 - output-port analysis is intentionally conservative
 - dynamic port names are allowed, but they weaken static validation
+- variadic inputs (`*args`/`**kwargs`) make the input set non-definite, so ports come from edges and destination-port validation is weaker
 - modules have no direct access to payload metadata such as source node id or sequence number
 - modules receive plain values after contract selection, not transport-layer objects

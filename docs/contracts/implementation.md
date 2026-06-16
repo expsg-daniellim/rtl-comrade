@@ -74,6 +74,8 @@ This is the normal contract input surface.
 
 In the current implementation, this mapping preserves the module input declaration order. Order-sensitive contracts may rely on that, as the shipped zip-style example does.
 
+For a module with non-definite inputs (a `run(...)` signature using `*args` or `**kwargs`), there is no signature-derived declaration order: the harness builds `ports` from the node's incoming edges instead. A contract paired with such a module should key into `ports` by name and not assume a signature-defined ordering.
+
 If the contract does not accept `ports`, the harness only logs a warning, but such a contract is rarely useful.
 
 ## The `ContractPort` API
