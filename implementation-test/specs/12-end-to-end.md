@@ -26,9 +26,9 @@ documenting any divergences observed.
   - `cd verif && rtl-comrade test basic` (the new graph)
 - Captured artifacts (committed under `tests/e2e/` or similar):
   - exit code parity for passing run, compile-fail, sim-timeout, and `--list`. For
-    `--early-stop` at each phase, assert Plan B exits **0** (deliberate divergence — rtl_buddy
+    `--early-stop` at each phase, assert this plan exits **0** (deliberate divergence — rtl_buddy
     exits 1; [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)),
-    while the per-test `NA` verdict still matches. The `desc` is Plan B's `"Stopped early at
+    while the per-test `NA` verdict still matches. The `desc` is this plan's `"Stopped early at
     <phase>"` using the phase token (`pre`/`comp`/`sim`); it matches rtl_buddy only for `sim`
     and deliberately diverges from rtl_buddy's `preproc`/`compile` wording for `pre`/`comp`
     (see [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
@@ -70,9 +70,13 @@ verdicts are not.
 - **ParseLog corrections** — logs exercising FAIL-wins-over-PASS, a `PASSTHROUGH` line, and a
   FAIL-without-`ERR:` line → verdicts match the corrected behaviour, no crash
   ([07 settled 15](../07-ambiguities-and-assumptions.md)).
-- **Concurrency divergence (expected)** — scenarios that collide on shared-CWD artefacts are
-  run sequentially or recorded as KIV in `KNOWN_DIVERGENCES.md`; parity is **not** forced with
-  a serialising lock (boundary: known divergence until [07 item 17](../07-ambiguities-and-assumptions.md)).
+- **Concurrency hole (fixed-`simv` builders) — expected, silent** — on a non-verilator
+  (fixed-`simv`) builder, a concurrent multi-test run can overwrite one test's binary with
+  another's and **silently** report wrong results (rc 0, green summary; see
+  [07 item 17](../07-ambiguities-and-assumptions.md)). There is **no built-in serialisation**, so
+  validate such builders **one test per invocation** (a single item in flight); do **not** force
+  parity with a serialising lock. Record the limitation in `KNOWN_DIVERGENCES.md`. Verilator
+  builders are unaffected (per-tag `obj_dir`/`simv`).
 
 ## Acceptance criteria
 
@@ -80,8 +84,8 @@ verdicts are not.
   `../rtl-buddy-proj-template/design/sandbox/verif` (per `rtl_buddy/AGENTS.md`). Four match
   `rtl_buddy` on exit code and per-test PASS/FAIL/NA + `desc`: passing run, compile-fail,
   sim-timeout, and `--list`. `--early-stop` at each phase (`pre`/`comp`/`sim`) matches the per-test
-  `NA` verdict but **diverges on exit code** — Plan B exits 0 where rtl_buddy exits 1 — **and on
-  the `desc` wording** for `pre`/`comp`: Plan B emits `"Stopped early at pre"`/`"…comp"` (phase
+  `NA` verdict but **diverges on exit code** — this plan exits 0 where rtl_buddy exits 1 — **and on
+  the `desc` wording** for `pre`/`comp`: this plan emits `"Stopped early at pre"`/`"…comp"` (phase
   token) where rtl_buddy emits `"…preproc"`/`"…compile"`; only `sim` has identical `desc`
   ([07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
 - Artifact parity in `logs/`: `.log`/`.err`/`.randseed` produced for the same runs and the
@@ -103,23 +107,28 @@ verdicts are not.
 - Assert **exit-code** and **per-test PASS/FAIL/NA + `desc`** parity for the four full-parity
   scenarios (passing run, compile-fail, sim-timeout, `--list`). For `--early-stop` per phase,
   assert the per-test `NA` verdict but exit **0** (documented exit-code divergence). The `desc`
-  is Plan B's `"Stopped early at <phase>"` (phase token); assert `desc` parity **only for
+  is this plan's `"Stopped early at <phase>"` (phase token); assert `desc` parity **only for
   `sim`** — `pre`/`comp` deliberately diverge from rtl_buddy's `preproc`/`compile` wording
   ([07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
   Summary-string **formatting** differences are allowed; the per-test verdicts are not.
 - Commit the captured artifacts under `tests/e2e/` (or similar), and record any unanticipated
   delta in `KNOWN_DIVERGENCES.md` / [07](../07-ambiguities-and-assumptions.md) with a follow-up
   issue.
-- Concurrency divergences are **expected** until [07 item 17](../07-ambiguities-and-assumptions.md)
-  lands — run sequentially or document the affected scenarios as KIV. Do **not** reintroduce a
-  serialising lock to force parity.
+- The fixed-`simv` concurrency hole is **expected** until [07 item 17](../07-ambiguities-and-assumptions.md)
+  is ported into rtl_comrade — it **silently** produces wrong results on non-verilator builders under
+  a concurrent multi-test run, and there is **no built-in serialisation**. Validate such builders
+  one test per invocation (operational workaround) and document the limitation as KIV; do **not**
+  reintroduce a serialising lock to force parity.
 
 ## Notes
 
-Concurrency-related divergences are *expected* until the upstream rtl_buddy
-per-invocation-subdir change lands ([07 KIV 17](../07-ambiguities-and-assumptions.md));
-either run this validation with sequential semantics (configure a concurrency-limiting
-contract, or wait for upstream) or document the affected scenarios as KIV.
+The fixed-`simv` concurrency hole is a known limitation until the upstream rtl_buddy
+per-invocation-subdir change ([07 KIV 17](../07-ambiguities-and-assumptions.md)) is ported into
+rtl_comrade and integrated with the existing modules: on a non-verilator builder a concurrent
+multi-test run can **silently** simulate the wrong binary (rc 0, green summary). The graph has
+**no built-in serialisation** (the lock shim was removed by TODO #30 and not replaced), so the
+interim workaround is operational — invoke such suites one test per `rtl-comrade test` call —
+and the limitation is documented as KIV. Verilator builders are unaffected (per-tag artefacts).
 
 Once this spec is signed off, the sibling graphs from [08](../08-sibling-graphs.md) become
 the natural next ticket.

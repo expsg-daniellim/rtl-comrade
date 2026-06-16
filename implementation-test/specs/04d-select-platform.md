@@ -51,7 +51,7 @@ class SelectPlatformMod:
 2. Iterate `root_cfg.platforms` in declaration order; the **first** platform whose `unames`
    list contains `uname` is the match — emit `("default", platform_cfg)` and return.
    **Divergence:** rtl_buddy iterates all platforms with no `break` (`config/root.py:111-115`),
-   so on overlapping `unames` the *last* match wins; Plan B returns on the first. Deliberate
+   so on overlapping `unames` the *last* match wins; this plan returns on the first. Deliberate
    (overlapping `unames` are a misconfiguration); recorded in
    [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy).
 3. **Failure — no platform matches.** Falling out of the loop means none matched:

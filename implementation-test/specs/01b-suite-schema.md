@@ -52,7 +52,7 @@ plain `parse-log` path is taken (else `parse-uvm-log`).
 
 Validation: `__post_init__` raises `ValueError` if either field is negative. Note this
 is `ValueError`, not `log.fatal` — UVMConfig is constructed during YAML deserialisation,
-where rtl_buddy's serde wraps the `ValueError` into its own error path. In Plan B, the
+where rtl_buddy's serde wraps the `ValueError` into its own error path. In this plan, the
 broad-`Exception` catch in `parse-suite-config` (spec [04](04-setup-modules.md))
 converts the validation failure into `log.fatal`.
 
@@ -81,7 +81,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/test.py:10-41`.
 
 The serde-decorated type read straight from `tests.yaml`'s `tests:` list. Fields use
 `field(rename=...)` to bridge YAML names to Pythonic attribute names. Converted into a
-runtime `TestConfig` via `initialise(suite_dir)` (Plan B drops rtl_buddy's eager
+runtime `TestConfig` via `initialise(suite_dir)` (this plan drops rtl_buddy's eager
 `ModelConfigLoader.get_model(...)` call — see Notable divergence below).
 
 | field           | type                 | YAML rename | default  | notes                                                                                                          |
@@ -95,7 +95,7 @@ runtime `TestConfig` via `initialise(suite_dir)` (Plan B drops rtl_buddy's eager
 | `pd`            | `dict \| None`       | `plusdefines`| `None`  | Plusdefines dict; same `None`-value semantics.                                                                 |
 | `uvm`           | `UVMConfig \| None`  | (none)      | `None`   | UVM config (see above); presence triggers `parse-uvm-log` post path.                                           |
 | `preproc_path`  | `str \| None`        | `preproc`   | `None`   | Path to preproc script. Deserialiser: `lambda data: data.get('path') if data is not None else None`.           |
-| `postproc_path` | `str \| None`        | `postproc`  | `None`   | Path to postproc script. Same deserialiser. **Not executed by Plan B** ([07 settled 14](../07-ambiguities-and-assumptions.md)). |
+| `postproc_path` | `str \| None`        | `postproc`  | `None`   | Path to postproc script. Same deserialiser. **Not executed by this plan** ([07 settled 14](../07-ambiguities-and-assumptions.md)). |
 | `sweep_path`    | `str \| None`        | `sweep`     | `None`   | Path to sweep script. Same deserialiser.                                                                       |
 | `tb`            | `str`                | `testbench` | required | Testbench name; resolved to `TestbenchConfig` in `initialise()`.                                               |
 | `timeout`       | `int \| None`        | `sim_timeout`| `None`  | Per-test override of the default sim timeout (seconds).                                                        |
@@ -154,7 +154,7 @@ Methods:
 | `set_timeout(timeout) -> None`           | `None`                                               | Used by preproc scripts.                                                                                                                                  |
 | `get_sweep_path() -> str \| None`        | `self.sweep_path`                                    | trivial getter.                                                                                                                                           |
 | `get_preproc_path() -> str \| None`      | `self.preproc_path`                                  | trivial getter.                                                                                                                                           |
-| `get_postproc_path() -> str \| None`     | `self.postproc_path`                                 | trivial getter. Plan B preserves the field but does not execute postproc ([07 settled 14](../07-ambiguities-and-assumptions.md)).                         |
+| `get_postproc_path() -> str \| None`     | `self.postproc_path`                                 | trivial getter. This plan preserves the field but does not execute postproc ([07 settled 14](../07-ambiguities-and-assumptions.md)).                         |
 | `get_reglvl(builder: str) -> int`        | resolved level for the given builder name            | Resolution order: builder-keyed dict entry → `default` dict entry → uniform int → `0` (when `None`). Malformed (`dict` with no builder or default) → `log.fatal`. Mirrors `rtl_buddy/src/rtl_buddy/config/test.py:286-299`. |
 
 Source: `rtl_buddy/src/rtl_buddy/config/test.py:43-302`.
@@ -181,7 +181,7 @@ Constructed by `parse-suite-config` (spec [04](04-setup-modules.md)) from a reso
 | `path`  | `Path`                     | Resolved suite-config path (the one `check-suite-cwd` passed in).                                |
 | `tests` | `dict[str, TestConfig]`    | Built as `{test.name: test.initialise(suite_dir, tbs) for test in raw.tests}` where `suite_dir = path.parent`. |
 
-Constructor behaviour (`__init__(path)` in rtl_buddy, `parse-suite-config.run(path)` in Plan B):
+Constructor behaviour (`__init__(path)` in rtl_buddy, `parse-suite-config.run(path)` in this plan):
 
 1. Open + `from_yaml(SuiteConfigFile, ...)`. Any exception → `log.fatal(f'failed to load {path}: {e}')`. Mirrors `suite.py:28-32`.
 2. Build `tbs = {tb.get_name(): tb for tb in raw.testbenches}`. Any exception → `log.fatal(f'{path}: Testbench section malformed: {e}')`. Mirrors `suite.py:39-42`.
@@ -191,7 +191,7 @@ Methods:
 
 | signature                              | returns                                                            | log idiom                                                                                                                       |
 |----------------------------------------|--------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `get_tests(test_name: str \| None = None) -> list[TestConfig] \| dict_values[TestConfig]` | one-element list if `test_name` given and present; all tests otherwise | `log.fatal(f"test_name {name} not found in suite {self.path}")` when `test_name` given but not in `self.tests`. Mirrors `suite.py:52-67`. Plan B's `select-tests` uses this same idiom (catalog row at line 112 of [03](../03-module-catalog.md)). |
+| `get_tests(test_name: str \| None = None) -> list[TestConfig] \| dict_values[TestConfig]` | one-element list if `test_name` given and present; all tests otherwise | `log.fatal(f"test_name {name} not found in suite {self.path}")` when `test_name` given but not in `self.tests`. Mirrors `suite.py:52-67`. This plan's `select-tests` uses this same idiom (catalog row at line 112 of [03](../03-module-catalog.md)). |
 | `get_test_names() -> list[str]`        | `list(self.tests.keys())`                                          | none.                                                                                                                           |
 | `get_path() -> Path`                   | `self.path`                                                        | none.                                                                                                                           |
 
@@ -201,7 +201,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
 
 1. **Lazy model loading** ([07 settled 8](../07-ambiguities-and-assumptions.md)). rtl_buddy
    `TestConfigFile.initialise` eagerly calls
-   `ModelConfigLoader(model_path).get_model(self.model)` (`test.py:322`). Plan B defers
+   `ModelConfigLoader(model_path).get_model(self.model)` (`test.py:322`). This plan defers
    this to `load-model` (spec [05](05-selection-expansion-modules.md)), so
    `TestConfig.model` is `None` until that node fires. Consequence: the runtime
    `TestConfig` carries `model_name: str`, `model_path: str`, and `suite_dir: Path` so
@@ -253,7 +253,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
 - Loading an unmodified rtl_buddy `tests.yaml` (e.g. from
   `rtl-buddy-proj-template/design/sandbox/verif`) produces `TestConfig` instances
   whose `get_*` methods return values equal to rtl_buddy's on the same input
-  (modulo `get_model()` returning `None` instead of a `ModelConfig` — Plan B is
+  (modulo `get_model()` returning `None` instead of a `ModelConfig` — this plan is
   lazy).
 - Every downstream consumer spec (`select-tests`, `filter-reglvl`, `load-model`,
   `expand-sweep`, `run-preproc`, `write-filelist`, `build-compile-cmd`,
@@ -289,7 +289,7 @@ YAML `field(rename=...)` targets are the **public surface** for downstream rtl_b
 users — do **not** Pythonify them. Preserve hyphens and casing exactly as listed.
 
 `SuiteConfig.get_tests()` returns `dict_values` when `test_name` is omitted (rtl_buddy
-`suite.py:67`). Plan B's `select-tests` (spec [05](05-selection-expansion-modules.md))
+`suite.py:67`). This plan's `select-tests` (spec [05](05-selection-expansion-modules.md))
 iterates and yields per-test — the type doesn't matter for that use, but if other
 callers index or `len()` the result, materialise to `list` first.
 

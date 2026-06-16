@@ -56,7 +56,7 @@ Notes and decisions (see [07](07-ambiguities-and-assumptions.md)):
   `run-process` module should replicate this (or a setup node like `resolve-builder`), since
   it is load-bearing for `verilator`/`simv` discovery.
 - **`-L/--logs-dir` is a small Notable divergence from `rtl_buddy`.** `rtl_buddy` hard-codes
-  `"logs"` (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55`); Plan B keeps the same default
+  `"logs"` (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55`); this plan keeps the same default
   but exposes the path as a CLI override so the artefact directory can be relocated without
   chdir gymnastics. The directory is materialised by the `ensure-logs-dir` setup node and
   consumed by `build-compile-cmd` / `build-sim-cmd` / `resolve-seed`. See

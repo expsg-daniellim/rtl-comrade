@@ -97,9 +97,9 @@ failure). One guard: an `early_stop` value outside `{pre,comp,sim,post}` →
 `log.fatal("invalid_early_stop", …)` (harness exit 1), since the CLI edge is a bare `str` the
 harness does not enum-validate. See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
 **Exit-code divergence (deliberate):** `EarlyStopResults` is NA, and `rtl_buddy` exits 1 on
-`--early-stop` (`runner/test_results.py:53-60`; `rtl_buddy.py:206`). Plan B treats a user-requested
+`--early-stop` (`runner/test_results.py:53-60`; `rtl_buddy.py:206`). This plan treats a user-requested
 stop as a successful early exit, so this `log.info` (never `log.error`) leaves `handler.failure`
-False → exit 0. The per-test `NA` verdict is unchanged, but the `desc` wording diverges: Plan B
+False → exit 0. The per-test `NA` verdict is unchanged, but the `desc` wording diverges: this plan
 emits `"Stopped early at <phase>"` with the phase token (`pre`/`comp`/`sim`), where rtl_buddy
 emits `preproc`/`compile`/`sim` — matching only for `sim`. Recorded in
 [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy).

@@ -54,7 +54,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/model.py:9-51`.
 > **Bug-for-bug or fix?** rtl_buddy's `ModelConfig.get_model_name` at
 > `model.py:30` returns `self.model_name` — an attribute that does not exist on the
 > dataclass (`name` is the actual field). Any caller invoking this method on rtl_buddy
-> would `AttributeError`; in practice no rtl_buddy caller does. Plan B should fix the
+> would `AttributeError`; in practice no rtl_buddy caller does. This plan should fix the
 > bug while reimplementing (return `self.name`) and flag it under "Notable
 > divergences" in [07](../07-ambiguities-and-assumptions.md) if any consumer ever
 > starts using the method. Until then, this is informational.
@@ -94,7 +94,7 @@ entries relative to the `models.yaml`'s directory.
 
 Source: `rtl_buddy/src/rtl_buddy/config/model.py:66-100`.
 
-## Plan B integration
+## Integration
 
 `load-model` (spec [05](05-selection-expansion-modules.md)) is the only direct
 consumer of `ModelConfigLoader`. The flow:
@@ -103,13 +103,13 @@ consumer of `ModelConfigLoader`. The flow:
    `model_path`, `suite_dir` from spec [01b](01b-suite-schema.md)).
 2. Resolves `resolved = ctx["test"].suite_dir / ctx["test"].model_path`.
 3. Constructs `ModelConfigLoader(str(resolved))` — `__init__`'s broad-exception catch
-   converts I/O / parse / schema errors to `log.fatal`, but in Plan B these are
+   converts I/O / parse / schema errors to `log.fatal`, but in this plan these are
    **port-routed `fail` `result`** (spec [05](05-selection-expansion-modules.md) `LoadModelMod`
    failure-handling block + [07 settled 10](../07-ambiguities-and-assumptions.md)). The
    reimplementation should therefore **let exceptions propagate from `ModelConfigLoader`**
    rather than calling `log.fatal` inside the loader itself; the `LoadModelMod` wrapper
    catches and routes. This is a deliberate divergence from rtl_buddy at the *loader*
-   layer, motivated by Plan B's per-test FAIL routing.
+   layer, motivated by this plan's per-test FAIL routing.
 4. Calls `loader.get_model(ctx["test"].model_name)`. A missing-model lookup similarly
    propagates rather than crit-logging; `LoadModelMod` catches and routes.
 5. Assigns `ctx["test"].model = the_model` and emits `("default", ctx)`.
@@ -124,13 +124,13 @@ is the file).
 
 1. **Failure routing.** rtl_buddy's `ModelConfigLoader.__init__` and `get_model` call
    `logger.critical(...)` directly — aborting the whole run on any per-test
-   `models.yaml` issue. Plan B's reimplementation **raises** instead, so `LoadModelMod`
+   `models.yaml` issue. This plan's reimplementation **raises** instead, so `LoadModelMod`
    can catch and emit a per-test `fail` `result` (see [07 settled
    10](../07-ambiguities-and-assumptions.md)). This is the loader-layer half of the
    broader "per-test config-domain failures route as per-test FAIL" divergence already
    recorded in [07 — Notable divergences](../07-ambiguities-and-assumptions.md).
 2. **`get_model_name` bug fix.** rtl_buddy returns `self.model_name` (a
-   non-existent attribute); Plan B returns `self.name`. Informational only — no
+   non-existent attribute); this plan returns `self.name`. Informational only — no
    current consumer calls this method.
 
 ## Tests (`modules/tests/test_model_schema.py`)
@@ -142,7 +142,7 @@ is the file).
   returns the `ModelConfig` with `name == "modelA"` and `path == <the loader's path>`
   (assert the mutation happened).
 - **`get_model` missing name.** `get_model("nonexistent")` raises rather than calling
-  `log.fatal` (Plan B divergence). Implementation choice: raise `KeyError` or a
+  `log.fatal` (divergence in this plan). Implementation choice: raise `KeyError` or a
   custom `ModelNotFoundError` — either is fine as long as `LoadModelMod` catches
   broadly.
 - **`ModelConfigLoader` ctor — bad path.** `ModelConfigLoader("/no/such/file.yaml")`
@@ -151,7 +151,7 @@ is the file).
   propagates.
 - **Empty `models:` list.** A `models.yaml` with `models: []` loads successfully;
   any `get_model(...)` call raises.
-- **`get_model_name` returns `self.name`** (Plan B bug fix verified by direct
+- **`get_model_name` returns `self.name`** (bug fix in this plan verified by direct
   assertion).
 
 ## Acceptance criteria

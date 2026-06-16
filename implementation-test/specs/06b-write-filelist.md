@@ -112,7 +112,7 @@ In `modules/rtl_buddy/build.py` (continuing from spec 03):
   at emission with the attempted filelist path, the chain of `-F` includes the resolver was
   processing, **and `result`/`desc`** (so the `SummaryProcessor` watch-list,
   [10c](10c-summary-handler.md), renders the row).
-  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output`; called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93`. Per-tag `run.{test_tag}.f` is a Plan B divergence from the hard-coded `"run.f"` (`vlog_sim.py:157`).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output`; called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93`. Per-tag `run.{test_tag}.f` is a divergence in this plan from the hard-coded `"run.f"` (`vlog_sim.py:157`).
 
 **Manifest** — append to the `- file: rtl_buddy/build.py` block in `modules/config.yaml`
 (opened by [`06a`](06a-run-preproc.md); append, don't re-create):

@@ -56,7 +56,7 @@ return. The states below are exhaustive — anything not on this list is a defec
    - **3a. Timeout path.**
      1. `os.killpg(os.getpgid(proc.pid), signal.SIGQUIT)` — signals every process in the
         group, not just the leader. (rtl_buddy `vlog_sim.py:259` signals only the leader
-        via `Popen.send_signal`; Plan B corrects this — see Notes.)
+        via `Popen.send_signal`; this plan corrects this — see Notes.)
      2. `await asyncio.wait_for(proc.wait(), _TIMEOUT_GRACE_S)` — give the child a grace
         period to dump a core / flush logs. `_TIMEOUT_GRACE_S` is a module-level constant
         (`5.0` s, not per-invocation).
@@ -115,7 +115,7 @@ class RunProcessMod:
 
 **Compatibility source:**
 - `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:162-179` — `VlogSim.compile`'s `subprocess.run` + `FileNotFoundError` (no-timeout compile leg).
-- `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:240-281` — `VlogSim.execute`'s `Popen` + `wait(timeout)` + `SIGQUIT`/`rc=4444` block (with-timeout sim leg). Plan B diverges on signal target (process group, not leader) and adds SIGKILL escalation — see the policy below and [07 settled 23](../07-ambiguities-and-assumptions.md).
+- `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:240-281` — `VlogSim.execute`'s `Popen` + `wait(timeout)` + `SIGQUIT`/`rc=4444` block (with-timeout sim leg). This plan diverges on signal target (process group, not leader) and adds SIGKILL escalation — see the policy below and [07 settled 23](../07-ambiguities-and-assumptions.md).
 
 ### Signal and timeout policy
 
@@ -317,15 +317,15 @@ size.
 
 1. rtl_buddy `vlog_sim.py:259` signals only the process-group leader
    (`process.send_signal(SIGQUIT)`); processes the simulator spawned (licence servers,
-   helper shells) are not reached. Plan B uses `os.killpg` to signal the whole group.
+   helper shells) are not reached. This plan uses `os.killpg` to signal the whole group.
 2. rtl_buddy has no SIGKILL escalation — a SIGQUIT-trapping simulator would hang the
-   suite. Plan B adds a `_TIMEOUT_GRACE_S` window followed by SIGKILL.
+   suite. This plan adds a `_TIMEOUT_GRACE_S` window followed by SIGKILL.
 
 Both should be recorded under "Notable divergences" in
 [07](../07-ambiguities-and-assumptions.md) when implementation lands.
 
 **`timed_out` is set independently of `rc`.** rtl_buddy's `timed_out` is implicitly
-`rc == 4444`. Plan B sets the flag at the return site (step 4) so a child that
+`rc == 4444`. This plan sets the flag at the return site (step 4) so a child that
 organically returns 4444 is not misclassified.
 
 **asyncio child-watcher.** Python 3.8+ default `ThreadedChildWatcher` reaps children

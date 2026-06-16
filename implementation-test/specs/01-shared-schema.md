@@ -33,7 +33,7 @@ A new package, `modules/rtl_buddy/schema/`:
   `cfg-rtl-reg`). **Verible is dropped** (settled, R3): no `VeribleConfigFile`/`VeribleConfig`,
   and the `cfg-verible` (root) / `verible` (per-platform) keys are left **unparsed** — pyserde
   silently ignores unknown keys, so a real `root_config.yaml` still loads drop-in. The resolved
-  runtime `PlatformConfig` is also **not** built: Plan B never calls rtl_buddy's
+  runtime `PlatformConfig` is also **not** built: this plan never calls rtl_buddy's
   `platform.initialise`; platform selection and builder resolution are graph nodes
   ([04d](04d-select-platform.md) / [04e](04e-resolve-builder.md)).
 - `builder.py` — `RtlBuilderConfig`, `RtlBuilderConfigOpts`, `process_opts`. Owned by
@@ -58,8 +58,7 @@ A new package, `modules/rtl_buddy/schema/`:
 ## `root.py` schema (detailed)
 
 These types are owned by this spec (no child ticket). Raw `@serde` dataclasses are faithful
-ports of rtl_buddy's `config/root.py` + `config/platform.py`; `RootConfig` is a **Plan-B
-redesign** (detailed in its subsection below). Source pin: `v1.4.0` / `a69d962`.
+ports of rtl_buddy's `config/root.py` + `config/platform.py`; `RootConfig` is a **redesign in this plan** (detailed in its subsection below). Source pin: `v1.4.0` / `a69d962`.
 
 ### `RootRtlField` (raw, `@serde`)
 
@@ -93,13 +92,13 @@ The per-platform `verible` key is **not** a field — left unparsed. No `initial
 methods are ported (platform selection + builder resolution are nodes). Source:
 `rtl_buddy/src/rtl_buddy/config/platform.py:56-61` (raw fields only).
 
-### `RootConfig` (runtime wrapper) — Plan-B redesign
+### `RootConfig` (runtime wrapper) — redesign in this plan
 
 rtl_buddy's `RootConfig.__init__(name, builder_override=None)` discovers + loads the YAML and
-selects the platform/builder/verible/reg in one constructor (`root.py:50-231`). Plan B has
+selects the platform/builder/verible/reg in one constructor (`root.py:50-231`). This plan has
 already split every one of those into nodes (discover = [04a](04a-discover-config-file.md),
 load/parse = [04c](04c-parse-root-config.md), platform-match = [04d](04d-select-platform.md),
-builder-resolve = [04e](04e-resolve-builder.md)), so Plan B's `RootConfig` is a **thin wrapper
+builder-resolve = [04e](04e-resolve-builder.md)), so this plan's `RootConfig` is a **thin wrapper
 over an already-parsed `RootConfigFile`** whose only transform is precomputing the builders
 dict (mirrors `root.py:94`).
 

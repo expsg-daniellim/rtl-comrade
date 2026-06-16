@@ -42,7 +42,7 @@ class LoadModelMod:
         resolved = ctx["test"].suite_dir / ctx["test"].model_path
         try:
             model = ModelConfigLoader(str(resolved)).get_model(ctx["test"].model_name)
-        except Exception as e:   # loader raises (Plan B) on I/O / parse / lookup miss
+        except Exception as e:   # loader raises (per this plan) on I/O / parse / lookup miss
             result = make_fail_result(desc=str(e))
             log.error("load_model_failed", key=ctx["key"], test_name=ctx["test"].get_name(), model_path=str(resolved), err=str(e),
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
@@ -58,7 +58,7 @@ class LoadModelMod:
 2. Load it: construct `ModelConfigLoader(str(resolved))` and call
    `loader.get_model(ctx["test"].model_name)` (spec 01c).
 3. Attach and pass through: `ctx["test"].model = model`; emit `("default", ctx)`.
-4. **Failure — lookup/load miss.** Wrap step 2 in `try/except Exception` (Plan B's loader
+4. **Failure — lookup/load miss.** Wrap step 2 in `try/except Exception` (this plan's loader
    *raises* rather than `log.fatal`-ing — spec 01c): file I/O, parse, schema mismatch, or
    model-not-in-file → emit `("fail", {"key": ctx["key"], "result": <FAIL with str(e) in
    desc>})` and `log.error("load_model_failed", …)` at emission with the resolved `model_path`
@@ -75,7 +75,7 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
   `loader.get_model(ctx["test"].model_name)`, assigns
   `ctx["test"].model = the_model`, emits `("default", ctx)`.
   **Failure handling**: catch broad `Exception` from both `ModelConfigLoader.__init__`
-  (I/O / parse / schema mismatch — Plan B's loader **raises rather than
+  (I/O / parse / schema mismatch — this plan's loader **raises rather than
   `log.fatal`s**, see spec [01c — Notable divergences](01c-model-schema.md)) and
   `loader.get_model(name)` (model not in file). Specific classes in play:
   `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O);
@@ -129,7 +129,7 @@ the failure cases; `logging_handler` to assert `failure is True` **without** `Sy
 
 - On success attach `ctx["test"].model = the_model` and emit `("default", ctx)`.
 - Catch broad `Exception` from both `ModelConfigLoader(...)` construction and `get_model(...)`
-  (the loader **raises** in Plan B — spec [01c](01c-model-schema.md)) → emit `("fail", {key,
+  (the loader **raises** in this plan — spec [01c](01c-model-schema.md)) → emit `("fail", {key,
   result: <FAIL with str(e)>})` on the **unwired** `fail` port and `log.error("load_model_failed",
   …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor`
   watch-list collects the row).

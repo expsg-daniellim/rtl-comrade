@@ -175,7 +175,7 @@ informational.
 25. **`.`-prepend to `$PATH`: dedicated `prepend-cwd-path` setup node** (settled
     2026-06-02). `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` mutates
     `os.environ["PATH"]` once at CLI bootstrap so a CWD-local simulator (`simv`,
-    `verilator`) is discoverable. Plan B reproduces this as an explicit graph node:
+    `verilator`) is discoverable. This plan reproduces this as an explicit graph node:
     [`prepend-cwd-path`](03-module-catalog.md) (spec
     [04](specs/04-setup-modules.md)), a zero-input `unit` setup node that performs
     the same idempotent prepend and emits a `bool` sentinel on `default`.
@@ -207,7 +207,7 @@ informational.
     a change there alone. **Default location** is `<work_dir>/logs` — `work_dir` is today the
     suite dir (= CWD, asserted by `check-suite-cwd`), giving parity with
     `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` (where `VlogSim.__init__` lazily
-    `makedirs`'s a hard-coded `"logs"` literal per test). Plan B lifts that into one setup node so
+    `makedirs`'s a hard-coded `"logs"` literal per test). This plan lifts that into one setup node so
     (a) no downstream writer needs `mkdir`, (b) the directory is materialised once per invocation
     rather than per `VlogSim`, (c) the subdir name is overridable, and (d) the *location* is a
     single data source rather than a leaf-level convention. **`-L/--logs-dir`** (default `"logs"`,
@@ -279,11 +279,14 @@ informational.
     `write-filelist` writes `run.{test_tag}.f` (the one shared filename the graph fully
     controls); `obj_dir_<tag>/`, the verilator `simv`, and the `logs/` paths were already
     per-tag. So concurrent tests no longer collide on those, with no lock and no loss of
-    concurrency. **Residual covered only by this item's reference fix:** non-verilator `simv`
-    (a fixed `builder_cfg.get_simv()` name the graph can't freely redirect), the `test.*`
-    "latest" symlinks (last-writer-wins), and tool-internal CWD writes — concurrent
-    same-builder runs of a fixed-`simv` builder still rely on the per-subdir change (or running
-    one at a time). Mechanism, the per-tag table, and the residual list in
+    concurrency. **Residual covered only by this item's reference fix:** the non-verilator `simv`
+    (a fixed `builder_cfg.get_simv()` name the graph can't freely redirect) and any tool-internal
+    fixed-name CWD write are **corrupting** — a concurrent multi-test run on a fixed-`simv` builder
+    can overwrite one test's binary with another's and **silently** report wrong results (rc 0,
+    green summary); the `test.*` "latest" symlinks race too but are benign (last-writer-wins
+    pointers to per-tag targets). There is **no built-in serialisation** (the lock shim was removed
+    by TODO #30 and not replaced), so until this item is ported into rtl_comrade the only interim
+    workaround is **operational**: run such suites one test per invocation. Mechanism, the per-tag table, and the residual list in
     [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
     The per-tag naming is itself **temporary** — superseded (not just complemented) when this
     item lands.
@@ -309,7 +312,7 @@ informational.
     `ThreadedChildWatcher` (Python 3.8+) reaps without explicit `waitpid`; that
     `os.killpg` race-with-already-exited (`ProcessLookupError`) actually surfaces under
     real load (not just contrived tests); that `asyncio.wait_for`'s inner cancellation
-    of `proc.wait()` does not interfere with our subsequent `proc.wait()` reap. Plan B
+    of `proc.wait()` does not interfere with our subsequent `proc.wait()` reap. This plan
     deliberately departs from rtl_buddy on (i) signalling the full process group rather
     than just the leader and (ii) adding SIGKILL escalation — record both under
     "Notable divergences" when implementation lands.
@@ -319,7 +322,7 @@ informational.
 - **`--early-stop` exits 0, not 1** (settled 10, R2). `rtl_buddy`'s `EarlyStopResults` is NA, and
   `exit_code |= 0 if is_pass() else 1` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:206`;
   `EarlyStopResults` at `runner/test_results.py:53-60`) makes `rtl_buddy test --early-stop <phase>`
-  exit **1**. Plan B treats a user-requested stop as a deliberate, successful early exit, not a
+  exit **1**. This plan treats a user-requested stop as a deliberate, successful early exit, not a
   failure: `early-stop-gate` emits `log.info("test_result", result="NA", …)` (never `log.error`),
   so the run exits **0**. The per-test `NA` verdict is unchanged, but the `desc` also diverges:
   `early-stop-gate` emits `"Stopped early at <phase>"` using the phase token (`pre`/`comp`/`sim`),
@@ -332,7 +335,7 @@ informational.
   [spec 10a](specs/10a-early-stop-gate.md).
 - **Verible config dropped; builder resolution re-homed** (R3). rtl_buddy's `RootConfig`
   (`config/root.py:50-231`) loads `cfg-verible` into `VeribleConfig`s and resolves the active
-  builder + verible *inside* `platform.initialise` during platform selection. Plan B (a) drops
+  builder + verible *inside* `platform.initialise` during platform selection. This plan (a) drops
   verible entirely — `VeribleConfigFile`/`VeribleConfig` are not ported, and the `cfg-verible`
   (root) / `verible` (per-platform) keys are left **unparsed** (pyserde ignores unknown keys, so
   files still load drop-in); and (b) keeps the builders dict (`rtl_builder_cfgs`) on a thin
@@ -343,7 +346,7 @@ informational.
   [04e](specs/04e-resolve-builder.md).
 - **`select-platform` is first-match, not last-match.** rtl_buddy iterates every platform with
   no `break` (`config/root.py:111-115`), so when two platforms share a `uname` the *last*
-  declared one wins. Plan B's [`select-platform`](specs/04d-select-platform.md) returns on the
+  declared one wins. This plan's [`select-platform`](specs/04d-select-platform.md) returns on the
   *first* match. Overlapping `unames` are a misconfiguration, so the choice is deliberate;
   recorded here so the parity claim is explicit. Single-platform-per-`uname` configs (the norm)
   are unaffected.
@@ -353,7 +356,7 @@ informational.
   while building every `TestConfig`).
 - **Compile output is persisted to files** (settled 12) as a side effect of the redirect.
   Departs from rtl_buddy's in-memory capture `subprocess.run(run_cmd, capture_output=True)`
-  (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:163`); Plan B redirects stdout/stderr to the
+  (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:163`); this plan redirects stdout/stderr to the
   `command` paths in `run-process` instead.
 - **Concurrency is structurally available** (deferred 17) — pending the upstream rtl_buddy
   per-invocation-subdir change (the reference fix). **Interim**: artefacts the graph controls
@@ -362,7 +365,7 @@ informational.
   The earlier `serial_acquire`/`any.release_lock` lock shim was **removed** (TODO #30). Residual
   shared-CWD artefacts (non-verilator `simv`, `test.*` symlinks, tool-internal files) remain for
   item 17 (see [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
-- **`git-status` is recorded as a logging event** (settled 27) — Plan B includes git-state
+- **`git-status` is recorded as a logging event** (settled 27) — this plan includes git-state
   capture (rtl_buddy's `show_git_rev` at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522`) but
   routes it through `log.info("git_state")`, which falls through to the console (the
   `SummaryProcessor` plugin accumulates results only), not through the graph. The summary
@@ -380,7 +383,7 @@ informational.
   `--level`. Drops rtl_buddy's `root_options` flags at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:116-117`.
 - **`-L/--logs-dir` is a new CLI override + centralised artefact-location provenance**
   (settled 26; centralised 2026-06-16). `rtl_buddy` hard-codes `"logs"`
-  (`tools/vlog_sim.py:55`) and every tool composes paths relative to the ambient CWD; Plan B
+  (`tools/vlog_sim.py:55`) and every tool composes paths relative to the ambient CWD; this plan
   keeps the same default but (a) accepts a user-supplied subdir **name**, and (b) decides the
   artefact *location* once — `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots `logs/`
   on it and emits the resolved directory `Path`. The composition sites (`build-compile-cmd`,
@@ -392,11 +395,11 @@ informational.
   (settled 10). `load-model`, `write-filelist`, `expand-sweep`, `run-preproc`, and
   `resolve-seed` (REPLAY) emit on a new `fail` port with `log.error` instead of aborting
   the whole run. rtl_buddy `logger.critical`s on preproc-script and sweep-script crashes
-  (`vlog_sim.py:134-137`, `rtl_buddy.py:279-281`); Plan B continues running other tests.
+  (`vlog_sim.py:134-137`, `rtl_buddy.py:279-281`); this plan continues running other tests.
   REPLAY-missing matches rtl_buddy's per-test FAIL **verdict** via `log.error`
   (`vlog_sim.py:200-213`), but with an **artifact divergence**: rtl_buddy additionally writes a
   FAIL stub `<test>.log`/`.err` and forces the `test.log`/`test.err` symlinks before returning
-  (`vlog_sim.py:204-212`), whereas Plan B's `resolve-seed` routes the `fail` `result` *before*
+  (`vlog_sim.py:204-212`), whereas this plan's `resolve-seed` routes the `fail` `result` *before*
   the sim/log/symlink steps run, so no stub log/err or symlinks are produced for a replay-fail.
   The verdict matches; the on-disk artifacts do not.
 

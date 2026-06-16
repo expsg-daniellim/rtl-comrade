@@ -221,21 +221,32 @@ artefact-location provider model as `logs/` so a relocation is a one-node change
 ### Residual — what only item 17 fixes
 
 Per-tag naming closes the filelist collision and confirms the already-per-tag artefacts, but
-it does **not** cover artefacts whose names the graph cannot freely choose:
+it does **not** cover artefacts whose names the graph cannot freely choose. These split into two
+severity classes — one **corrupting**, one benign:
 
-- **non-verilator `simv`** — a *fixed configured* name from `builder_cfg.get_simv()` (no
-  `build_dir` prefix; see [01a — Verilator quirk](specs/01a-builder-schema.md)). Redirecting
-  it per-tag needs a builder-specific output-path option, not a rename the graph owns.
-- **`test.log`/`test.err`/`test.randseed` symlinks** — `link-latest` forces fixed "latest"
-  names in CWD; concurrent runs race on them (last-writer-wins; convenience pointers, not
-  corrupting).
-- **anything the simulator/compiler writes into CWD itself** (intermediate files, tool logs).
+- **non-verilator `simv` (corrupting — silent wrong results)** — a *fixed configured* name from
+  `builder_cfg.get_simv()` (no `build_dir` prefix; see
+  [01a — Verilator quirk](specs/01a-builder-schema.md)). Two concurrent compiles write the same
+  CWD path, so test B's compile can overwrite the binary test A is about to simulate: test A then
+  runs B's `simv`, both exit rc 0, and the summary shows two meaningless passes. The corruption is
+  **silent** — no error, no parity check catches it. Redirecting it per-tag needs a
+  builder-specific output-path option, not a rename the graph owns.
+- **anything the simulator/compiler writes into CWD under a fixed name (corrupting)** —
+  intermediate files, tool dbs/logs; same silent-overwrite hazard as the `simv` for any tool that
+  hard-codes a CWD output name.
+- **`test.log`/`test.err`/`test.randseed` symlinks (benign)** — `link-latest` forces fixed
+  "latest" names in CWD; concurrent runs race on them (last-writer-wins), but they are convenience
+  pointers to per-tag targets, so a race only mispoints the pointer — it does **not** corrupt
+  results.
 
 These are exactly the artefacts that **item 17's per-invocation working directories** isolate
 wholesale, and that reference implementation is materially more complete than this naming
 subset. Until item 17 lands, structural concurrency is safe for verilator builders and the
-filelist; for builders whose `simv` is a fixed name, concurrent same-builder runs still rely
-on item 17 (or running them one at a time). This residual is recorded under item 17 — do not
+filelist, but **unsafe for fixed-`simv` (non-verilator) builders**: a concurrent multi-test run
+on such a builder can silently produce wrong results (above). There is **no built-in
+serialisation** — the lock shim was removed (TODO #30) and not replaced — so the only interim
+workaround is **operational**: invoke such suites one test per `rtl-comrade test` call (a single
+item in flight) until item 17 is ported into rtl_comrade. This residual is recorded under item 17 — do not
 re-introduce a lock to paper over it; that path was tried and removed.
 
 ## Result aggregation and exit code

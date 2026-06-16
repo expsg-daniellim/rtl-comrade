@@ -46,7 +46,7 @@ ctx = {
 - **`ctx["test"]` is the live `TestConfig`**, mutated in-place by `run-preproc` /
   `expand-sweep`; `ctx["test"].model` carries the loaded `ModelConfig` after `load-model`.
   These reimplement rtl_buddy `TestConfig` (`rtl_buddy/src/rtl_buddy/config/test.py:43-302`)
-  and `ModelConfig` (`config/model.py:9-51`); the Plan B field renames are pinned in
+  and `ModelConfig` (`config/model.py:9-51`); the field renames in this plan are pinned in
   specs [01b](specs/01b-suite-schema.md) / [01c](specs/01c-model-schema.md). The `seed_mode`
   payload is the `SeedMode` enum (`rtl_buddy/src/rtl_buddy/seed_mode.py:4-7`).
 - **No `result` field, ever.** Terminal outcomes leave as Shape-3 payloads, removing the
@@ -142,7 +142,7 @@ a base `TestResults` with `{"result": "FAIL", "desc": desc}`, defined in `result
 
 `TestResults.is_pass()` is the single source of truth for the exit code (SKIP counts as
 pass; NA/FAIL do not), exactly as in `rtl_buddy` — **except `early-stop`**: `EarlyStopResults`
-is NA (and `rtl_buddy` exits 1 on `--early-stop`), but Plan B treats a user-requested stop as a
+is NA (and `rtl_buddy` exits 1 on `--early-stop`), but this plan treats a user-requested stop as a
 non-failure and exits 0. This is the one deliberate exit-code divergence
 ([07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
 A genuine NA verdict from `parse-log`/`parse-uvm-log` still drives exit 1.

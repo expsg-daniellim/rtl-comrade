@@ -200,7 +200,7 @@ default-resolution lives in one obvious place.
    exit code (`exit_code |= 0 if is_pass() else 1`) ORs R identical pass-states into the same
    value as one.
 
-   Plan B places `gate-pre`/`gate-comp` (and `filter-reglvl`) **before** the `runs` fan-out, so
+   This plan places `gate-pre`/`gate-comp` (and `filter-reglvl`) **before** the `runs` fan-out, so
    a pre/comp early-stop or a skip emits **one** `test_result` row, not R. This is a deliberate
    de-duplication: identical exit code, no work difference (the dropped rows are
    indistinguishable in the printed table), and arguably cleaner output. **Genuine** per-run

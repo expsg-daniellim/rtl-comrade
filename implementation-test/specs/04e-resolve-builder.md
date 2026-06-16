@@ -59,7 +59,7 @@ class ResolveBuilderMod:
    unknown override, a `None` platform builder with no override, or no builders configured at
    all): `log.fatal(f"named builder {name} not in configured builders
    {sorted(root_cfg.rtl_builder_cfgs)}")` (harness exits 1). rtl_buddy raises
-   `typer.BadParameter`; Plan B uses `log.fatal` for uniform exit semantics.
+   `typer.BadParameter`; this plan uses `log.fatal` for uniform exit semantics.
 
 ## Deliverables
 
@@ -75,7 +75,7 @@ In `modules/rtl_buddy/setup.py`:
   no builders configured), `log.fatal(f"named builder {name} not in configured builders
   {sorted(root_cfg.rtl_builder_cfgs)}")` (rtl_buddy's `rtl_buddy.py:76-80` raises
   `typer.BadParameter` for the override and `platform.py:78-79` criticals on the unset case;
-  Plan B uses `log.fatal` for uniform exit semantics). Empty builders dict is also covered
+  this plan uses `log.fatal` for uniform exit semantics). Empty builders dict is also covered
   (`root.py:151`).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/platform.py:63-84`
   (`PlatformConfigFile.initialise`) + `config/root.py:94` (the `rtl_builder_cfgs` dict).

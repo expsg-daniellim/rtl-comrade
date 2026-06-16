@@ -111,7 +111,7 @@ In `modules/rtl_buddy/setup.py`:
   (becomes a harness CRITICAL via the bubbling-SystemExit catch, same idiom as
   `DiscoverConfigFileMod`'s `PermissionError`). No port-routed fail — this is a setup-domain
   config error, not per-test.
-  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"` mkdir in `VlogSim.__init__` (lifted to a setup node; rooting on `work_dir` and emitting the resolved path are Plan B divergences — see [07 settled 26](../07-ambiguities-and-assumptions.md)).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"` mkdir in `VlogSim.__init__` (lifted to a setup node; rooting on `work_dir` and emitting the resolved path are divergences in this plan — see [07 settled 26](../07-ambiguities-and-assumptions.md)).
 
 **Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml`
 (opened by [`04a`](04a-discover-config-file.md); append, don't re-create):

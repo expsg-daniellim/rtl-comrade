@@ -133,7 +133,7 @@ Deserialise `tests.yaml` into the schema-compatible suite (testbenches + tests),
 test to its testbench (within-file) and recording the suite directory on each test so
 `load-model` can resolve `model_path` later. Model loading is deferred to `load-model`.
 
-- **Source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__`: `from_yaml(SuiteConfigFile, ...)`, the testbench bind `tbs = {tb.get_name(): tb for tb in data.testbenches}` (`suite.py:40`), and `test.initialise(config_dir, tbs)` (`suite.py:46`). Per-test `initialise` at `config/test.py:320-323`. (Plan B defers `load-model`, which rtl_buddy does eagerly at `test.py:322`.)
+- **Source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__`: `from_yaml(SuiteConfigFile, ...)`, the testbench bind `tbs = {tb.get_name(): tb for tb in data.testbenches}` (`suite.py:40`), and `test.initialise(config_dir, tbs)` (`suite.py:46`). Per-test `initialise` at `config/test.py:320-323`. (this plan defers `load-model`, which rtl_buddy does eagerly at `test.py:322`.)
 - **In:** `test_config_path:Path` (resolved by `check-suite-cwd` in test/randtest, or by
   `parse-reg-config` in regression — see [08](08-sibling-graphs.md))
 - **Out:** default → `suite_cfg`
@@ -220,7 +220,7 @@ Load the test's `models.yaml` (resolving `model_path` relative to the suite dir 
 `parse-suite-config`) and attach the `ModelConfig` to `ctx["test"]`. Deferred from suite
 parse so it is per-test and reusable (the `filelist` command needs the same step).
 
-- **Source:** `rtl_buddy/src/rtl_buddy/config/model.py:66-100` — `ModelConfigLoader.__init__` (`from_yaml(ModelConfigFile, ...)`) + `get_model` (name lookup, `model.path` stamp, not-found path). Plan B **raises** here instead of rtl_buddy's `log.fatal` so the module can route a per-test FAIL ([07 settled 10](07-ambiguities-and-assumptions.md)).
+- **Source:** `rtl_buddy/src/rtl_buddy/config/model.py:66-100` — `ModelConfigLoader.__init__` (`from_yaml(ModelConfigFile, ...)`) + `get_model` (name lookup, `model.path` stamp, not-found path). This plan **raises** here instead of rtl_buddy's `log.fatal` so the module can route a per-test FAIL ([07 settled 10](07-ambiguities-and-assumptions.md)).
 - **In:** `ctx`
 - **Out:** `("default", ctx)` (test now carries its model) | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on missing/malformed `models.yaml`; `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -256,7 +256,7 @@ uses) so concurrent tests don't collide on a shared `run.f`, rooted on the `work
 second port (both consumed in lockstep by `build-compile-cmd`, which passes
 `filelist["filelist"]` straight to `-f`, so no join and no naming change is needed there).
 
-- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output` (model + test filelist `_extract`, `_process`, write). Called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93` with `unroll=True, deduplicate=True`. The per-tag `run.{test_tag}.f` name is a Plan B divergence (rtl_buddy hard-codes `"run.f"` at `vlog_sim.py:157`).
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output` (model + test filelist `_extract`, `_process`, write). Called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93` with `unroll=True, deduplicate=True`. The per-tag `run.{test_tag}.f` name is a divergence in this plan (rtl_buddy hard-codes `"run.f"` at `vlog_sim.py:157`).
 - **In:** `ctx`, `work_dir:Path` (validated base dir from `check-suite-cwd`; **load-bearing** persistent input)
 - **Out:** `("ctx", ctx)`, `("filelist", {key, filelist})` | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on filelist generation failure (e.g. unresolved source file); `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -296,7 +296,7 @@ lifecycle and cancellation semantics.
 
 - **Source:**
   - `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:162-179` — `VlogSim.compile`'s `subprocess.run(run_cmd, capture_output=True)` + `FileNotFoundError` handling (the no-timeout compile leg).
-  - `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:240-281` — `VlogSim.execute`'s `Popen(preexec_fn=os.setpgrp, stdout=…, stderr=…)`, `process.wait(timeout)`, and the timeout→`SIGQUIT`/`rc=4444` block (the with-timeout sim leg). Plan B diverges on signal target + SIGKILL escalation — see [specs/03-run-process.md](specs/03-run-process.md) and [07 settled 23](07-ambiguities-and-assumptions.md).
+  - `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:240-281` — `VlogSim.execute`'s `Popen(preexec_fn=os.setpgrp, stdout=…, stderr=…)`, `process.wait(timeout)`, and the timeout→`SIGQUIT`/`rc=4444` block (the with-timeout sim leg). This plan diverges on signal target + SIGKILL escalation — see [specs/03-run-process.md](specs/03-run-process.md) and [07 settled 23](07-ambiguities-and-assumptions.md).
 - **In:** `command:{key,argv,stdout_path,stderr_path}`, `timeout:float | None = None`, `env_ready:bool = True`
 - **Out:** default → `proc:{key,rc,timed_out,stdout_path,stderr_path}`
 - **Log idiom:** `log.fatal` if the subprocess fails to *launch* (binary not on PATH, permission denied) — system-wide condition, not per-test. Non-zero `rc` and `timed_out` are not failures here; they are interpreted downstream by `interpret-compile` / `interpret-sim` as per-test results. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -358,7 +358,7 @@ One compiled test → one `ctx` per run-id, yielding a fresh `ctx` with `key` su
 (default `logs/...`, matching rtl_buddy). Emits `ctx` unchanged and the seed payload
 in lockstep so `build-sim-cmd` receives both from the same upstream without a join.
 
-- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute`'s seed resolution: REPLAY reads `<path>.randseed` with `(FileNotFoundError, ValueError)` handling (`:197-213`), NEW does `random.randrange(1000000)` (`:214-216`), DEFAULT uses `get_seed()` (`:218-219`). Plan B routes REPLAY failure as a per-test FAIL `result` rather than rtl_buddy's inline FAIL-stub-and-return (`:203-212`).
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute`'s seed resolution: REPLAY reads `<path>.randseed` with `(FileNotFoundError, ValueError)` handling (`:197-213`), NEW does `random.randrange(1000000)` (`:214-216`), DEFAULT uses `get_seed()` (`:218-219`). This plan routes REPLAY failure as a per-test FAIL `result` rather than rtl_buddy's inline FAIL-stub-and-return (`:203-212`).
 - **In:** `ctx`, `seed_mode`, `builder_cfg`, `logs_dir:Path` (resolved artefact dir from `ensure-logs-dir`)
 - **Out:** `("ctx", ctx)`, `("seed", {key, seed})` | `("fail", result)` *(REPLAY only)*
 - **Log idiom:** port-routed `fail` `result` in REPLAY mode when `<logs_dir>/<test>[_NNNN].randseed` is missing or malformed; `log.error` at emission with the path. `NEW`/`DEFAULT` modes have no failure path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -406,7 +406,7 @@ Distinct functionality from randseed writing.
 Pure routing on the joined result: `timed_out` → `timeout` (`SimTimeoutResults`), else `ok`.
 No side-effects — the artifacts were written upstream.
 
-- **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch in `TestRunner.run`. The `rc=4444` sentinel is set in `tools/vlog_sim.py:258-261`; the FAIL payload is `SimTimeoutResults` at `runner/test_results.py:62-69`. Plan B keys on the explicit `timed_out` flag rather than the magic `rc`.
+- **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch in `TestRunner.run`. The `rc=4444` sentinel is set in `tools/vlog_sim.py:258-261`; the FAIL payload is `SimTimeoutResults` at `runner/test_results.py:62-69`. This plan keys on the explicit `timed_out` flag rather than the magic `rc`.
 - **In:** `test_run`
 - **Out:** `("ok", test_run)` | `("timeout", result)`
 - **Log idiom:** port-routed `timeout` `result` (`SimTimeoutResults`) when `timed_out` is set; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -428,7 +428,7 @@ is the only place the uvm/plain decision lives.
 Reimplements `VlogPost` with corrections (see [07 settled 15](07-ambiguities-and-assumptions.md)):
 the `PASS/FAIL/ERR/FAT` regex scan on `test_run["log"]`. Emits `{key, result}`.
 
-- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results`: the per-line `^PASS` / `^FAIL` / `^(ERR|FAT):` searches and the `NA`/`FAIL`/`PASS` precedence. Plan B **corrects** the quirks (PASS-after-FAIL override, partial-match `match_err` crash) — see [07 settled 15](07-ambiguities-and-assumptions.md).
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results`: the per-line `^PASS` / `^FAIL` / `^(ERR|FAT):` searches and the `NA`/`FAIL`/`PASS` precedence. This plan **corrects** the quirks (PASS-after-FAIL override, partial-match `match_err` crash) — see [07 settled 15](07-ambiguities-and-assumptions.md).
 - **In:** `test_run`
 - **Out:** default → `result`
 - **Log idiom:** port-routed `result`; `log.error` at emission when the parsed result is FAIL. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
@@ -529,7 +529,7 @@ wins; keep this table in step when a range there changes.
 | `parse-uvm-log` | `tools/vlog_post.py:58-81` — `UvmVlogPost.get_results` |
 | `early-stop-gate` | `runner/test_runner.py:59-76` — `RunDepth` checkpoints (enum `:14-18`) |
 
-For the rtl_buddy behaviour each Plan B departure leaves behind, see
+For the rtl_buddy behaviour each departure in this plan leaves behind, see
 [07 — Notable divergences](07-ambiguities-and-assumptions.md).
 
 > `fan-in-results` and `aggregate-results` were removed by the TODO #15 redesign — the
