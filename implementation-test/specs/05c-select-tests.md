@@ -48,7 +48,7 @@ class SelectTestsMod:
    "run_id": None})` — one `ctx` per selected test. `--list` is handled upstream, so there is
    no mode logic here.
 3. **Failure — unknown test name.** No `try/except` at this layer: when `test_name` is supplied
-   but absent, `SuiteConfig.get_tests` itself calls `log.critical(f"test_name {test_name} not
+   but absent, `SuiteConfig.get_tests` itself calls `log.fatal(f"test_name {test_name} not
    found in suite {self.path}")` (spec 01b).
 
 ## Deliverables
@@ -61,7 +61,7 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
   `{"key": test.get_name(), "test": test, "run_id": None}` per `TestConfig` returned. No mode logic;
   `--list` is handled upstream.
   **Failure handling**: `SuiteConfig.get_tests(test_name)` itself calls
-  `log.critical(f"test_name {test_name} not found in suite {self.path}")` when
+  `log.fatal(f"test_name {test_name} not found in suite {self.path}")` when
   `test_name` is supplied and missing (spec [01b — `SuiteConfig`](01b-suite-schema.md)
   — mirrors `rtl_buddy/src/rtl_buddy/config/suite.py:62-63` and `rtl_buddy.py:36`).
   No additional `try/except` needed at the module layer.
@@ -77,13 +77,13 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 ## Tests
 
 In `modules/tests/test_selection.py`. Fixtures: a 3-test `suite_cfg` fixture (and an empty
-one); `logging_handler` for the `log.critical` path.
+one); `logging_handler` for the `log.fatal` path.
 
 - `(suite_cfg, test_name="")` over a 3-test suite → yields 3 `("default", ctx)` in declaration
   order, each `ctx == {"key": test.get_name(), "test": test, "run_id": None}`.
 - `(suite_cfg, test_name="foo")` where `foo` exists → yields exactly one `("default", ctx)`
   for `foo`.
-- `(suite_cfg, test_name="nonexistent")` → `SuiteConfig.get_tests` itself `log.critical`s →
+- `(suite_cfg, test_name="nonexistent")` → `SuiteConfig.get_tests` itself `log.fatal`s →
   `pytest.raises(SystemExit)`.
 - `(empty_suite_cfg, test_name="")` → yields nothing (boundary: empty suite, generator emits
   zero ctxs).
@@ -95,7 +95,7 @@ one); `logging_handler` for the `log.critical` path.
   `ctx`s with correctly-stamped keys (streamed end-to-end against the reference suite
   `../rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`).
 - Failure idiom exercised: a supplied `test_name` absent from the suite →
-  `SuiteConfig.get_tests` emits `log.critical` (harness exit 1).
+  `SuiteConfig.get_tests` emits `log.fatal` (harness exit 1).
 - The `modules/config.yaml` manifest entry `{ name: select-tests, class_name: SelectTestsMod }`
   validates and the harness resolves `select-tests` → `SelectTestsMod`.
 
@@ -105,4 +105,4 @@ one); `logging_handler` for the `log.critical` path.
   "test": test, "run_id": None}`.
 - Do **not** add `--list` mode logic here — list-mode is routed upstream by `route-list-mode`.
 - Do **not** wrap the lookup in `try/except`: an unknown `test_name` makes
-  `SuiteConfig.get_tests` itself `log.critical` (harness exit 1). No port-routed result.
+  `SuiteConfig.get_tests` itself `log.fatal` (harness exit 1). No port-routed result.

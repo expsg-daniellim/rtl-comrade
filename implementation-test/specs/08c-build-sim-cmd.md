@@ -85,7 +85,7 @@ class BuildSimCmdMod:
    float(timeout))`. The `argv` rides `sim_cmd` as well as `command` so the downstream
    `keyed_join` `write-randseed` can check it for `hier_inst_seed` (spec 08d).
 7. **Failure — bad builder mode.** No catch: `builder_cfg.get_run_time_opts(builder_mode,
-   seed)` `log.critical`s if `builder_mode` is unknown or its `run_time` is `None` (spec 01a).
+   seed)` `log.fatal`s if `builder_mode` is unknown or its `run_time` is `None` (spec 01a).
 
 ## Deliverables
 
@@ -120,7 +120,7 @@ In `modules/rtl_buddy/sim.py`:
   "argv"})`, `("command", {"key", "argv", "stdout_path", "stderr_path"})`,
   `("timeout", float | None)`.
   **Failure handling**: `builder_cfg.get_run_time_opts(builder_mode, seed)` calls
-  `log.critical` if `builder_mode` is not in `builder_cfg.opts` or the mode's
+  `log.fatal` if `builder_mode` is not in `builder_cfg.opts` or the mode's
   `run_time` is `None` — see spec [01a](01a-builder-schema.md). No catching.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:195,221-235` — `VlogSim.execute` argv + `get_timeout`; `get_run_time_opts` at `config/rtl.py:104-123`, `get_timeout` at `config/test.py:210-219`.
 
@@ -153,7 +153,7 @@ for the bad-mode path.
 - `ctx["run_id"]` set (e.g. `5`) → every path stem includes the `_0005` run suffix (boundary:
   run-id suffix); `sim_cmd["argv"]` equals `command["argv"]` (so `write-randseed` can run the
   `hier_inst_seed` membership check).
-- `builder_mode` unknown → `get_run_time_opts` `log.critical`s → `pytest.raises(SystemExit)`
+- `builder_mode` unknown → `get_run_time_opts` `log.fatal`s → `pytest.raises(SystemExit)`
   (not caught here).
 
 ## Acceptance criteria
@@ -178,5 +178,5 @@ for the bad-mode path.
   do **not** assume a CWD-relative `"logs"` or read the ambient CWD. Do **not** `mkdir(logs_dir)`
   — `ensure-logs-dir` owns it.
 - Emit `timeout` as `float | None`. Emit all four ports in lockstep via the generator.
-- Do **not** catch `get_run_time_opts` — it `log.critical`s on an unknown mode / `None` opts
+- Do **not** catch `get_run_time_opts` — it `log.fatal`s on an unknown mode / `None` opts
   (spec [01a](01a-builder-schema.md)); system-wide misconfiguration, not per-test.

@@ -59,7 +59,7 @@ class LoadModelMod:
    `loader.get_model(ctx["test"].model_name)` (spec 01c).
 3. Attach and pass through: `ctx["test"].model = model`; emit `("default", ctx)`.
 4. **Failure — lookup/load miss.** Wrap step 2 in `try/except Exception` (Plan B's loader
-   *raises* rather than `log.critical`-ing — spec 01c): file I/O, parse, schema mismatch, or
+   *raises* rather than `log.fatal`-ing — spec 01c): file I/O, parse, schema mismatch, or
    model-not-in-file → emit `("fail", {"key": ctx["key"], "result": <FAIL with str(e) in
    desc>})` and `log.error("load_model_failed", …)` at emission with the resolved `model_path`
    **plus `result`/`desc`** (so `SummaryProcessor`'s watch-list collects the row). This is the
@@ -76,7 +76,7 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
   `ctx["test"].model = the_model`, emits `("default", ctx)`.
   **Failure handling**: catch broad `Exception` from both `ModelConfigLoader.__init__`
   (I/O / parse / schema mismatch — Plan B's loader **raises rather than
-  `log.critical`s**, see spec [01c — Notable divergences](01c-model-schema.md)) and
+  `log.fatal`s**, see spec [01c — Notable divergences](01c-model-schema.md)) and
   `loader.get_model(name)` (model not in file). Specific classes in play:
   `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O);
   `serde.SerdeError` / `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema
@@ -113,7 +113,7 @@ the failure cases; `logging_handler` to assert `failure is True` **without** `Sy
   `FileNotFoundError` → emits `("fail", …)`, `log.error`, no abort.
 - `ctx` pointing at a malformed `models.yaml` → parse error → emits `("fail", …)`,
   `log.error`, no abort (boundary: I/O vs parse vs lookup all route to the same port).
-- Assert across the fail cases that **no** `log.critical`/`SystemExit` fires — the deliberate
+- Assert across the fail cases that **no** `log.fatal`/`SystemExit` fires — the deliberate
   divergence from rtl_buddy's abort.
 
 ## Acceptance criteria
@@ -133,6 +133,6 @@ the failure cases; `logging_handler` to assert `failure is True` **without** `Sy
   result: <FAIL with str(e)>})` on the **unwired** `fail` port and `log.error("load_model_failed",
   …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor`
   watch-list collects the row).
-- **Must not** `log.critical` / abort the run — per-test FAIL preserves run continuity; this is
+- **Must not** `log.fatal` / abort the run — per-test FAIL preserves run continuity; this is
   the deliberate divergence from rtl_buddy.
 - Use string-literal port names (`default`/`fail`).

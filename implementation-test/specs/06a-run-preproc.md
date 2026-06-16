@@ -137,7 +137,7 @@ a `root_cfg` fixture; `logging_handler` to assert `failure is True` without `Sys
   `FileNotFoundError`/`PermissionError`) → emit `("fail", {key, result: <FAIL with str(e) +
   traceback>})` on the **unwired** `fail` port and `log.error("preproc_failed", …, exc_info=e)`
   carrying **`result`/`desc`** (so the `SummaryProcessor` watch-list collects the row). Per-test
-  FAIL, **not** `log.critical`/abort.
+  FAIL, **not** `log.fatal`/abort.
 - Reuse the shared `exec_hook` helper (spec [05f](05f-expand-sweep.md)) — do **not** copy-paste.
 
 ## Notes

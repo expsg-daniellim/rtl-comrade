@@ -141,8 +141,10 @@ One output may feed many destinations (output fan-out is allowed; the single-sou
 constrains *input* ports only). Config broadcasts:
 
 - setup chain: `discover-root` → `parse-root` → `select-platform` → `resolve-builder`
-- env setup: `prepend-path` → `ensure-logs.env_ready`; `check-cwd.work_dir` → `ensure-logs.work_dir`;
-  `ensure-logs.env_ready` → `cc-run.env_ready`, `sim-run.env_ready` (chained token)
+- env setup: `prepend-path` → `ensure-logs.env_ready`; `check-cwd.work_dir` → `ensure-logs.work_dir`,
+  `filelist.work_dir`, `cc-build.work_dir` (persistent base-dir fan-out: `filelist` roots
+  `run.<tag>.f`, `cc-build` roots `obj_dir_<tag>/`); `ensure-logs.env_ready` → `cc-run.env_ready`,
+  `sim-run.env_ready` (chained token)
 - `parse-root.root_cfg` → `select-platform`, `resolve-builder` (`unit`); `sweep`, `preproc` (persistent)
 - `resolve-builder.builder_cfg` → `filter`, `cc-build`, `seed`, `sim-build` (persistent)
 - `parse-suite.suite_cfg` → `route-list`; `route-list.run` → `select`, `route-list.list` → `list-names`

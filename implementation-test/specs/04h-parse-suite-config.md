@@ -40,7 +40,7 @@ class ParseSuiteConfigMod:
         try:
             suite_cfg = SuiteConfig(test_config_path)   # from_yaml + testbench bind + suite_dir stamp
         except Exception as e:   # I/O, parse, UVMConfig ValueError, unknown-testbench KeyError
-            log.critical("suite_config_load_failed", path=str(test_config_path), err=str(e))
+            log.fatal("suite_config_load_failed", path=str(test_config_path), err=str(e))
         return ("default", suite_cfg)
 ```
 
@@ -59,9 +59,9 @@ flow is enumerated in spec [01b — `SuiteConfig`](01b-suite-schema.md) and repr
    (`tests: dict[str, TestConfig]`, `path: Path`), and emit `("default", suite_cfg)`.
 5. **Failure — load/parse/validation.** Wrap steps 1–4 in `try/except Exception`: file I/O +
    parse errors (same family as `parse-root-config`) and `UVMConfig.__post_init__`'s
-   `ValueError` on negative `max_warns`/`max_errors` → `log.critical`. A `TestConfigFile.tb`
+   `ValueError` on negative `max_warns`/`max_errors` → `log.fatal`. A `TestConfigFile.tb`
    that does not resolve in `tbs` (`KeyError` from `tbs[t.tb]`) →
-   `log.critical(f"test {test.name} references unknown testbench {test.tb}")`.
+   `log.fatal(f"test {test.name} references unknown testbench {test.tb}")`.
 
 ## Deliverables
 
@@ -81,9 +81,9 @@ In `modules/rtl_buddy/setup.py`:
   spec [01b — `SuiteConfig`](01b-suite-schema.md).
   **Failure handling**: catch broad `Exception` from the YAML load and from
   `UVMConfig.__post_init__`'s `ValueError` on negative `max_warns`/`max_errors` (same
-  exception family as `ParseRootConfigMod`) → `log.critical`. After deserialisation, a
+  exception family as `ParseRootConfigMod`) → `log.fatal`. After deserialisation, a
   post-check: each `TestConfigFile.tb` must resolve to a defined `TestbenchConfig` —
-  unresolved (`KeyError` from `tbs[t.tb]`) → `log.critical(f"test {test.name}
+  unresolved (`KeyError` from `tbs[t.tb]`) → `log.fatal(f"test {test.name}
   references unknown testbench {test.tb}")`. Mirrors `rtl_buddy/src/rtl_buddy/config/suite.py:28-50`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/suite.py:26-50` — `SuiteConfig.__init__` (parse + testbench bind); per-test `TestConfigFile.initialise` at `config/test.py:320-323`.
 
@@ -98,18 +98,18 @@ In `modules/rtl_buddy/setup.py`:
 
 In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `tests.yaml` fixture for
 the happy path; `tmp_path` crafted YAML for the failure cases; `logging_handler` for the
-`log.critical` paths.
+`log.fatal` paths.
 
 - A real `tests.yaml` `Path` → emits `("default", suite_cfg)` with `tests:
   dict[str, TestConfig]`, each `test.tb` bound to its `TestbenchConfig` instance, and
   `suite_dir == test_config_path.parent` stamped on every test.
-- Path to a nonexistent file → `FileNotFoundError` caught → `log.critical` →
+- Path to a nonexistent file → `FileNotFoundError` caught → `log.fatal` →
   `pytest.raises(SystemExit)`.
-- Path to malformed-YAML → parse error caught → `log.critical` → `pytest.raises(SystemExit)`.
+- Path to malformed-YAML → parse error caught → `log.fatal` → `pytest.raises(SystemExit)`.
 - A test references a `testbench` name not in the file's `testbenches` → `KeyError` from
-  `tbs[t.tb]` → `log.critical("… references unknown testbench …")` → `pytest.raises(SystemExit)`.
+  `tbs[t.tb]` → `log.fatal("… references unknown testbench …")` → `pytest.raises(SystemExit)`.
 - A test's `uvm` block has negative `max_warns` (or `max_errors`) → `UVMConfig.__post_init__`
-  `ValueError` caught → `log.critical` → `pytest.raises(SystemExit)` (boundary: validation).
+  `ValueError` caught → `log.fatal` → `pytest.raises(SystemExit)` (boundary: validation).
 
 ## Acceptance criteria
 
@@ -120,7 +120,7 @@ the happy path; `tmp_path` crafted YAML for the failure cases; `logging_handler`
   — contributes to the setup-only end-to-end graph (see
   [04 index](04-setup-modules.md#acceptance-criteria)).
 - Failure idioms exercised: load/parse/validation errors (incl. `UVMConfig` negative
-  `max_warns`/`max_errors`) and a test referencing an unknown testbench → `log.critical`
+  `max_warns`/`max_errors`) and a test referencing an unknown testbench → `log.fatal`
   (harness exit 1).
 - The `modules/config.yaml` manifest entry `{ name: parse-suite-config, class_name: ParseSuiteConfigMod }`
   validates and the harness resolves `parse-suite-config` → `ParseSuiteConfigMod`.
@@ -132,7 +132,7 @@ the happy path; `tmp_path` crafted YAML for the failure cases; `logging_handler`
 - Stamp `suite_dir = test_config_path.parent` onto **every** test so `load-model` (spec
   [05e](05e-load-model.md)) can resolve `suite_dir / model_path` later.
 - Bind testbenches within-file via `tbs = {tb.get_name(): tb for tb in raw.testbenches}`; an
-  unresolved `t.tb` (`KeyError`) → `log.critical`.
+  unresolved `t.tb` (`KeyError`) → `log.fatal`.
 - Catch broad `Exception` (file I/O, parse, `UVMConfig.__post_init__`'s `ValueError`,
-  unknown-testbench `KeyError`) → `log.critical` (harness exit 1). All setup-domain config
+  unknown-testbench `KeyError`) → `log.fatal` (harness exit 1). All setup-domain config
   errors; never a port-routed result.

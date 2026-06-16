@@ -138,7 +138,7 @@ empty); a `ctx` fixture whose `test.get_sweep_path()` returns the script path or
   `FileNotFoundError`/`PermissionError`) → emit `("fail", {key, result: <FAIL with str(e) +
   traceback>})` on the **unwired** `fail` port and `log.error("sweep_failed", …, exc_info=e)`
   carrying **`result`/`desc`** (so the `SummaryProcessor` watch-list collects the row). Per-test
-  FAIL, **not** `log.critical`/abort (divergence from rtl_buddy's `typer.Abort`).
+  FAIL, **not** `log.fatal`/abort (divergence from rtl_buddy's `typer.Abort`).
 - Reuse the shared `exec_hook(path, namespace)` helper — do **not** copy-paste the
   `exec`-with-namespace pattern from `run-preproc`.
 

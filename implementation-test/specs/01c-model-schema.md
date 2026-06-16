@@ -65,7 +65,7 @@ The serde-decorated top-level type read straight from `models.yaml`.
 
 | field                | type                          | YAML rename          | default                  | notes                                                                                  |
 |----------------------|-------------------------------|----------------------|--------------------------|----------------------------------------------------------------------------------------|
-| `rtl_buddy_filetype` | `Literal['model_config']`     | `rtl-buddy-filetype` | required                 | Discriminator; serde raises on mismatch (caught by `ModelConfigLoader` → `log.critical`). |
+| `rtl_buddy_filetype` | `Literal['model_config']`     | `rtl-buddy-filetype` | required                 | Discriminator; serde raises on mismatch (caught by `ModelConfigLoader` → `log.fatal`). |
 | `models`             | `list[ModelConfig]`           | (none)               | `field(default_factory=list)` | Empty `models:` is legal and produces a no-op file (no models retrievable).            |
 
 Source: `rtl_buddy/src/rtl_buddy/config/model.py:53-63`.
@@ -78,14 +78,14 @@ Helper that reads `models.yaml` once and answers `get_model(name)` lookups. Owne
 Construction (`__init__(path: str)`):
 
 1. `self.path = path`.
-2. Open + `from_yaml(ModelConfigFile, ...)`. Any exception → `log.critical(f'Failed to load "{path}" {e}')`. Mirrors `model.py:76-81`. Specific classes in play: `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O); `serde.SerdeError` / `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema mismatch).
+2. Open + `from_yaml(ModelConfigFile, ...)`. Any exception → `log.fatal(f'Failed to load "{path}" {e}')`. Mirrors `model.py:76-81`. Specific classes in play: `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O); `serde.SerdeError` / `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema mismatch).
 3. `self.models = data.models` (the list).
 
 Method:
 
 | signature                                       | returns                          | log idiom                                                                                                                                            |
 |-------------------------------------------------|----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `get_model(model_name: str) -> ModelConfig`     | The matching `ModelConfig`, with its `path` field mutated in place to `self.path` (so downstream consumers know which `models.yaml` it came from). | `log.critical(f"model '{model_name}' not found")` if no `ModelConfig` in `self.models` has `name == model_name`. Mirrors `model.py:83-100`.          |
+| `get_model(model_name: str) -> ModelConfig`     | The matching `ModelConfig`, with its `path` field mutated in place to `self.path` (so downstream consumers know which `models.yaml` it came from). | `log.fatal(f"model '{model_name}' not found")` if no `ModelConfig` in `self.models` has `name == model_name`. Mirrors `model.py:83-100`.          |
 
 Note the **`path` mutation side effect** at `model.py:97`: `get_model` writes
 `model.path = self.path` before returning. Preserve this — `write-filelist` (spec
@@ -103,11 +103,11 @@ consumer of `ModelConfigLoader`. The flow:
    `model_path`, `suite_dir` from spec [01b](01b-suite-schema.md)).
 2. Resolves `resolved = ctx["test"].suite_dir / ctx["test"].model_path`.
 3. Constructs `ModelConfigLoader(str(resolved))` — `__init__`'s broad-exception catch
-   converts I/O / parse / schema errors to `log.critical`, but in Plan B these are
+   converts I/O / parse / schema errors to `log.fatal`, but in Plan B these are
    **port-routed `fail` `result`** (spec [05](05-selection-expansion-modules.md) `LoadModelMod`
    failure-handling block + [07 settled 10](../07-ambiguities-and-assumptions.md)). The
    reimplementation should therefore **let exceptions propagate from `ModelConfigLoader`**
-   rather than calling `log.critical` inside the loader itself; the `LoadModelMod` wrapper
+   rather than calling `log.fatal` inside the loader itself; the `LoadModelMod` wrapper
    catches and routes. This is a deliberate divergence from rtl_buddy at the *loader*
    layer, motivated by Plan B's per-test FAIL routing.
 4. Calls `loader.get_model(ctx["test"].model_name)`. A missing-model lookup similarly
@@ -142,11 +142,11 @@ is the file).
   returns the `ModelConfig` with `name == "modelA"` and `path == <the loader's path>`
   (assert the mutation happened).
 - **`get_model` missing name.** `get_model("nonexistent")` raises rather than calling
-  `log.critical` (Plan B divergence). Implementation choice: raise `KeyError` or a
+  `log.fatal` (Plan B divergence). Implementation choice: raise `KeyError` or a
   custom `ModelNotFoundError` — either is fine as long as `LoadModelMod` catches
   broadly.
 - **`ModelConfigLoader` ctor — bad path.** `ModelConfigLoader("/no/such/file.yaml")`
-  raises (FileNotFoundError) rather than calling `log.critical`.
+  raises (FileNotFoundError) rather than calling `log.fatal`.
 - **`ModelConfigLoader` ctor — malformed YAML.** A fixture with bad YAML similarly
   propagates.
 - **Empty `models:` list.** A `models.yaml` with `models: []` loads successfully;
@@ -168,9 +168,9 @@ is the file).
 
 - Preserve the `rtl-buddy-filetype` rename (keep the hyphen); do **not** Pythonify it.
 - `ModelConfigLoader.__init__` and `get_model` must **raise** on I/O / parse / schema error
-  and on a missing model — **not** `log.critical`. This is the deliberate loader-layer
+  and on a missing model — **not** `log.fatal`. This is the deliberate loader-layer
   divergence from rtl_buddy that lets `LoadModelMod` (spec [05e](05e-load-model.md)) catch and
-  route a per-test FAIL. Do not collapse it back to `log.critical`.
+  route a per-test FAIL. Do not collapse it back to `log.fatal`.
 - `get_model` must mutate `model.path = self.path` in place before returning — preserve this
   side effect; `write-filelist` (spec [06b](06b-write-filelist.md)) reads `model.path` to
   resolve `filelist` entries.

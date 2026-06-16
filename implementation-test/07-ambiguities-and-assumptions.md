@@ -76,7 +76,7 @@ informational.
     crash, `run-preproc` exec crash, `resolve-seed` REPLAY missing/malformed `.randseed`)
     emit on a `fail` output port (now **unwired**) and `log.error` once at emission.
     `run-process` subprocess-launch failure (binary not on PATH, permission denied) is
-    `log.critical` (system-wide, not per-test). Parse-machinery exceptions distinct from FAIL
+    `log.fatal` (system-wide, not per-test). Parse-machinery exceptions distinct from FAIL
     classification are deferred pending item 15. Full per-site table in
     [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
@@ -164,10 +164,10 @@ informational.
     example (`cd .../verif && python -m rtl_buddy test basic`). A new setup node
     [`check-suite-cwd`](03-module-catalog.md) (spec
     [04](specs/04-setup-modules.md)) enforces the convention by failing fast with
-    `log.critical` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
+    `log.fatal` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
     or if the resolved file doesn't exist. This catches `-c /abs/elsewhere/tests.yaml`,
     `-c ../sibling/tests.yaml`, and `-c subdir/tests.yaml` — three monorepo-mistarget
-    cases that the existing `parse-suite-config` log.critical (file-missing only) does
+    cases that the existing `parse-suite-config` log.fatal (file-missing only) does
     not catch. Wired in test and randtest graphs; **not** wired in regression (regression
     `chdir`s per-suite via `parse-reg-config` → `parse-suite-config`). The "CWD
     assumptions preserved" implementation note below is now explicit, not silent.
@@ -337,6 +337,12 @@ informational.
   not `platform.initialise`. The runtime `PlatformConfig` is therefore never built. See
   [spec 01 — `root.py` schema](specs/01-shared-schema.md#rootpy-schema-detailed) and
   [04e](specs/04e-resolve-builder.md).
+- **`select-platform` is first-match, not last-match.** rtl_buddy iterates every platform with
+  no `break` (`config/root.py:111-115`), so when two platforms share a `uname` the *last*
+  declared one wins. Plan B's [`select-platform`](specs/04d-select-platform.md) returns on the
+  *first* match. Overlapping `unames` are a misconfiguration, so the choice is deliberate;
+  recorded here so the parity claim is explicit. Single-platform-per-`uname` configs (the norm)
+  are unaffected.
 - **`load-model` is lazy** (settled 8) — broken `models.yaml` in a skipped test no longer
   errors early. Departs from rtl_buddy's eager load inside `TestConfigFile.initialise`
   (`rtl_buddy/src/rtl_buddy/config/test.py:320-323`, which calls `ModelConfigLoader.get_model`

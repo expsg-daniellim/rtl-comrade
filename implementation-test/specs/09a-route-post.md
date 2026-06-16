@@ -49,9 +49,10 @@ class RoutePostMod:
 
 In `modules/rtl_buddy/sim.py` (continuing from spec 08):
 
-- `RoutePostMod` — `(ctx)` → `("uvm", ctx)` if `ctx["test"].uvm is not None` else
-  `("plain", ctx)`. `ctx["test"].uvm` is `UVMConfig | None` per spec
-  [01b](01b-suite-schema.md). Pure data classifier; no scheduling.
+- `RoutePostMod` — `(test_run)` → `("uvm", test_run)` if `test_run["test"].uvm is not None`
+  else `("plain", test_run)`. The payload here is the post-sim `test_run` record
+  ([02 — Shape 1b](../02-payload-conventions.md)); `test_run["test"].uvm` is `UVMConfig | None`
+  per spec [01b](01b-suite-schema.md). Pure data classifier; no scheduling.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:293-298` — the `if self.test_cfg.uvm:` dispatch in `VlogSim.post`.
 
 **Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`

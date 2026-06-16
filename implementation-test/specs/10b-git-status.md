@@ -59,7 +59,7 @@ class GitStatusMod:
    log.
 4. **Failure — not a repo / git absent.** Wrap step 1 in `try/except (CalledProcessError,
    FileNotFoundError)` → `log.warning("git_state_unavailable", reason=str(e))`. **Never**
-   `log.error`/`log.critical`: missing git state must not fail the run. Step 3 still emits.
+   `log.error`/`log.fatal`: missing git state must not fail the run. Step 3 still emits.
 
 ## Deliverables
 
@@ -71,7 +71,7 @@ Zero-input `unit` node. `run(self)` shells out to git (`git rev-parse --abbrev-r
 not collected by any plugin — it falls through the `SummaryProcessor` (which accumulates
 results only) to the console and prints at run start. If not in a git repo or `git` is
 unavailable, `log.warning("git_state_unavailable", reason=...)` — **never**
-`log.error`/`log.critical`. Returns `("default", True)`; the port is unwired (the node exists
+`log.error`/`log.fatal`. Returns `("default", True)`; the port is unwired (the node exists
 only for the side-effect log).
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev` (here emitted as one structured `git_state` event rather than printed).
@@ -105,7 +105,7 @@ assert `failure is False` throughout.
 - Tests pass.
 - Output port `default` exercised (emits `True`, sequencing only): in a git repo it emits one
   `git_state` event (branch/sha/dirty) at INFO; outside a repo it emits
-  `git_state_unavailable` at WARNING and never `log.error`/`log.critical`.
+  `git_state_unavailable` at WARNING and never `log.error`/`log.fatal`.
 - The `modules/config.yaml` manifest entry `{ name: git-status, class_name: GitStatusMod }`
   validates and the harness resolves `git-status` → `GitStatusMod`.
 
@@ -113,7 +113,7 @@ assert `failure is False` throughout.
 
 - `unit` contract, zero-input — runs once for its `log.info("git_state", …)` side-effect.
 - Catch `(subprocess.CalledProcessError, FileNotFoundError)` (not a repo / `git` absent) →
-  `log.warning("git_state_unavailable", …)`. **Never** `log.error`/`log.critical` — missing git
+  `log.warning("git_state_unavailable", …)`. **Never** `log.error`/`log.fatal` — missing git
   state must not fail or abort the run.
 - `git_state` is **not** collected by `SummaryProcessor` (results-only); it falls through to the
   console at run start.

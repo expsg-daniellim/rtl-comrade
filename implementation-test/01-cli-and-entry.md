@@ -76,7 +76,7 @@ The plain `test` and `randtest` graphs inherit this user-driven posture because 
 land in CWD. To prevent the silent "wrong CWD → artefacts in wrong place" failure mode (the
 monorepo case with `-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`, or
 `-c subdir/tests.yaml`), a [`check-suite-cwd`](03-module-catalog.md) setup node fails fast
-with `log.critical` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
+with `log.fatal` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
 or if the resolved file doesn't exist. The `regression` graph does not wire this node — it
 `chdir`s per-suite internally. See [07 settled 24](07-ambiguities-and-assumptions.md) for
 the full rationale.

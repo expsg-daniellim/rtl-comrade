@@ -481,31 +481,31 @@ each have a documented home.
 
 ### R14. Extend the `work_dir` provider model to `run.f` and `obj_dir_<tag>/`
 
-**Status: Open.** Follow-on to R12. The path-provenance centralisation (R12) covered the
-artefact (`logs/`) tree only: `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots `logs/`
-on it and emits the resolved `Path`, and the composers join onto it. Two leaf-level writers still
-compose **CWD-relative** paths and so still bake in the rtl_buddy "everything is CWD-relative"
-assumption:
+**Status: Resolved 2026-06-16.** Follow-on to R12. The path-provenance centralisation (R12) covered
+the artefact (`logs/`) tree only: `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots
+`logs/` on it and emits the resolved `Path`, and the composers join onto it. Two leaf-level writers
+still composed **CWD-relative** paths and so still baked in the rtl_buddy "everything is
+CWD-relative" assumption:
 
-- **`run.f`** — `write-filelist` (`06b`) writes `Path(f"run.{test_tag}.f")`, relative to the
-  ambient CWD.
+- **`run.f`** — `write-filelist` (`06b`) wrote `Path(f"run.{test_tag}.f")`, relative to the
+  ambient CWD. **Now:** takes `work_dir` as a load-bearing persistent input and writes
+  `Path(work_dir) / f"run.{test_tag}.f"`.
 - **`obj_dir_<tag>/`** (and the verilator `simv = f"{build_dir}/simv"`) — `build-compile-cmd`
-  (`07a`) composes `build_dir = f"obj_dir_{test_tag}"`, relative to the ambient CWD.
+  (`07a`) composed `build_dir = f"obj_dir_{test_tag}"`, relative to the ambient CWD. **Now:** takes
+  `work_dir` as a load-bearing persistent input and composes `build_dir = str(Path(work_dir) /
+  f"obj_dir_{test_tag}")`; the verilator `simv` inherits the rooting via `build_dir`.
 
-Apply the same provider model: feed these writers a base directory derived from
-`check-suite-cwd`'s `work_dir` (or a dedicated build-dir provider) and have them join onto it,
-so location is decided once and a relocation (`--work-dir`, regression's per-suite root) is a
-one-node change rather than per-writer edits.
+Both writers now consume `check-suite-cwd`'s `work_dir` directly (the same provider
+`ensure-logs-dir` consumes), so location is decided once and a relocation (`--work-dir`,
+regression's per-suite root) is a one-node change. **Residual (still item 17):** the non-verilator
+`simv = builder_cfg.get_simv()` is a fixed configured name the graph can't redirect, plus the
+`test.*` symlinks and tool-internal files — these wait on the per-invocation-subdir change
+([07 item 17](implementation-test/07-ambiguities-and-assumptions.md)), which supersedes both the
+per-tag naming and this `work_dir` rooting when it lands.
 
-**Why deferred, not done with R12.** This is the broader CWD-collision/relocation work already on
-the books as [07 item 17](implementation-test/07-ambiguities-and-assumptions.md) (per-invocation
-working subdirs that isolate *every* CWD-relative artefact at once). R14 is the concrete
-"do for `run.f`/`obj_dir` what R12 did for `logs/`" slice of that item; sequence it with item 17
-so the two don't design the base-dir source twice.
-
-**Touch points (when taken up):** `06b` (write-filelist), `07a` (build-compile-cmd `build_dir`
-/ verilator `simv`), the `03` catalog rows, `06` graph edges (a base-dir fan-out), and the
-`07` item 17 / "CWD assumptions" notes.
+**Touch points (done):** `06b` (write-filelist), `07a` (build-compile-cmd `build_dir` / verilator
+`simv`), the `03` catalog rows, `04f` (check-suite-cwd's `work_dir` consumer list), and `06` graph
+edges (the `work_dir` fan-out to `filelist` / `cc-build`).
 
 #### Acceptance check
 
@@ -533,4 +533,4 @@ CWD-relative.
 | R11 | `08f` logs a "configured timeout" absent from `test_run` | Minor | Resolved 2026-06-15 |
 | R12 | `04g` `_cwd` default weakens CWD-sequencing edge validation | Minor | Resolved 2026-06-16 (path-provenance centralised: `check-cwd` `work_dir` → `ensure-logs` → composers) |
 | R13 | `make_fail_result` referenced in 7 skeletons but defined nowhere | Minor | Resolved 2026-06-15 |
-| R14 | Extend `work_dir` provider model to `run.f` / `obj_dir_<tag>/` (follow-on to R12) | Consistency | Open (sequence with [07 item 17]) |
+| R14 | Extend `work_dir` provider model to `run.f` / `obj_dir_<tag>/` (follow-on to R12) | Consistency | Resolved 2026-06-16 (`write-filelist`/`build-compile-cmd` take `work_dir`; non-verilator `simv` + symlinks remain for [07 item 17]) |

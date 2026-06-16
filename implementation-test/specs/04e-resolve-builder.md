@@ -40,7 +40,7 @@ class ResolveBuilderMod:
         name = builder or platform_cfg.builder          # CLI override wins, else platform's declared builder name
         builder_cfg = root_cfg.rtl_builder_cfgs.get(name)
         if builder_cfg is None:
-            log.critical("builder_not_found", builder=name)
+            log.fatal("builder_not_found", builder=name)
         return ("default", builder_cfg)
 ```
 
@@ -57,9 +57,9 @@ class ResolveBuilderMod:
 3. If found, emit `("default", builder_cfg)`.
 4. **Failure — unknown / none configured.** If `builder_cfg is None` (the name is missing — an
    unknown override, a `None` platform builder with no override, or no builders configured at
-   all): `log.critical(f"named builder {name} not in configured builders
+   all): `log.fatal(f"named builder {name} not in configured builders
    {sorted(root_cfg.rtl_builder_cfgs)}")` (harness exits 1). rtl_buddy raises
-   `typer.BadParameter`; Plan B uses `log.critical` for uniform exit semantics.
+   `typer.BadParameter`; Plan B uses `log.fatal` for uniform exit semantics.
 
 ## Deliverables
 
@@ -72,10 +72,10 @@ In `modules/rtl_buddy/setup.py`:
   persistent CLI `builder` override.
   **Failure handling**: post-lookup check — if the resolved `name` is not in
   `root_cfg.rtl_builder_cfgs` (unknown override, `None` platform builder with no override, or
-  no builders configured), `log.critical(f"named builder {name} not in configured builders
+  no builders configured), `log.fatal(f"named builder {name} not in configured builders
   {sorted(root_cfg.rtl_builder_cfgs)}")` (rtl_buddy's `rtl_buddy.py:76-80` raises
   `typer.BadParameter` for the override and `platform.py:78-79` criticals on the unset case;
-  Plan B uses `log.critical` for uniform exit semantics). Empty builders dict is also covered
+  Plan B uses `log.fatal` for uniform exit semantics). Empty builders dict is also covered
   (`root.py:151`).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/platform.py:63-84`
   (`PlatformConfigFile.initialise`) + `config/root.py:94` (the `rtl_builder_cfgs` dict).
@@ -91,20 +91,20 @@ In `modules/rtl_buddy/setup.py`:
 
 In `modules/tests/test_setup.py`. Fixtures: a `root_cfg` fixture carrying an
 `rtl_builder_cfgs` dict (keyed by builder name); a `platform_cfg` fixture whose `builder`
-names a configured builder; `logging_handler` for the `log.critical` paths.
+names a configured builder; `logging_handler` for the `log.fatal` paths.
 
 - `builder=""` (no override) with `platform_cfg.builder` present in `rtl_builder_cfgs` → emits
   `("default", rtl_builder_cfgs[platform_cfg.builder])` (empty string falls back to the
   platform's declared builder).
 - `builder="<name>"` override naming a configured builder → emits
   `("default", rtl_builder_cfgs["<name>"])` (override wins over the platform default).
-- `builder="<unknown>"` not in `rtl_builder_cfgs` → `builder_cfg is None` → `log.critical` →
+- `builder="<unknown>"` not in `rtl_builder_cfgs` → `builder_cfg is None` → `log.fatal` →
   `pytest.raises(SystemExit)`.
 - `builder=""` with `platform_cfg.builder = None` (platform declares no builder, no override)
-  → lookup yields `None` → `log.critical` → `pytest.raises(SystemExit)` (boundary: unset
+  → lookup yields `None` → `log.fatal` → `pytest.raises(SystemExit)` (boundary: unset
   builder).
 - `builder=""` with an empty `rtl_builder_cfgs` dict (no builders configured) → lookup yields
-  `None` → `log.critical` → `pytest.raises(SystemExit)` (boundary: empty configured list).
+  `None` → `log.fatal` → `pytest.raises(SystemExit)` (boundary: empty configured list).
 
 ## Acceptance criteria
 
@@ -113,7 +113,7 @@ names a configured builder; `logging_handler` for the `log.critical` paths.
   `builder` override) from a real rtl_buddy `root_config.yaml` fixture (contributes to the
   setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
 - Failure idiom exercised: a named builder absent from the platform →
-  `log.critical(f"named builder {name} not in configured builders ...")` (harness exit 1).
+  `log.fatal(f"named builder {name} not in configured builders ...")` (harness exit 1).
 - The `modules/config.yaml` manifest entry `{ name: resolve-builder, class_name: ResolveBuilderMod }`
   validates and the harness resolves `resolve-builder` → `ResolveBuilderMod`.
 
@@ -124,6 +124,6 @@ names a configured builder; `logging_handler` for the `log.critical` paths.
   `builder` name), and the persistent CLI `builder`. The builders dict is a **root** concern —
   do not look for it on `platform_cfg`.
 - The CLI `builder` override wins; an empty string falls back to `platform_cfg.builder`.
-- Unknown override, unset platform builder, or no builders configured → `log.critical` (harness
-  exit 1). Use `log.critical` (not rtl_buddy's `typer.BadParameter`) so exit semantics stay
+- Unknown override, unset platform builder, or no builders configured → `log.fatal` (harness
+  exit 1). Use `log.fatal` (not rtl_buddy's `typer.BadParameter`) so exit semantics stay
   uniform with the rest of the setup chain.

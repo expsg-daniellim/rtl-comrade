@@ -51,10 +51,10 @@ plain `parse-log` path is taken (else `parse-uvm-log`).
 | `max_errors`  | `int`| (none)      | `0`     | Maximum `UVM_ERROR` count before the test fails. (Fatal must be 0.)|
 
 Validation: `__post_init__` raises `ValueError` if either field is negative. Note this
-is `ValueError`, not `log.critical` — UVMConfig is constructed during YAML deserialisation,
+is `ValueError`, not `log.fatal` — UVMConfig is constructed during YAML deserialisation,
 where rtl_buddy's serde wraps the `ValueError` into its own error path. In Plan B, the
 broad-`Exception` catch in `parse-suite-config` (spec [04](04-setup-modules.md))
-converts the validation failure into `log.critical`.
+converts the validation failure into `log.fatal`.
 
 Source: `rtl_buddy/src/rtl_buddy/config/uvm.py:1-19`.
 
@@ -107,7 +107,7 @@ not `preproc: foo.py`). A YAML omission leaves the field `None`.
 `initialise(suite_dir, tbs) -> TestConfig`:
 
 1. `tb = tbs[self.tb]` — raise `KeyError` if testbench unknown (caught by
-   `SuiteConfig.__init__` → `log.critical`).
+   `SuiteConfig.__init__` → `log.fatal`).
 2. Construct a `TestConfig` with all fields plus `suite_dir=suite_dir`,
    `model_name=self.model`, `model_path=self.model_path`, `model=None` (lazy —
    `load-model` fills it in later).
@@ -136,7 +136,7 @@ Differs from rtl_buddy's `TestConfig` in three ways (see Notable divergences bel
 | `sweep_path`     | `str \| None`       | from raw                |                                                                                                      |
 | `tb`             | `TestbenchConfig`   | required                | Bound from `tbs[raw.tb]` during `initialise()`.                                                      |
 | `timeout`        | `int \| None`       | from raw                | Per-test override.                                                                                   |
-| `default_timeout`| `int`               | `60`                    | Used by `get_timeout()` when `timeout is None`. Module-level constant; matches rtl_buddy.            |
+| `default_timeout`| `int`               | `60`                    | A field on `TestConfig` (default `60`), used by `get_timeout()` when `timeout is None`. Matches rtl_buddy's `default_timeout` field (`config/test.py:81`).            |
 
 Methods:
 
@@ -155,7 +155,7 @@ Methods:
 | `get_sweep_path() -> str \| None`        | `self.sweep_path`                                    | trivial getter.                                                                                                                                           |
 | `get_preproc_path() -> str \| None`      | `self.preproc_path`                                  | trivial getter.                                                                                                                                           |
 | `get_postproc_path() -> str \| None`     | `self.postproc_path`                                 | trivial getter. Plan B preserves the field but does not execute postproc ([07 settled 14](../07-ambiguities-and-assumptions.md)).                         |
-| `get_reglvl(builder: str) -> int`        | resolved level for the given builder name            | Resolution order: builder-keyed dict entry → `default` dict entry → uniform int → `0` (when `None`). Malformed (`dict` with no builder or default) → `log.critical`. Mirrors `rtl_buddy/src/rtl_buddy/config/test.py:286-299`. |
+| `get_reglvl(builder: str) -> int`        | resolved level for the given builder name            | Resolution order: builder-keyed dict entry → `default` dict entry → uniform int → `0` (when `None`). Malformed (`dict` with no builder or default) → `log.fatal`. Mirrors `rtl_buddy/src/rtl_buddy/config/test.py:286-299`. |
 
 Source: `rtl_buddy/src/rtl_buddy/config/test.py:43-302`.
 
@@ -183,15 +183,15 @@ Constructed by `parse-suite-config` (spec [04](04-setup-modules.md)) from a reso
 
 Constructor behaviour (`__init__(path)` in rtl_buddy, `parse-suite-config.run(path)` in Plan B):
 
-1. Open + `from_yaml(SuiteConfigFile, ...)`. Any exception → `log.critical(f'failed to load {path}: {e}')`. Mirrors `suite.py:28-32`.
-2. Build `tbs = {tb.get_name(): tb for tb in raw.testbenches}`. Any exception → `log.critical(f'{path}: Testbench section malformed: {e}')`. Mirrors `suite.py:39-42`.
-3. Build `self.tests = {t.name: t.initialise(config_dir, tbs) for t in raw.tests}`. `KeyError` (unknown testbench in `t.tb`) → `log.critical(f'{path}: Requested testbench missing')`. Any other exception → `log.critical(f'{path}: Tests section malformed: {e}')`. Mirrors `suite.py:44-50`.
+1. Open + `from_yaml(SuiteConfigFile, ...)`. Any exception → `log.fatal(f'failed to load {path}: {e}')`. Mirrors `suite.py:28-32`.
+2. Build `tbs = {tb.get_name(): tb for tb in raw.testbenches}`. Any exception → `log.fatal(f'{path}: Testbench section malformed: {e}')`. Mirrors `suite.py:39-42`.
+3. Build `self.tests = {t.name: t.initialise(config_dir, tbs) for t in raw.tests}`. `KeyError` (unknown testbench in `t.tb`) → `log.fatal(f'{path}: Requested testbench missing')`. Any other exception → `log.fatal(f'{path}: Tests section malformed: {e}')`. Mirrors `suite.py:44-50`.
 
 Methods:
 
 | signature                              | returns                                                            | log idiom                                                                                                                       |
 |----------------------------------------|--------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| `get_tests(test_name: str \| None = None) -> list[TestConfig] \| dict_values[TestConfig]` | one-element list if `test_name` given and present; all tests otherwise | `log.critical(f"test_name {name} not found in suite {self.path}")` when `test_name` given but not in `self.tests`. Mirrors `suite.py:52-67`. Plan B's `select-tests` uses this same idiom (catalog row at line 112 of [03](../03-module-catalog.md)). |
+| `get_tests(test_name: str \| None = None) -> list[TestConfig] \| dict_values[TestConfig]` | one-element list if `test_name` given and present; all tests otherwise | `log.fatal(f"test_name {name} not found in suite {self.path}")` when `test_name` given but not in `self.tests`. Mirrors `suite.py:52-67`. Plan B's `select-tests` uses this same idiom (catalog row at line 112 of [03](../03-module-catalog.md)). |
 | `get_test_names() -> list[str]`        | `list(self.tests.keys())`                                          | none.                                                                                                                           |
 | `get_path() -> Path`                   | `self.path`                                                        | none.                                                                                                                           |
 
@@ -230,7 +230,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
   `preproc: null` → `preproc_path is None`.
 - **`get_reglvl` resolution order.** Four cases: int `_reglvl` → that int regardless of
   builder; dict with builder key → that entry; dict with `default` only → default;
-  `None` → `0`; dict missing both builder and `default` → `log.critical` (caplog +
+  `None` → `0`; dict missing both builder and `default` → `log.fatal` (caplog +
   bubbling-`SystemExit`).
 - **`get_timeout`.** `timeout=None` → `(60, False)`; `timeout=300` → `(300, True)`.
 - **Plusarg/plusdefine mutation.** `set_plusarg("FOO", 1)` on a test with `pa is None`
@@ -239,10 +239,10 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
 - **`UVMConfig` defaults and validation.** YAML `uvm: {}` → `max_warns == 0 == max_errors`;
   `max_warns: 5, max_errors: 2` round-trips; `max_warns: -1` → `ValueError` at
   construction (which `parse-suite-config`'s broad-exception catch converts to
-  `log.critical`).
+  `log.fatal`).
 - **Testbench binding.** A `tests.yaml` with a test referencing a known testbench
   produces `test.tb` as that `TestbenchConfig` instance; referencing an unknown
-  testbench → `parse-suite-config` calls `log.critical`.
+  testbench → `parse-suite-config` calls `log.fatal`.
 - **Lazy model.** A freshly-`initialise`d `TestConfig` has `model is None`,
   `model_name` and `model_path` populated, `suite_dir` set to the parent of the
   loaded YAML path.
@@ -274,13 +274,14 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
   (the rtl_buddy `initialise`-time `get_model` call is deliberately dropped).
 - `get_reglvl(builder)` resolution order is fixed: builder-keyed dict entry → `default` dict
   entry → uniform int → `0`. A malformed dict (no builder key and no `default`) must
-  `log.critical`.
+  `log.fatal`.
 - `get_timeout()` returns `(self.timeout, True)` on a per-test override else
-  `(self.default_timeout, False)`; `default_timeout` is the module-level constant `60`.
+  `(self.default_timeout, False)`; `default_timeout` is a `TestConfig` field defaulting to `60`
+  (rtl_buddy `config/test.py:81`).
 - `get_plusarg`/`get_plusdefine` raise `AttributeError` when `pa`/`pd` is `None` — preserve
   this; callers must guard with `get_plusargs() is not None` first.
 - `UVMConfig` validation is `ValueError` at construction (see [01](01-shared-schema.md)
-  constraints), not `log.critical`.
+  constraints), not `log.fatal`.
 
 ## Notes
 

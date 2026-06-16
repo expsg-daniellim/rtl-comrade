@@ -116,7 +116,7 @@ stop iff `order.index(early_stop) <= order.index(phase)`.
   result="NA", desc="Stopped early at comp")`.
 - `phase="comp", early_stop="post"` (default) → `("go", payload)` and emits **no**
   `test_result` event (boundary: the default `post` never stops any phase).
-- A `stop` emits no `log.error`/`log.critical` — `logging_handler.failure` stays `False` (a
+- A `stop` emits no `log.error`/`log.fatal` — `logging_handler.failure` stays `False` (a
   stop is a normal terminal, not a failure).
 - `payload` agnosticism: a `ctx`-shaped payload at `phase="pre"` and a `test_run`-shaped
   payload at `phase="sim"` both route purely on `payload["key"]`.
@@ -136,7 +136,7 @@ stop iff `order.index(early_stop) <= order.index(phase)`.
 - Stop iff `order.index(early_stop) <= order.index(self.phase)`: emit `("stop", {key, result:
   EarlyStopResults})` on the **unwired** `stop` port **and** `log.info("test_result",
   result="NA", desc=…)`. Otherwise emit `("go", payload)`.
-- A `stop` is a **normal terminal, not a failure** — emit **no** `log.error`/`log.critical`.
+- A `stop` is a **normal terminal, not a failure** — emit **no** `log.error`/`log.fatal`.
 - Read only `payload["key"]`; stay agnostic to whether `payload` is `ctx` (gate-pre/comp) or
   `test_run` (gate-sim). Three node instances differ only by `config.phase`.
 

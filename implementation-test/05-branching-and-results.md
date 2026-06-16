@@ -203,16 +203,18 @@ ctx["test"].get_name())` and derives per-tag paths, so most artefacts are alread
 
 | artefact | producer | naming | status |
 |---|---|---|---|
-| `obj_dir_<tag>/` | `build-compile-cmd` (`--Mdir`) | `f"obj_dir_{test_tag}"` | already per-tag |
-| verilator `simv` | compile | `f"obj_dir_{test_tag}/simv"` | already per-tag |
+| `obj_dir_<tag>/` | `build-compile-cmd` (`--Mdir`) | `str(Path(work_dir) / f"obj_dir_{test_tag}")` | per-tag + `work_dir`-rooted (R14) |
+| verilator `simv` | compile | `f"{work_dir}/obj_dir_{test_tag}/simv"` | per-tag + `work_dir`-rooted (R14) |
 | compile/sim `.log`/`.err` | `run-process` | `f"{logs_dir}/{test_tag}…"` | already per-tag |
 | `.randseed` | `write-randseed` | `f"{logs_dir}/{test_tag}…"` | already per-tag |
-| **`run.f`** | **`write-filelist`** | **was literal `run.f` → now `run.{test_tag}.f`** | **fixed by (B)** |
+| **`run.f`** | **`write-filelist`** | **was literal `run.f` → now `Path(work_dir) / f"run.{test_tag}.f"`** | **fixed by (B) + `work_dir`-rooted (R14)** |
 
-The only change (B) makes is the filelist: `write-filelist` writes `run.{test_tag}.f` and
-emits that `Path` on its `filelist` port; `build-compile-cmd` already passes
-`filelist["filelist"]` to `-f`, so no edge or downstream change is needed. `write-filelist`
-reverts to the plain `default` contract.
+Change (B) is the filelist naming: `write-filelist` writes `run.{test_tag}.f` and emits that
+`Path` on its `filelist` port; `build-compile-cmd` already passes `filelist["filelist"]` to `-f`,
+so no edge or downstream change is needed. `write-filelist` reverts to the plain `default`
+contract. On top of (B), R14 roots `run.f` and `obj_dir_<tag>/` on `check-suite-cwd`'s `work_dir`
+(both writers take it as a load-bearing persistent input), bringing them under the same
+artefact-location provider model as `logs/` so a relocation is a one-node change.
 
 ### Residual — what only item 17 fixes
 
@@ -273,7 +275,7 @@ own watched event with `result`/`desc` kwargs added (the failure terminals that 
 `log.error`). The rows below list each site's idiom. Four idioms are in play, per
 `docs/invariants.md:14-23` and `docs/harness/logging.md`:
 
-- **`log.critical`** — immediate `SystemExit(1)`. Reserved for unrecoverable setup/config
+- **`log.fatal`** — immediate `SystemExit(1)`. Reserved for unrecoverable setup/config
   failures and harness-internal scheduling errors.
 - **Unwired `result` port** — the terminal outcome is still returned on the module's named
   output port (`skip`, `stop`, `fail`, `timeout`, `result`), but the port has no edge, so
@@ -285,7 +287,7 @@ own watched event with `result`/`desc` kwargs added (the failure terminals that 
 - **`log.info("test_result", …)`** — pass-like terminals (PASS, SKIP) emit their summary row at
   INFO, so they are collected but do **not** affect the exit code.
 
-### Setup / config — `log.critical`
+### Setup / config — `log.fatal`
 
 | Site | Failure |
 |---|---|

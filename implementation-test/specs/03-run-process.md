@@ -158,7 +158,7 @@ class RunProcessMod:
 
 - **(a) Launch failure.** `FileNotFoundError` (binary not on PATH) or `PermissionError`
   (exec bit unset, EACCES) raised by `asyncio.create_subprocess_exec`. Caught;
-  `log.critical(...)` emitted with the offending `argv[0]`. Matches rtl_buddy
+  `log.fatal(...)` emitted with the offending `argv[0]`. Matches rtl_buddy
   `vlog_sim.py:163-165`. Harness exits 1 via the deferred-CRITICAL contract. See
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
 - **(b) Externally killed.** A second process (admin `kill -9`, oom-killer, parent
@@ -195,7 +195,7 @@ The tests below are testable against a slow-sleep bash fake (a child of the form
   die. Verify by `os.kill(grandchild_pid, 0)` raising `ProcessLookupError` after the
   call returns.
 - **Launch failure.** `command["argv"] = ["/no/such/binary"]`. Module catches
-  `FileNotFoundError` and calls `log.critical`; the harness exits 1 (asserted via
+  `FileNotFoundError` and calls `log.fatal`; the harness exits 1 (asserted via
   `caplog` plus the bubbling-`SystemExit` contract).
 - **External kill.** Child runs a 10 s sleep; a sibling task sends SIGKILL at 0.1 s.
   `rc = -signal.SIGKILL`, `timed_out=False`. The module returns normally.
@@ -261,7 +261,7 @@ assert no orphaned children. One terminal Lifecycle state per case (the list is 
   (boundary: `timed_out` is set at the return site, never derived from `rc == 4444`, so an
   organic 4444 is not misclassified).
 - `argv=["./nonexistent-binary"]` → `create_subprocess_exec` raises `FileNotFoundError` →
-  launch-failure `log.critical` → `pytest.raises(SystemExit)` (Failure case (a)).
+  launch-failure `log.fatal` → `pytest.raises(SystemExit)` (Failure case (a)).
 - Wrap `run()` in a task and cancel it while the child sleeps → the child is SIGKILLed and
   reaped under `asyncio.shield`, `CancelledError` re-raises, **no** `proc` payload is emitted,
   partial stdout on disk is preserved, and no zombies remain (Lifecycle 2c → 3b).
@@ -298,7 +298,7 @@ assert no orphaned children. One terminal Lifecycle state per case (the list is 
   Swallow `ProcessLookupError` from `killpg` (exit race); the final `proc.wait()` still reaps.
 - Redirect stdout/stderr to caller-supplied files under `with` — **never** `PIPE` /
   `communicate()` (bounds memory, preserves partial output across a kill).
-- Launch failure (`FileNotFoundError`/`PermissionError`) → `log.critical` (harness exit 1).
+- Launch failure (`FileNotFoundError`/`PermissionError`) → `log.fatal` (harness exit 1).
   A non-zero `rc` or `timed_out=True` is **not** a failure at this layer — downstream
   `interpret-compile`/`interpret-sim` classify it.
 - On cancellation, do **not** emit a `proc` payload — re-raise `CancelledError` after reaping

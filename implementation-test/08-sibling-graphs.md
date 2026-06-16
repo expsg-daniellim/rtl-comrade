@@ -183,6 +183,33 @@ default-resolution lives in one obvious place.
    the downstream pipeline at end-of-stream (it will, because `default` returns
    `EndSentinel` when its required port ends, which cascades through the rest).
 
+4. **Early-stop / skip row count under multiple run-ids — deliberate de-duplication, not a
+   gap.** This is the one place the reused `test`-graph topology emits *fewer* summary rows than
+   rtl_buddy, and it only surfaces here (in `randtest`/`regression`, where `run_ids` has more
+   than one entry — the `test` graph runs `run_ids = [None]`, so it is unaffected).
+
+   rtl_buddy fans the run-ids out *inside* `TestRunner.run_multiple`
+   (`runner/test_runner.py:82-117`): one `pre()` + one `compile()`, then a loop over
+   `execute()` per run-id (confirming the fan-out is **sim-only — runs share a single
+   compilation**). For an `--early-stop pre|comp` (and for a level **skip**), the stop happens
+   *before* any `execute()`, so `run_multiple` returns `[EarlyStopResults(…) for _ in run_ids]`
+   — R results with **identical** `result`/`desc`, distinguished only by `randmode_i`, which
+   `_append_results` stores (`rtl_buddy.py:301-303`) but the summary print (`rtl_buddy.py:204-206`)
+   **never renders**. The `_do_test_suite` docstring says as much: the expansion is "one row per
+   run_id for consistent output shape." So rtl_buddy prints R cosmetically-identical lines; the
+   exit code (`exit_code |= 0 if is_pass() else 1`) ORs R identical pass-states into the same
+   value as one.
+
+   Plan B places `gate-pre`/`gate-comp` (and `filter-reglvl`) **before** the `runs` fan-out, so
+   a pre/comp early-stop or a skip emits **one** `test_result` row, not R. This is a deliberate
+   de-duplication: identical exit code, no work difference (the dropped rows are
+   indistinguishable in the printed table), and arguably cleaner output. **Genuine** per-run
+   divergence — actual sim verdicts under `--early-stop sim|post` — is *not* affected: `gate-sim`
+   and the parsers sit *after* the fan-out, so each run-id keeps its own row (`#run_id` key).
+   When building these sibling graphs, treat the pre/comp/skip single-row behaviour as intended;
+   only revisit the gate placement if exact R-row parity with rtl_buddy's duplicate lines is a
+   hard requirement (it should not be).
+
 ---
 
 ## Summary

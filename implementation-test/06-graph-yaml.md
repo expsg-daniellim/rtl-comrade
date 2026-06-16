@@ -64,13 +64,16 @@ nodes:
   contract: default
   config: { phase: pre }
   contract_config: { persistent_inputs: [ early_stop ] }
-- { id: filelist, module: write-filelist, contract: default }   # writes run.<tag>.f (per-tag, TODO #30)
+- id: filelist
+  module: write-filelist
+  contract: default
+  contract_config: { persistent_inputs: [ work_dir ] }   # writes <work_dir>/run.<tag>.f (per-tag, TODO #30)
 
 # --- compile (run-process #1) ---
 - id: cc-build
   module: build-compile-cmd
   contract: default
-  contract_config: { persistent_inputs: [ builder_cfg, builder_mode, logs_dir ] }
+  contract_config: { persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ] }
 - { id: cc-run, module: run-process, contract: default }
 - id: cc-int
   module: interpret-compile
@@ -148,6 +151,11 @@ edges:
 # artefact dir on check-cwd's validated work_dir (load-bearing data, not an ordering token).
 - { src: { node: prepend-path },                dst: { node: ensure-logs, port: env_ready } }
 - { src: { node: check-cwd,   port: work_dir }, dst: { node: ensure-logs, port: work_dir } }
+# check-cwd's work_dir also roots the CWD-relative artefacts the logs/ tree doesn't cover:
+# write-filelist's run.<tag>.f and build-compile-cmd's obj_dir_<tag>/ (load-bearing persistent
+# inputs — same provider model as logs_dir, so a relocation stays a check-cwd-only change).
+- { src: { node: check-cwd,   port: work_dir }, dst: { node: filelist,    port: work_dir } }
+- { src: { node: check-cwd,   port: work_dir }, dst: { node: cc-build,    port: work_dir } }
 - { src: { node: ensure-logs, port: env_ready },dst: { node: cc-run,      port: env_ready } }
 - { src: { node: ensure-logs, port: env_ready },dst: { node: sim-run,     port: env_ready } }
 # Resolved artefact dir (a Path) fans out to the path composers as a persistent input —
@@ -235,9 +243,12 @@ Notes:
   a CLI edge to `ensure-logs` only. `ensure-logs` roots it on `check-cwd`'s `work_dir` and emits
   the **resolved directory `Path`** on its `logs_dir` port, which fans out as a persistent input
   to the three composers `cc-build` / `sim-build` / `seed`. They join filenames onto that
-  directory and never read the ambient CWD, so the rtl_buddy "everything is CWD-relative"
-  assumption lives only in the `check-cwd → ensure-logs` provider pair (relocating artefacts is a
-  change there alone). `write-randseed` does **not** take `logs_dir` — `sim-build` pre-composes
+  directory and never read the ambient CWD. The non-`logs/` CWD-relative artefacts follow the
+  same model off `check-cwd`'s `work_dir` directly: `filelist` roots `run.<tag>.f` and `cc-build`
+  roots `obj_dir_<tag>/` on `work_dir` (load-bearing persistent inputs), so the rtl_buddy
+  "everything is CWD-relative" assumption lives only in `check-cwd` and its `ensure-logs`
+  sub-rooting (relocating artefacts is a change there alone). `write-randseed` does **not** take
+  `logs_dir` — `sim-build` pre-composes
   `randseed_path` (and `log`/`err`) into `sim_cmd`, which `randseed` receives as a keyed port.
   The default `"logs"` matches rtl_buddy's hard-coded literal; override is a small Notable
   divergence (see [07 settled 26](07-ambiguities-and-assumptions.md)).

@@ -78,8 +78,8 @@ Methods:
 | `get_simv() -> str`                                             | `self.simv` (callers handle the verilator override themselves — see below)                                           | none                                                                                                                                                       |
 | `get_seed() -> int`                                             | `self.sim_rand_seed`                                                                                                 | none                                                                                                                                                       |
 | `get_modes() -> list[str]`                                      | `list(self.opts.keys())`                                                                                             | none                                                                                                                                                       |
-| `get_compile_time_opts(mode: str) -> list[str]`                 | a **fresh copy** of `self.opts[mode].compile_time`                                                                   | `log.critical` if `mode not in self.opts` or `self.opts[mode].compile_time is None`; immediate `SystemExit(1)` per [05](../05-branching-and-results.md#log-idioms-per-failure-site). |
-| `get_run_time_opts(mode: str, seed: int \| None = None) -> list[str]` | a **fresh copy** of `self.opts[mode].run_time`, with `self.sim_rand_prefix + str(seed)` appended if `seed is not None` | same `log.critical` conditions as `get_compile_time_opts`.                                                                                                  |
+| `get_compile_time_opts(mode: str) -> list[str]`                 | a **fresh copy** of `self.opts[mode].compile_time`                                                                   | `log.fatal` if `mode not in self.opts` or `self.opts[mode].compile_time is None`; immediate `SystemExit(1)` per [05](../05-branching-and-results.md#log-idioms-per-failure-site). |
+| `get_run_time_opts(mode: str, seed: int \| None = None) -> list[str]` | a **fresh copy** of `self.opts[mode].run_time`, with `self.sim_rand_prefix + str(seed)` appended if `seed is not None` | same `log.fatal` conditions as `get_compile_time_opts`.                                                                                                  |
 
 Both `get_*_opts` methods return *fresh* lists (rtl_buddy uses `list(...)` at
 `rtl.py:102,120`). Mutating the return value must not corrupt the underlying config;
@@ -90,9 +90,10 @@ Source: `rtl_buddy/src/rtl_buddy/config/rtl.py:22-126`.
 ### Verilator quirk (caller-side convention)
 
 `builder_cfg.get_simv()` always returns the configured value. Verilator builds use a
-different convention: the simulator binary sits at `<build_dir>/simv` (where
-`build_dir = f"obj_dir_{test_tag}"`), not at `builder_cfg.simv`. Callers
-(`build-compile-cmd`, `build-sim-cmd`) MUST switch on:
+different convention: the simulator binary sits at `<build_dir>/simv` (where `build_dir =
+str(Path(work_dir) / f"obj_dir_{test_tag}")` — `build-compile-cmd` roots the per-tag `obj_dir`
+on the `work_dir` provider, spec [07a](07a-build-compile-cmd.md)), not at `builder_cfg.simv`.
+Callers (`build-compile-cmd`, `build-sim-cmd`) MUST switch on:
 
 ```python
 if os.path.basename(builder_cfg.get_exe()).startswith("verilator"):
@@ -117,7 +118,7 @@ the schema stays a pure value object.
 - **`process_opts` `None` passthrough.** A YAML omitting `compile-time` leaves
   `RtlBuilderConfigOpts.compile_time is None`; same for `run-time`.
 - **`get_compile_time_opts("debug")`** returns the deserialised list for that mode.
-- **`get_compile_time_opts("missing-mode")`** calls `log.critical` (assert via
+- **`get_compile_time_opts("missing-mode")`** calls `log.fatal` (assert via
   `caplog` plus the bubbling-`SystemExit` contract).
 - **`get_compile_time_opts(mode)` where `compile_time is None`** likewise criticals.
 - **`get_run_time_opts("debug", seed=42)`** appends `sim_rand_prefix + "42"` to the
@@ -143,7 +144,7 @@ the schema stays a pure value object.
 - Preserve the YAML renames exactly (`builder`, `builder-simv`, `sim-rand-seed`,
   `sim-rand-seed-prefix`, `builder-opts`, `compile-time`, `run-time`). Do **not** Pythonify
   them — they are the public surface for drop-in `root_config.yaml` loading.
-- `get_compile_time_opts(mode)` / `get_run_time_opts(mode, seed)` must `log.critical`
+- `get_compile_time_opts(mode)` / `get_run_time_opts(mode, seed)` must `log.fatal`
   (immediate `SystemExit(1)`) when `mode not in self.opts` or the mode's list is `None` — not
   a port-routed result (this is system-wide misconfiguration). See
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).

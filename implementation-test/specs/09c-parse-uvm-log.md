@@ -55,9 +55,13 @@ class ParseUvmLogMod:
 1. Read the thresholds and log: `uvm = test_run["test"].uvm` (non-negative `max_warns` /
    `max_errors`, validated at deserialisation — not re-checked here); `text =
    Path(test_run["log"]).read_text()`.
-2. Parse the UVM "Report counts by severity" block into WARNING/ERROR/FATAL counts. A missing
-   Report Summary block is itself a FAIL ("Invalid UVM Report Summary"); `int()` over a
-   regex-matched `[0-9]+` cannot raise.
+2. Parse the UVM "Report counts by severity" block into WARNING/ERROR/FATAL counts. Two
+   distinct FAILs here, matching rtl_buddy's two messages (`vlog_post.py:67,71`):
+   - the **Report Summary regex does not match at all** (no summary block) →
+     `desc = f"No UVM Report Summary detected. See {path}."`;
+   - the block matches but **WARNING/ERROR/FATAL are not all present** in the parsed counts →
+     `desc = f"Invalid UVM Report Summary detected. See {path}"`.
+   `int()` over a regex-matched `[0-9]+` cannot raise.
 3. Verdict: PASS iff `WARNING <= uvm.max_warns and ERROR <= uvm.max_errors and FATAL == 0`,
    else FAIL with the counts summary in `desc`.
 4. **Log the verdict directly, then emit.** One `test_result` event:
@@ -111,8 +115,11 @@ against rtl_buddy `UvmVlogPost`.
 - `WARNING > max_warns` → emits FAIL, `log.error("test_result", …)`.
 - `FATAL == 1` with WARNING/ERROR within thresholds → emits FAIL (boundary: `FATAL == 0` is
   absolute, not threshold-gated).
-- Log with no Report Summary block → emits FAIL with `desc = "Invalid UVM Report Summary"`,
-  `log.error("test_result", …)`.
+- Log with **no** Report Summary block (regex no match) → emits FAIL with
+  `desc = "No UVM Report Summary detected. See {path}."`, `log.error("test_result", …)`.
+- Log **with** a Report Summary block but missing one of WARNING/ERROR/FATAL → emits FAIL with
+  `desc = "Invalid UVM Report Summary detected. See {path}"`, `log.error("test_result", …)`
+  (boundary: the two distinct rtl_buddy messages are not conflated).
 - `test_run["log"]` missing → `OSError` caught → emits FAIL with `str(e)` in `desc`, logged as an
   ERROR `test_result`.
 
@@ -132,7 +139,10 @@ against rtl_buddy `UvmVlogPost`.
 
 - Verdict: PASS **iff** `WARNING <= max_warns and ERROR <= max_errors and FATAL == 0`; else FAIL
   with the counts summary in `desc`.
-- A missing Report Summary block is itself a FAIL (`"Invalid UVM Report Summary"`).
+- A missing Report Summary block is a FAIL with `"No UVM Report Summary detected. See {path}."`;
+  a block present but missing a severity count is a FAIL with `"Invalid UVM Report Summary
+  detected. See {path}"` — keep both rtl_buddy messages distinct (`vlog_post.py:67,71`), do not
+  conflate them (the fixture-by-fixture parity check compares `desc`).
 - Do **not** re-validate the thresholds — their non-negative invariant is enforced at YAML
   deserialisation (spec [01b](01b-suite-schema.md)).
 - Log the verdict once as `test_result`: `log.error("test_result", key, result, desc)` when

@@ -33,18 +33,24 @@ The two success ports are emitted in lockstep via a generator (one `(port, value
 yield — the harness has no multi-port single return).
 
 ```
-contract: default
-inputs:   ctx
-outputs:  ctx      → ctx
-          filelist → {key, filelist}
-          fail     → result
+contract:          default
+persistent_inputs: [work_dir]
+inputs:            ctx, work_dir:Path
+outputs:           ctx      → ctx
+                   filelist → {key, filelist}
+                   fail     → result
 ```
+
+`work_dir` is the **validated base directory** (a `Path`) supplied by `check-suite-cwd` — the same
+artefact-location provider `ensure-logs-dir` consumes. This module joins the per-tag filename onto
+it and never touches the ambient CWD; it is load-bearing (read to decide where the `.f` lands), so
+it is a required (non-defaulted) port the harness edge-validates.
 
 ```python
 class WriteFilelistMod:
-    def run(self, ctx):
+    def run(self, ctx, work_dir):
         test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", ctx["test"].get_name())
-        path = Path(f"run.{test_tag}.f")
+        path = Path(work_dir) / f"run.{test_tag}.f"   # rooted on the validated base dir, not ambient CWD
         try:
             write_output(path, ctx["test"], unroll=True, deduplicate=True)
         except Exception as e:
@@ -59,9 +65,11 @@ class WriteFilelistMod:
 
 ## Algorithm
 
-1. Derive the per-tag filename: `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
-   ctx["test"].get_name())` (the same regex `build-compile-cmd` uses) and `path =
-   Path(f"run.{test_tag}.f")` — per-tag so concurrent tests don't collide on a shared `run.f`.
+1. Derive the per-tag filename rooted on the provided base: `test_tag = re.sub(r"[^A-Za-z0-9_.-]",
+   "_", ctx["test"].get_name())` (the same regex `build-compile-cmd` uses) and `path =
+   Path(work_dir) / f"run.{test_tag}.f"` — per-tag so concurrent tests don't collide on a shared
+   `run.f`, and joined onto `work_dir` (the validated base dir from `check-suite-cwd`) so the
+   location is decided by the provider, not the ambient CWD.
 2. Resolve and write the filelist: port `VlogFilelist.write_output(unroll=True, flatten=False,
    strip=False, deduplicate=True, test_filelist=ctx["test"].get_testbench().get_filelist())`,
    using `ctx["test"].get_model()` (the `ModelConfig` from `load-model`, with `.filelist` /
@@ -82,13 +90,16 @@ class WriteFilelistMod:
 
 In `modules/rtl_buddy/build.py` (continuing from spec 03):
 
-- `WriteFilelistMod` — `(ctx)` → reimplements `VlogFilelist.write_output(unroll=True,
+- `WriteFilelistMod` — `(ctx, work_dir:Path)` → reimplements `VlogFilelist.write_output(unroll=True,
   flatten=False, strip=False, deduplicate=True,
   test_filelist=ctx["test"].get_testbench().get_filelist())` using
   `ctx["test"].get_model()` (the `ModelConfig` populated by `load-model` upstream,
   with `.filelist: list[str]` and `.path: str` per spec [01c](01c-model-schema.md))
-  for `-F` include resolution. Writes the filelist file; emits two named outputs on
-  success:
+  for `-F` include resolution. Writes the filelist file to `Path(work_dir) /
+  f"run.{test_tag}.f"`, joining the per-tag name onto the validated base directory `work_dir`
+  supplied by `check-suite-cwd` (the same artefact-location provider `ensure-logs-dir` consumes;
+  **load-bearing** persistent input, so a missing edge fails edge-validation rather than silently
+  writing to the ambient CWD). Emits two named outputs on success:
   - `("ctx", ctx)` (passthrough)
   - `("filelist", {"key": ctx["key"], "filelist": <Path>})` (consumed in lockstep by
     `build-compile-cmd` in spec [07a](07a-build-compile-cmd.md)).
@@ -113,21 +124,26 @@ In `modules/rtl_buddy/build.py` (continuing from spec 03):
 ## Tests
 
 In `modules/tests/test_prep.py`. Fixtures: a committed `models.yaml` + testbench filelist
-fixture; `tmp_path` CWD via `monkeypatch.chdir` (so `run.{test_tag}.f` lands in a temp dir);
-a `ctx` fixture carrying a resolved model + testbench; `logging_handler` for the fail paths.
+fixture; `tmp_path` passed as the `work_dir` port (so `run.{test_tag}.f` lands under it); a `ctx`
+fixture carrying a resolved model + testbench; `logging_handler` for the fail paths.
 
-- `ctx` with a real model + testbench filelist → writes `run.{test_tag}.f`, yields `("ctx",
-  ctx)` then `("filelist", {"key", "filelist": <Path>})`; a round-trip parse of the `.f`
-  matches the expected entries and `+incdir+` consolidation is applied.
+- `ctx` with a real model + testbench filelist, `work_dir=tmp_path` → writes
+  `tmp_path/"run.{test_tag}.f"`, yields `("ctx", ctx)` then `("filelist", {"key", "filelist":
+  <Path under work_dir>})`; a round-trip parse of the `.f` matches the expected entries and
+  `+incdir+` consolidation is applied.
+- Location follows `work_dir`, **not** the process CWD: with `monkeypatch.chdir(other)` and
+  `work_dir=tmp_path`, the `.f` is still written under `tmp_path` (boundary: rooting on the
+  provided base dir, mirrors `ensure-logs-dir`).
 - `ctx` whose `test.get_name()` has shell-unsafe chars (e.g. `a/b:c`) → the filelist filename
-  is sanitised to `run.a_b_c.f` (boundary: `test_tag` regex matches `build-compile-cmd`).
+  is sanitised to `run.a_b_c.f` under `work_dir` (boundary: `test_tag` regex matches
+  `build-compile-cmd`).
 - `ctx` where `ctx["test"].get_model() is None` (load-model did not fire) → `AttributeError`
   during `-F` resolution → emits `("fail", {"key", "result": <FAIL with str(e)>})`,
   `log.error`, no abort.
 - `ctx` whose testbench filelist file is missing → `FileNotFoundError` during resolution →
   emits `("fail", …)`, `log.error`.
-- `ctx` written into a read-only CWD → `PermissionError` on write → emits `("fail", …)`,
-  `log.error` (boundary: write-side error routed like a resolve error).
+- `work_dir` pointing into a read-only directory → `PermissionError` on write → emits
+  `("fail", …)`, `log.error` (boundary: write-side error routed like a resolve error).
 
 ## Acceptance criteria
 
@@ -146,6 +162,11 @@ a `ctx` fixture carrying a resolved model + testbench; `logging_handler` for the
   ctx["test"].get_name())`, the same regex `build-compile-cmd` uses) — **never** the bare
   `run.f`. This per-tag naming is the interim concurrency mitigation; do **not** reintroduce a
   serialising lock (the `serial_acquire` shim was removed, TODO #30).
+- Root the filename on the provided `work_dir`: `Path(work_dir) / f"run.{test_tag}.f"` — `work_dir`
+  is the validated base directory from `check-suite-cwd` (the same provider `ensure-logs-dir`
+  consumes), supplied as a **load-bearing** persistent input. Do **not** compose a CWD-relative
+  `Path(f"run.{test_tag}.f")` or read the ambient process CWD — location is decided by the
+  provider, so a relocation (`--work-dir`, regression's per-suite root) is a one-node change.
 - Use the plain `default` contract (reverted from `serial_acquire`).
 - On success emit `("ctx", ctx)` then `("filelist", {key, filelist: <Path>})` in lockstep via
   the generator.
@@ -167,11 +188,14 @@ Filelist filename (TODO #30 / KIV 17): rtl_buddy writes a single `run.f` in CWD 
 so concurrent compiles would collide. `write-filelist` therefore writes a **per-tag** path
 `run.{test_tag}.f`, where `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
 ctx["test"].get_name())` (the same regex `build-compile-cmd` uses — spec
-[07a](07a-build-compile-cmd.md)), and emits that `Path` on its `filelist` port.
+[07a](07a-build-compile-cmd.md)), rooted on the `work_dir` provider
+(`Path(work_dir) / f"run.{test_tag}.f"`), and emits that `Path` on its `filelist` port.
 `build-compile-cmd` passes `filelist["filelist"]` straight to `-f`, so it needs no change.
-This per-tag naming is the interim, graph-local mitigation that replaced the removed
-`serial_acquire` lock shim; the broader CWD isolation (non-verilator `simv`, symlinks,
-tool-internal files) is the upstream per-invocation-subdir change
-([07 item 17](../07-ambiguities-and-assumptions.md)), the reference fix that supersedes this
-naming when it lands. See
+The per-tag naming is the interim concurrency mitigation that replaced the removed
+`serial_acquire` lock shim; rooting on `work_dir` is the R14 slice that brings `run.f` under the
+same artefact-location provider model as `logs/` (`check-suite-cwd` → consumers). The residual
+CWD-relative artefacts this does **not** cover (non-verilator configured `simv`, `test.*`
+symlinks, tool-internal files) wait on the upstream per-invocation-subdir change
+([07 item 17](../07-ambiguities-and-assumptions.md)), the reference fix that supersedes both when
+it lands. See
 [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).

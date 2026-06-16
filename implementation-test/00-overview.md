@@ -104,9 +104,9 @@ or scalars (`Path`, `bool`, `str`). Colours:
   (and `git-status`, which falls through to the console);
 - **orange** — setup chain + persistent config broadcasts (`root_cfg`, `builder_cfg`, …);
 - **purple** — env-setup sequencing (`env_ready`) plus artefact-dir provenance: `check-cwd`
-  emits `work_dir`, `ensure-logs` roots `logs/` on it and emits the resolved directory `Path`
-  to the path composers — ordering the `$PATH` prepend and `logs/` `mkdir` upstream of every
-  subprocess;
+  emits `work_dir`, which `ensure-logs` roots `logs/` on (emitting the resolved directory `Path`
+  to the path composers) and which `filelist` / `cc-build` root `run.<tag>.f` / `obj_dir_<tag>/`
+  on directly — ordering the `$PATH` prepend and `logs/` `mkdir` upstream of every subprocess;
 - **green** — CLI subcommand options (rounded nodes).
 
 `select`/`sweep`/`runs` are the only fan-out generators; `cc-int`/`randseed` the only joins
@@ -169,6 +169,8 @@ flowchart TD
 
   prepend_path["prepend-path"] -->|"env_ready:bool"| ensure_logs["ensure-logs"]
   check_cwd -->|"work_dir:Path"| ensure_logs
+  check_cwd -->|"work_dir:Path"| filelist
+  check_cwd -->|"work_dir:Path"| cc_build
   ensure_logs -->|"env_ready:bool"| cc_run
   ensure_logs -->|"env_ready:bool"| sim_run
   ensure_logs -->|"logs_dir:Path"| cc_build
@@ -206,11 +208,11 @@ flowchart TD
   %% setup chain + persistent config (orange)
   linkStyle 38,39,40,41,42,43,44,45,46,47,48,49 stroke:#bf8700,stroke-width:1.5px
   %% env sequencing + artefact-dir provenance (purple)
-  linkStyle 50,51,52,53,54,55,56 stroke:#8250df,stroke-width:1.5px
+  linkStyle 50,51,52,53,54,55,56,57,58 stroke:#8250df,stroke-width:1.5px
   %% CLI options (green)
-  linkStyle 57,58,59,60,61,62,63,64,65,66,67,68 stroke:#1a7f37,stroke-width:1.5px
+  linkStyle 59,60,61,62,63,64,65,66,67,68,69,70 stroke:#1a7f37,stroke-width:1.5px
   %% git-status (grey)
-  linkStyle 69 stroke:#6e7781,stroke-width:1px
+  linkStyle 71 stroke:#6e7781,stroke-width:1px
 ```
 
 There is **no fan-in node** — the 13 terminal ports are unwired and the summary is a logging

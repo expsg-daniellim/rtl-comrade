@@ -39,7 +39,7 @@ class ParseRootConfigMod:
             raw = from_yaml(RootConfigFile, path.read_text())
             return ("default", RootConfig(raw))
         except Exception as e:   # I/O, parse, schema mismatch — all unrecoverable here
-            log.critical("root_config_load_failed", path=str(path), err=str(e))
+            log.fatal("root_config_load_failed", path=str(path), err=str(e))
 ```
 
 ## Algorithm
@@ -51,7 +51,7 @@ class ParseRootConfigMod:
 4. **Failure — load/parse/schema error.** Wrap steps 1–2 in `try/except Exception`: file I/O
    (`FileNotFoundError`/`PermissionError`/`IsADirectoryError`), parse
    (`serde.SerdeError`/`yaml.YAMLError`), or schema mismatch (`TypeError`/`KeyError`) are all
-   unrecoverable here → `log.critical(f"failed to load {path}: {e}")` (harness exits 1). See
+   unrecoverable here → `log.fatal(f"failed to load {path}: {e}")` (harness exits 1). See
    Failure handling below for the exception catalogue.
 
 ## Deliverables
@@ -65,7 +65,7 @@ In `modules/rtl_buddy/setup.py`:
   `rtl_buddy/src/rtl_buddy/config/root.py:88-89`). Specific classes in play:
   `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O);
   `serde.SerdeError` or `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema /
-  dataclass mismatch). Convert to `log.critical(f"failed to load {path}: {e}")`.
+  dataclass mismatch). Convert to `log.fatal(f"failed to load {path}: {e}")`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:38-48` — `RootConfigFile`/`RootRtlField` serde renames; load at `root.py:84-90`.
 
 **Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml`
@@ -79,17 +79,17 @@ In `modules/rtl_buddy/setup.py`:
 
 In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `root_config.yaml`
 fixture for the happy path; `tmp_path` files for the malformed cases; `logging_handler` for
-the `log.critical` paths.
+the `log.fatal` paths.
 
 - A valid `root_config.yaml` path → emits `("default", RootConfig)`; every field round-trips
   equal to the equivalent rtl_buddy `RootConfig` over the same YAML.
-- Path to a nonexistent file → `FileNotFoundError` caught → `log.critical` →
+- Path to a nonexistent file → `FileNotFoundError` caught → `log.fatal` →
   `pytest.raises(SystemExit)`.
 - Path to a malformed-YAML file (`tmp_path` with unparseable text) → `yaml.YAMLError` caught
-  → `log.critical` → `pytest.raises(SystemExit)`.
+  → `log.fatal` → `pytest.raises(SystemExit)`.
 - Path to schema-mismatched YAML (required field missing / wrong type) → `TypeError`/`KeyError`
-  caught → `log.critical` → `pytest.raises(SystemExit)`.
-- Path to a directory rather than a file → `IsADirectoryError` caught → `log.critical` →
+  caught → `log.fatal` → `pytest.raises(SystemExit)`.
+- Path to a directory rather than a file → `IsADirectoryError` caught → `log.fatal` →
   `pytest.raises(SystemExit)` (boundary: I/O-class error).
 
 ## Acceptance criteria
@@ -100,7 +100,7 @@ the `log.critical` paths.
   per `rtl_buddy/AGENTS.md`) — contributes to the setup-only end-to-end graph (see
   [04 index](04-setup-modules.md#acceptance-criteria)).
 - Failure idiom exercised: an unreadable / unparseable / schema-mismatched config →
-  `log.critical(f"failed to load {path}: {e}")` (harness exit 1).
+  `log.fatal(f"failed to load {path}: {e}")` (harness exit 1).
 - The `modules/config.yaml` manifest entry `{ name: parse-root-config, class_name: ParseRootConfigMod }`
   validates and the harness resolves `parse-root-config` → `ParseRootConfigMod`.
 
@@ -109,5 +109,5 @@ the `log.critical` paths.
 - `unit` contract; emit on the string-literal `default` port.
 - Catch broad `Exception` around the read + deserialise (file I/O, `serde.SerdeError`/
   `yaml.YAMLError` parse, `TypeError`/`KeyError` schema mismatch) and convert to
-  `log.critical` (harness exit 1) — a setup-domain config error, never a port-routed result.
+  `log.fatal` (harness exit 1) — a setup-domain config error, never a port-routed result.
 - Do **not** demote the failure to `log.error`: a malformed root config is unrecoverable.

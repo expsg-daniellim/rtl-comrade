@@ -6,11 +6,18 @@ purpose-specific payload shapes, plus one correlation key.
 
 ## The correlation key
 
-A stable string identifying one test invocation, stamped at each fan-out:
+A stable string identifying one test invocation, suffixed at each fan-out **that actually
+produces variants**:
 
 - `select` → `key = "<test_name>"`
-- `sweep`  → `key = "<test_name>#<sweep_idx>"`
-- `runs`   → `key = "<test_name>#<sweep_idx>#<run_id>"`
+- `sweep`  → `key = "<test_name>#<sweep_idx>"` **per produced variant**; a test with no sweep
+  script passes through with its key **unchanged** (see [spec 05f](specs/05f-expand-sweep.md))
+- `runs`   → `key = "<test_name>[#<sweep_idx>]#<run_id>"` when `run_id is not None`; for the
+  plain `test` command `run_ids = [None]`, so the key is **unchanged** (see
+  [spec 08a](specs/08a-expand-runs.md))
+
+The suffix is only added when the fan-out emits more than the single passthrough item; the
+invariant the joins rely on is uniqueness, not a fixed `#i#run` shape.
 
 The key exists so the two join nodes can match a subprocess result back to the test it
 came from. It appears as a field only on payloads that actually enter a `keyed_join`

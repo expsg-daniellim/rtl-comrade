@@ -135,8 +135,8 @@ dict (mirrors `root.py:94`).
   drop-in file still loads (settled, R3).
 - `TestResults.is_pass()` must return `True` for `PASS`/`SKIP` only — never for FAIL / NA /
   timeout / compile-fail / early-stop.
-- `UVMConfig.__post_init__` must raise `ValueError` (not `log.critical`) on a negative
-  `max_warns`/`max_errors`; promoting that to `log.critical` is `parse-suite-config`'s job
+- `UVMConfig.__post_init__` must raise `ValueError` (not `log.fatal`) on a negative
+  `max_warns`/`max_errors`; promoting that to `log.fatal` is `parse-suite-config`'s job
   (spec [04h](04h-parse-suite-config.md)), not this dataclass's.
 - These are pure `@serde` value objects: no `run()`, no ports, no graph awareness, no logging.
   The harness never loads them directly.

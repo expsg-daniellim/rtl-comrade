@@ -36,7 +36,7 @@ the catalog is the design view, this is the build view; update both when behavio
 contract: unit
 inputs:   test_config:str = "tests.yaml"
 outputs:  default  → Path   (resolved suite-config path → parse-suite-config)
-          work_dir → Path   (validated base directory → ensure-logs-dir)
+          work_dir → Path   (validated base directory → ensure-logs-dir, write-filelist, build-compile-cmd)
 ```
 
 ```python
@@ -44,11 +44,11 @@ class CheckSuiteCwdMod:
     def run(self, test_config:str = "tests.yaml"):
         resolved = (Path.cwd() / test_config).resolve()
         if resolved.parent != Path.cwd().resolve():
-            log.critical("suite_cwd_mismatch", test_config=test_config, resolved=str(resolved))
+            log.fatal("suite_cwd_mismatch", test_config=test_config, resolved=str(resolved))
         if not resolved.is_file():
-            log.critical("suite_config_missing", test_config=test_config, resolved=str(resolved))
+            log.fatal("suite_config_missing", test_config=test_config, resolved=str(resolved))
         yield ("default", resolved)            # resolved suite-config path → parse-suite-config
-        yield ("work_dir", resolved.parent)    # validated base dir (artefact root) → ensure-logs-dir
+        yield ("work_dir", resolved.parent)    # validated base dir (artefact root) → ensure-logs-dir / write-filelist / build-compile-cmd
 ```
 
 ## Algorithm
@@ -57,13 +57,13 @@ class CheckSuiteCwdMod:
    and `cwd = Path.cwd().resolve()`. Both `.resolve()` calls follow symlinks symmetrically, so
    a `tests.yaml` symlink inside a symlinked CWD still compares equal.
 2. **Failure — outside the suite dir.** If `resolved.parent != cwd`:
-   `log.critical(f"test_config {test_config!r} resolves to {resolved}, which is not in the
+   `log.fatal(f"test_config {test_config!r} resolves to {resolved}, which is not in the
    current directory ({cwd}). Run rtl-comrade test from the suite directory.")` — catches
    `-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`, and `-c subdir/tests.yaml`,
    which would otherwise parse but silently mistarget `logs/`, `run.f`, `obj_dir_<tag>/`, and
    the `test.*` symlinks.
 3. **Failure — missing file.** If `not resolved.is_file()`:
-   `log.critical(f"test_config {test_config!r} not found at {resolved}")`.
+   `log.fatal(f"test_config {test_config!r} not found at {resolved}")`.
 4. Emit both ports in lockstep: `("default", resolved)` for `parse-suite-config`, and
    `("work_dir", resolved.parent)` — the validated base directory — for `ensure-logs-dir`.
    `work_dir` is the **one** place artefact location is decided: today it is the suite dir
@@ -84,7 +84,7 @@ In `modules/rtl_buddy/setup.py`:
   [Algorithm](#algorithm) for the numbered steps (resolve → CWD-mismatch check → missing-file
   check → emit both ports). Both `.resolve()` calls follow symlinks symmetrically, so a
   `tests.yaml` symlink in a symlinked CWD passes correctly.
-  **Failure handling**: both checks are setup-domain config errors → `log.critical` (see
+  **Failure handling**: both checks are setup-domain config errors → `log.fatal` (see
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site)).
   **Compatibility source:** no direct rtl_buddy analogue (new check, Notable divergence) — enforces the convention `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) assumes vs `do_rtl_regression`'s `os.chdir` at `rtl_buddy.py:404`.
 
@@ -98,18 +98,18 @@ In `modules/rtl_buddy/setup.py`:
 ## Tests
 
 In `modules/tests/test_setup.py`. Fixtures: `tmp_path` + `monkeypatch.chdir` to set CWD and
-lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical` paths.
+lay out the (mis)placed files/symlinks; `logging_handler` for the `log.fatal` paths.
 
 - `test_config="tests.yaml"` with the file present in CWD → emits `("default", resolved)`
   where `resolved == (Path.cwd() / "tests.yaml").resolve()`, **and** `("work_dir",
   resolved.parent)` where `resolved.parent == Path.cwd().resolve()`.
 - `test_config="/abs/elsewhere/tests.yaml"` (absolute, outside CWD) → CWD-mismatch
-  `log.critical` → `pytest.raises(SystemExit)`.
+  `log.fatal` → `pytest.raises(SystemExit)`.
 - `test_config="../sibling/tests.yaml"` → resolved parent is not CWD → CWD-mismatch
-  `log.critical` → `pytest.raises(SystemExit)`.
+  `log.fatal` → `pytest.raises(SystemExit)`.
 - `test_config="subdir/tests.yaml"` → resolved parent is a subdir of CWD, not CWD →
-  CWD-mismatch `log.critical` → `pytest.raises(SystemExit)`.
-- `test_config="tests.yaml"` with no such file in CWD → missing-file `log.critical` →
+  CWD-mismatch `log.fatal` → `pytest.raises(SystemExit)`.
+- `test_config="tests.yaml"` with no such file in CWD → missing-file `log.fatal` →
   `pytest.raises(SystemExit)`.
 - CWD is itself a symlink (`/tmp/link → /tmp/real`) and `tests.yaml` sits in `/tmp/real` →
   emits `("default", resolved)` (boundary: both `.resolve()` calls collapse to the same
@@ -121,8 +121,8 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical`
 - Output ports exercised: `default` emits the resolved suite-config `Path` and `work_dir`
   emits the validated base directory when invoked from the suite directory (contributes to the
   setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
-- Failure idioms exercised: invoked from outside the suite dir → `log.critical` (harness
-  exit 1); the resolved `test_config` not a file → `log.critical`.
+- Failure idioms exercised: invoked from outside the suite dir → `log.fatal` (harness
+  exit 1); the resolved `test_config` not a file → `log.fatal`.
 - The `modules/config.yaml` manifest entry `{ name: check-suite-cwd, class_name: CheckSuiteCwdMod }`
   validates and the harness resolves `check-suite-cwd` → `CheckSuiteCwdMod`.
 
@@ -131,11 +131,11 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical`
 - `unit` contract; emit the resolved suite-config `Path` on the string-literal `default` port
   and the validated base directory (`resolved.parent`) on the `work_dir` port (both in lockstep
   via the generator). Do **not** re-derive the base dir downstream — `work_dir` is the single
-  artefact-location source consumed by `ensure-logs-dir`.
+  artefact-location source consumed by `ensure-logs-dir`, `write-filelist`, and `build-compile-cmd`.
 - Resolve **both** sides with `.resolve()` (`(Path.cwd() / test_config).resolve()` and
   `Path.cwd().resolve()`) so symlinks collapse symmetrically — do not compare un-resolved paths.
 - Both failures — `resolved.parent != cwd` (outside the suite dir) and `not resolved.is_file()`
-  (missing) — are setup-domain config errors → `log.critical` (harness exit 1), never a
+  (missing) — are setup-domain config errors → `log.fatal` (harness exit 1), never a
   port-routed result.
 - Do **not** wire this node in the regression graph (it `chdir`s per-suite); it is `test`/
   `randtest` only.
@@ -147,9 +147,11 @@ documented in [01](../01-cli-and-entry.md) — the regression graph does **not**
 (regression `chdir`s per-suite internally; see [08](../08-sibling-graphs.md)).
 
 It is also the **artefact-location provider**: `work_dir` is the one node that decides where
-outputs live. Downstream writers (`ensure-logs-dir` and, through it, `build-compile-cmd` /
-`build-sim-cmd` / `resolve-seed`) consume a resolved directory and never touch the ambient
-process CWD themselves. This keeps the rtl_buddy "everything is CWD-relative" assumption out of
+outputs live. It fans out directly to `ensure-logs-dir` (which sub-roots `logs/` and feeds the
+resolved dir to `build-sim-cmd` / `resolve-seed` and `build-compile-cmd`'s log paths),
+`write-filelist` (which roots `run.<tag>.f` on it), and `build-compile-cmd` (which roots
+`obj_dir_<tag>/` on it). Every such writer consumes a resolved directory and never touches the
+ambient process CWD itself. This keeps the rtl_buddy "everything is CWD-relative" assumption out of
 the leaf modules: relocating artefacts (a future `--work-dir`, or regression's per-suite root)
 changes this provider alone. In the regression graph the equivalent base-dir source is the
 per-suite `chdir` context in [08](../08-sibling-graphs.md).
