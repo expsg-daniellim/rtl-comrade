@@ -49,7 +49,7 @@ class ExpandSweepMod:
             exec_hook(sweep, ns)   # read + exec the sweep script; populates ns["out_test_cfgs"]
         except Exception as e:
             result = make_fail_result(desc=str(e))
-            log.error("sweep_failed", key=ctx["key"], exc_info=e,
+            log.error("sweep_failed", key=ctx["key"], test_name=ctx["test"].get_name(), exc_info=e,
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
             yield ("fail", { "key": ctx["key"], "result": result })
             return

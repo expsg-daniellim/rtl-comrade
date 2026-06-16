@@ -103,7 +103,8 @@ Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`)
 TODO #15 redesign these ports are **unwired** — there is no `aggregate-results` collector.
 Each terminal additionally **logs its outcome**, and the per-graph `SummaryProcessor` plugin
 collects those log events (via a configured watch-list) and renders the table. Two emission
-styles, both carrying `key`/`result`/`desc`:
+styles, both carrying `test_name`/`key`/`result`/`desc` (`test_name` = the test's `get_name()`,
+rendered as the summary's first column for rtl_buddy parity; `key` is retained for correlation):
 
 - **`test_result` directly** — the result-producing terminals that would otherwise log nothing
   (`parse-log`/`parse-uvm-log` on PASS/NA/FAIL, `filter.skip`, `early-stop-gate`) call
@@ -115,8 +116,8 @@ styles, both carrying `key`/`result`/`desc`:
 - **A domain event the watch-list collects** — the failure terminals that already `log.error`
   (`interpret-compile`→`compile_failed`, `interpret-sim`→`sim_timeout`, and
   `load-model`/`expand-sweep`/`run-preproc`/`write-filelist`/`resolve-seed`→`*_failed`) just add
-  `result`/`desc` kwargs to their existing call; `SummaryProcessor`'s `Config` watch-list lists
-  those event names, so no parallel `test_result` is emitted for them.
+  `test_name`/`result`/`desc` kwargs to their existing call; `SummaryProcessor`'s `Config`
+  watch-list lists those event names, so no parallel `test_result` is emitted for them.
 
 The `<TestResults>` object is still built (for `is_pass()` classification and the logged
 `result`/`desc`). See [05](05-branching-and-results.md) and [spec 10c](specs/10c-summary-handler.md).

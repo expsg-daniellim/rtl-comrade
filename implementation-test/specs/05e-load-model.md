@@ -44,7 +44,7 @@ class LoadModelMod:
             model = ModelConfigLoader(str(resolved)).get_model(ctx["test"].model_name)
         except Exception as e:   # loader raises (Plan B) on I/O / parse / lookup miss
             result = make_fail_result(desc=str(e))
-            log.error("load_model_failed", key=ctx["key"], model_path=str(resolved), err=str(e),
+            log.error("load_model_failed", key=ctx["key"], test_name=ctx["test"].get_name(), model_path=str(resolved), err=str(e),
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
             return ("fail", { "key": ctx["key"], "result": result })
         ctx["test"].model = model

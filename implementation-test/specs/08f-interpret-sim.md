@@ -38,7 +38,7 @@ class InterpretSimMod:
     def run(self, test_run):
         if test_run["timed_out"]:
             result = SimTimeoutResults(...)
-            log.error("sim_timeout", key=test_run["key"], err=test_run["err"],
+            log.error("sim_timeout", key=test_run["key"], test_name=test_run["test"].get_name(), err=test_run["err"],
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
             return ("timeout", { "key": test_run["key"], "result": result })
         return ("ok", test_run)

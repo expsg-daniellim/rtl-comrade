@@ -42,7 +42,7 @@ class ParseLogMod:
         except OSError as e:
             result = make_fail_result(desc=str(e))   # unreadable log → FAIL
         log_fn = log.error if not result.is_pass() else log.info   # ERROR drives exit on non-pass
-        log_fn("test_result", key=test_run["key"],
+        log_fn("test_result", key=test_run["key"], test_name=test_run["test"].get_name(),
                result=result.results["result"], desc=result.results["desc"])
         return ("default", { "key": test_run["key"], "result": result })
 ```

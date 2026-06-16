@@ -66,13 +66,14 @@ emission site:
    left **unwired**, so the harness logs `no_destination` at INFO and the item simply leaves
    the graph. No module signature or `definite_emits` change: the module stays graph-agnostic
    and does not know whether anything listens.
-2. **logs its outcome** (carrying `key`/`result`/`desc`) so the summary processor can collect
+2. **logs its outcome** (carrying `test_name`/`key`/`result`/`desc`; `test_name` = the test's
+   `get_name()`, the summary's first column) so the summary processor can collect
    the row, in one of two styles:
    - the result-producing terminals that would otherwise log nothing
      (`parse-log`/`parse-uvm-log`, `filter.skip`, `early-stop-gate`) call `log.info("test_result",
      …)` (pass-like) or `log.error("test_result", …)` (non-`is_pass()`, which also drives the exit);
    - the failure terminals that already `log.error` (`compile_failed`, `sim_timeout`, the five
-     `*_failed`) just add `result`/`desc` kwargs to their existing call.
+     `*_failed`) just add `test_name`/`result`/`desc` kwargs to their existing call.
 
 A `git-status` setup node similarly calls `log.info("git_state", branch=..., sha=...,
 dirty=...)` once at run start. The summary plugin's role is **outcomes only** — it collects the
@@ -118,7 +119,8 @@ class SummaryProcessor:
                  event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         name = event_dict.get("event")
         if name in self._events:
-            self._rows.append({"key": event_dict.get("key"),
+            self._rows.append({"test_name": event_dict.get("test_name"),   # summary's first column
+                               "key": event_dict.get("key"),
                                "result": event_dict.get("result"),
                                "desc": event_dict.get("desc")})
             if name in self._suppress:
@@ -268,7 +270,8 @@ missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.
 ## Log idioms per failure site
 
 Each module and contract that can fail records its idiom here. Every terminal site logs its
-outcome (carrying `key`/`result`/`desc`) so `SummaryProcessor`'s watch-list can collect its row —
+outcome (carrying `test_name`/`key`/`result`/`desc`; `test_name` = the test's `get_name()`, the
+summary's first column) so `SummaryProcessor`'s watch-list can collect its row —
 **either** as a `test_result` event (the result-producing terminals that would otherwise be
 silent: `parse-log`/`parse-uvm-log`, `filter.skip`, `early-stop-gate`) **or** as the terminal's
 own watched event with `result`/`desc` kwargs added (the failure terminals that already

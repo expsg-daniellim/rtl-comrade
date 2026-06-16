@@ -54,7 +54,7 @@ class ResolveSeedMod:
                 seed = int(Path(path).open().readline().strip())
             except (FileNotFoundError, ValueError, PermissionError):
                 result = make_fail_result(desc=f"Replay seed missing or invalid at {path}")
-                log.error("replay_seed_invalid", key=ctx["key"], path=str(path),
+                log.error("replay_seed_invalid", key=ctx["key"], test_name=ctx["test"].get_name(), path=str(path),
                           result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
                 yield ("fail", { "key": ctx["key"], "result": result })
                 return

@@ -45,7 +45,7 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
    them — which is why no module needs a guard. There is **no collector node**: each terminal
    port is left unwired and its module additionally **logs its outcome** — the otherwise-silent
    paths (`parse-log`/`parse-uvm-log`, `filter.skip`, `early-stop`) emit a `test_result` event,
-   while the failure terminals add `result`/`desc` to their existing `log.error`. A per-graph
+   while the failure terminals add `test_name`/`result`/`desc` to their existing `log.error`. A per-graph
    **`SummaryProcessor` logging plugin** collects those events via a configured watch-list and
    renders the table in its `finalise()` hook. `git-status` logs its git stateline separately and
    it falls through to the console. The exit code is driven by per-emission `log.error`. This is

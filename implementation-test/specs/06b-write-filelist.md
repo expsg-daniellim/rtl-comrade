@@ -55,7 +55,7 @@ class WriteFilelistMod:
             write_output(path, ctx["test"], unroll=True, deduplicate=True)
         except Exception as e:
             result = make_fail_result(desc=str(e))
-            log.error("filelist_failed", key=ctx["key"], path=str(path), err=str(e),
+            log.error("filelist_failed", key=ctx["key"], test_name=ctx["test"].get_name(), path=str(path), err=str(e),
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
             yield ("fail", { "key": ctx["key"], "result": result })
             return

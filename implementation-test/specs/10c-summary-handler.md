@@ -56,7 +56,8 @@ plugin:         SummaryProcessor  (structlog processor class — stateful; NOT a
 chain position: harness handler's formatter chain, before ConsoleRenderer (include_default: true)
 accumulates:    a Config watch-list of per-test outcome events (default: test_result,
                 compile_failed, sim_timeout, load_model_failed, sweep_failed, preproc_failed,
-                filelist_failed, replay_seed_invalid) → {key,result,desc} appended to self._rows
+                filelist_failed, replay_seed_invalid) → {test_name,key,result,desc} appended to
+                self._rows (test_name = the test's get_name(), the table's first column)
 suppresses:     only the Config `suppress` subset (default: test_result) via DropEvent; the
                 failure events are collected but still print to the console as errors
 passes through: every non-watched event, incl. git_state → ConsoleRenderer (returned unchanged)
@@ -95,6 +96,7 @@ class SummaryProcessor:
         name = event_dict.get("event")
         if name in self._events:
             self._rows.append({                  # harvest the row
+                "test_name": event_dict.get("test_name"),   # summary's first column (rtl_buddy parity)
                 "key": event_dict.get("key"),
                 "result": event_dict.get("result"),
                 "desc": event_dict.get("desc"),
@@ -106,7 +108,7 @@ class SummaryProcessor:
     def finalise(self):                          # per-run teardown hook, at run end
         if not self._rows:                       # list-mode / CRITICAL abort → no-op
             return
-        ...                                      # render the key/result/desc table
+        ...                                      # render the test_name/result/desc table
 ```
 
 It accumulates the **watch-list** events and nothing else. The failure events
@@ -120,7 +122,9 @@ rendering here).
 
 `__call__(logger, method_name, event_dict)` — runs per log event, before `ConsoleRenderer`:
 1. If `event_dict["event"]` is in the Config **watch-list** (`self._events`), harvest
-   `{key, result, desc}` into `self._rows`. If it is *also* in the `suppress` subset (default just
+   `{test_name, key, result, desc}` into `self._rows` (`test_name` = the test's `get_name()`,
+   rendered as the summary's first column for rtl_buddy parity; `key` retained for correlation).
+   If it is *also* in the `suppress` subset (default just
    `test_result`), `raise DropEvent` so its per-event console line is suppressed.
 2. Otherwise return `event_dict` unchanged. Watched-but-unsuppressed events (the failure
    `log.error`s — `compile_failed` etc.) are both collected **and** returned, so they still print
@@ -130,7 +134,8 @@ rendering here).
 failure check):
 3. If `self._rows` is empty (list-mode, or a CRITICAL abort before any result), return — a
    no-op.
-4. Otherwise render the `key`/`result`/`desc` table from `self._rows`. It drives no exit code
+4. Otherwise render the `test_name`/`result`/`desc` table from `self._rows` (`test_name` first,
+   parity with rtl_buddy's `test_name` column — `rtl_buddy.py:204`). It drives no exit code
    (that is the per-emission `log.error` at each failure site).
 
 ## Deliverables
@@ -143,14 +148,16 @@ In `graphs/log/summary.py` — a single `SummaryProcessor` class:
   (default covers `test_result`, emitted by the parsers / `filter.skip` / `early-stop`, **plus**
   the failure terminals' own events: `compile_failed`, `sim_timeout`, `load_model_failed`,
   `sweep_failed`, `preproc_failed`, `filelist_failed`, `replay_seed_invalid`) — and a `suppress`
-  subset (default `["test_result"]`). Each watched event must carry `key`/`result`/`desc` (the
-  failure terminals enrich their existing `log.error(...)` with `result`/`desc`; see their specs).
-- `__call__` harvests `{key, result, desc}` from every watched event into `self._rows`; it raises
+  subset (default `["test_result"]`). Each watched event must carry `test_name`/`key`/`result`/`desc`
+  (`test_name` = the test's `get_name()`; the failure terminals enrich their existing
+  `log.error(...)` with `test_name`/`result`/`desc`; see their specs).
+- `__call__` harvests `{test_name, key, result, desc}` from every watched event into `self._rows`; it raises
   `structlog.exceptions.DropEvent` only for events in `suppress` (the summary-only `test_result`
   rows), and returns **everything else unchanged** — so the failure `log.error`s, `git_state`,
   and all module logs still reach the console.
 - `finalise()` (the per-run teardown hook the harness invokes at run end) renders the
-  `key`/`result`/`desc` table from `self._rows`. It is a **no-op when `self._rows` is empty**
+  `test_name`/`result`/`desc` table from `self._rows` (first column `test_name`, parity with
+  rtl_buddy's `test_name` column). It is a **no-op when `self._rows` is empty**
   (list-mode, or a CRITICAL abort before any result). It drives **no** exit code.
 
 There is **no** separate `drop_summary_events` processor: the single `SummaryProcessor` both
@@ -174,9 +181,10 @@ table renders.
 watch-list); hand-built `event_dict`s; `capsys` for the rendered table; `pytest.raises(DropEvent)`
 for the suppression cases. No graph/harness needed.
 
-- Feed N `test_result` events (mix PASS/SKIP/FAIL/NA) through `__call__`, then `finalise()` →
-  one table rendered with a `key`/`result`/`desc` row per event in arrival order.
-- A watched **failure** event (e.g. `compile_failed` carrying `key`/`result`/`desc`) → a row is
+- Feed N `test_result` events (mix PASS/SKIP/FAIL/NA, each carrying `test_name`) through
+  `__call__`, then `finalise()` → one table rendered with a `test_name`/`result`/`desc` row per
+  event in arrival order (first column `test_name`).
+- A watched **failure** event (e.g. `compile_failed` carrying `test_name`/`key`/`result`/`desc`) → a row is
   appended **and** the event is returned unchanged (no `DropEvent`), so it still reaches the
   console (boundary: collected-but-not-suppressed).
 - No events fed → `finalise()` is a no-op, renders nothing (boundary: list-mode / CRITICAL
@@ -198,15 +206,15 @@ for the suppression cases. No graph/harness needed.
 ## Acceptance criteria
 
 - Tests pass.
-- **Outcome-only role**: only the watch-list events are collected (`{key, result, desc}`);
+- **Outcome-only role**: only the watch-list events are collected (`{test_name, key, result, desc}`);
   `git_state` and other non-watched events pass through to the console untouched (no git
   stateline in the table, no `self._git_state`). Failure events are collected **and** still
   printed — only `test_result` (the `suppress` set) is dropped.
 - Exit-code semantics: a run with any FAIL/NA emits ≥1 `log.error` → harness exit 1; an
   all-PASS/SKIP run emits none → exit 0. This reproduces rtl_buddy's
   `exit_code |= 0 if is_pass() else 1` via the per-emission `log.error`, not an aggregator.
-- The summary table content matches what `aggregate-results.finalise()` previously produced
-  (same `key`/`result`/`desc` columns).
+- The summary table content matches what `aggregate-results.finalise()` previously produced,
+  with `test_name` as the first column (rtl_buddy parity) followed by `result`/`desc`.
 - No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
   `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
   single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
@@ -219,7 +227,8 @@ for the suppression cases. No graph/harness needed.
 - Sits **before** `ConsoleRenderer` (non-terminal under `include_default: true`); `__call__`
   returns an `EventDict`, never a pre-rendered string.
 - Collect the **Config watch-list** events (default: `test_result` + the failure-terminal events)
-  — harvest `{key, result, desc}` into `self._rows`. `raise DropEvent` only for events in the
+  — harvest `{test_name, key, result, desc}` into `self._rows` (`test_name` = the test's
+  `get_name()`, the rendered first column). `raise DropEvent` only for events in the
   `suppress` set (default `["test_result"]`); return **every other** event (failure errors,
   `git_state`, module logs) unchanged. Do **not** hard-code the event names, keep a
   `self._git_state`, or render git state in the table.

@@ -43,7 +43,7 @@ class FilterRegLvlMod:
         lvl = ctx["test"].get_reglvl(builder_cfg.get_name())
         if (reg_level is not None and lvl > reg_level) or (start_level is not None and lvl < start_level):
             result = SkipResults(desc=...)
-            log.info("test_result", key=ctx["key"],          # SKIP is pass-like → INFO (no exit)
+            log.info("test_result", key=ctx["key"], test_name=ctx["test"].get_name(),  # SKIP is pass-like → INFO (no exit)
                      result=result.results["result"], desc=result.results["desc"])
             return ("skip", { "key": ctx["key"], "result": result })
         return ("keep", ctx)

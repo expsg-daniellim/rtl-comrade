@@ -26,7 +26,7 @@ Implement the cross-cutting early-stop gate, reused at three boundaries
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
 the catalog is the design view, this is the build view; update both when behaviour changes.
 The `payload` port accepts either `ctx` (gate-pre/comp) or `test_run` (gate-sim) — the
-module reads only `payload["key"]`.
+module reads only `payload["key"]` and `payload["test"]` (both present in either shape).
 
 ```
 contract:          default
@@ -48,8 +48,11 @@ class EarlyStopGateMod:
 
     def run(self, payload, early_stop:str = "post"):
         order = ["pre", "comp", "sim", "post"]   # reuse rtl_buddy RunDepth
+        if early_stop not in order:              # guard: reject an invalid --early-stop value
+            log.fatal("invalid_early_stop", early_stop=early_stop, valid=order)
         if order.index(early_stop) <= order.index(self.phase):
-            log.info("test_result", key=payload["key"], result="NA", desc=f"Stopped early at {self.phase}")
+            log.info("test_result", key=payload["key"], test_name=payload["test"].get_name(),
+                     result="NA", desc=f"Stopped early at {self.phase}")
             return ("stop", { "key": payload["key"], "result": EarlyStopResults(f"Stopped early at {self.phase}") })
         return ("go", payload)
 ```
@@ -58,17 +61,21 @@ class EarlyStopGateMod:
 
 1. Establish the phase ordering `order = ["pre", "comp", "sim", "post"]` (reuse rtl_buddy's
    `RunDepth` / a small schema equivalent — see Notes), where `self.phase` is this node
-   instance's checkpoint and `early_stop` is the requested depth.
+   instance's checkpoint and `early_stop` is the requested depth. Guard first: if `early_stop`
+   is not one of the four phase tokens, `log.fatal("invalid_early_stop", …)` — the CLI edge is a
+   bare `str` and the harness does not enum-validate it, so an invalid `--early-stop` value would
+   otherwise raise an uncaught `ValueError` at `order.index(early_stop)`.
 2. Branch: if `order.index(early_stop) <= order.index(self.phase)`, this run is stopped at or
    before this checkpoint → emit `("stop", {"key": payload["key"], "result":
    EarlyStopResults(f"Stopped early at {self.phase}")})` **and** `log.info("test_result",
-   key=payload["key"], result="NA", desc=f"Stopped early at {self.phase}")` (the
-   `SummaryProcessor` collects that event; the `stop` port itself is unwired). Otherwise emit
-   `("go", payload)`.
+   key=payload["key"], test_name=payload["test"].get_name(), result="NA", desc=f"Stopped early
+   at {self.phase}")` (the `SummaryProcessor` collects that event — `test_name` is its first
+   column; the `stop` port itself is unwired). Otherwise emit `("go", payload)`.
 
-The module reads only `payload["key"]` and is agnostic to whether `payload` is `ctx`
-(gate-pre/comp) or `test_run` (gate-sim). No failure path — a `stop` is a normal terminal, not
-an error.
+The module reads only `payload["key"]` and `payload["test"]` (both present whether `payload` is
+`ctx` (gate-pre/comp) or `test_run` (gate-sim)), so it stays shape-agnostic. The only failure
+path is the `log.fatal` guard on an invalid `early_stop`; a `stop` itself is a normal terminal,
+not an error.
 
 ## Deliverables
 
@@ -76,18 +83,25 @@ In `modules/rtl_buddy/control.py` — `EarlyStopGateMod`:
 
 `(payload, early_stop:str="post")` with module `Config` containing `phase:str` (one of
 `pre`/`comp`/`sim`). `payload` is `ctx` at `gate-pre`/`gate-comp` and `test_run` at
-`gate-sim`; the module reads only `payload["key"]` and is agnostic to the shape otherwise.
-Compares `early_stop` against `phase` using the ordering `pre < comp < sim < post`; if stop
-here → `("stop", {"key": payload["key"], "result": EarlyStopResults(f"Stopped early at
-{phase}")})` **and** `log.info("test_result", key=..., result="NA", desc=...)`; else
-`("go", payload)`. Three node instances, differing only in `config.phase`. The `stop` port is
-**unwired** (TODO #15) — the harness logs `no_destination` at INFO.
-**Failure handling**: routing only; no exception, no `log.error` (a `stop` is a normal
-terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
+`gate-sim`; the module reads only `payload["key"]` and `payload["test"]` (both present in either
+shape) and is agnostic otherwise. It first guards `early_stop` against the four valid phase
+tokens, `log.fatal`-ing on an invalid value (the CLI edge is a bare `str`; the harness does not
+enum-validate it). Compares `early_stop` against `phase` using the ordering `pre < comp < sim <
+post`; if stop here → `("stop", {"key": payload["key"], "result": EarlyStopResults(f"Stopped
+early at {phase}")})` **and** `log.info("test_result", key=..., test_name=payload["test"].get_name(),
+result="NA", desc=...)`; else `("go", payload)`. Three node instances, differing only in
+`config.phase`. The `stop` port is **unwired** (TODO #15) — the harness logs `no_destination`
+at INFO.
+**Failure handling**: routing only — no `log.error` (a `stop` is a normal terminal, not a
+failure). One guard: an `early_stop` value outside `{pre,comp,sim,post}` →
+`log.fatal("invalid_early_stop", …)` (harness exit 1), since the CLI edge is a bare `str` the
+harness does not enum-validate. See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
 **Exit-code divergence (deliberate):** `EarlyStopResults` is NA, and `rtl_buddy` exits 1 on
 `--early-stop` (`runner/test_results.py:53-60`; `rtl_buddy.py:206`). Plan B treats a user-requested
 stop as a successful early exit, so this `log.info` (never `log.error`) leaves `handler.failure`
-False → exit 0. Per-test verdict and summary row are unchanged. Recorded in
+False → exit 0. The per-test `NA` verdict is unchanged, but the `desc` wording diverges: Plan B
+emits `"Stopped early at <phase>"` with the phase token (`pre`/`comp`/`sim`), where rtl_buddy
+emits `preproc`/`compile`/`sim` — matching only for `sim`. Recorded in
 [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy).
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the `RunDepth` early-stop checkpoints; enum at `test_runner.py:14-18`; `--early-stop` flag at `rtl_buddy.py:121`; `EarlyStopResults` at `runner/test_results.py:53-60`.
@@ -119,7 +133,11 @@ stop iff `order.index(early_stop) <= order.index(phase)`.
 - A `stop` emits no `log.error`/`log.fatal` — `logging_handler.failure` stays `False` (a
   stop is a normal terminal, not a failure).
 - `payload` agnosticism: a `ctx`-shaped payload at `phase="pre"` and a `test_run`-shaped
-  payload at `phase="sim"` both route purely on `payload["key"]`.
+  payload at `phase="sim"` both route on `payload["key"]`/`payload["test"]`, which exist in
+  either shape.
+- `early_stop="bogus"` (not a phase token) → `log.fatal("invalid_early_stop", …)` →
+  `pytest.raises(SystemExit)` (boundary: invalid `--early-stop` value, since the CLI edge is an
+  unvalidated `str`).
 
 ## Acceptance criteria
 
@@ -137,8 +155,12 @@ stop iff `order.index(early_stop) <= order.index(phase)`.
   EarlyStopResults})` on the **unwired** `stop` port **and** `log.info("test_result",
   result="NA", desc=…)`. Otherwise emit `("go", payload)`.
 - A `stop` is a **normal terminal, not a failure** — emit **no** `log.error`/`log.fatal`.
-- Read only `payload["key"]`; stay agnostic to whether `payload` is `ctx` (gate-pre/comp) or
-  `test_run` (gate-sim). Three node instances differ only by `config.phase`.
+- Read only `payload["key"]` and `payload["test"]` (both present in `ctx` and `test_run`); stay
+  agnostic to the shape otherwise. Three node instances differ only by `config.phase`.
+- Guard `early_stop` against `{pre,comp,sim,post}` → `log.fatal("invalid_early_stop", …)` on an
+  invalid value (the CLI edge is a bare `str`; the harness does not enum-validate it). A
+  `Literal["pre","comp","sim","post"]` annotation is an acceptable equivalent only if the harness
+  enforces it; the explicit membership guard is the reliable mechanism.
 
 ## Notes
 

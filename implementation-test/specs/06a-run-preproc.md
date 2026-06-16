@@ -47,7 +47,7 @@ class RunPreprocMod:
             exec_hook(preproc, ns)   # read + exec the script; mutates ctx["test"] in place
         except Exception as e:
             result = make_fail_result(desc=str(e))
-            log.error("preproc_failed", key=ctx["key"], exc_info=e,
+            log.error("preproc_failed", key=ctx["key"], test_name=ctx["test"].get_name(), exc_info=e,
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
             return ("fail", { "key": ctx["key"], "result": result })
         return ("default", ctx)

@@ -1,6 +1,7 @@
 # Spec 03: `run-process` module
 
-**Depends on:** none.
+**Depends on:** spec 06a (creates the shared `modules/rtl_buddy/build.py` that 03 appends to —
+file-creation ordering only; no logic dependency).
 **References:** [03 — `run-process`](../03-module-catalog.md), [07 settled 4 / open verify 23](../07-ambiguities-and-assumptions.md).
 
 ## Before you start

@@ -54,7 +54,7 @@ collision to prefix against, and none is added.
 | 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (extracted from 01 per TODO #10; consumed by 04, 05, 06, 07, 08, 09). |
 | 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (extracted from 01 per TODO #10; consumed by 05, 06). |
 | 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` only (plain, reusable; **unwired** in `test`). `FanInResultsMod` removed by TODO #15 — build only if another graph needs it. |
-| 03 | [run-process](03-run-process.md) | — | The reusable subprocess star. |
+| 03 | [run-process](03-run-process.md) | 06a (creates `build.py`) | The reusable subprocess star. Appends to the shared `build.py` 06a creates (file-creation ordering only; no logic dependency). |
 | 04 | [setup-modules](04-setup-modules.md) (index) | 01 | Setup chain + suite parse + seed-mode derivation. Split into 04a–04i. |
 | 05 | [selection-expansion-modules](05-selection-expansion-modules.md) (index) | 01 | List routing, select, filter, load-model, sweep. Split into 05a–05f. |
 | 06 | [prep-modules](06-prep-modules.md) (index) | 01 | `run-preproc`, `write-filelist`. Split into 06a–06b. |
@@ -110,8 +110,10 @@ group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle
 `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that
 group.
 
-Specs 01, 01a, 01b, 01c, 02, and 03 can all run in parallel from the start (01b has a
+Specs 01, 01a, 01b, 01c, and 02 can all run in parallel from the start (01b has a
 type-annotation dependency on 01c but no logic dependency; 02 has no external blocker).
+Spec 03 (run-process) appends to the shared `build.py` that 06a creates, so it depends on 06a
+for that file (file-creation ordering only — no logic dependency).
 Specs 04, 05, 06, 09, 10 (and their children) can run
 in parallel after their listed deps. Specs 07 and 08 share `run-process` (spec 03)
 and reuse modules from 04/05/06. Schema fan-in: 01a → 05/07/08; 01b →

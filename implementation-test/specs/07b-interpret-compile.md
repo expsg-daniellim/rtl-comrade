@@ -43,7 +43,7 @@ class InterpretCompileMod:
         if proc["rc"] == 0:
             return ("ok", ctx)   # simv already set by build-compile-cmd
         result = CompileFailResults(...)
-        log.error("compile_failed", key=ctx["key"], rc=proc["rc"], stderr_path=proc["stderr_path"],
+        log.error("compile_failed", key=ctx["key"], test_name=ctx["test"].get_name(), rc=proc["rc"], stderr_path=proc["stderr_path"],
                   result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
         return ("fail", { "key": ctx["key"], "result": result })
 ```

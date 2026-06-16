@@ -50,7 +50,9 @@ class BuildSimCmdMod:
     def run(self, ctx, seed, builder_cfg, builder_mode, logs_dir):
         simv = ctx["simv"]   # set by build-compile-cmd
         argv = [simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]), *plusdefines, *plusargs]  # plusdefines/plusargs built per Algorithm step 2
-        timeout, _is_custom = ctx["test"].get_timeout()
+        timeout, is_custom = ctx["test"].get_timeout()
+        if is_custom:
+            log.warning("custom_sim_timeout", key=ctx["key"], timeout=timeout)   # rtl_buddy vlog_sim.py:233-234
         stem = logs_dir / f"{ctx['test'].get_name()}{run_suffix(ctx)}"   # logs_dir: resolved Path from ensure-logs-dir
         log_path, err_path, rs_path = f"{stem}.log", f"{stem}.err", f"{stem}.randseed"
         yield ("ctx", ctx)
@@ -70,8 +72,10 @@ class BuildSimCmdMod:
 3. Assemble the argv: `[simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]),
    *plusdefines, *plusargs]`. `get_run_time_opts` already appends `sim_rand_prefix + str(seed)`
    internally — do **not** add the seed again.
-4. Resolve the timeout: `(timeout, _is_custom) = ctx["test"].get_timeout()` (spec 01b —
-   `(self.timeout, True)` on a per-test override, else `(60, False)`); emit it as `float`.
+4. Resolve the timeout: `(timeout, is_custom) = ctx["test"].get_timeout()` (spec 01b —
+   `(self.timeout, True)` on a per-test override, else `(60, False)`); when `is_custom`, log
+   `log.warning("custom_sim_timeout", …)` (rtl_buddy parity, `vlog_sim.py:233-234`); emit
+   `timeout` as `float`.
 5. Compose the log/randseed paths off one stem `stem = logs_dir /
    f"{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err = f"{stem}.err"`,
    `randseed_path = f"{stem}.randseed"`. `logs_dir` is the resolved `Path` from `ensure-logs-dir`
@@ -102,7 +106,8 @@ In `modules/rtl_buddy/sim.py`:
   None`; when not `None`, format each entry as `f"+{k}={v}"` or `f"+{k}"` for `v is
   None`, mirroring `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:95-105`). Computes
   `(timeout, is_custom) = ctx["test"].get_timeout()` (spec [01b](01b-suite-schema.md)
-  — `(self.timeout, True)` if a per-test override is set, else `(60, False)`); the
+  — `(self.timeout, True)` if a per-test override is set, else `(60, False)`); when `is_custom`,
+  logs `log.warning("custom_sim_timeout", …)` (rtl_buddy parity, `vlog_sim.py:233-234`); the
   `timeout` value (an `int` seconds) is emitted as a `float | None`. Log paths are
   `logs_dir / f"{test_name}{run_suffix}.log"`/`.err`, where `run_suffix` is `""` when
   `ctx["run_id"] is None` and `f"_{run_id:04d}"` (run-id zero-padded to four digits) otherwise —
@@ -178,5 +183,7 @@ for the bad-mode path.
   do **not** assume a CWD-relative `"logs"` or read the ambient CWD. Do **not** `mkdir(logs_dir)`
   — `ensure-logs-dir` owns it.
 - Emit `timeout` as `float | None`. Emit all four ports in lockstep via the generator.
+- When `get_timeout()` reports `is_custom` (a per-test `sim_timeout` override), log
+  `log.warning("custom_sim_timeout", …)` — rtl_buddy parity (`vlog_sim.py:233-234`).
 - Do **not** catch `get_run_time_opts` — it `log.fatal`s on an unknown mode / `None` opts
   (spec [01a](01a-builder-schema.md)); system-wide misconfiguration, not per-test.

@@ -321,8 +321,12 @@ informational.
   `EarlyStopResults` at `runner/test_results.py:53-60`) makes `rtl_buddy test --early-stop <phase>`
   exit **1**. Plan B treats a user-requested stop as a deliberate, successful early exit, not a
   failure: `early-stop-gate` emits `log.info("test_result", result="NA", …)` (never `log.error`),
-  so the run exits **0**. The per-test verdict (`NA`, `"Stopped early at <phase>"`) and the summary
-  row are unchanged — only the exit code diverges. Genuine NA verdicts from
+  so the run exits **0**. The per-test `NA` verdict is unchanged, but the `desc` also diverges:
+  `early-stop-gate` emits `"Stopped early at <phase>"` using the phase token (`pre`/`comp`/`sim`),
+  whereas rtl_buddy emits `"Stopped early at preproc"`/`"…compile"`/`"…sim"`
+  (`runner/test_runner.py:60,68,76`) — so the `desc` matches only for `sim` and diverges for
+  `pre`/`comp`. Both the exit code and the `pre`/`comp` `desc` wording are deliberate deltas.
+  Genuine NA verdicts from
   `parse-log`/`parse-uvm-log` are unaffected and still exit 1. See [02 table](02-payload-conventions.md#testresults-values-used-at-the-terminal-ports),
   [05 — Result aggregation](05-branching-and-results.md#result-aggregation-and-exit-code), and
   [spec 10a](specs/10a-early-stop-gate.md).
@@ -389,9 +393,12 @@ informational.
   `resolve-seed` (REPLAY) emit on a new `fail` port with `log.error` instead of aborting
   the whole run. rtl_buddy `logger.critical`s on preproc-script and sweep-script crashes
   (`vlog_sim.py:134-137`, `rtl_buddy.py:279-281`); Plan B continues running other tests.
-  REPLAY-missing already matches rtl_buddy's per-test FAIL via `log.error` + FAIL stub
-  log (`vlog_sim.py:200-213`); the divergence is structural (port-routed `result`) not
-  behavioural.
+  REPLAY-missing matches rtl_buddy's per-test FAIL **verdict** via `log.error`
+  (`vlog_sim.py:200-213`), but with an **artifact divergence**: rtl_buddy additionally writes a
+  FAIL stub `<test>.log`/`.err` and forces the `test.log`/`test.err` symlinks before returning
+  (`vlog_sim.py:204-212`), whereas Plan B's `resolve-seed` routes the `fail` `result` *before*
+  the sim/log/symlink steps run, so no stub log/err or symlinks are produced for a replay-fail.
+  The verdict matches; the on-disk artifacts do not.
 
 ## Implementation notes
 
