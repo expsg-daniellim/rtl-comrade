@@ -65,7 +65,12 @@ informational.
     **per-emission `log.error`** at each failure site: one ERROR sets `handler.failure` →
     harness exits 1 (reproducing rtl_buddy's OR-accumulated exit code). This is now the
     **sole** driver — the old `aggregate-results.finalise()` ERROR is gone with the node.
-    PASS and SKIP log no ERROR and contribute nothing. CRITICAL is reserved for fatal config
+    PASS and SKIP log no ERROR and contribute nothing. **`early-stop` is the one NA that does
+    not contribute**: `EarlyStopResults` is NA, but a user-requested stop is not a failure, so
+    `early-stop-gate` logs `log.info` (exit 0) rather than `log.error` — a deliberate divergence
+    from rtl_buddy, which exits 1 on `--early-stop` (recorded under "Notable divergences"). A
+    genuine NA from `parse-log`/`parse-uvm-log` still logs `log.error` → exit 1. CRITICAL is
+    reserved for fatal config
     errors (matching `logger.critical` → `typer.Abort`). Per-test config-domain failures
     (`load-model` missing/malformed, `write-filelist` source-not-found, `expand-sweep` exec
     crash, `run-preproc` exec crash, `resolve-seed` REPLAY missing/malformed `.randseed`)
@@ -187,33 +192,40 @@ informational.
     where unused and load-bearing where the simulator binary sits in CWD. Supersedes
     the "Implementation notes" entry of the same name below (now removed).
 
-26. **`logs/` ownership, lifecycle, and `--logs-dir`** (settled 2026-06-02). The
-    artefact directory is **owned by a single setup node**, not the writers. A new
-    [`ensure-logs-dir`](03-module-catalog.md) (spec
-    [04](specs/04-setup-modules.md)) `unit` node calls
-    `Path(logs_dir).mkdir(parents=True, exist_ok=True)` once at startup; no other
-    module calls `mkdir`. **Location is CWD-relative `logs/` by default** — parity
-    with `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59`, where `VlogSim.__init__`
-    lazily `makedirs`'s a hard-coded `"logs"` literal per test. Plan B lifts that
-    into one explicit setup node so (a) no downstream writer needs `mkdir`, (b) the
-    directory is materialised once per invocation rather than per `VlogSim`, and (c)
-    the path becomes overridable. **`-L/--logs-dir`** (default `"logs"`) is a small
-    Notable divergence from rtl_buddy (which has no override) — it broadcasts as a
-    CLI edge to `ensure-logs-dir` (creates the directory) and to `build-compile-cmd`
-    / `build-sim-cmd` / `resolve-seed` as persistent inputs (compose paths inside it).
-    `write-randseed` does not consume `logs_dir` directly — `build-sim-cmd` emits
-    `randseed_path` in `sim_cmd` so the `keyed_join` receives it as a dedicated keyed
-    port (no persistent config port on keyed_join — see Implementation notes). **Sequencing**: the
-    env-setup chain is now `prepend-path → ensure-logs → cc-run/sim-run.env_ready`,
-    with an additional `check-cwd → ensure-logs._cwd` edge so a bad-CWD invocation
-    aborts before any rogue `logs/` is materialised. **Lifecycle**: never auto-cleaned
-    (parity); user owns purging. **Concurrency**: filenames within `logs/` are
-    uniquely keyed by `<test_name>[_NNNN]` (sweep + run-id), so no within-directory
-    collisions even when the [item 17](07-ambiguities-and-assumptions.md) interim
-    shim is in effect. Wired in `test`/`randtest` only — `regression`'s per-suite
-    `chdir` needs a per-suite bootstrap that lives in [08](08-sibling-graphs.md).
-    The CWD-relative half of the "CWD assumptions preserved" Implementation notes
-    entry below is now explicit, not silent.
+26. **Artefact-location provenance, `logs/` ownership, lifecycle, and `--logs-dir`**
+    (settled 2026-06-02; **provenance centralised 2026-06-16**). Artefact location is
+    decided in **one** place and flows as data — the leaf writers do not re-derive it from the
+    ambient CWD. [`check-suite-cwd`](03-module-catalog.md) emits the validated base directory
+    `work_dir`; [`ensure-logs-dir`](03-module-catalog.md) (spec [04](specs/04-setup-modules.md),
+    a `unit` node) roots the artefact directory on it — `(Path(work_dir) /
+    logs_dir).mkdir(parents=True, exist_ok=True)` once at startup; no other module calls `mkdir`
+    — and **emits the resolved directory `Path`** on its `logs_dir` port. That `Path` fans out
+    as a persistent input to the composers `build-compile-cmd` / `build-sim-cmd` / `resolve-seed`,
+    which **join filenames onto it** and never touch the process CWD. So the rtl_buddy
+    "everything is CWD-relative" assumption lives **only** in the `check-suite-cwd → ensure-logs-dir`
+    provider pair; relocating artefacts (a future `--work-dir`, or regression's per-suite root) is
+    a change there alone. **Default location** is `<work_dir>/logs` — `work_dir` is today the
+    suite dir (= CWD, asserted by `check-suite-cwd`), giving parity with
+    `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` (where `VlogSim.__init__` lazily
+    `makedirs`'s a hard-coded `"logs"` literal per test). Plan B lifts that into one setup node so
+    (a) no downstream writer needs `mkdir`, (b) the directory is materialised once per invocation
+    rather than per `VlogSim`, (c) the subdir name is overridable, and (d) the *location* is a
+    single data source rather than a leaf-level convention. **`-L/--logs-dir`** (default `"logs"`,
+    the subdirectory **name**) is a small Notable divergence from rtl_buddy (which has no override)
+    — it is a CLI edge to `ensure-logs-dir` only. `write-randseed` does not consume `logs_dir` —
+    `build-sim-cmd` emits `randseed_path` in `sim_cmd` so the `keyed_join` receives it as a
+    dedicated keyed port (no persistent config port on keyed_join — see Implementation notes).
+    **Sequencing**: the env-setup chain is `prepend-path → ensure-logs → cc-run/sim-run.env_ready`;
+    `ensure-logs` takes `work_dir` from `check-cwd` as **load-bearing** data (it is read to root
+    the directory, so a missing edge fails edge-validation — superseding the former ordering-only
+    `_cwd` token, whose defaulted-port exemption per item 21 could silently skip the guard).
+    **Lifecycle**: never auto-cleaned (parity); user owns purging. **Concurrency**: filenames
+    within `logs/` are uniquely keyed by `<test_name>[_NNNN]` (sweep + run-id), so no
+    within-directory collisions even when the [item 17](07-ambiguities-and-assumptions.md) interim
+    shim is in effect. Wired in `test`/`randtest` only — `regression`'s per-suite `chdir` feeds a
+    different `work_dir` to the same node, a bootstrap that lives in [08](08-sibling-graphs.md).
+    The CWD-relative half of the "CWD assumptions preserved" Implementation notes entry below is
+    now explicit, not silent.
 
 27. **`git-status` recorded + summary rendered by a logging plugin** (settled 2026-06-10;
     resolves TODO #15). Decision: **include** git state, as a logging concern, not a
@@ -233,17 +245,17 @@ informational.
     spec in [10](specs/10-control-aggregate-modules.md).
 
     **Plugin form revised 2026-06-11 (processor, not handler).** The plugin was first specified
-    as a `SummaryHandler` (`logging.Handler`) + a paired `drop_summary_events` processor. That
-    was a workaround for a harness gap: only handlers get an end-of-run hook (`App.cleanup`
-    walks the root logger's *handlers* and calls `finalise()`, per
-    `docs/logger/implementation.md`), so a stateful aggregator that needed to render once at run
-    end was forced into a handler — even though a processor is the right kind (processor classes
-    hold state; a processor sits before `ConsoleRenderer` to intercept-and-accumulate result
-    events; and `DropEvent` — a processor-only mechanism — suppresses their per-event lines in
-    the *same* object, removing the second piece). **The fix is to extend the
-    finalisation hook to processors** (have the per-run teardown call `finalise()` on configured
-    processor instances that define one), not to keep abusing a handler. This redesign **assumes
-    that harness gap is closed**; the plugin is now the single `SummaryProcessor`.
+    as a `SummaryHandler` (`logging.Handler`) + a paired `drop_summary_events` processor — a
+    workaround written when it was believed only handlers got an end-of-run hook, so a stateful
+    aggregator that renders once at run end was forced into a handler. A processor is the right
+    kind (processor classes hold state; a processor sits before `ConsoleRenderer` to
+    intercept-and-accumulate result events; and `DropEvent` — a processor-only mechanism —
+    suppresses their per-event lines in the *same* object, removing the second piece). **The
+    per-run finalisation hook already covers processors:** `App.cleanup` finalises the run's
+    processors (then handlers), duck-typed, before the failure check and not on a `CRITICAL`
+    exit (`docs/logger/implementation.md:95-99`, timing at `:165-167`). So this is a **shipped
+    harness feature, not an assumed-open gap** (review R6); the plugin is now the single
+    `SummaryProcessor` whose `finalise()` renders the table.
     **Knock-on:** supersedes items 3 and
     19; revises items 9 and 10. It also disturbed the interim parallel-safety shim (whose lock
     *release* lived on the now-deleted `fan-in` node) — **TODO #30** resolved that by removing
@@ -304,6 +316,27 @@ informational.
 
 ## Notable divergences from rtl_buddy
 
+- **`--early-stop` exits 0, not 1** (settled 10, R2). `rtl_buddy`'s `EarlyStopResults` is NA, and
+  `exit_code |= 0 if is_pass() else 1` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:206`;
+  `EarlyStopResults` at `runner/test_results.py:53-60`) makes `rtl_buddy test --early-stop <phase>`
+  exit **1**. Plan B treats a user-requested stop as a deliberate, successful early exit, not a
+  failure: `early-stop-gate` emits `log.info("test_result", result="NA", …)` (never `log.error`),
+  so the run exits **0**. The per-test verdict (`NA`, `"Stopped early at <phase>"`) and the summary
+  row are unchanged — only the exit code diverges. Genuine NA verdicts from
+  `parse-log`/`parse-uvm-log` are unaffected and still exit 1. See [02 table](02-payload-conventions.md#testresults-values-used-at-the-terminal-ports),
+  [05 — Result aggregation](05-branching-and-results.md#result-aggregation-and-exit-code), and
+  [spec 10a](specs/10a-early-stop-gate.md).
+- **Verible config dropped; builder resolution re-homed** (R3). rtl_buddy's `RootConfig`
+  (`config/root.py:50-231`) loads `cfg-verible` into `VeribleConfig`s and resolves the active
+  builder + verible *inside* `platform.initialise` during platform selection. Plan B (a) drops
+  verible entirely — `VeribleConfigFile`/`VeribleConfig` are not ported, and the `cfg-verible`
+  (root) / `verible` (per-platform) keys are left **unparsed** (pyserde ignores unknown keys, so
+  files still load drop-in); and (b) keeps the builders dict (`rtl_builder_cfgs`) on a thin
+  runtime `RootConfig` and resolves the builder in a dedicated node — `resolve-builder` reads
+  `root_cfg.rtl_builder_cfgs` keyed by `platform_cfg.builder` (CLI `--builder` override wins),
+  not `platform.initialise`. The runtime `PlatformConfig` is therefore never built. See
+  [spec 01 — `root.py` schema](specs/01-shared-schema.md#rootpy-schema-detailed) and
+  [04e](specs/04e-resolve-builder.md).
 - **`load-model` is lazy** (settled 8) — broken `models.yaml` in a skipped test no longer
   errors early. Departs from rtl_buddy's eager load inside `TestConfigFile.initialise`
   (`rtl_buddy/src/rtl_buddy/config/test.py:320-323`, which calls `ModelConfigLoader.get_model`
@@ -335,11 +368,16 @@ informational.
   `ParseUvmLogMod` unaffected. See Settled item 15.
 - **`--debug`/`--color` flags not exposed** (settled 11) — logging owned by harness
   `--level`. Drops rtl_buddy's `root_options` flags at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:116-117`.
-- **`-L/--logs-dir` is a new CLI override** (settled 26). `rtl_buddy` hard-codes
-  `"logs"` (`tools/vlog_sim.py:55`); Plan B keeps the same default but accepts a
-  user-supplied path. Composition sites (`build-compile-cmd`, `build-sim-cmd`,
-  `resolve-seed` REPLAY) take it as a persistent input; the bootstrap site
-  (`ensure-logs-dir`) creates the directory once at startup.
+- **`-L/--logs-dir` is a new CLI override + centralised artefact-location provenance**
+  (settled 26; centralised 2026-06-16). `rtl_buddy` hard-codes `"logs"`
+  (`tools/vlog_sim.py:55`) and every tool composes paths relative to the ambient CWD; Plan B
+  keeps the same default but (a) accepts a user-supplied subdir **name**, and (b) decides the
+  artefact *location* once — `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots `logs/`
+  on it and emits the resolved directory `Path`. The composition sites (`build-compile-cmd`,
+  `build-sim-cmd`, `resolve-seed` REPLAY) take that resolved `Path` as a persistent input and
+  join filenames onto it — they no longer carry the CWD-relative assumption. This deliberately
+  departs from rtl_buddy's leaf-level "everything is CWD-relative" model so relocating artefacts
+  is a one-node change.
 - **Per-test config-domain failures route as per-test FAIL, not `logger.critical`**
   (settled 10). `load-model`, `write-filelist`, `expand-sweep`, `run-preproc`, and
   `resolve-seed` (REPLAY) emit on a new `fail` port with `log.error` instead of aborting
@@ -357,13 +395,17 @@ informational.
   first-class tags would need a manifest + loader extension.
 - **Config objects cross edges as live Python objects** (`RootConfig`, `TestConfig`, …). Fine
   for asyncio; would need to be picklable only if the harness ever went multiprocess.
-- **CWD assumptions preserved.** `root_config.yaml` discovery walks up from CWD; `run.f`,
-  `obj_dir`, `logs/` (default, overridable via `--logs-dir` per Settled 26) are
-  CWD-relative — same as rtl_buddy. The user must `cd` into the suite directory before
-  invoking `rtl-comrade test`/`randtest`; the `check-suite-cwd` node enforces this (see
-  Settled item 24). The `logs/` directory is materialised by `ensure-logs-dir` once at
-  startup (Settled 26). `regression`'s per-suite `chdir` is out of scope for the
-  `test`/`randtest` graphs.
+- **CWD assumptions — `logs/` centralised, others still leaf-relative.** `root_config.yaml`
+  discovery walks up from CWD; `run.f` (`write-filelist`) and `obj_dir_<tag>/`
+  (`build-compile-cmd`) remain CWD-relative — same as rtl_buddy, and tracked for the broader
+  per-invocation-subdir work under [item 17](07-ambiguities-and-assumptions.md). The user must
+  `cd` into the suite directory before invoking `rtl-comrade test`/`randtest`; the
+  `check-suite-cwd` node enforces this (see Settled item 24). The **artefact (`logs/`) directory
+  is no longer leaf-CWD-relative**: `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots
+  `logs/` on it once at startup and emits the resolved `Path`, and the composers join onto that
+  (Settled 26) — so artefact location is one data source, not a per-writer convention. Extending
+  the same provider model to `run.f`/`obj_dir` is the natural next step (item 17).
+  `regression`'s per-suite `chdir` feeds a different `work_dir` to `ensure-logs-dir`.
 - **`exec`'d preproc/sweep scripts reproduced as-is.** `run-preproc`/`expand-sweep` emit the
   mutated/expanded `TestConfig` in `ctx`, not via hidden global mutation.
 - **`keyed_join` cannot hold a persistent config port** (it joins every port by key). That's

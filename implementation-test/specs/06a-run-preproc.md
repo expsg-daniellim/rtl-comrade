@@ -42,11 +42,14 @@ class RunPreprocMod:
         preproc = ctx["test"].get_preproc_path()
         if preproc is None:
             return ("default", ctx)
+        ns = {"logger": logger, "test_cfg": ctx["test"], "root_cfg": root_cfg}
         try:
-            exec_hook(preproc, ctx["test"], root_cfg)   # mutates ctx["test"] in place
+            exec_hook(preproc, ns)   # read + exec the script; mutates ctx["test"] in place
         except Exception as e:
-            log.error("preproc_failed", key=ctx["key"], exc_info=e)
-            return ("fail", { "key": ctx["key"], "result": ... })
+            result = make_fail_result(desc=str(e))
+            log.error("preproc_failed", key=ctx["key"], exc_info=e,
+                      result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
+            return ("fail", { "key": ctx["key"], "result": result })
         return ("default", ctx)
 ```
 
@@ -55,16 +58,18 @@ class RunPreprocMod:
 1. Branch on the preproc path: `preproc = ctx["test"].get_preproc_path()` (spec 01b → `str |
    None`). If `None`, emit `("default", ctx)` once and return (rtl_buddy short-circuits the same
    way).
-2. Read the script and execute it in a fresh namespace: `ns = {"logger": logger, "test_cfg":
-   ctx["test"], "root_cfg": root_cfg}`, then `exec(compile(code, preproc, "exec"), ns)`. The
-   script mutates `ctx["test"]` in place via setters (`set_plusarg`/`set_plusdefine`/
-   `set_timeout`, spec 01b). Reuse the shared `exec_hook` helper (see Notes).
+2. Build a fresh namespace `ns = {"logger": logger, "test_cfg": ctx["test"], "root_cfg":
+   root_cfg}`, then call `exec_hook(preproc, ns)` — the shared helper reads the script and
+   `exec`s it into `ns`. The script mutates `ctx["test"]` in place via setters
+   (`set_plusarg`/`set_plusdefine`/`set_timeout`, spec 01b). The helper is defined in spec
+   [05f](05f-expand-sweep.md) (see Notes).
 3. Emit `("default", ctx)` with the mutated test.
 4. **Failure — script error.** Wrap the read + `exec` (step 2) in `try/except Exception` (user
    script exceptions plus `FileNotFoundError`/`PermissionError` reading the script) → emit
    `("fail", {"key": ctx["key"], "result": <FAIL with str(e) + traceback summary>})` and
-   `log.error(..., exc_info=e)`. Notable divergence: per-test FAIL vs rtl_buddy's
-   `logger.critical → typer.Abort`.
+   `log.error("preproc_failed", …, exc_info=e, result=…, desc=…)` (the `result`/`desc` kwargs let
+   `SummaryProcessor`'s watch-list collect the row). Notable divergence: per-test FAIL vs
+   rtl_buddy's `logger.critical → typer.Abort`.
 
 ## Deliverables
 
@@ -83,8 +88,10 @@ In `modules/rtl_buddy/build.py` (continuing from spec 03):
   exception from the user script, plus `FileNotFoundError` / `PermissionError` reading the
   preproc script itself; mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:134-137`).
   Emit `("fail", {"key": ctx["key"], "result": <FAIL payload with `str(e)` and traceback
-  summary>})` and call `log.error` at emission with `exc_info=e`. **Notable divergence
-  from rtl_buddy**: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
+  summary>})` and call `log.error("preproc_failed", …)` at emission with `exc_info=e` **and
+  `result`/`desc`** (so the `SummaryProcessor` watch-list, [10c](10c-summary-handler.md), renders
+  the row). **Notable divergence from rtl_buddy**: per-test FAIL vs rtl_buddy's
+  `logger.critical → typer.Abort`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:119-139` — `VlogSim.pre`.
 
 **Manifest** — this module opens the `rtl_buddy/build.py` block in `modules/config.yaml`
@@ -128,12 +135,16 @@ a `root_cfg` fixture; `logging_handler` to assert `failure is True` without `Sys
   `set_timeout`); pass the mutated `ctx` through on `default`.
 - Catch broad `Exception` around the read + `exec` (user-script errors plus
   `FileNotFoundError`/`PermissionError`) → emit `("fail", {key, result: <FAIL with str(e) +
-  traceback>})` on the **unwired** `fail` port and `log.error(..., exc_info=e)`. Per-test FAIL,
-  **not** `log.critical`/abort.
+  traceback>})` on the **unwired** `fail` port and `log.error("preproc_failed", …, exc_info=e)`
+  carrying **`result`/`desc`** (so the `SummaryProcessor` watch-list collects the row). Per-test
+  FAIL, **not** `log.critical`/abort.
 - Reuse the shared `exec_hook` helper (spec [05f](05f-expand-sweep.md)) — do **not** copy-paste.
 
 ## Notes
 
 `run-preproc` and `expand-sweep` (spec [05f](05f-expand-sweep.md)) share the same
-`exec`-with-namespace pattern — reuse the `exec_hook(path, namespace)` helper rather than
-copy-pasting.
+`exec`-with-namespace pattern — reuse the `exec_hook(path, namespace)` helper
+(`modules/rtl_buddy/_hooks.py`) rather than copy-pasting. The signature and its
+exception-propagation contract are defined once in spec [05f](05f-expand-sweep.md) Notes;
+preproc passes only `logger`/`test_cfg`/`root_cfg` (no `out_test_cfgs`) and relies on the
+script's in-place mutation of `test_cfg`.

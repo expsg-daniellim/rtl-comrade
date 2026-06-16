@@ -84,6 +84,11 @@ here → `("stop", {"key": payload["key"], "result": EarlyStopResults(f"Stopped 
 **unwired** (TODO #15) — the harness logs `no_destination` at INFO.
 **Failure handling**: routing only; no exception, no `log.error` (a `stop` is a normal
 terminal, not a failure). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
+**Exit-code divergence (deliberate):** `EarlyStopResults` is NA, and `rtl_buddy` exits 1 on
+`--early-stop` (`runner/test_results.py:53-60`; `rtl_buddy.py:206`). Plan B treats a user-requested
+stop as a successful early exit, so this `log.info` (never `log.error`) leaves `handler.failure`
+False → exit 0. Per-test verdict and summary row are unchanged. Recorded in
+[07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy).
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the `RunDepth` early-stop checkpoints; enum at `test_runner.py:14-18`; `--early-stop` flag at `rtl_buddy.py:121`; `EarlyStopResults` at `runner/test_results.py:53-60`.
 

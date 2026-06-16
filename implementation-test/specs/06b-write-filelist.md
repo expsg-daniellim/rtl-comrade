@@ -48,8 +48,10 @@ class WriteFilelistMod:
         try:
             write_output(path, ctx["test"], unroll=True, deduplicate=True)
         except Exception as e:
-            log.error("filelist_failed", key=ctx["key"], path=str(path), err=str(e))
-            yield ("fail", { "key": ctx["key"], "result": ... })
+            result = make_fail_result(desc=str(e))
+            log.error("filelist_failed", key=ctx["key"], path=str(path), err=str(e),
+                      result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
+            yield ("fail", { "key": ctx["key"], "result": result })
             return
         yield ("ctx", ctx)
         yield ("filelist", { "key": ctx["key"], "filelist": path })
@@ -72,8 +74,9 @@ class WriteFilelistMod:
    `FileNotFoundError`/`IsADirectoryError`/`OSError`/`PermissionError` (write), or
    `KeyError`/`AttributeError` from a missing testbench filelist or `ctx["test"].get_model() is
    None` (meaning `load-model` did not fire upstream) → emit `("fail", {"key": ctx["key"],
-   "result": <FAIL with str(e) in desc>})` and `log.error` with the attempted path and the chain
-   of `-F` includes the resolver was processing.
+   "result": <FAIL with str(e) in desc>})` and `log.error("filelist_failed", …)` with the
+   attempted path, the chain of `-F` includes the resolver was processing, **and `result`/`desc`**
+   (so `SummaryProcessor`'s watch-list collects the row).
 
 ## Deliverables
 
@@ -94,9 +97,10 @@ In `modules/rtl_buddy/build.py` (continuing from spec 03):
   errors; `KeyError` / `AttributeError` from a missing testbench filelist, or model-path
   resolution failure during `-F` recursion — e.g. `ctx["test"].get_model() is None`,
   meaning `load-model` did not fire upstream). Emit `("fail", {"key": ctx["key"],
-  "result": <FAIL payload with `str(e)` in `desc`>})` and call `log.error` at emission
-  with the attempted filelist path and the chain of `-F` includes the resolver was
-  processing.
+  "result": <FAIL payload with `str(e)` in `desc`>})` and call `log.error("filelist_failed", …)`
+  at emission with the attempted filelist path, the chain of `-F` includes the resolver was
+  processing, **and `result`/`desc`** (so the `SummaryProcessor` watch-list,
+  [10c](10c-summary-handler.md), renders the row).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` — `VlogFilelist.write_output`; called from `VlogSim._write_filelist` at `tools/vlog_sim.py:88-93`. Per-tag `run.{test_tag}.f` is a Plan B divergence from the hard-coded `"run.f"` (`vlog_sim.py:157`).
 
 **Manifest** — append to the `- file: rtl_buddy/build.py` block in `modules/config.yaml`
@@ -148,7 +152,8 @@ a `ctx` fixture carrying a resolved model + testbench; `logging_handler` for the
 - Catch broad `Exception` from the resolve/write (`OSError`/`PermissionError`/`FileNotFoundError`/
   `IsADirectoryError`, or `KeyError`/`AttributeError` from a missing testbench filelist or
   `ctx["test"].get_model() is None`) → emit `("fail", {key, result: <FAIL with str(e)>})` on the
-  **unwired** `fail` port and `log.error` with the attempted path. Per-test FAIL, not abort.
+  **unwired** `fail` port and `log.error("filelist_failed", …)` with the attempted path **and
+  `result`/`desc`** (so the `SummaryProcessor` watch-list collects the row). Per-test FAIL, not abort.
 
 ## Notes
 

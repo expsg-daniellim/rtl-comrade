@@ -58,8 +58,9 @@ class ParseRootConfigMod:
 
 In `modules/rtl_buddy/setup.py`:
 
-- `ParseRootConfigMod` — reads the path, deserialises into the schema (spec 01); emits
-  `root_cfg`.
+- `ParseRootConfigMod` — reads the path, deserialises into `RootConfigFile`, then wraps it as
+  `RootConfig(raw)` (the thin runtime wrapper that precomputes `rtl_builder_cfgs`, per
+  [spec 01 — `root.py` schema](01-shared-schema.md#rootpy-schema-detailed)); emits `root_cfg`.
   **Failure handling**: catch broad `Exception` from the YAML load (mirrors
   `rtl_buddy/src/rtl_buddy/config/root.py:88-89`). Specific classes in play:
   `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O);

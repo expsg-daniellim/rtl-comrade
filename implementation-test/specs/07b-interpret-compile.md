@@ -42,19 +42,22 @@ class InterpretCompileMod:
     def run(self, ctx, proc):
         if proc["rc"] == 0:
             return ("ok", ctx)   # simv already set by build-compile-cmd
-        log.error("compile_failed", key=ctx["key"], rc=proc["rc"], stderr_path=proc["stderr_path"])
-        return ("fail", { "key": ctx["key"], "result": CompileFailResults(...) })
+        result = CompileFailResults(...)
+        log.error("compile_failed", key=ctx["key"], rc=proc["rc"], stderr_path=proc["stderr_path"],
+                  result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
+        return ("fail", { "key": ctx["key"], "result": result })
 ```
 
 ## Algorithm
 
 1. Branch on the subprocess result (joined to `ctx` by key via `keyed_join`): if `proc["rc"]
    == 0`, emit `("ok", ctx)` unchanged — `ctx["simv"]` was already set by `build-compile-cmd`.
-2. **Failure — non-zero rc.** Otherwise read a tail of `proc["stderr_path"]`, `log.error` at
-   emission with `rc`/`stderr_path`/the stderr tail, and emit `("fail", {"key": ctx["key"],
-   "result": CompileFailResults(...)})`. This is result routing on `rc`, not a caught Python
-   exception; an `OSError`/`FileNotFoundError` reading `stderr_path` would be surprising and is
-   left to propagate.
+2. **Failure — non-zero rc.** Otherwise read a tail of `proc["stderr_path"]`, build `result =
+   CompileFailResults(...)`, `log.error("compile_failed", …)` at emission with
+   `rc`/`stderr_path`/the stderr tail **plus `result`/`desc`** (so `SummaryProcessor`'s watch-list
+   collects the row), and emit `("fail", {"key": ctx["key"], "result": result})`. This is result
+   routing on `rc`, not a caught Python exception; an `OSError`/`FileNotFoundError` reading
+   `stderr_path` would be surprising and is left to propagate.
 
 ## Deliverables
 
@@ -65,9 +68,11 @@ In `modules/rtl_buddy/build.py`:
   rc != 0 → reads `proc["stderr_path"]`/`stdout_path` and logs at ERROR, then
   `("fail", {"key": ctx["key"], "result": CompileFailResults()})`.
   **Failure handling**: routing on `proc["rc"]`; no Python exception is caught here. The
-  ERROR log at emission carries `rc`, `stderr_path`, and a tail of the stderr file
-  (mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:170-172`). `OSError` /
-  `FileNotFoundError` reading `stderr_path` would be surprising; let it propagate.
+  ERROR `compile_failed` log at emission carries `rc`, `stderr_path`, a tail of the stderr file
+  (mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:170-172`), **and `result`/`desc`** from
+  `CompileFailResults` so the `SummaryProcessor` watch-list ([10c](10c-summary-handler.md))
+  renders the row. `OSError` / `FileNotFoundError` reading `stderr_path` would be surprising; let
+  it propagate.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:63-65` — the `compile_returncode != 0 → CompileFailResults` branch; rc check at `tools/vlog_sim.py:168-171`; `CompileFailResults` at `runner/test_results.py:44-51`.
 
 **Manifest** — append to the `- file: rtl_buddy/build.py` block in `modules/config.yaml`
@@ -86,7 +91,8 @@ the contract's concern.
 
 - `proc["rc"] == 0` → emits `("ok", ctx)` unchanged (`ctx["simv"]` preserved); no log.
 - `proc["rc"] == 2` with a stderr file → emits `("fail", {"key", "result": CompileFailResults})`,
-  `logging_handler.failure is True`, and the ERROR log carries `rc`/`stderr_path`/the stderr tail.
+  `logging_handler.failure is True`, and the ERROR `compile_failed` log carries
+  `rc`/`stderr_path`/the stderr tail **and `result="FAIL"`/`desc`** (so `SummaryProcessor` collects it).
 - `proc["rc"] == -11` (signal-style non-zero) → still routes `("fail", …)` (boundary: any
   non-zero rc is a compile failure, not just positive codes).
 - `proc["rc"] != 0` with `stderr_path` pointing at a missing file → reading the tail raises
@@ -111,7 +117,8 @@ the contract's concern.
   node, not single-source `default`.
 - Route on `proc["rc"]`: `rc == 0` → `("ok", ctx)` unchanged (`ctx["simv"]` already set by
   `build-compile-cmd`); `rc != 0` → `("fail", {key, result: CompileFailResults()})` on the
-  **unwired** `fail` port and `log.error` at emission (`rc`, `stderr_path`, stderr tail).
+  **unwired** `fail` port and `log.error("compile_failed", …)` at emission (`rc`, `stderr_path`,
+  stderr tail, **and `result`/`desc`** so the `SummaryProcessor` watch-list collects the row).
 - This is result routing on `rc`, **not** a caught Python exception. An `OSError`/
   `FileNotFoundError` reading `stderr_path` is surprising — let it propagate.
 

@@ -10,9 +10,9 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | S1 | `discover-root` | `discover-config-file` | `unit` | — (config `filename`) |
 | S2 | `parse-root` | `parse-root-config` | `unit` | `path` |
 | S3 | `select-platform` | `select-platform` | `unit` | `root_cfg` |
-| S4 | `resolve-builder` | `resolve-builder` | `unit` | `platform_cfg`; CLI `builder` |
-| S4.5 | `check-cwd` | `check-suite-cwd` | `unit` | CLI `test_config` |
-| S4.6 | `ensure-logs` | `ensure-logs-dir` | `unit` | CLI `logs_dir`; `env_ready` (from `prepend-path`); `_cwd` (from `check-cwd`) |
+| S4 | `resolve-builder` | `resolve-builder` | `unit` | `root_cfg`, `platform_cfg`; CLI `builder` |
+| S4.5 | `check-cwd` | `check-suite-cwd` | `unit` | CLI `test_config` (emits `default` path + `work_dir`) |
+| S4.6 | `ensure-logs` | `ensure-logs-dir` | `unit` | CLI `logs_dir` (name); `work_dir` (from `check-cwd`); `env_ready` (from `prepend-path`) — emits resolved `logs_dir` Path + `env_ready` |
 | S5 | `parse-suite` | `parse-suite-config` | `unit` | `test_config_path` (from `check-cwd`) |
 | S6 | `seed-mode` | `derive-seed-mode` | `unit` | CLI `rnd_new`,`rnd_last` |
 | S7 | `git-status` | `git-status` | `unit` | — (zero-input; logs `git_state`) |
@@ -25,13 +25,13 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | 5 | `preproc` | `run-preproc` | `default` | `ctx` / `root_cfg` |
 | 6 | `gate-pre` | `early-stop-gate` (phase=pre) | `default` | `ctx` / `early_stop` |
 | 7 | `filelist` | `write-filelist` | `default` | `ctx` (writes `run.<tag>.f`) |
-| 8 | `cc-build` | `build-compile-cmd` | `default` | `ctx`,`filelist` / `builder_cfg`,`builder_mode`,`logs_dir` |
+| 8 | `cc-build` | `build-compile-cmd` | `default` | `ctx`,`filelist` / `builder_cfg`,`builder_mode`,`logs_dir` (Path from `ensure-logs`) |
 | 9 | `cc-run` | `run-process` | `default` | `command` / `env_ready` (from `ensure-logs`) |
 | 10 | `cc-int` | `interpret-compile` | `keyed_join` (`key_field: key`) | `ctx`,`proc` |
 | 11 | `gate-comp` | `early-stop-gate` (phase=comp) | `default` | `ctx` / `early_stop` |
 | 12 | `runs` | `expand-runs` | `default` | `ctx` / `run_ids` |
-| 13 | `seed` | `resolve-seed` | `default` | `ctx` / `seed_mode`,`builder_cfg`,`logs_dir` |
-| 14 | `sim-build` | `build-sim-cmd` | `default` | `ctx`,`seed` / `builder_cfg`,`builder_mode`,`logs_dir` |
+| 13 | `seed` | `resolve-seed` | `default` | `ctx` / `seed_mode`,`builder_cfg`,`logs_dir` (Path from `ensure-logs`) |
+| 14 | `sim-build` | `build-sim-cmd` | `default` | `ctx`,`seed` / `builder_cfg`,`builder_mode`,`logs_dir` (Path from `ensure-logs`) |
 | 15 | `sim-run` | `run-process` | `default` | `command`,`timeout` / `env_ready` (from `ensure-logs`) |
 | 16 | `randseed` | `write-randseed` | `keyed_join` (`key_field: key`) | `ctx`,`proc`,`sim_cmd` |
 | 17 | `link-latest` | `link-latest` | `default` | `test_run` |
@@ -42,10 +42,11 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | 21b | `parse-uvm-log` | `parse-uvm-log` | `default` | `test_run` |
 
 > **No `fan-in`/`agg` rows (TODO #15).** The former rows 22a (`fan-in`) and 22 (`agg`) are
-> removed. The 13 terminal ports are left **unwired** (each terminal node logs a
-> `test_result` row instead), and the summary **results** table is rendered by the per-graph
-> `SummaryProcessor` logging plugin in its `finalise()` hook (git state falls through to the
-> console separately). See
+> removed. The 13 terminal ports are left **unwired** (each terminal instead logs its outcome —
+> `test_result` from the otherwise-silent paths, the terminal's own `*_failed`/`compile_failed`/
+> `sim_timeout` event from the failure sites), and the summary **results** table is rendered by
+> the per-graph `SummaryProcessor` logging plugin (watch-list-driven) in its `finalise()` hook
+> (git state falls through to the console separately). See
 > [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
 
 The same nodes are drawn in the overview's
@@ -70,11 +71,13 @@ plus `check-cwd` → `parse-suite`, `check-cwd` → `ensure-logs`, `prepend-path
 returns `EndSentinel` forever. `select`'s generator fans out all tests from that single
 invocation. `discover-root` and `prepend-path` are zero-input, which also run once.
 `prepend-path` and `ensure-logs` together form the env-setup chain whose terminal
-`bool` sentinel feeds `cc-run.env_ready` and `sim-run.env_ready`, sequencing both the
+`env_ready` token feeds `cc-run.env_ready` and `sim-run.env_ready`, sequencing both the
 `$PATH` mutation and the `logs/` `mkdir` strictly upstream of every subprocess via the
-harness's data-dependency ordering. `ensure-logs` additionally takes `_cwd` from
-`check-cwd` (a second consumer of `check-cwd`'s default output, alongside `parse-suite`)
-so a bad-CWD invocation aborts before any rogue `logs/` is created.
+harness's data-dependency ordering. `ensure-logs` additionally takes `work_dir` from
+`check-cwd` (the validated base directory — a second consumer of `check-cwd`'s outputs,
+alongside `parse-suite` on the `default` port) and roots the artefact directory on it, emitting
+the resolved `logs_dir` Path that the composers consume. Because `work_dir` is read (not an
+ordering-only token), a missing edge fails edge-validation rather than silently mistargeting.
 
 ### `default` (+ `persistent_inputs`) — the linear stages
 Most stages take exactly one work payload (`ctx`, or `command`) plus cached config. The
@@ -117,8 +120,9 @@ tool-internal CWD files). Detail in
 
 ### Re-convergence — removed; the summary is a logging concern
 There is no longer a re-convergence node. The 13 mutually-exclusive terminal-result branches
-are left unwired; each terminal node logs a `test_result` row that the per-graph
-`SummaryProcessor` accumulates (results only) and renders in `finalise()`. The `any` contract
+are left unwired; each terminal logs its outcome (a `test_result` event, or the failure
+terminal's own watched event) that the per-graph `SummaryProcessor` collects via its watch-list
+and renders in `finalise()`. The `any` contract
 that previously fed `fan-in` is retained (reusable) but unwired in `test`. Details in
 [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
 and [specs/10](specs/10-control-aggregate-modules.md).
@@ -137,16 +141,17 @@ One output may feed many destinations (output fan-out is allowed; the single-sou
 constrains *input* ports only). Config broadcasts:
 
 - setup chain: `discover-root` → `parse-root` → `select-platform` → `resolve-builder`
-- env setup: `prepend-path` → `ensure-logs.env_ready`; `check-cwd` → `ensure-logs._cwd`;
-  `ensure-logs.default` → `cc-run.env_ready`, `sim-run.env_ready` (chained sentinel)
-- `parse-root.root_cfg` → `sweep`, `preproc` (persistent)
+- env setup: `prepend-path` → `ensure-logs.env_ready`; `check-cwd.work_dir` → `ensure-logs.work_dir`;
+  `ensure-logs.env_ready` → `cc-run.env_ready`, `sim-run.env_ready` (chained token)
+- `parse-root.root_cfg` → `select-platform`, `resolve-builder` (`unit`); `sweep`, `preproc` (persistent)
 - `resolve-builder.builder_cfg` → `filter`, `cc-build`, `seed`, `sim-build` (persistent)
 - `parse-suite.suite_cfg` → `route-list`; `route-list.run` → `select`, `route-list.list` → `list-names`
 - `seed-mode.default` → `seed.seed_mode`
 - CLI `early_stop` → `gate-pre`, `gate-comp`, `gate-sim`
 - CLI `builder_mode` → `cc-build`, `sim-build`
-- CLI `logs_dir` → `ensure-logs`, `cc-build`, `sim-build`, `seed` (persistent on the
-  three main-line consumers; `unit` on `ensure-logs`)
+- CLI `logs_dir` (subdir name) → `ensure-logs` only; the **resolved** `logs_dir` Path
+  `ensure-logs.logs_dir` → `cc-build`, `sim-build`, `seed` (persistent on the three main-line
+  composers). Artefact location is decided once (`check-cwd.work_dir`) and flows as data.
 
 ## Liveness / termination
 

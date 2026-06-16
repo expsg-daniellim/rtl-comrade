@@ -53,5 +53,6 @@ own line (append, don't re-create the block):
 ## Notes
 
 `expand-sweep` and `run-preproc` (spec [06a](06a-run-preproc.md)) share the same
-`exec`-with-namespace pattern. Factor a small `exec_hook(path, namespace)` helper into a
-private module rather than copy-pasting.
+`exec`-with-namespace pattern via a small `exec_hook(path, namespace)` helper in
+`modules/rtl_buddy/_hooks.py`. Its signature and exception-propagation contract are defined
+once in spec [05f](05f-expand-sweep.md) Notes; `06a` references it.

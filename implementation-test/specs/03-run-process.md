@@ -328,8 +328,10 @@ Both should be recorded under "Notable divergences" in
 organically returns 4444 is not misclassified.
 
 **asyncio child-watcher.** Python 3.8+ default `ThreadedChildWatcher` reaps children
-transparently; no explicit `os.waitpid` is required beyond `proc.wait()`. Spec 00's
-framework probe should confirm the default policy on the target Python.
+transparently; no explicit `os.waitpid` is required beyond `proc.wait()`. Confirming the
+default policy on the target Python is tracked under
+[07 item 23](../07-ambiguities-and-assumptions.md) (async subprocess hardening — empirical
+verification before the module is built).
 
 **`asyncio.shield` around the cancellation-path reap.** Small and non-load-bearing,
 but explicit: a second cancellation during the finally-block would otherwise drop the

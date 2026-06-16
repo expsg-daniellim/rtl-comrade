@@ -20,8 +20,8 @@ in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
 | [04c](04c-parse-root-config.md) | `ParseRootConfigMod` | Deserialise `root_config.yaml` → `root_cfg`. |
 | [04d](04d-select-platform.md) | `SelectPlatformMod` | Match `uname` → `platform_cfg`. |
 | [04e](04e-resolve-builder.md) | `ResolveBuilderMod` | Pick active `RtlBuilderConfig` → `builder_cfg`. |
-| [04f](04f-check-suite-cwd.md) | `CheckSuiteCwdMod` | Enforce the suite-directory CWD convention. |
-| [04g](04g-ensure-logs-dir.md) | `EnsureLogsDirMod` | Bootstrap the `logs/` artefact directory once. |
+| [04f](04f-check-suite-cwd.md) | `CheckSuiteCwdMod` | Enforce the suite-directory CWD convention; emit `work_dir` (artefact-location provider). |
+| [04g](04g-ensure-logs-dir.md) | `EnsureLogsDirMod` | Bootstrap the artefact dir under `work_dir` once; emit its resolved `Path`. |
 | [04h](04h-parse-suite-config.md) | `ParseSuiteConfigMod` | Deserialise `tests.yaml` → `suite_cfg`. |
 | [04i](04i-derive-seed-mode.md) | `DeriveSeedModeMod` | Map the two CLI booleans → `SeedMode`. |
 
@@ -51,9 +51,10 @@ in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
 - End-to-end "setup-only" graph wiring all nine nodes against the real rtl_buddy reference
   suite `../rtl-buddy-proj-template/design/sandbox(/verif)` (per `rtl_buddy/AGENTS.md`)
   produces correct `root_cfg`/`builder_cfg`/`suite_cfg` values, with `CheckSuiteCwdMod`
-  aborting runs invoked from outside the suite directory, `PrependCwdPathMod` leaving
-  `os.environ["PATH"]` starting with `.` for the duration of the run, and `EnsureLogsDirMod`
-  leaving the configured `logs_dir` present on disk (default `./logs/`) before any later
+  aborting runs invoked from outside the suite directory (and emitting `work_dir`),
+  `PrependCwdPathMod` leaving `os.environ["PATH"]` starting with `.` for the duration of the run,
+  and `EnsureLogsDirMod` rooting the artefact directory on `work_dir` (default `<work_dir>/logs`,
+  i.e. `./logs/` when run from the suite dir) and emitting its resolved `Path` before any later
   main-line node fires.
 - Every child's `modules/config.yaml` entry validates and resolves: `discover-config-file`,
   `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`,

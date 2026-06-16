@@ -71,24 +71,27 @@ Run `uname` and match it against each platform's `unames`; pick the platform. Si
 - **Log idiom:** `log.critical` if no platform's `unames` matches the current host. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `resolve-builder`  · tags: setup · contract: `unit`
-Resolve the active builder from the platform (honouring the `--builder` override); critical
-if the named builder is missing.
+Resolve the active `RtlBuilderConfig` from the root builders dict using the platform's declared
+builder name (honouring the `--builder` override); critical if the named builder is missing.
 
-- **Source:** `rtl_buddy/src/rtl_buddy/config/platform.py:63-84` — `PlatformConfigFile.initialise`: builder lookup, the `builder_override` branch, and the `log.critical`s when a named builder / verible is absent.
-- **In:** `platform_cfg`, `builder:str = ""`
+- **Source:** `rtl_buddy/src/rtl_buddy/config/platform.py:63-84` (`PlatformConfigFile.initialise`: builder lookup + `builder_override` branch) resolving against `config/root.py:94`'s `rtl_builder_cfgs` dict. Verible resolution is dropped (R3).
+- **In:** `root_cfg`, `platform_cfg`, `builder:str = ""`
 - **Out:** default → `builder_cfg`
-- **Log idiom:** `log.critical` if the named builder is missing on the platform. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Log idiom:** `log.critical` if the resolved name is missing from `root_cfg.rtl_builder_cfgs`. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `check-suite-cwd`  · tags: setup · contract: `unit`
 Enforce the user-driven CWD convention: `rtl-comrade test`/`randtest` must be invoked from
 the suite directory (matching `rtl_buddy`'s `do_cmd_test`, which never `chdir`s — only
 `do_rtl_regression` does, per-suite). Resolves the CLI `test_config` against CWD and
-fails fast if the resolved path's parent is not CWD. Emits the resolved `Path` for
-downstream `parse-suite-config`.
+fails fast if the resolved path's parent is not CWD. Emits the resolved suite-config `Path`
+for `parse-suite-config` **and** the validated base directory `work_dir` (= `resolved.parent`)
+for `ensure-logs-dir`. This is the **single artefact-location provider**: downstream writers
+consume a resolved directory instead of re-deriving it from the ambient CWD, so relocating
+artefacts (a future `--work-dir`, or regression's per-suite root) is a change to this node alone.
 
 - **Source:** No direct rtl_buddy analogue — a new check (Notable divergence, see [07 settled 24](07-ambiguities-and-assumptions.md)). It enforces the CWD convention that `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) silently assumes: that command never `chdir`s, unlike `do_rtl_regression`'s per-suite `os.chdir` at `rtl_buddy.py:404`.
 - **In:** `test_config:str = "tests.yaml"`
-- **Out:** default → `Path` (the resolved suite-config path)
+- **Out:** default → `Path` (resolved suite-config path); work_dir → `Path` (validated base dir)
 - **Log idiom:** `log.critical` if (a) `(Path.cwd() / test_config).resolve().parent !=
   Path.cwd().resolve()` (CWD mismatch), or (b) the resolved path is not a file. See
   [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site). Not wired
@@ -96,25 +99,28 @@ downstream `parse-suite-config`.
   [08](08-sibling-graphs.md)).
 
 ### `ensure-logs-dir`  · tags: setup · contract: `unit`
-Bootstrap the CWD-relative artefact directory (`logs/` by default) that downstream subprocess
-nodes and randseed writers redirect into. Mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59`
+Bootstrap the artefact directory (`<work_dir>/logs` by default) that downstream subprocess
+nodes and randseed writers redirect into, **and emit its resolved path as data** so the path
+composers join onto a provided directory instead of the ambient CWD. Mirrors
+`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59`
 (`output_dir = "logs"; if not os.path.exists(...): os.makedirs(...)`), lifted out of
 `VlogSim.__init__`'s per-test lazy mkdir into a single explicit setup node so no downstream
-writer needs to `mkdir` and the directory is created exactly once per invocation. Takes the
-CLI `logs_dir` (with `--logs-dir` default `"logs"` — a small **Notable divergence** from
-rtl_buddy, which has no override; see [07](07-ambiguities-and-assumptions.md)), plus two
-sequencing inputs: `env_ready:bool` from `prepend-cwd-path` (chains the PATH-prepend
-strictly upstream) and `_cwd:Path` from `check-suite-cwd` (so a bad-CWD invocation never
-materialises a rogue `logs/` before the cwd check has aborted). Emits a `bool` sentinel
-consumed by `cc-run.env_ready` and `sim-run.env_ready` — the env_ready chain
-([07 settled 25](07-ambiguities-and-assumptions.md)) is now `prepend-path → ensure-logs →
-cc-run/sim-run`. Idempotent (`mkdir(parents=True, exist_ok=True)`) — accepts nested or
-absolute `logs_dir`. Not wired in the regression graph (regression `chdir`s per-suite — see
-[08](08-sibling-graphs.md)).
+writer needs to `mkdir`, the directory is created exactly once per invocation, and artefact
+location is decided once (by `check-suite-cwd`'s `work_dir`). Takes `work_dir:Path` from
+`check-suite-cwd` (the validated base directory — **load-bearing**, joined under `logs_dir`,
+so a missing edge fails edge-validation), the CLI `logs_dir` **subdir name** (with `--logs-dir`
+default `"logs"` — a small **Notable divergence** from rtl_buddy, which has no override; see
+[07](07-ambiguities-and-assumptions.md)), and one sequencing input `env_ready:bool` from
+`prepend-cwd-path` (chains the PATH-prepend strictly upstream). Emits the resolved directory
+`Path` on `logs_dir` (a persistent input consumed by `cc-build`/`sim-build`/`seed`) and a
+`bool` token on `env_ready` consumed by `cc-run.env_ready`/`sim-run.env_ready` — the env_ready
+chain ([07 settled 25](07-ambiguities-and-assumptions.md)) is `prepend-path → ensure-logs →
+cc-run/sim-run`. Idempotent (`mkdir(parents=True, exist_ok=True)`) — accepts nested names. Not
+wired in the regression graph (regression `chdir`s per-suite — see [08](08-sibling-graphs.md)).
 
-- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"; if not os.path.exists(...): os.makedirs(...)` block in `VlogSim.__init__` (lifted out of the per-test lazy mkdir into a single setup node; `--logs-dir` override is a Notable divergence, [07 settled 26](07-ambiguities-and-assumptions.md)).
-- **In:** `logs_dir:str = "logs"`, `env_ready:bool = True`, `_cwd:Path`
-- **Out:** default → `bool` (always `True`; only used for sequencing)
+- **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"; if not os.path.exists(...): os.makedirs(...)` block in `VlogSim.__init__` (lifted out of the per-test lazy mkdir into a single setup node; rooting on `work_dir`, emitting the resolved path, and the `--logs-dir` override are Notable divergences, [07 settled 26](07-ambiguities-and-assumptions.md)).
+- **In:** `work_dir:Path`, `logs_dir:str = "logs"` (subdir name), `env_ready:bool = True`
+- **Out:** logs_dir → `Path` (resolved artefact dir); env_ready → `bool` (sequencing token)
 - **Log idiom:** `log.info("logs_dir_ready", path=...)` once; no failure port. `OSError` /
   `PermissionError` from `mkdir` propagate uncaught and surface as a harness CRITICAL via
   the bubbling-SystemExit catch (same idiom as `discover-config-file`'s `PermissionError`).
@@ -270,7 +276,7 @@ compile log paths into `command` so `run-process` redirects there. Folds `simv` 
 bootstrapped the directory (env_ready chain).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:141-159` — `VlogSim.compile` argv assembly (`[get_exe()] + get_compile_time_opts(mode) + (["--Mdir", build_dir] if verilator) + plusdefines + ["-f", run.f]`), up to but excluding the `subprocess.run`. Supporting helpers: `_get_build_tag` regex `vlog_sim.py:65`, `_get_build_dir` `:67-71`, `_get_simv_path` verilator switch `:73-80`, `_get_plusdefines` `:107-117`.
-- **In:** `ctx`, `filelist`, `builder_cfg`, `builder_mode:str = "debug"`, `logs_dir:str = "logs"`
+- **In:** `ctx`, `filelist`, `builder_cfg`, `logs_dir:Path` (resolved artefact dir from `ensure-logs-dir`), `builder_mode:str = "debug"`
 - **Out:** `("ctx", ctx_with_simv)`, `("command", {key, argv, stdout_path, stderr_path})`
 
 ### `run-process`  · tags: compile, sim  ← **the reusable star**
@@ -348,7 +354,7 @@ One compiled test → one `ctx` per run-id, yielding a fresh `ctx` with `key` su
 in lockstep so `build-sim-cmd` receives both from the same upstream without a join.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:191-219` — `VlogSim.execute`'s seed resolution: REPLAY reads `<path>.randseed` with `(FileNotFoundError, ValueError)` handling (`:197-213`), NEW does `random.randrange(1000000)` (`:214-216`), DEFAULT uses `get_seed()` (`:218-219`). Plan B routes REPLAY failure as a per-test FAIL `result` rather than rtl_buddy's inline FAIL-stub-and-return (`:203-212`).
-- **In:** `ctx`, `seed_mode`, `builder_cfg`, `logs_dir:str = "logs"`
+- **In:** `ctx`, `seed_mode`, `builder_cfg`, `logs_dir:Path` (resolved artefact dir from `ensure-logs-dir`)
 - **Out:** `("ctx", ctx)`, `("seed", {key, seed})` | `("fail", result)` *(REPLAY only)*
 - **Log idiom:** port-routed `fail` `result` in REPLAY mode when `<logs_dir>/<test>[_NNNN].randseed` is missing or malformed; `log.error` at emission with the path. `NEW`/`DEFAULT` modes have no failure path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
@@ -361,7 +367,7 @@ Puts log paths into `command` so `run-process` redirects there, and into `sim_cm
 Does not `mkdir` — `ensure-logs-dir` has already done so.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:195,221-235` — `VlogSim.execute` argv assembly (`[_get_simv_path()] + get_run_time_opts(mode, seed) + plusdefines + plusargs`) and `timeout, is_custom = test_cfg.get_timeout()`. `get_timeout` is `config/test.py:210-219`; `get_run_time_opts` (seed appended via `sim_rand_prefix`) is `config/rtl.py:104-123`.
-- **In:** `ctx`, `seed`, `builder_cfg`, `builder_mode`, `logs_dir:str = "logs"`
+- **In:** `ctx`, `seed`, `builder_cfg`, `builder_mode`, `logs_dir:Path` (resolved artefact dir from `ensure-logs-dir`)
 - **Out:** `("ctx", ctx)` (unchanged), `("sim_cmd", {key, seed, log, err, randseed_path})`, `("command", {key, argv, stdout_path, stderr_path})`, `("timeout", float)`
 
 *(then `run-process` again, wired with the `timeout` input)*
@@ -455,10 +461,11 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 > and the exit code are no longer produced by a graph sink:
 >
 > - **Summary** is rendered by a per-graph `SummaryProcessor` (a stateful structlog processor
->   in `log/summary.py`, **not** a `logging.Handler`) from the `test_result` rows that each
->   terminal node now logs at emission — **results only**. It renders the table in its
->   `finalise()` teardown hook. The `git_state` event from `git-status` is not collected; it
->   falls through to the console. See
+>   in `log/summary.py`, **not** a `logging.Handler`) from the outcome events each terminal logs
+>   at emission — `test_result` from the otherwise-silent paths, the failure terminals' own
+>   `compile_failed`/`sim_timeout`/`*_failed` (collected via a `Config` watch-list) — **outcomes
+>   only**. It renders the table in its `finalise()` teardown hook. The `git_state` event from
+>   `git-status` is not collected; it falls through to the console. See
 >   [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
 > - **Exit code** is driven solely by the per-emission `log.error` at each failure site —
 >   the old belt-and-braces `aggregate-results.finalise()` `log.error` is gone.

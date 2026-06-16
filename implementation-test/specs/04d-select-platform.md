@@ -19,7 +19,9 @@ coordinate shared imports and helpers with those specs.
 
 ## Goal
 
-Run `uname`, match it against each configured platform, and emit the active `platform_cfg`.
+Run `uname`, match it against each configured platform, and emit the active `platform_cfg` —
+the **raw `PlatformConfigFile`** (no `initialise` call), which carries the declared `builder`
+name that [`resolve-builder`](04e-resolve-builder.md) resolves against `root_cfg.rtl_builder_cfgs`.
 
 ## Surface
 

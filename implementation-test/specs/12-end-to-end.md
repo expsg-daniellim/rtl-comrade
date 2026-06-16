@@ -25,8 +25,10 @@ documenting any divergences observed.
   - `cd verif && rtl_buddy test basic` (reference)
   - `cd verif && rtl-comrade test basic` (the new graph)
 - Captured artifacts (committed under `tests/e2e/` or similar):
-  - exit code parity for passing run, compile-fail, sim-timeout, `--list`, `--early-stop`
-    at each phase.
+  - exit code parity for passing run, compile-fail, sim-timeout, and `--list`. For
+    `--early-stop` at each phase, assert Plan B exits **0** (deliberate divergence — rtl_buddy
+    exits 1; [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)),
+    while per-test `NA` + `desc` still match.
   - summary string fidelity (allow formatting differences; assert per-test PASS/FAIL/NA
     and `desc` match).
   - artifact parity in `logs/`: `.log`, `.err`, `.randseed` produced for the same runs;
@@ -53,9 +55,10 @@ verdicts are not.
   (the `rc=4444`/`timed_out` path), matching `rtl_buddy`.
 - `rtl-comrade test --list` → prints the suite's test names in declaration order, exit `0`,
   matching `rtl_buddy test --list`.
-- `rtl-comrade test --early-stop <phase>` for each phase (`pre`/`comp`/`sim`) → exit-code and
-  per-test `NA` "Stopped early at <phase>" parity; one `test_result` per stopped test
-  (boundary: all three phases).
+- `rtl-comrade test --early-stop <phase>` for each phase (`pre`/`comp`/`sim`) → exit **0**
+  (deliberate divergence — rtl_buddy exits 1; [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy))
+  with per-test `NA` "Stopped early at <phase>" + `desc` parity; one `test_result` per stopped
+  test (boundary: all three phases).
 - **Lazy load-model** — a suite where a *skipped* test references a broken `models.yaml` →
   the run completes and the skipped test does not trip on the broken model (new behaviour,
   [07 settled 8](../07-ambiguities-and-assumptions.md)).
@@ -69,9 +72,11 @@ verdicts are not.
 ## Acceptance criteria
 
 - All five parity scenarios run against the reference suite
-  `../rtl-buddy-proj-template/design/sandbox/verif` (per `rtl_buddy/AGENTS.md`) match
+  `../rtl-buddy-proj-template/design/sandbox/verif` (per `rtl_buddy/AGENTS.md`). Four match
   `rtl_buddy` on exit code and per-test PASS/FAIL/NA + `desc`: passing run, compile-fail,
-  sim-timeout, `--list`, and `--early-stop` at each phase (`pre`/`comp`/`sim`).
+  sim-timeout, and `--list`. `--early-stop` at each phase (`pre`/`comp`/`sim`) matches per-test
+  `NA` + `desc` but **diverges on exit code** — Plan B exits 0 where rtl_buddy exits 1
+  ([07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
 - Artifact parity in `logs/`: `.log`/`.err`/`.randseed` produced for the same runs and the
   `test.log`/`test.err`/`test.randseed` symlinks (in CWD) point at the same files; compile
   logs are persisted (new behaviour, [07 settled 12](../07-ambiguities-and-assumptions.md)).
@@ -88,9 +93,10 @@ verdicts are not.
 
 - Validate against the real reference suite `../rtl-buddy-proj-template/design/sandbox/verif`
   (per `rtl_buddy/AGENTS.md`) — do not substitute a synthetic fixture for the parity claims.
-- Assert **exit-code** and **per-test PASS/FAIL/NA + `desc`** parity across all five scenarios
-  (passing run, compile-fail, sim-timeout, `--list`, `--early-stop` per phase). Summary-string
-  **formatting** differences are allowed; the per-test verdicts are not.
+- Assert **exit-code** and **per-test PASS/FAIL/NA + `desc`** parity for the four full-parity
+  scenarios (passing run, compile-fail, sim-timeout, `--list`). For `--early-stop` per phase,
+  assert per-test `NA` + `desc` parity but exit **0** (the documented exit-code divergence, not
+  parity). Summary-string **formatting** differences are allowed; the per-test verdicts are not.
 - Commit the captured artifacts under `tests/e2e/` (or similar), and record any unanticipated
   delta in `KNOWN_DIVERGENCES.md` / [07](../07-ambiguities-and-assumptions.md) with a follow-up
   issue.

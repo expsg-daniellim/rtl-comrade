@@ -123,10 +123,8 @@ logging:
 edges:
 # ---- CLI edges (subcommand options) ----
 - { src: { cli: test_config, type: str,  default: "tests.yaml" }, dst: { node: check-cwd,       port: test_config } }
+# --logs-dir is the subdir NAME, consumed only by ensure-logs; the resolved Path fans out below.
 - { src: { cli: logs_dir,    type: str,  default: "logs" },        dst: { node: ensure-logs,    port: logs_dir } }
-- { src: { cli: logs_dir,    type: str,  default: "logs" },        dst: { node: cc-build,       port: logs_dir } }
-- { src: { cli: logs_dir,    type: str,  default: "logs" },        dst: { node: sim-build,      port: logs_dir } }
-- { src: { cli: logs_dir,    type: str,  default: "logs" },        dst: { node: seed,           port: logs_dir } }
 - { src: { cli: builder,      type: str,  default: "" },          dst: { node: resolve-builder, port: builder } }
 - { src: { cli: test_name, option: false, type: str, default: "" }, dst: { node: select,        port: test_name } }
 - { src: { cli: list,         type: bool, default: false },       dst: { node: route-list,      port: list } }
@@ -141,16 +139,22 @@ edges:
 # ---- setup chain ----
 - { src: { node: discover-root },     dst: { node: parse-root,      port: path } }
 - { src: { node: parse-root },        dst: { node: select-platform, port: root_cfg } }
+- { src: { node: parse-root },        dst: { node: resolve-builder, port: root_cfg } }
 - { src: { node: select-platform },   dst: { node: resolve-builder, port: platform_cfg } }
 - { src: { node: check-cwd },         dst: { node: parse-suite,     port: test_config_path } }
 
 # ---- env setup: PATH-prepend + logs/ bootstrap sequenced upstream of every subprocess ----
-# Chain: prepend-path → ensure-logs → cc-run/sim-run. ensure-logs additionally takes the
-# CWD-validated signal from check-cwd as a sequencing input (`_cwd`).
-- { src: { node: prepend-path },      dst: { node: ensure-logs,     port: env_ready } }
-- { src: { node: check-cwd },         dst: { node: ensure-logs,     port: _cwd } }
-- { src: { node: ensure-logs },       dst: { node: cc-run,          port: env_ready } }
-- { src: { node: ensure-logs },       dst: { node: sim-run,         port: env_ready } }
+# Chain: prepend-path → ensure-logs → cc-run/sim-run (env_ready token). ensure-logs roots the
+# artefact dir on check-cwd's validated work_dir (load-bearing data, not an ordering token).
+- { src: { node: prepend-path },                dst: { node: ensure-logs, port: env_ready } }
+- { src: { node: check-cwd,   port: work_dir }, dst: { node: ensure-logs, port: work_dir } }
+- { src: { node: ensure-logs, port: env_ready },dst: { node: cc-run,      port: env_ready } }
+- { src: { node: ensure-logs, port: env_ready },dst: { node: sim-run,     port: env_ready } }
+# Resolved artefact dir (a Path) fans out to the path composers as a persistent input —
+# they join filenames onto it; the CWD-relative assumption lives only in check-cwd/ensure-logs.
+- { src: { node: ensure-logs, port: logs_dir }, dst: { node: cc-build,    port: logs_dir } }
+- { src: { node: ensure-logs, port: logs_dir }, dst: { node: sim-build,   port: logs_dir } }
+- { src: { node: ensure-logs, port: logs_dir }, dst: { node: seed,        port: logs_dir } }
 
 # ---- config fan-out (persistent inputs; one output → many inputs is allowed) ----
 - { src: { node: parse-root },      dst: { node: sweep,     port: root_cfg } }
@@ -227,12 +231,16 @@ Notes:
   All post-sim nodes receive `test_run` on a single `default`-contract port.
 - `run-process` writes the `.log`/`.err` files itself (redirect, paths supplied in
   `command`) — there is no separate "write logs" node. `link-latest` only forces symlinks.
-- `--logs-dir` is broadcast as a CLI edge to **four** consumers: `ensure-logs` (creates
-  the directory once at startup), and `cc-build` / `sim-build` / `seed` (compose paths
-  inside it). `write-randseed` does **not** take `logs_dir` as a persistent input — instead
-  `sim-build` pre-composes `randseed_path` (and `log`/`err`) into `sim_cmd`, which
-  `randseed` receives as a keyed port. The default `"logs"` matches rtl_buddy's hard-coded
-  literal; override is a small Notable divergence (see [07 settled 26](07-ambiguities-and-assumptions.md)).
+- **Artefact location is decided once and flows as data.** `--logs-dir` (the subdir *name*) is
+  a CLI edge to `ensure-logs` only. `ensure-logs` roots it on `check-cwd`'s `work_dir` and emits
+  the **resolved directory `Path`** on its `logs_dir` port, which fans out as a persistent input
+  to the three composers `cc-build` / `sim-build` / `seed`. They join filenames onto that
+  directory and never read the ambient CWD, so the rtl_buddy "everything is CWD-relative"
+  assumption lives only in the `check-cwd → ensure-logs` provider pair (relocating artefacts is a
+  change there alone). `write-randseed` does **not** take `logs_dir` — `sim-build` pre-composes
+  `randseed_path` (and `log`/`err`) into `sim_cmd`, which `randseed` receives as a keyed port.
+  The default `"logs"` matches rtl_buddy's hard-coded literal; override is a small Notable
+  divergence (see [07 settled 26](07-ambiguities-and-assumptions.md)).
 - `load-model` sits after `filter` so models for skipped tests aren't loaded — a deliberate
   lazy-vs-eager change from rtl_buddy (07, item on model loading).
 

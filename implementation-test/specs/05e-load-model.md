@@ -43,8 +43,10 @@ class LoadModelMod:
         try:
             model = ModelConfigLoader(str(resolved)).get_model(ctx["test"].model_name)
         except Exception as e:   # loader raises (Plan B) on I/O / parse / lookup miss
-            log.error("load_model_failed", key=ctx["key"], model_path=str(resolved), err=str(e))
-            return ("fail", { "key": ctx["key"], "result": ... })
+            result = make_fail_result(desc=str(e))
+            log.error("load_model_failed", key=ctx["key"], model_path=str(resolved), err=str(e),
+                      result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
+            return ("fail", { "key": ctx["key"], "result": result })
         ctx["test"].model = model
         return ("default", ctx)
 ```
@@ -59,8 +61,9 @@ class LoadModelMod:
 4. **Failure — lookup/load miss.** Wrap step 2 in `try/except Exception` (Plan B's loader
    *raises* rather than `log.critical`-ing — spec 01c): file I/O, parse, schema mismatch, or
    model-not-in-file → emit `("fail", {"key": ctx["key"], "result": <FAIL with str(e) in
-   desc>})` and `log.error` at emission with the resolved `model_path`. This is the Notable
-   divergence from rtl_buddy: a per-test FAIL keeps the run going where rtl_buddy aborts.
+   desc>})` and `log.error("load_model_failed", …)` at emission with the resolved `model_path`
+   **plus `result`/`desc`** (so `SummaryProcessor`'s watch-list collects the row). This is the
+   Notable divergence from rtl_buddy: a per-test FAIL keeps the run going where rtl_buddy aborts.
 
 ## Deliverables
 
@@ -79,7 +82,9 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
   `serde.SerdeError` / `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema
   mismatch); `KeyError` or custom `ModelNotFoundError` (lookup miss). Emit
   `("fail", {"key": ctx["key"], "result": <FAIL payload with `str(e)` in `desc`>})` and
-  call `log.error` at emission with the resolved `model_path`. **Notable
+  call `log.error("load_model_failed", …)` at emission with the resolved `model_path` **and
+  `result`/`desc`** (so the `SummaryProcessor` watch-list, [10c](10c-summary-handler.md),
+  renders the row). **Notable
   divergence from rtl_buddy**: per-test FAIL preserves run continuity; rtl_buddy
   aborts the whole run via `logger.critical` inside `ModelConfigLoader`
   (`rtl_buddy/src/rtl_buddy/config/model.py:78-81,100`; [07 settled
@@ -125,8 +130,9 @@ the failure cases; `logging_handler` to assert `failure is True` **without** `Sy
 - On success attach `ctx["test"].model = the_model` and emit `("default", ctx)`.
 - Catch broad `Exception` from both `ModelConfigLoader(...)` construction and `get_model(...)`
   (the loader **raises** in Plan B — spec [01c](01c-model-schema.md)) → emit `("fail", {key,
-  result: <FAIL with str(e)>})` on the **unwired** `fail` port and `log.error` at emission with
-  the resolved `model_path`.
+  result: <FAIL with str(e)>})` on the **unwired** `fail` port and `log.error("load_model_failed",
+  …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor`
+  watch-list collects the row).
 - **Must not** `log.critical` / abort the run — per-test FAIL preserves run continuity; this is
   the deliberate divergence from rtl_buddy.
 - Use string-literal port names (`default`/`fail`).

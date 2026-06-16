@@ -29,19 +29,24 @@ Assemble the per-test compile argv (with log paths placed in `command`), fold `s
 
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
 the catalog is the design view, this is the build view; update both when behaviour changes.
-Both outputs are emitted in lockstep via a generator.
+Both outputs are emitted in lockstep via a generator. The skeleton is **illustrative** —
+`plusdefines` is constructed per Algorithm step 2 (the Algorithm + Deliverables are
+authoritative for the list-building details elided here).
 
 ```
 contract:          default
 persistent_inputs: [builder_cfg, builder_mode, logs_dir]
-inputs:            ctx, filelist, builder_cfg, builder_mode:str = "debug", logs_dir:str = "logs"
+inputs:            ctx, filelist, builder_cfg, logs_dir:Path, builder_mode:str = "debug"
 outputs:           ctx     → ctx   (with simv folded in)
                    command → {key, argv, stdout_path, stderr_path}
 ```
 
+`logs_dir` is the **resolved artefact directory** (a `Path`) supplied by `ensure-logs-dir`, not
+the CLI subdir name — this module joins filenames onto it and never touches the ambient CWD.
+
 ```python
 class BuildCompileCmdMod:
-    def run(self, ctx, filelist, builder_cfg, builder_mode:str = "debug", logs_dir:str = "logs"):
+    def run(self, ctx, filelist, builder_cfg, logs_dir, builder_mode:str = "debug"):
         test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", ctx["test"].get_name())
         exe = builder_cfg.get_exe()
         is_verilator = os.path.basename(exe).startswith("verilator")
@@ -50,12 +55,12 @@ class BuildCompileCmdMod:
         argv = [exe, *builder_cfg.get_compile_time_opts(builder_mode)]
         if is_verilator:
             argv += ["--Mdir", build_dir]
-        argv += [*plusdefines, "-f", str(filelist["filelist"])]
+        argv += [*plusdefines, "-f", str(filelist["filelist"])]  # plusdefines built per Algorithm step 2
         ctx = { **ctx, "simv": simv }
         yield ("ctx", ctx)
         yield ("command", { "key": ctx["key"], "argv": argv,
-                            "stdout_path": f"{logs_dir}/{test_tag}.compile.log",
-                            "stderr_path": f"{logs_dir}/{test_tag}.compile.err" })
+                            "stdout_path": str(logs_dir / f"{test_tag}.compile.log"),
+                            "stderr_path": str(logs_dir / f"{test_tag}.compile.err") })
 ```
 
 ## Algorithm
@@ -73,8 +78,10 @@ class BuildCompileCmdMod:
    str(filelist["filelist"])]`. Do not `mkdir(logs_dir)` — `ensure-logs-dir` already created it.
 4. Fold `simv` into ctx (`ctx = {**ctx, "simv": simv}`; `build_dir` is not carried — unused
    downstream) and emit in lockstep: `("ctx", ctx)` then `("command", {"key": ctx["key"],
-   "argv": argv, "stdout_path": f"{logs_dir}/{test_tag}.compile.log", "stderr_path":
-   f"{logs_dir}/{test_tag}.compile.err"})`.
+   "argv": argv, "stdout_path": str(logs_dir / f"{test_tag}.compile.log"), "stderr_path":
+   str(logs_dir / f"{test_tag}.compile.err")})`. `logs_dir` is the resolved `Path` from
+   `ensure-logs-dir`; join filenames onto it (`logs_dir / name`) — do not assume a CWD-relative
+   `"logs"`.
 5. **Failure — bad builder mode.** No catch here:
    `builder_cfg.get_compile_time_opts(builder_mode)` itself `log.critical`s (immediate exit) if
    `builder_mode` is unknown or its `compile_time` is `None` (spec 01a) — system-wide
@@ -84,7 +91,7 @@ class BuildCompileCmdMod:
 
 In `modules/rtl_buddy/build.py`:
 
-- `BuildCompileCmdMod` — `(ctx, filelist, builder_cfg, builder_mode:str="debug", logs_dir:str="logs")` →
+- `BuildCompileCmdMod` — `(ctx, filelist, builder_cfg, logs_dir:Path, builder_mode:str="debug")` →
   assembles the argv as
   `[builder_cfg.get_exe()] + builder_cfg.get_compile_time_opts(builder_mode) + (["--Mdir", build_dir] if is_verilator else []) + plusdefines + ["-f", filelist["filelist"]]`,
   where `is_verilator = os.path.basename(builder_cfg.get_exe()).startswith("verilator")`
@@ -94,12 +101,14 @@ In `modules/rtl_buddy/build.py`:
   f"{build_dir}/simv" if is_verilator else builder_cfg.get_simv()` (mirrors
   `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:61-80`). Folds `simv` into `ctx`
   (`ctx["simv"] = simv`); does not fold `build_dir` (not needed downstream). Does not
-  `mkdir(logs_dir)` — `ensure-logs-dir` has already bootstrapped the directory via the
-  env_ready chain. `plusdefines` is built from `ctx["test"].get_plusdefines()` (spec
+  `mkdir(logs_dir)` — `ensure-logs-dir` has already bootstrapped the directory.
+  `plusdefines` is built from `ctx["test"].get_plusdefines()` (spec
   [01b](01b-suite-schema.md) — returns `dict | None`; when not `None`, format each entry
   as `f"+define+{k}={v}"` or `f"+define+{k}"` for `v is None`, mirroring
-  `vlog_sim.py:107-117`). Compile log paths are composed as
-  `f"{logs_dir}/{test_tag}.compile.log"` and `.err`.
+  `vlog_sim.py:107-117`). Compile log paths are composed by joining onto the resolved `logs_dir`
+  `Path` supplied by `ensure-logs-dir`: `str(logs_dir / f"{test_tag}.compile.log")` and
+  `.compile.err`. This module never references the ambient CWD — `logs_dir` already encodes the
+  artefact location decided once by `check-suite-cwd`/`ensure-logs-dir`.
   Emits:
   - `("ctx", ctx_with_simv)` — ctx now carries `simv`
   - `("command", {"key", "argv", "stdout_path", "stderr_path"})` — log paths under `logs_dir`.
@@ -131,9 +140,10 @@ for the bad-mode path.
   switch derives `simv`/`build_dir` differently).
 - `get_plusdefines()` returns `{"FOO": 1, "BAR": None}` → `argv` contains `"+define+FOO=1"`
   and `"+define+BAR"` (boundary: `None`-valued define formats without `=`).
-- `logs_dir="custom"` → `command["stdout_path"] == "custom/{tag}.compile.log"` and
-  `stderr_path == "custom/{tag}.compile.err"`; default `"logs"` yields `logs/{tag}.compile.*`
-  (rtl_buddy parity).
+- `logs_dir=Path("/work/custom")` (resolved dir from `ensure-logs-dir`) →
+  `command["stdout_path"] == "/work/custom/{tag}.compile.log"` and
+  `stderr_path == "/work/custom/{tag}.compile.err"` (paths are joined onto the provided
+  directory; the module does not assume a CWD-relative `"logs"`).
 - `ctx["test"].get_name()` has shell-unsafe chars → `test_tag` is sanitised in `build_dir`,
   verilator `simv`, and both log paths (boundary: `test_tag` regex).
 - `builder_mode` unknown to the builder → `get_compile_time_opts` `log.critical`s →
@@ -157,6 +167,9 @@ for the bad-mode path.
 - Detect verilator on `os.path.basename(builder_cfg.get_exe()).startswith("verilator")` (the
   `exe`, not `name`); `simv = f"{build_dir}/simv"` for verilator else `builder_cfg.get_simv()`.
 - Do **not** `mkdir(logs_dir)` — `ensure-logs-dir` already bootstrapped it.
+- `logs_dir` is the resolved artefact `Path` from `ensure-logs-dir` — compose paths by joining
+  onto it (`logs_dir / name`); do **not** assume a CWD-relative `"logs"` string or read the
+  ambient CWD.
 - Fold `simv` into `ctx`; do **not** fold `build_dir` (unused downstream).
 - Do **not** catch `get_compile_time_opts(builder_mode)` — it `log.critical`s on an unknown
   mode / `None` opts (spec [01a](01a-builder-schema.md)); this is system-wide misconfiguration,

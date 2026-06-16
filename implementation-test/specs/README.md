@@ -24,7 +24,7 @@ tree the specs cite as compatibility sources).
 
 | File | Modules (plugin name → class) |
 |---|---|
-| `modules/rtl_buddy/schema/` (package) | config dataclasses only: `builder.py` (01a), `suite.py` (01b), `model.py` (01c), `root.py` (01). No plugins. |
+| `modules/rtl_buddy/schema/` (package) | config dataclasses only: `builder.py` (01a), `suite.py` (01b), `uvm.py` (01b), `model.py` (01c), `root.py` (01), `results.py` (01), `seed_mode.py` (01). No plugins. |
 | `modules/rtl_buddy/setup.py` | `discover-config-file`, `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`, `check-suite-cwd`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode`, `git-status`, `route-list-mode`, `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep` |
 | `modules/rtl_buddy/build.py` | `run-preproc`, `write-filelist`, `build-compile-cmd`, `run-process`, `interpret-compile` |
 | `modules/rtl_buddy/sim.py` | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`, `route-post`, `parse-log`, `parse-uvm-log` |
@@ -104,7 +104,8 @@ line — whichever appender runs first must tolerate the file already existing o
 `modules/rtl_buddy/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py`
 (02) each have a single writer. The schema specs (01/01a/01b/01c) share the
 `modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`,
-`model.py`), so coordinate the package layout, not a single file. Test files are per spec
+`uvm.py`, `model.py`, `root.py`, `results.py`, `seed_mode.py`), so coordinate the package
+layout, not a single file. Test files are per spec
 group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`,
 `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that
 group.

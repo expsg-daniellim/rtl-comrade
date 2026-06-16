@@ -31,10 +31,16 @@ surface so existing `tests.yaml` files load drop-in (see [07 settled
 
 ## Deliverables
 
-A single file, `modules/rtl_buddy/schema/suite.py`, with the `UVMConfig` and `TestbenchConfig`
-classes inlined (not split into separate files); tests treat them as one surface.
+Two files in the schema package:
 
-### `UVMConfig`
+- `modules/rtl_buddy/schema/uvm.py` — `UVMConfig` alone. Kept separate because
+  `parse-uvm-log` (spec [09c](09c-parse-uvm-log.md)) is effectively its only consumer; the
+  rest of the graph touches `TestConfig.uvm` only as an opaque presence/absence flag.
+- `modules/rtl_buddy/schema/suite.py` — `TestbenchConfig`, `TestConfigFile`, `TestConfig`,
+  `SuiteConfigFile`, `SuiteConfig`. Imports `UVMConfig` from `uvm.py` for the
+  `TestConfig.uvm: UVMConfig | None` annotation.
+
+### `UVMConfig` (`uvm.py`)
 
 Per-test UVM report parsing configuration. Lives on `TestConfig.uvm`; if `None`, the
 plain `parse-log` path is taken (else `parse-uvm-log`).

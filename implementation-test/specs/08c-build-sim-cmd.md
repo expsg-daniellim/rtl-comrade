@@ -28,25 +28,30 @@ carried in `sim_cmd`) and the timeout.
 
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry —
 the catalog is the design view, this is the build view; update both when behaviour changes.
-All four outputs are emitted in lockstep via a generator.
+All four outputs are emitted in lockstep via a generator. The skeleton is **illustrative** —
+`plusdefines`/`plusargs` are constructed per Algorithm step 2 (the Algorithm + Deliverables
+are authoritative for the list-building details elided here).
 
 ```
 contract:          default
 persistent_inputs: [builder_cfg, builder_mode, logs_dir]
-inputs:            ctx, seed, builder_cfg, builder_mode, logs_dir:str = "logs"
+inputs:            ctx, seed, builder_cfg, builder_mode, logs_dir:Path
 outputs:           ctx     → ctx
                    sim_cmd → {key, seed, log, err, randseed_path, argv}
                    command → {key, argv, stdout_path, stderr_path}
                    timeout → float | None
 ```
 
+`logs_dir` is the **resolved artefact directory** (a `Path`) supplied by `ensure-logs-dir`, not
+the CLI subdir name — the log/randseed stems join onto it and never touch the ambient CWD.
+
 ```python
 class BuildSimCmdMod:
-    def run(self, ctx, seed, builder_cfg, builder_mode, logs_dir:str = "logs"):
+    def run(self, ctx, seed, builder_cfg, builder_mode, logs_dir):
         simv = ctx["simv"]   # set by build-compile-cmd
-        argv = [simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]), *plusdefines, *plusargs]
+        argv = [simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]), *plusdefines, *plusargs]  # plusdefines/plusargs built per Algorithm step 2
         timeout, _is_custom = ctx["test"].get_timeout()
-        stem = f"{logs_dir}/{ctx['test'].get_name()}{run_suffix(ctx)}"
+        stem = logs_dir / f"{ctx['test'].get_name()}{run_suffix(ctx)}"   # logs_dir: resolved Path from ensure-logs-dir
         log_path, err_path, rs_path = f"{stem}.log", f"{stem}.err", f"{stem}.randseed"
         yield ("ctx", ctx)
         yield ("sim_cmd", { "key": ctx["key"], "seed": seed["seed"], "log": log_path,
@@ -67,12 +72,13 @@ class BuildSimCmdMod:
    internally — do **not** add the seed again.
 4. Resolve the timeout: `(timeout, _is_custom) = ctx["test"].get_timeout()` (spec 01b —
    `(self.timeout, True)` on a per-test override, else `(60, False)`); emit it as `float`.
-5. Compose the log/randseed paths off one stem `stem =
-   f"{logs_dir}/{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err =
-   f"{stem}.err"`, `randseed_path = f"{stem}.randseed"`. `run_suffix(ctx)` returns `""` when
+5. Compose the log/randseed paths off one stem `stem = logs_dir /
+   f"{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err = f"{stem}.err"`,
+   `randseed_path = f"{stem}.randseed"`. `logs_dir` is the resolved `Path` from `ensure-logs-dir`
+   (join onto it — no ambient-CWD assumption). `run_suffix(ctx)` returns `""` when
    `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) —
-   rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 5 → `logs/my_test_0005.log`.
-   Do not `mkdir(logs_dir)` — already bootstrapped.
+   rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 5 →
+   `<logs_dir>/my_test_0005.log`. Do not `mkdir(logs_dir)` — already bootstrapped.
 6. Emit in lockstep: `("ctx", ctx)`; `("sim_cmd", {"key": ctx["key"], "seed": seed["seed"],
    "log": log, "err": err, "randseed_path": randseed_path, "argv": argv})`; `("command",
    {"key": ctx["key"], "argv": argv, "stdout_path": log, "stderr_path": err})`; `("timeout",
@@ -85,7 +91,7 @@ class BuildSimCmdMod:
 
 In `modules/rtl_buddy/sim.py`:
 
-- `BuildSimCmdMod` — `(ctx, seed, builder_cfg, builder_mode, logs_dir:str="logs")` → assembles
+- `BuildSimCmdMod` — `(ctx, seed, builder_cfg, builder_mode, logs_dir:Path)` → assembles
   `[simv_path] + builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]) + plusdefines + plusargs`,
   where `simv_path` is `ctx["simv"]` (set by `build-compile-cmd` — see spec
   [07a](07a-build-compile-cmd.md) and spec [01a — Verilator quirk](01a-builder-schema.md)). `get_run_time_opts`
@@ -98,12 +104,12 @@ In `modules/rtl_buddy/sim.py`:
   `(timeout, is_custom) = ctx["test"].get_timeout()` (spec [01b](01b-suite-schema.md)
   — `(self.timeout, True)` if a per-test override is set, else `(60, False)`); the
   `timeout` value (an `int` seconds) is emitted as a `float | None`. Log paths are
-  `f"{logs_dir}/{test_name}{run_suffix}.log"`/`.err`, where `run_suffix` is `""` when
+  `logs_dir / f"{test_name}{run_suffix}.log"`/`.err`, where `run_suffix` is `""` when
   `ctx["run_id"] is None` and `f"_{run_id:04d}"` (run-id zero-padded to four digits) otherwise —
-  e.g. `logs/my_test.log` for a single run, `logs/my_test_0005.log` for run-id 5 (path format is
-  rtl_buddy `_get_log_path`, `tools/vlog_sim.py:82-86`; default `logs/...`; `logs_dir` is a
-  persistent input fed by `--logs-dir`). Also composes
-  `randseed_path = f"{logs_dir}/{test_name}{run_suffix}.randseed"` (same stem). These paths are
+  e.g. `<logs_dir>/my_test.log` for a single run, `<logs_dir>/my_test_0005.log` for run-id 5
+  (path format is rtl_buddy `_get_log_path`, `tools/vlog_sim.py:82-86`; `logs_dir` is the
+  resolved artefact `Path` persistent input supplied by `ensure-logs-dir`). Also composes
+  `randseed_path = logs_dir / f"{test_name}{run_suffix}.randseed"` (same stem). These paths are
   emitted in `sim_cmd` (not folded into `ctx`) so `write-randseed` receives them as a
   dedicated keyed port. The assembled `argv` is **also** carried on `sim_cmd` (in addition to
   `command`) so the downstream `keyed_join` `write-randseed` can perform the
@@ -140,8 +146,10 @@ for the bad-mode path.
   custom timeout emitted as `float`).
 - `get_plusargs()` `{"X": 5, "Y": None}` and `get_plusdefines()` `{"D": None}` → `argv`
   contains `"+X=5"`, `"+Y"`, and `"+define+D"` (boundary: `None`-valued plus formats without `=`).
-- `logs_dir="custom"` → `command["stdout_path"]`/`stderr_path` and `sim_cmd["log"]`/`["err"]`/
-  `["randseed_path"]` all carry the `custom/` prefix; default `"logs"` gives `logs/...` parity.
+- `logs_dir=Path("/work/custom")` (resolved dir from `ensure-logs-dir`) →
+  `command["stdout_path"]`/`stderr_path` and `sim_cmd["log"]`/`["err"]`/`["randseed_path"]` all
+  carry the `/work/custom/` prefix (paths joined onto the provided directory; no CWD-relative
+  `"logs"` assumption).
 - `ctx["run_id"]` set (e.g. `5`) → every path stem includes the `_0005` run suffix (boundary:
   run-id suffix); `sim_cmd["argv"]` equals `command["argv"]` (so `write-randseed` can run the
   `hier_inst_seed` membership check).
@@ -165,8 +173,10 @@ for the bad-mode path.
 - Carry the assembled `argv` on **both** `sim_cmd` and `command` so the downstream `keyed_join`
   `write-randseed` can run the `"hier_inst_seed" in argv` membership check (spec
   [08d](08d-write-randseed.md)) — `keyed_join` cannot take a persistent input.
-- Emit log/randseed paths on `sim_cmd` (not folded into `ctx`); compose them from the
-  `logs_dir` persistent input. Do **not** `mkdir(logs_dir)` — `ensure-logs-dir` owns it.
+- Emit log/randseed paths on `sim_cmd` (not folded into `ctx`); compose them by joining onto
+  the resolved `logs_dir` `Path` persistent input from `ensure-logs-dir` (`logs_dir / name`) —
+  do **not** assume a CWD-relative `"logs"` or read the ambient CWD. Do **not** `mkdir(logs_dir)`
+  — `ensure-logs-dir` owns it.
 - Emit `timeout` as `float | None`. Emit all four ports in lockstep via the generator.
 - Do **not** catch `get_run_time_opts` — it `log.critical`s on an unknown mode / `None` opts
   (spec [01a](01a-builder-schema.md)); system-wide misconfiguration, not per-test.

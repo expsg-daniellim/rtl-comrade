@@ -42,7 +42,10 @@ class FilterRegLvlMod:
     def run(self, ctx, builder_cfg, reg_level = None, start_level = None):
         lvl = ctx["test"].get_reglvl(builder_cfg.get_name())
         if (reg_level is not None and lvl > reg_level) or (start_level is not None and lvl < start_level):
-            return ("skip", { "key": ctx["key"], "result": SkipResults(desc=...) })
+            result = SkipResults(desc=...)
+            log.info("test_result", key=ctx["key"],          # SKIP is pass-like → INFO (no exit)
+                     result=result.results["result"], desc=result.results["desc"])
+            return ("skip", { "key": ctx["key"], "result": result })
         return ("keep", ctx)
 ```
 
@@ -52,11 +55,14 @@ class FilterRegLvlMod:
    builder *name* is needed; the whole `RtlBuilderConfig` rides the persistent port because the
    same payload feeds `cc-build`/`seed`/`sim-build` downstream.
 2. Test the window: if `reg_level is not None and lvl > reg_level`, or `start_level is not None
-   and lvl < start_level`, the level is outside `[start_level, reg_level]` → emit
-   `("skip", {"key": ctx["key"], "result": SkipResults(desc=...)})`.
+   and lvl < start_level`, the level is outside `[start_level, reg_level]` → build `result =
+   SkipResults(desc=...)`, log it directly as `log.info("test_result", key=ctx["key"],
+   result=..., desc=...)` (SKIP is pass-like, so **INFO** — it does **not** drive the exit), and
+   emit `("skip", {"key": ctx["key"], "result": result})`.
 3. Otherwise (inside the window, or both bounds `None`) emit `("keep", ctx)`.
 
-No failure path: SKIP is a pass-like routing decision, not an error, and emits no log call.
+No failure path: SKIP is a pass-like routing decision, not an error — it logs `test_result` at
+INFO (collected by `SummaryProcessor`), never `log.error`.
 
 ## Deliverables
 
@@ -69,8 +75,10 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
   `rtl_buddy/src/rtl_buddy/rtl_buddy.py:350`) — only the builder *name* is needed,
   not the full config object, but the persistent port carries the whole
   `RtlBuilderConfig` (see spec [01a](01a-builder-schema.md)) because the same
-  payload feeds `cc-build`, `seed`, and `sim-build` downstream. No failure path
-  (SKIP is a routing decision and is pass-like; no log call).
+  payload feeds `cc-build`, `seed`, and `sim-build` downstream. On skip it logs
+  `test_result` at INFO directly (`log.info("test_result", key, result, desc)`) so
+  `SummaryProcessor` collects the row; SKIP is pass-like, so it never `log.error`s / drives the
+  exit. No other failure path.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:349-357` — `_do_test_suite` level filter; `get_reglvl` at `config/test.py:287-299`; `SkipResults` at `runner/test_results.py:71-78`.
 
 **Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml`
@@ -83,25 +91,27 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 ## Tests
 
 In `modules/tests/test_selection.py`. Fixtures: a `ctx` fixture whose `test.get_reglvl(name)`
-returns a controlled int; a `builder_cfg` fixture with `get_name()`. No `logging_handler`
-needed (SKIP is not an error).
+returns a controlled int; a `builder_cfg` fixture with `get_name()`; `logging_handler` to assert
+the skip path logs one INFO `test_result` and keeps `failure` `False`.
 
 - `(ctx, builder_cfg, reg_level=None, start_level=None)`, any `lvl` → emits `("keep", ctx)`
-  (both bounds `None` keeps every test).
+  (both bounds `None` keeps every test); no log.
 - `lvl` strictly inside `[start_level, reg_level]` (e.g. `lvl=3`, window `[1, 5]`) → emits
-  `("keep", ctx)`.
+  `("keep", ctx)`; no log.
 - `lvl == reg_level` and `lvl == start_level` (window edges) → emits `("keep", ctx)`
   (boundary: window is inclusive, `> / <` are strict).
 - `lvl > reg_level` (e.g. `lvl=6`, `reg_level=5`) → emits `("skip", {"key": ctx["key"],
-  "result": SkipResults})` (boundary: above the upper bound).
+  "result": SkipResults})` and one `log.info("test_result", result="SKIP", …)`;
+  `logging_handler.failure is False` (boundary: above the upper bound; SKIP does not drive exit).
 - `lvl < start_level` (e.g. `lvl=0`, `start_level=1`) → emits `("skip", {"key": ctx["key"],
-  "result": SkipResults})` (boundary: below the lower bound).
+  "result": SkipResults})` and one INFO `test_result` (boundary: below the lower bound).
 
 ## Acceptance criteria
 
 - Tests pass.
 - Both output ports (`keep`, `skip`) are exercised: `keep` forwards `ctx`, and the `skip`
-  diversion path emits a `SkipResults` `result`.
+  diversion path emits a `SkipResults` `result` and logs one INFO `test_result` (collected by
+  `SummaryProcessor`, [10c](10c-summary-handler.md); no exit contribution).
 - The `modules/config.yaml` manifest entry `{ name: filter-reglvl, class_name: FilterRegLvlMod }`
   validates and the harness resolves `filter-reglvl` → `FilterRegLvlMod`.
 
@@ -111,7 +121,8 @@ needed (SKIP is not an error).
 - Pass only the builder **name** to `get_reglvl(builder_cfg.get_name())`; the persistent port
   carries the whole `RtlBuilderConfig` because the same payload feeds `cc-build`/`seed`/
   `sim-build` downstream.
-- SKIP is a **pass-like routing decision, not a failure** — emit `("skip", {key, result:
-  SkipResults})` with **no** `log.error`/`log.critical`. The `skip` terminal port is unwired
-  (TODO #15); still emit on it.
+- SKIP is a **pass-like routing decision, not a failure** — on skip, log `test_result` at INFO
+  (`log.info`, **never** `log.error`/`log.critical`) and emit `("skip", {key, result:
+  SkipResults})`. The `skip` port is unwired (TODO #15); the INFO `test_result` is what reaches
+  the summary.
 - Use string-literal port names (`keep`/`skip`); stay graph-agnostic.

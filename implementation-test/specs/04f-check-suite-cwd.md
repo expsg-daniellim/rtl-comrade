@@ -22,7 +22,10 @@ coordinate shared imports and helpers with those specs.
 
 Enforce the user-driven CWD convention: `rtl-comrade test` / `randtest` must be invoked
 from the suite directory. Resolve the CLI `test_config` against CWD and abort early if it
-points elsewhere; emit the resolved `Path` for downstream `parse-suite-config`.
+points elsewhere; emit the resolved suite-config `Path` for `parse-suite-config` **and** the
+validated **base directory** (`work_dir`) that downstream artefact writers root against. This
+node is the single source of artefact-location policy — leaf modules consume a resolved path
+rather than re-deriving it from the ambient CWD (see [Notes](#notes)).
 
 ## Surface
 
@@ -32,7 +35,8 @@ the catalog is the design view, this is the build view; update both when behavio
 ```
 contract: unit
 inputs:   test_config:str = "tests.yaml"
-outputs:  default → Path   (resolved suite-config path)
+outputs:  default  → Path   (resolved suite-config path → parse-suite-config)
+          work_dir → Path   (validated base directory → ensure-logs-dir)
 ```
 
 ```python
@@ -43,7 +47,8 @@ class CheckSuiteCwdMod:
             log.critical("suite_cwd_mismatch", test_config=test_config, resolved=str(resolved))
         if not resolved.is_file():
             log.critical("suite_config_missing", test_config=test_config, resolved=str(resolved))
-        return ("default", resolved)
+        yield ("default", resolved)            # resolved suite-config path → parse-suite-config
+        yield ("work_dir", resolved.parent)    # validated base dir (artefact root) → ensure-logs-dir
 ```
 
 ## Algorithm
@@ -59,7 +64,11 @@ class CheckSuiteCwdMod:
    the `test.*` symlinks.
 3. **Failure — missing file.** If `not resolved.is_file()`:
    `log.critical(f"test_config {test_config!r} not found at {resolved}")`.
-4. Emit `("default", resolved)` for downstream `parse-suite-config`.
+4. Emit both ports in lockstep: `("default", resolved)` for `parse-suite-config`, and
+   `("work_dir", resolved.parent)` — the validated base directory — for `ensure-logs-dir`.
+   `work_dir` is the **one** place artefact location is decided: today it is the suite dir
+   (= CWD, since step 2 has just asserted that), but relocating artefacts later (e.g. a
+   `--work-dir` flag) is a change to this node alone, not to every downstream writer.
 
 ## Deliverables
 
@@ -69,10 +78,12 @@ In `modules/rtl_buddy/setup.py`:
   `randtest` must be invoked from the suite directory (matching rtl_buddy's `do_cmd_test`,
   which never `chdir`s — see `rtl_buddy/AGENTS.md` validation example: `cd .../verif &&
   python -m rtl_buddy test basic`). Takes the CLI `test_config:str` and resolves it
-  against CWD; emits the resolved `Path` that downstream `ParseSuiteConfigMod` consumes. See
+  against CWD; emits the resolved suite-config `Path` that downstream `ParseSuiteConfigMod`
+  consumes, **and** the validated base directory `work_dir` (= `resolved.parent`) that
+  `EnsureLogsDirMod` roots the artefact tree against. See
   [Algorithm](#algorithm) for the numbered steps (resolve → CWD-mismatch check → missing-file
-  check → emit). Both `.resolve()` calls follow symlinks symmetrically, so a `tests.yaml`
-  symlink in a symlinked CWD passes correctly.
+  check → emit both ports). Both `.resolve()` calls follow symlinks symmetrically, so a
+  `tests.yaml` symlink in a symlinked CWD passes correctly.
   **Failure handling**: both checks are setup-domain config errors → `log.critical` (see
   [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site)).
   **Compatibility source:** no direct rtl_buddy analogue (new check, Notable divergence) — enforces the convention `do_cmd_test` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:166-209`) assumes vs `do_rtl_regression`'s `os.chdir` at `rtl_buddy.py:404`.
@@ -90,7 +101,8 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` + `monkeypatch.chdir` to 
 lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical` paths.
 
 - `test_config="tests.yaml"` with the file present in CWD → emits `("default", resolved)`
-  where `resolved == (Path.cwd() / "tests.yaml").resolve()`.
+  where `resolved == (Path.cwd() / "tests.yaml").resolve()`, **and** `("work_dir",
+  resolved.parent)` where `resolved.parent == Path.cwd().resolve()`.
 - `test_config="/abs/elsewhere/tests.yaml"` (absolute, outside CWD) → CWD-mismatch
   `log.critical` → `pytest.raises(SystemExit)`.
 - `test_config="../sibling/tests.yaml"` → resolved parent is not CWD → CWD-mismatch
@@ -106,9 +118,9 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical`
 ## Acceptance criteria
 
 - Tests pass.
-- Output port `default` exercised: emits the resolved suite-config `Path` when invoked from
-  the suite directory (contributes to the setup-only end-to-end graph — see
-  [04 index](04-setup-modules.md#acceptance-criteria)).
+- Output ports exercised: `default` emits the resolved suite-config `Path` and `work_dir`
+  emits the validated base directory when invoked from the suite directory (contributes to the
+  setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
 - Failure idioms exercised: invoked from outside the suite dir → `log.critical` (harness
   exit 1); the resolved `test_config` not a file → `log.critical`.
 - The `modules/config.yaml` manifest entry `{ name: check-suite-cwd, class_name: CheckSuiteCwdMod }`
@@ -116,7 +128,10 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical`
 
 ## Constraints
 
-- `unit` contract; emit the resolved `Path` on the string-literal `default` port.
+- `unit` contract; emit the resolved suite-config `Path` on the string-literal `default` port
+  and the validated base directory (`resolved.parent`) on the `work_dir` port (both in lockstep
+  via the generator). Do **not** re-derive the base dir downstream — `work_dir` is the single
+  artefact-location source consumed by `ensure-logs-dir`.
 - Resolve **both** sides with `.resolve()` (`(Path.cwd() / test_config).resolve()` and
   `Path.cwd().resolve()`) so symlinks collapse symmetrically — do not compare un-resolved paths.
 - Both failures — `resolved.parent != cwd` (outside the suite dir) and `not resolved.is_file()`
@@ -130,3 +145,11 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.critical`
 `CheckSuiteCwdMod` is the explicit enforcement of the user-driven CWD convention
 documented in [01](../01-cli-and-entry.md) — the regression graph does **not** wire it
 (regression `chdir`s per-suite internally; see [08](../08-sibling-graphs.md)).
+
+It is also the **artefact-location provider**: `work_dir` is the one node that decides where
+outputs live. Downstream writers (`ensure-logs-dir` and, through it, `build-compile-cmd` /
+`build-sim-cmd` / `resolve-seed`) consume a resolved directory and never touch the ambient
+process CWD themselves. This keeps the rtl_buddy "everything is CWD-relative" assumption out of
+the leaf modules: relocating artefacts (a future `--work-dir`, or regression's per-suite root)
+changes this provider alone. In the regression graph the equivalent base-dir source is the
+per-suite `chdir` context in [08](../08-sibling-graphs.md).

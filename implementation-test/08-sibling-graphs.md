@@ -191,7 +191,8 @@ default-resolution lives in one obvious place.
 - **regression:** 2 new modules (`parse-reg-config`, `resolve-reg-config-path`) + 1
   contract switch (`parse-suite-config`: unit → default) + CLI rewiring. (`chdir-suite`
   was originally listed but is dropped — see structural note #1.)
-- **No new contracts** beyond `merge` (already present in the test graph).
+- **No new contract types** beyond those already in the test graph (`unit` / `default` /
+  `keyed_join`, plus an unwired `any`).
 - **Most of the module catalogue** ([03](03-module-catalog.md)) is reused untouched.
 
 ---

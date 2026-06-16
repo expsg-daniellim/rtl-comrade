@@ -19,7 +19,7 @@ This spec is split into one ticket per deliverable — build them as independent
 |---|---|---|---|
 | [10a](10a-early-stop-gate.md) | `EarlyStopGateMod` | `modules/rtl_buddy/control.py` | Cross-cutting early-stop gate (3 instances). |
 | [10b](10b-git-status.md) | `GitStatusMod` | `modules/rtl_buddy/setup.py` | Record git state as a structured log event. |
-| [10c](10c-summary-handler.md) | `SummaryProcessor` | `graphs/log/summary.py` | Accumulate `test_result` rows (results only) and render the summary table. |
+| [10c](10c-summary-handler.md) | `SummaryProcessor` | `graphs/log/summary.py` | Collect the watch-list outcome events (`test_result` + the failure terminals' events) and render the summary table. |
 
 **Manifest** — each child ticket carries its exact `modules/config.yaml` line: `EarlyStopGateMod`
 opens the `rtl_buddy/control.py` block ([`10a`](10a-early-stop-gate.md)); `GitStatusMod` appends to
@@ -30,12 +30,18 @@ the `rtl_buddy/setup.py` block ([`10b`](10b-git-status.md)). `graphs/log/summary
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- Exit-code semantics: a run with any FAIL/NA emits ≥1 `log.error` → harness exit 1; an
-  all-PASS/SKIP run emits none → exit 0. This reproduces rtl_buddy's
-  `exit_code |= 0 if is_pass() else 1` via the per-emission `log.error`, not an aggregator.
+- Exit-code semantics: a run with any FAIL or genuine NA (parse FAIL/NA, compile fail, timeout)
+  emits ≥1 `log.error` → harness exit 1; an all-PASS/SKIP run emits none → exit 0. This reproduces
+  rtl_buddy's `exit_code |= 0 if is_pass() else 1` via the per-emission `log.error`, not an
+  aggregator. **Exception:** `early-stop` is NA but logs `log.info` (not `log.error`), so a
+  `--early-stop` run exits **0** — a deliberate divergence from rtl_buddy's exit 1
+  (see [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)
+  and [10a](10a-early-stop-gate.md)).
 - The summary table content matches what `aggregate-results.finalise()` previously produced
-  (same `key`/`result`/`desc` columns). The table is **results only** — git state is logged
-  separately by `git-status` and falls through to the console, not into the table.
+  (same `key`/`result`/`desc` columns), collected from the `Config` watch-list events
+  (`test_result` + `compile_failed`/`sim_timeout`/`*_failed`). The table is **outcomes only** —
+  git state is logged separately by `git-status` and falls through to the console, not into the
+  table.
 - No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
   `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
   single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).

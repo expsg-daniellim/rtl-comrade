@@ -40,13 +40,13 @@ class ParseUvmLogMod:
         uvm = test_run["test"].uvm
         try:
             text = Path(test_run["log"]).read_text()
+            counts = parse_uvm_summary(text)         # missing summary → FAIL
+            result = uvm_verdict(counts, uvm.max_warns, uvm.max_errors)
         except OSError as e:
-            log.error("parse_uvm_read_failed", key=test_run["key"], err=str(e))
-            return ("default", { "key": test_run["key"], "result": ... })   # FAIL with str(e)
-        counts = parse_uvm_summary(text)   # missing summary → FAIL
-        result = uvm_verdict(counts, uvm.max_warns, uvm.max_errors)
-        if not result.is_pass():
-            log.error("test_failed", key=test_run["key"], log=str(test_run["log"]))
+            result = make_fail_result(desc=str(e))   # unreadable log → FAIL
+        log_fn = log.error if not result.is_pass() else log.info   # ERROR drives exit on non-pass
+        log_fn("test_result", key=test_run["key"],
+               result=result.results["result"], desc=result.results["desc"])
         return ("default", { "key": test_run["key"], "result": result })
 ```
 
@@ -60,10 +60,14 @@ class ParseUvmLogMod:
    regex-matched `[0-9]+` cannot raise.
 3. Verdict: PASS iff `WARNING <= uvm.max_warns and ERROR <= uvm.max_errors and FATAL == 0`,
    else FAIL with the counts summary in `desc`.
-4. Emit `("default", {"key": test_run["key"], "result": TestResults(...)})`; on a non-pass
-   result `log.error("test_failed", ...)` with the counts and log path; PASS does not log.
-5. **Failure — unreadable log.** Wrap step 1's read in `try/except OSError` →
-   `log.error("parse_uvm_read_failed", ...)` and emit a FAIL result carrying `str(e)` as `desc`.
+4. **Log the verdict directly, then emit.** One `test_result` event:
+   `log.error("test_result", key=, result=, desc=)` when `not result.is_pass()` (FAIL — the
+   exit driver), else `log.info("test_result", ...)` (PASS); then return `("default", {"key":
+   test_run["key"], "result": result})`. `SummaryProcessor` watches `test_result`; the `default`
+   port stays unwired.
+5. **Failure — unreadable log.** Wrap step 1's read in `try/except OSError` → build a FAIL
+   `result` carrying `str(e)` as `desc` and fall through to step 4 (logged as an ERROR
+   `test_result`). No separate `parse_uvm_read_failed` / `test_failed` event.
 
 ## Deliverables
 
@@ -76,11 +80,12 @@ In `modules/rtl_buddy/sim.py` (continuing from spec 08):
   [01b — `UVMConfig`](01b-suite-schema.md); their non-negative invariant is enforced
   at YAML deserialisation, so this module does not re-validate. Emits `{"key":
   ctx["key"], "result": TestResults(...)}`.
-  **Failure handling**: FAIL result → `log.error` at emission carrying the severity counts
-  and `test_run["log"]` path; PASS does not log. `FileNotFoundError`/`OSError` reading
-  `test_run["log"]` → emit FAIL with the exception string as `desc` and call `log.error`.
-  Missing Report Summary block is already handled (FAIL with explicit message); `int()` on
-  regex-matched `[0-9]+` cannot raise `ValueError`.
+  **Failure handling**: the verdict is logged once as `test_result` — `log.error` when `not
+  result.is_pass()` (FAIL; the exit driver), `log.info` when PASS (carrying `key`/`result`/`desc`).
+  `FileNotFoundError`/`OSError` reading `test_run["log"]` → build a FAIL `result` with the
+  exception string as `desc` and log it through the same `test_result` path. Missing Report
+  Summary block is already a FAIL (explicit message); `int()` on regex-matched `[0-9]+` cannot
+  raise `ValueError`. No separate `test_failed` / `parse_uvm_read_failed` event.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`; thresholds from `UVMConfig` (`config/uvm.py:3-19`).
 
 **Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`
@@ -98,17 +103,18 @@ Summary counts; one without a summary block); a `test_run` whose `test.uvm` carr
 against rtl_buddy `UvmVlogPost`.
 
 - Report Summary with `WARNING=0, ERROR=0, FATAL=0` within thresholds → emits `("default",
-  {result: PASS})`, no log.
+  {result: PASS})` and one `log.info("test_result", result="PASS", …)`; `failure is False`.
 - `WARNING == max_warns` and `ERROR == max_errors`, `FATAL=0` → emits PASS (boundary:
   inclusive `<=` edge).
-- `ERROR > max_errors` (others within bounds) → emits FAIL with the counts summary in `desc`,
-  `log.error`.
-- `WARNING > max_warns` → emits FAIL, `log.error`.
+- `ERROR > max_errors` (others within bounds) → emits FAIL with the counts summary in `desc`
+  and `log.error("test_result", result="FAIL", …)`; `failure is True`.
+- `WARNING > max_warns` → emits FAIL, `log.error("test_result", …)`.
 - `FATAL == 1` with WARNING/ERROR within thresholds → emits FAIL (boundary: `FATAL == 0` is
   absolute, not threshold-gated).
 - Log with no Report Summary block → emits FAIL with `desc = "Invalid UVM Report Summary"`,
-  `log.error`.
-- `test_run["log"]` missing → `OSError` caught → emits FAIL with `str(e)` in `desc`, `log.error`.
+  `log.error("test_result", …)`.
+- `test_run["log"]` missing → `OSError` caught → emits FAIL with `str(e)` in `desc`, logged as an
+  ERROR `test_result`.
 
 ## Acceptance criteria
 
@@ -116,7 +122,9 @@ against rtl_buddy `UvmVlogPost`.
 - Output port `default` exercised: a fixture-by-fixture comparison against rtl_buddy
   `UvmVlogPost` on the same log files produces identical `TestResults`.
 - Failure idioms exercised: a log with no UVM summary → a FAIL `result`; a missing
-  `test_run["log"]` → `OSError` caught → FAIL with `str(e)` in `desc`, `log.error`.
+  `test_run["log"]` → `OSError` caught → FAIL with `str(e)` in `desc`. Every verdict is logged
+  once as `test_result` — ERROR on FAIL (exit driver), INFO on PASS — which `SummaryProcessor`
+  collects ([10c](10c-summary-handler.md)).
 - The `modules/config.yaml` manifest entry `{ name: parse-uvm-log, class_name: ParseUvmLogMod }`
   validates and the harness resolves `parse-uvm-log` → `ParseUvmLogMod`.
 
@@ -127,6 +135,8 @@ against rtl_buddy `UvmVlogPost`.
 - A missing Report Summary block is itself a FAIL (`"Invalid UVM Report Summary"`).
 - Do **not** re-validate the thresholds — their non-negative invariant is enforced at YAML
   deserialisation (spec [01b](01b-suite-schema.md)).
-- A FAIL verdict → `log.error("test_failed", …)` at emission; PASS does not log. Catch
-  `OSError`/`FileNotFoundError` reading the log → FAIL with `str(e)` in `desc` and `log.error`.
+- Log the verdict once as `test_result`: `log.error("test_result", key, result, desc)` when
+  `not is_pass()` (FAIL — the exit driver), else `log.info("test_result", …)` (PASS). Do **not**
+  emit a separate `test_failed` event. Catch `OSError`/`FileNotFoundError` reading the log → build
+  a FAIL `result` with `str(e)` in `desc` and log it through the same `test_result` path.
 - `int()` over a regex-matched `[0-9]+` cannot raise — no guard needed there.

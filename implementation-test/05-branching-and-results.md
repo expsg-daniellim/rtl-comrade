@@ -2,7 +2,9 @@
 
 `rtl_buddy` is an imperative pipeline with many early `return`s; a graph is fixed dataflow.
 This file shows how each early-exit becomes a named output port that routes the item off
-the main line, and how the mutually-exclusive results re-converge through a custom contract.
+the main line, and how the mutually-exclusive results — terminal ports left **unwired**
+since the TODO #15 redesign — are instead collected by the `SummaryProcessor` logging
+plugin rather than re-converging through a graph node.
 
 ## Each terminal outcome is a named output port
 
@@ -64,44 +66,64 @@ emission site:
    left **unwired**, so the harness logs `no_destination` at INFO and the item simply leaves
    the graph. No module signature or `definite_emits` change: the module stays graph-agnostic
    and does not know whether anything listens.
-2. **calls `log.info("test_result", key=..., result=..., desc=...)`** so the summary processor
-   can collect the row. (Previously these rows were emitted only by `aggregate-results.finalise()`;
-   they now move to each terminal site.)
+2. **logs its outcome** (carrying `key`/`result`/`desc`) so the summary processor can collect
+   the row, in one of two styles:
+   - the result-producing terminals that would otherwise log nothing
+     (`parse-log`/`parse-uvm-log`, `filter.skip`, `early-stop-gate`) call `log.info("test_result",
+     …)` (pass-like) or `log.error("test_result", …)` (non-`is_pass()`, which also drives the exit);
+   - the failure terminals that already `log.error` (`compile_failed`, `sim_timeout`, the five
+     `*_failed`) just add `result`/`desc` kwargs to their existing call.
 
 A `git-status` setup node similarly calls `log.info("git_state", branch=..., sha=...,
-dirty=...)` once at run start. The summary plugin's role is **results only** — it accumulates
-`test_result` and nothing else; `git_state` is not collected. A **`SummaryProcessor`** — a
-per-graph structlog processor — accumulates the `test_result` rows and renders the table from
-its `finalise()` teardown hook. `git_state` falls through the processor to the console and
-prints at run start like any other log line.
+dirty=...)` once at run start. The summary plugin's role is **outcomes only** — it collects the
+events on its watch-list and nothing else; `git_state` is not on the list. A **`SummaryProcessor`**
+— a per-graph structlog processor — accumulates the watched rows and renders the table from its
+`finalise()` teardown hook. `git_state` falls through the processor to the console and prints at
+run start like any other log line.
 
 ### The `SummaryProcessor` logging plugin
 
 The plugin is a stateful structlog **processor**, not a `logging.Handler`. It sits in the
 harness handler's formatter chain **before** `ConsoleRenderer` (non-terminal under
-`include_default: true`, so `__call__` returns an `EventDict`). On each `test_result` it does
-both halves of the job in one place — accumulate the row, then raise `DropEvent` to suppress
-the per-event console line that `ConsoleRenderer` would otherwise print. Every other event
-(including `git_state`) is returned unchanged and flows on to `ConsoleRenderer`. The table is
-rendered once in `finalise()`:
+`include_default: true`, so `__call__` returns an `EventDict`). A `Config` carries the
+**watch-list** of outcome event names it collects (default: `test_result` plus the failure
+terminals' `compile_failed`/`sim_timeout`/`*_failed`) and a `suppress` subset (default just
+`test_result`). On each watched event it harvests `{key, result, desc}` into a row; for events in
+`suppress` it then raises `DropEvent` to drop the per-event console line, while the failure events
+are collected **and** returned so they still print as errors. Every non-watched event (including
+`git_state`) is returned unchanged and flows on to `ConsoleRenderer`. The table is rendered once
+in `finalise()` (full spec in [10c](specs/10c-summary-handler.md)):
 
 ```python
 # log/summary.py
 from __future__ import annotations
 from typing import Any
 from collections.abc import MutableMapping
+from serde import serde, field
 from structlog.exceptions import DropEvent
 
 class SummaryProcessor:
-    def __init__(self):
-        self._rows = []                          # results only; fresh per run
+    @serde
+    class Config:
+        events: list[str] = field(default_factory=lambda: [
+            "test_result", "compile_failed", "sim_timeout", "load_model_failed",
+            "sweep_failed", "preproc_failed", "filelist_failed", "replay_seed_invalid"])
+        suppress: list[str] = field(default_factory=lambda: ["test_result"])
+
+    def __init__(self, config):
+        self._events, self._suppress = set(config.events), set(config.suppress)
+        self._rows = []                          # fresh per run
 
     def __call__(self, logger, method_name: str,
                  event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
-        if event_dict.get("event") == "test_result":
-            self._rows.append(event_dict)        # accumulate
-            raise DropEvent                      # suppress the per-event console line
-        return event_dict                        # everything else (incl. git_state) falls through
+        name = event_dict.get("event")
+        if name in self._events:
+            self._rows.append({"key": event_dict.get("key"),
+                               "result": event_dict.get("result"),
+                               "desc": event_dict.get("desc")})
+            if name in self._suppress:
+                raise DropEvent                  # summary-only → drop the console line
+        return event_dict                        # failure errors, git_state, etc. fall through
 
     def finalise(self):
         if not self._rows:                       # nothing to summarise → no-op
@@ -221,15 +243,21 @@ self-contained mechanisms:
    below). A single `ERROR` sets `handler.failure = True`, which the harness turns into a
    non-zero exit, reproducing `rtl_buddy`'s `exit_code |= 0 if is_pass() else 1`
    (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:206`) exactly (SKIP/PASS log no `ERROR` and
-   contribute nothing; FAIL/NA — compile fail, timeout, early-stop, unknown — each
-   `log.error` once and force exit 1). This is now the **sole** exit-code driver; the old
+   contribute nothing; FAIL and genuine NA — compile fail, timeout, parse FAIL/NA, unknown —
+   each `log.error` once and force exit 1). **`early-stop` is the one exception**: its
+   `EarlyStopResults` is NA but it logs `log.info`, not `log.error`, so a user-requested stop
+   exits 0 — a deliberate divergence from rtl_buddy's exit 1 (see
+   [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
+   This is now the **sole** exit-code driver; the old
    belt-and-braces `aggregate-results.finalise()` `log.error` is gone with the node.
-2. **Summary table** is rendered by `SummaryProcessor.finalise()` from the `test_result` rows
-   each terminal site emits (see [Re-convergence](#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)),
-   reproducing `do_cmd_test`'s "Test Results Summary" loop
-   (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`). The processor accumulates **results
-   only**; the `show_git_rev` git state (`rtl_buddy.py:500-522`) is logged separately by
-   `git-status` and falls through to the console at run start, not into this table.
+2. **Summary table** is rendered by `SummaryProcessor.finalise()` from the watch-list events each
+   terminal site emits (`test_result` from the otherwise-silent paths; the failure terminals' own
+   `compile_failed`/`sim_timeout`/`*_failed`) — see
+   [Re-convergence](#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node) — reproducing
+   `do_cmd_test`'s "Test Results Summary" loop (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`).
+   The processor collects **outcomes only**; the `show_git_rev` git state (`rtl_buddy.py:500-522`)
+   is logged separately by `git-status` and falls through to the console at run start, not into
+   this table.
 
 `CRITICAL` stays reserved for harness-fatal conditions (missing/malformed `root_config.yaml`,
 missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.Abort`
@@ -237,11 +265,13 @@ missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.
 
 ## Log idioms per failure site
 
-Each module and contract that can fail records its idiom here. Every terminal site (failure
-or not) additionally emits `log.info("test_result", key=..., result=..., desc=...)` at
-emission so `SummaryProcessor` can collect its row; the rows below list only the *failure*
-idiom. Three failure idioms are in play, per `docs/invariants.md:14-23` and
-`docs/harness/logging.md`:
+Each module and contract that can fail records its idiom here. Every terminal site logs its
+outcome (carrying `key`/`result`/`desc`) so `SummaryProcessor`'s watch-list can collect its row —
+**either** as a `test_result` event (the result-producing terminals that would otherwise be
+silent: `parse-log`/`parse-uvm-log`, `filter.skip`, `early-stop-gate`) **or** as the terminal's
+own watched event with `result`/`desc` kwargs added (the failure terminals that already
+`log.error`). The rows below list each site's idiom. Four idioms are in play, per
+`docs/invariants.md:14-23` and `docs/harness/logging.md`:
 
 - **`log.critical`** — immediate `SystemExit(1)`. Reserved for unrecoverable setup/config
   failures and harness-internal scheduling errors.
@@ -249,9 +279,11 @@ idiom. Three failure idioms are in play, per `docs/invariants.md:14-23` and
   output port (`skip`, `stop`, `fail`, `timeout`, `result`), but the port has no edge, so
   the harness logs `no_destination` at INFO and the item leaves the graph. No collector.
 - **`log.error` at emission** — fires once at every per-test FAIL emission site and is the
-  **sole** deferred-exit driver (`handler.failure`). There is no second `finalise()` site.
-- **No `log.error`** — non-failure terminals (SKIP, early-stop) emit their `test_result`
-  row but log no `ERROR`, so they do not affect the exit code.
+  **sole** deferred-exit driver (`handler.failure`). Carries `result`/`desc` so the watch-list
+  collects the row from the *same* event (no separate `test_result` for these). There is no
+  second `finalise()` site.
+- **`log.info("test_result", …)`** — pass-like terminals (PASS, SKIP) emit their summary row at
+  INFO, so they are collected but do **not** affect the exit code.
 
 ### Setup / config — `log.critical`
 
@@ -266,39 +298,45 @@ idiom. Three failure idioms are in play, per `docs/invariants.md:14-23` and
 | `select-tests` | named test not in suite |
 | `run-process` | subprocess launch failure (binary not on PATH, permission denied) — distinct from non-zero `rc`, which is per-test |
 
-### Per-test failure — unwired `result` port + `log.error` at emission (sole exit driver) + `log.info("test_result")` row
+### Per-test failure — unwired `result` port + `log.error` at emission (sole exit driver; the same event carries the summary row)
+
+Each row below `log.error`s **its own watched event** carrying `result`/`desc`; `SummaryProcessor`'s
+`Config` watch-list lists those event names, so the failure event *is* the summary row — no
+separate `test_result` is emitted for these.
+
+| Site | Port → payload (unwired) | Emission log (watched event) |
+|---|---|---|
+| `interpret-compile.fail` | `fail` → `CompileFailResults` | `log.error("compile_failed", rc, stderr_path, result, desc)` |
+| `interpret-sim.timeout` | `timeout` → `SimTimeoutResults` | `log.error("sim_timeout", err, result, desc)` |
+| `load-model.fail` | `fail` → FAIL payload | `log.error("load_model_failed", model_path, result, desc)` |
+| `write-filelist.fail` | `fail` → FAIL payload | `log.error("filelist_failed", path, result, desc)` |
+| `expand-sweep.fail` | `fail` → FAIL payload | `log.error("sweep_failed", exc_info, result, desc)` |
+| `run-preproc.fail` | `fail` → FAIL payload | `log.error("preproc_failed", exc_info, result, desc)` |
+| `resolve-seed.fail` (REPLAY only) | `fail` → FAIL payload | `log.error("replay_seed_invalid", path, result, desc)` |
+
+Parse FAIL/NA verdicts (`parse-log`/`parse-uvm-log`) are in the next table — they have no prior
+event name, so they emit `test_result` directly. Topology consequence: all 13 terminal ports stay
+**unwired** — there is no `fan-in`/`aggregate-results` to receive them (TODO #15 redesign). Adding
+a new failure terminal adds no edge; the module enriches its existing `log.error` and the
+watch-list name is added to `SummaryProcessor`'s `Config`.
+
+### Per-test terminals that log `test_result` directly (the otherwise-silent paths)
+
+These have no prior log event, so they emit `test_result` themselves — `log.error` when
+`not is_pass()` (drives the exit), `log.info` when pass-like.
 
 | Site | Port → payload (unwired) | Emission log |
 |---|---|---|
-| `interpret-compile.fail` | `fail` → `CompileFailResults` | `log.error` (compile `rc`, stderr path) |
-| `interpret-sim.timeout` | `timeout` → `SimTimeoutResults` | `log.error` (`timed_out`, stderr path) |
-| `parse-log.result` (FAIL) | `result` → FAIL payload | `log.error` (parsed reason) |
-| `parse-uvm-log.result` (FAIL) | `result` → FAIL payload | `log.error` (severity counts) |
-| `load-model.fail` | `fail` → FAIL payload | `log.error` (`models.yaml` path, reason) |
-| `write-filelist.fail` | `fail` → FAIL payload | `log.error` (filelist generation reason) |
-| `expand-sweep.fail` | `fail` → FAIL payload | `log.error` (sweep script trace) |
-| `run-preproc.fail` | `fail` → FAIL payload | `log.error` (preproc script trace) |
-| `resolve-seed.fail` (REPLAY only) | `fail` → FAIL payload | `log.error` (missing/malformed `.randseed` path) |
-
-The bottom five rows are **new failure ports** added to modules that previously had only a
-success path. Topology consequence: all 13 terminal ports are now **unwired** — there is no
-`fan-in`/`aggregate-results` to receive them (TODO #15 redesign). Adding a new terminal source
-adds no edge; the module just emits its `test_result` row and leaves its port unwired. Every
-failure site emits exactly one `log.error` (the sole exit-code driver) and one
-`log.info("test_result", ...)` (the summary row).
-
-### Per-test non-failure terminals — unwired `result` port + `log.info("test_result")` row, **no `log.error`**
-
-| Site | Port → payload (unwired) |
-|---|---|
-| `filter-reglvl.skip` | `skip` → `SkipResults` (SKIP is pass-like via `is_pass()`) |
-| `early-stop-gate.stop` (×3 instances) | `stop` → `EarlyStopResults` (normal terminal, not a failure) |
+| `parse-log.result` | `result` → PASS/FAIL/NA | `log.error("test_result", …)` on FAIL/NA (exit driver); `log.info("test_result", …)` on PASS |
+| `parse-uvm-log.result` | `result` → PASS/FAIL/NA | `log.error("test_result", …)` on FAIL/NA; `log.info("test_result", …)` on PASS |
+| `filter-reglvl.skip` | `skip` → `SkipResults` | `log.info("test_result", …)` (SKIP is pass-like via `is_pass()`; no exit contribution) |
+| `early-stop-gate.stop` (×3) | `stop` → `EarlyStopResults` | `log.info("test_result", …)` *(NA, but `log.info` not `log.error` — a user-requested stop exits 0; deliberate divergence from rtl_buddy's exit 1, see [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy))* |
 
 ### Summary rendering — `SummaryProcessor.finalise()` (not an exit driver)
 
 | Site | Trigger | Action |
 |---|---|---|
-| `SummaryProcessor.finalise()` | run end (per-run teardown), if any `test_result` row collected | render the consolidated **results** table; **no** `log.error` (exit is driven per-emission above) |
+| `SummaryProcessor.finalise()` | run end (per-run teardown), if any watched row collected | render the consolidated **results** table; **no** `log.error` (exit is driven per-emission above) |
 | `git-status` (setup) | run start | `log.info("git_state", branch=..., sha=..., dirty=...)` once; falls through to the console (not collected by `SummaryProcessor`) |
 
 ### Deferred

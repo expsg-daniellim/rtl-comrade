@@ -58,7 +58,7 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 - `SelectTestsMod` — `(suite_cfg: SuiteConfig, test_name:str="")` → calls
   `suite_cfg.get_tests(test_name or None)` (spec [01b](01b-suite-schema.md) — returns
   one-element list or all-tests view) and yields one
-  `{"key": test.get_name(), "test": test}` per `TestConfig` returned. No mode logic;
+  `{"key": test.get_name(), "test": test, "run_id": None}` per `TestConfig` returned. No mode logic;
   `--list` is handled upstream.
   **Failure handling**: `SuiteConfig.get_tests(test_name)` itself calls
   `log.critical(f"test_name {test_name} not found in suite {self.path}")` when
