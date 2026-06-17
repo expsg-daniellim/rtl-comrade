@@ -29,7 +29,7 @@ def is_special(port:ContractPort) -> bool:
 		``True`` if the port is currently special, otherwise ``False``.
 	"""
 
-	return not port.required and ((port.state['persistent'] and port.state['last_value'] is not None) or port.has_default)
+	return (port.state['persistent'] and port.state['last_value'] is not None) or (port.has_default and not port.required)
 
 @dataclass
 class DefaultContract:
