@@ -44,9 +44,11 @@ Prepend `.` to `$PATH` so a CWD-local simulator (`simv`, `verilator`) is discove
 downstream subprocess invocations. Idempotent — skips the mutation if `.` is already on
 `$PATH`. Mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, where rtl_buddy does the
 same once at CLI bootstrap; here it is a graph node so the responsibility is explicit.
-Emits a `bool` sentinel consumed by `run-process` (`env_ready`), which pins the mutation
-strictly upstream of every compile/sim subprocess via the harness's data-dependency
-ordering — no race window. No failure path: dict mutation cannot meaningfully fail.
+Emits a `bool` token wired **directly** to each `run-process` on `env_ready` (no relay through
+`ensure-logs`). The edge is marked `required: true` and `env_ready` is in each `run-process`'s
+`persistent_inputs`: `required` suppresses the module default so the first subprocess **blocks**
+until the PATH mutation is done (hard ordering), `persistent` replays the once-emitted token for
+later invocations (see [07 settled 25](07-ambiguities-and-assumptions.md)). No failure path: dict mutation cannot meaningfully fail.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `if not '.' in os.environ["PATH"].split(...)` guard + prepend in `RtlBuddy.__init__` (here lifted from CLI bootstrap into an explicit graph node).
 - **In:** — (zero-input; runs once)
@@ -109,19 +111,21 @@ composers join onto a provided directory instead of the ambient CWD. Mirrors
 writer needs to `mkdir`, the directory is created exactly once per invocation, and artefact
 location is decided once (by `check-suite-cwd`'s `work_dir`). Takes `work_dir:Path` from
 `check-suite-cwd` (the validated base directory — **load-bearing**, joined under `logs_dir`,
-so a missing edge fails edge-validation), the CLI `logs_dir` **subdir name** (with `--logs-dir`
+so a missing edge fails edge-validation) and the CLI `logs_dir` **subdir name** (with `--logs-dir`
 default `"logs"` — a small **Notable divergence** from rtl_buddy, which has no override; see
-[07](07-ambiguities-and-assumptions.md)), and one sequencing input `env_ready:bool` from
-`prepend-cwd-path` (chains the PATH-prepend strictly upstream). Emits the resolved directory
-`Path` on `logs_dir` (a persistent input consumed by `cc-build`/`sim-build`/`seed`) and a
-`bool` token on `env_ready` consumed by `cc-run.env_ready`/`sim-run.env_ready` — the env_ready
-chain ([07 settled 25](07-ambiguities-and-assumptions.md)) is `prepend-path → ensure-logs →
-cc-run/sim-run`. Idempotent (`mkdir(parents=True, exist_ok=True)`) — accepts nested names. Not
-wired in the regression graph (regression `chdir`s per-suite — see [08](08-sibling-graphs.md)).
+[07](07-ambiguities-and-assumptions.md)). Emits the resolved directory `Path` on `logs_dir` (a
+first-run-required persistent input consumed by `cc-build`/`sim-build`/`seed`). It carries **no**
+`env_ready` token: because it `mkdir`s *before* emitting `logs_dir` and the composers block on that
+value before building a command, the directory provably exists before any subprocess redirects into
+it — the `logs_dir` data edge orders the `mkdir` for free, and the PATH prepend is sequenced
+separately by `prepend-cwd-path → run-process.env_ready` (`required: true`,
+[07 settled 25](07-ambiguities-and-assumptions.md)). Idempotent (`mkdir(parents=True,
+exist_ok=True)`) — accepts nested names. Not wired in the regression graph (regression `chdir`s
+per-suite — see [08](08-sibling-graphs.md)).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` — the `output_dir = "logs"; if not os.path.exists(...): os.makedirs(...)` block in `VlogSim.__init__` (lifted out of the per-test lazy mkdir into a single setup node; rooting on `work_dir`, emitting the resolved path, and the `--logs-dir` override are Notable divergences, [07 settled 26](07-ambiguities-and-assumptions.md)).
-- **In:** `work_dir:Path`, `logs_dir:str = "logs"` (subdir name), `env_ready:bool = True`
-- **Out:** logs_dir → `Path` (resolved artefact dir); env_ready → `bool` (sequencing token)
+- **In:** `work_dir:Path`, `logs_dir:str = "logs"` (subdir name)
+- **Out:** logs_dir → `Path` (resolved artefact dir; first-run-required at consumers)
 - **Log idiom:** `log.info("logs_dir_ready", path=...)` once; no failure port. `OSError` /
   `PermissionError` from `mkdir` propagate uncaught and surface as a harness CRITICAL via
   the bubbling-SystemExit catch (same idiom as `discover-config-file`'s `PermissionError`).
@@ -178,17 +182,20 @@ Routes on the `--list` flag (a global mode): `list` → the `list-test-names` te
 - **In:** `suite_cfg`, `list:bool = False`
 - **Out:** `("run", suite_cfg)` | `("list", suite_cfg)`
 
-### `list-test-names`  · tags: select · contract: `unit`
+### `list-test-names`  · tags: select · contract: `default`
 Print the suite's test names. Terminal — emits nothing, so in list-mode the whole pipeline
-drains and exits 0.
+drains and exits 0. `default` (not `unit`) so the unfired branch in run-mode drains an empty
+stream silently — see [04 — Why each contract](04-pipeline-and-contracts.md#default--the-post-branch-run-once-nodes-select-list-names).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:183` — `typer.echo("  ".join(self.suite_cfg.get_test_names()))`; `get_test_names` is `config/suite.py:69-76`.
 - **In:** `suite_cfg`
 - **Out:** none
 
-### `select-tests`  · tags: select · contract: `unit`
+### `select-tests`  · tags: select · contract: `default`
 Select one test or all (`get_tests(test_name)`) and yield one `ctx` per test, stamping
-`key`. No mode logic — `--list` is handled upstream by `route-list-mode`.
+`key`. No mode logic — `--list` is handled upstream by `route-list-mode`. `default` (not `unit`)
+so the unfired `run` branch in list-mode drains an empty stream silently — see
+[04 — Why each contract](04-pipeline-and-contracts.md#default--the-post-branch-run-once-nodes-select-list-names).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/config/suite.py:52-67` — `SuiteConfig.get_tests`: returns `[self.tests[test_name]]` for a named test (with `log.fatal` if absent) or `self.tests.values()` for all.
 - **In:** `suite_cfg`, `test_name:str = ""`
@@ -278,7 +285,8 @@ Computes `test_tag`, `build_dir = str(Path(work_dir) / f"obj_dir_{test_tag}")` (
 `work_dir` provider, not the ambient CWD), and `simv` for use in the argv and log paths; puts the
 compile log paths into `command` so `run-process` redirects there. Folds `simv` into `ctx` so downstream nodes carry it without re-derivation; does not fold
 `build_dir` (not needed downstream). Does not `mkdir` — `ensure-logs-dir` has already
-bootstrapped the directory (env_ready chain).
+bootstrapped the directory, and this node blocks on its `logs_dir` (first-run-required) before
+composing the command, so the directory exists by the time `run-process` redirects into it.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:141-159` — `VlogSim.compile` argv assembly (`[get_exe()] + get_compile_time_opts(mode) + (["--Mdir", build_dir] if verilator) + plusdefines + ["-f", run.f]`), up to but excluding the `subprocess.run`. Supporting helpers: `_get_build_tag` regex `vlog_sim.py:65`, `_get_build_dir` `:67-71`, `_get_simv_path` verilator switch `:73-80`, `_get_plusdefines` `:107-117`.
 - **In:** `ctx`, `filelist`, `builder_cfg`, `logs_dir:Path` (resolved artefact dir from `ensure-logs-dir`), `work_dir:Path` (validated base dir from `check-suite-cwd`), `builder_mode:str = "debug"`
@@ -300,7 +308,7 @@ lifecycle and cancellation semantics.
 - **In:** `command:{key,argv,stdout_path,stderr_path}`, `timeout:float | None = None`, `env_ready:bool = True`
 - **Out:** default → `proc:{key,rc,timed_out,stdout_path,stderr_path}`
 - **Log idiom:** `log.fatal` if the subprocess fails to *launch* (binary not on PATH, permission denied) — system-wide condition, not per-test. Non-zero `rc` and `timed_out` are not failures here; they are interpreted downstream by `interpret-compile` / `interpret-sim` as per-test results. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
-- **`env_ready`** is a generic persistent sequencing input. The default `True` keeps the module testable in isolation (and the graph valid if no env-setup nodes are wired); in the production graph it carries the `bool` signal from `prepend-cwd-path` (and any future env-setup node) so the PATH mutation strictly precedes the first subprocess. The value is never read or branched on. Pairs with [07 settled 25](07-ambiguities-and-assumptions.md).
+- **`env_ready`** is a generic sequencing input. The Python default `True` keeps the module testable in isolation (and the graph valid if no env-setup node is wired). In the production graph the edge `prepend-cwd-path → run-process.env_ready` is marked **`required: true`** and the node lists `env_ready` in `persistent_inputs`: `required` suppresses the default so the **first** invocation blocks until the PATH mutation is done (a hard dependency, not best-effort), and `persistent` caches that single token and replays it for the streaming later invocations. Wired **directly** from `prepend-cwd-path` (no relay through `ensure-logs`). The value is never read or branched on. Pairs with [07 settled 25](07-ambiguities-and-assumptions.md).
 
 ```python
 class RunProcessMod:

@@ -40,10 +40,11 @@ nodes:
 
 # --- list mode vs run ---
 - { id: route-list, module: route-list-mode, contract: unit }
-- { id: list-names, module: list-test-names, contract: unit }
+# select/list-names: default, not unit — the unfired branch leaves them fed only EndSentinel; unit would log missing_required_inputs → exit 1 (see 04)
+- { id: list-names, module: list-test-names, contract: default }
 
 # --- selection / expansion ---
-- { id: select, module: select-tests, contract: unit }
+- { id: select, module: select-tests, contract: default }   # default, not unit — empty `run` branch in list-mode must drain silently (see 04)
 - id: filter
   module: filter-reglvl
   contract: default
@@ -74,7 +75,10 @@ nodes:
   module: build-compile-cmd
   contract: default
   contract_config: { persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ] }
-- { id: cc-run, module: run-process, contract: default }
+- id: cc-run
+  module: run-process
+  contract: default
+  contract_config: { persistent_inputs: [ env_ready ] }   # caches prepend-path's token; edge is required: true (see env-setup block)
 - id: cc-int
   module: interpret-compile
   contract: keyed_join
@@ -98,7 +102,10 @@ nodes:
   module: build-sim-cmd
   contract: default
   contract_config: { persistent_inputs: [ builder_cfg, builder_mode, logs_dir ] }
-- { id: sim-run, module: run-process, contract: default }
+- id: sim-run
+  module: run-process
+  contract: default
+  contract_config: { persistent_inputs: [ env_ready ] }   # caches prepend-path's token; edge is required: true (see env-setup block)
 - id: randseed
   module: write-randseed
   contract: keyed_join
@@ -146,20 +153,26 @@ edges:
 - { src: { node: select-platform },   dst: { node: resolve-builder, port: platform_cfg } }
 - { src: { node: check-cwd },         dst: { node: parse-suite,     port: test_config_path } }
 
-# ---- env setup: PATH-prepend + logs/ bootstrap sequenced upstream of every subprocess ----
-# Chain: prepend-path → ensure-logs → cc-run/sim-run (env_ready token). ensure-logs roots the
-# artefact dir on check-cwd's validated work_dir (load-bearing data, not an ordering token).
-- { src: { node: prepend-path },                dst: { node: ensure-logs, port: env_ready } }
+# ---- env setup: PATH prepend (token, direct) + logs/ bootstrap (data) — two independent edges ----
+# PATH-readiness has no data carrier, so prepend-path emits an env_ready token wired DIRECTLY to
+# each run-process (no relay through ensure-logs). The edge is marked `required: true` AND env_ready
+# is in each run-process's persistent_inputs: `required` suppresses the module's `env_ready=True`
+# default so the FIRST invocation blocks until prepend-path has mutated PATH (a hard ordering),
+# while `persistent` caches that one token and replays it on every later invocation (prepend-path
+# emits once; cc-run/sim-run are streaming). This is the logs_dir pattern; the module keeps its
+# default for isolation testing. The logs/ mkdir is ordered separately by the logs_dir DATA edge below.
+- { src: { node: prepend-path }, dst: { node: cc-run,  port: env_ready, required: true } }
+- { src: { node: prepend-path }, dst: { node: sim-run, port: env_ready, required: true } }
 - { src: { node: check-cwd,   port: work_dir }, dst: { node: ensure-logs, port: work_dir } }
 # check-cwd's work_dir also roots the CWD-relative artefacts the logs/ tree doesn't cover:
 # write-filelist's run.<tag>.f and build-compile-cmd's obj_dir_<tag>/ (load-bearing persistent
 # inputs — same provider model as logs_dir, so a relocation stays a check-cwd-only change).
 - { src: { node: check-cwd,   port: work_dir }, dst: { node: filelist,    port: work_dir } }
 - { src: { node: check-cwd,   port: work_dir }, dst: { node: cc-build,    port: work_dir } }
-- { src: { node: ensure-logs, port: env_ready },dst: { node: cc-run,      port: env_ready } }
-- { src: { node: ensure-logs, port: env_ready },dst: { node: sim-run,     port: env_ready } }
-# Resolved artefact dir (a Path) fans out to the path composers as a persistent input —
-# they join filenames onto it; the CWD-relative assumption lives only in check-cwd/ensure-logs.
+# Resolved artefact dir (a Path) fans out to the path composers as a first-run-required persistent
+# input (no Python default): cc-build/sim-build/seed block until ensure-logs — after its mkdir —
+# emits logs_dir. That data dependency is what orders the mkdir before any subprocess redirect, so
+# no env_ready token is needed for it. The CWD-relative assumption lives only in check-cwd/ensure-logs.
 - { src: { node: ensure-logs, port: logs_dir }, dst: { node: cc-build,    port: logs_dir } }
 - { src: { node: ensure-logs, port: logs_dir }, dst: { node: sim-build,   port: logs_dir } }
 - { src: { node: ensure-logs, port: logs_dir }, dst: { node: seed,        port: logs_dir } }

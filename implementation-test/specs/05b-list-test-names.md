@@ -27,10 +27,14 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 the catalog is the design view, this is the build view; update both when behaviour changes.
 
 ```
-contract: unit
+contract: default
 inputs:   suite_cfg
 outputs:  none  (terminal sink)
 ```
+
+> `default`, **not** `unit`: the unfired `list`/`run` branch leaves this node fed only an
+> `EndSentinel`, which `unit` would treat as `missing_required_inputs` (→ exit 1). Rationale in
+> [04 — Why each contract](../04-pipeline-and-contracts.md#default--the-post-branch-run-once-nodes-select-list-names).
 
 ```python
 class ListTestNamesMod:

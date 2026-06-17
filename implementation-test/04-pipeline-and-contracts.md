@@ -12,13 +12,13 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | S3 | `select-platform` | `select-platform` | `unit` | `root_cfg` |
 | S4 | `resolve-builder` | `resolve-builder` | `unit` | `root_cfg`, `platform_cfg`; CLI `builder` |
 | S4.5 | `check-cwd` | `check-suite-cwd` | `unit` | CLI `test_config` (emits `default` path + `work_dir`) |
-| S4.6 | `ensure-logs` | `ensure-logs-dir` | `unit` | CLI `logs_dir` (name); `work_dir` (from `check-cwd`); `env_ready` (from `prepend-path`) — emits resolved `logs_dir` Path + `env_ready` |
+| S4.6 | `ensure-logs` | `ensure-logs-dir` | `unit` | CLI `logs_dir` (name); `work_dir` (from `check-cwd`) — emits resolved `logs_dir` Path |
 | S5 | `parse-suite` | `parse-suite-config` | `unit` | `test_config_path` (from `check-cwd`) |
 | S6 | `seed-mode` | `derive-seed-mode` | `unit` | CLI `rnd_new`,`rnd_last` |
 | S7 | `git-status` | `git-status` | `unit` | — (zero-input; logs `git_state`) |
 | 0 | `route-list` | `route-list-mode` | `unit` | `suite_cfg`; CLI `list` |
-| 0a | `list-names` | `list-test-names` | `unit` | `suite_cfg` (terminal) |
-| 1 | `select` | `select-tests` | `unit` | `suite_cfg`; CLI `test_name` |
+| 0a | `list-names` | `list-test-names` | `default` | `suite_cfg` (terminal) |
+| 1 | `select` | `select-tests` | `default` | `suite_cfg`; CLI `test_name` |
 | 2 | `filter` | `filter-reglvl` | `default` | `ctx` / `builder_cfg`,`reg_level`,`start_level` |
 | 3 | `load-model` | `load-model` | `default` | `ctx` |
 | 4 | `sweep` | `expand-sweep` | `default` | `ctx` / `root_cfg` |
@@ -26,13 +26,13 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | 6 | `gate-pre` | `early-stop-gate` (phase=pre) | `default` | `ctx` / `early_stop` |
 | 7 | `filelist` | `write-filelist` | `default` | `ctx` (writes `run.<tag>.f`) |
 | 8 | `cc-build` | `build-compile-cmd` | `default` | `ctx`,`filelist` / `builder_cfg`,`builder_mode`,`logs_dir` (Path from `ensure-logs`) |
-| 9 | `cc-run` | `run-process` | `default` | `command` / `env_ready` (from `ensure-logs`) |
+| 9 | `cc-run` | `run-process` | `default` | `command` / `env_ready` (from `prepend-path`; edge `required: true`, persistent) |
 | 10 | `cc-int` | `interpret-compile` | `keyed_join` (`key_field: key`) | `ctx`,`proc` |
 | 11 | `gate-comp` | `early-stop-gate` (phase=comp) | `default` | `ctx` / `early_stop` |
 | 12 | `runs` | `expand-runs` | `default` | `ctx` / `run_ids` |
 | 13 | `seed` | `resolve-seed` | `default` | `ctx` / `seed_mode`,`builder_cfg`,`logs_dir` (Path from `ensure-logs`) |
 | 14 | `sim-build` | `build-sim-cmd` | `default` | `ctx`,`seed` / `builder_cfg`,`builder_mode`,`logs_dir` (Path from `ensure-logs`) |
-| 15 | `sim-run` | `run-process` | `default` | `command`,`timeout` / `env_ready` (from `ensure-logs`) |
+| 15 | `sim-run` | `run-process` | `default` | `command`,`timeout` / `env_ready` (from `prepend-path`; edge `required: true`, persistent) |
 | 16 | `randseed` | `write-randseed` | `keyed_join` (`key_field: key`) | `ctx`,`proc`,`sim_cmd` |
 | 17 | `link-latest` | `link-latest` | `default` | `test_run` |
 | 18 | `sim-int` | `interpret-sim` | `default` | `test_run` |
@@ -65,19 +65,45 @@ specified but is **no longer wired** in the `test` graph.
 
 ### `unit` — the run-once nodes
 The setup chain (`discover-root` → `parse-root` → `select-platform` → `resolve-builder`,
-plus `check-cwd` → `parse-suite`, `check-cwd` → `ensure-logs`, `prepend-path` →
-`ensure-logs`, and `seed-mode`) and the selection front (`route-list`, `list-names`,
-`select`) each run exactly once. `unit` reads one item per port, invokes once, then
-returns `EndSentinel` forever. `select`'s generator fans out all tests from that single
-invocation. `discover-root` and `prepend-path` are zero-input, which also run once.
-`prepend-path` and `ensure-logs` together form the env-setup chain whose terminal
-`env_ready` token feeds `cc-run.env_ready` and `sim-run.env_ready`, sequencing both the
-`$PATH` mutation and the `logs/` `mkdir` strictly upstream of every subprocess via the
-harness's data-dependency ordering. `ensure-logs` additionally takes `work_dir` from
-`check-cwd` (the validated base directory — a second consumer of `check-cwd`'s outputs,
-alongside `parse-suite` on the `default` port) and roots the artefact directory on it, emitting
-the resolved `logs_dir` Path that the composers consume. Because `work_dir` is read (not an
-ordering-only token), a missing edge fails edge-validation rather than silently mistargeting.
+plus `check-cwd` → `parse-suite`, `check-cwd` → `ensure-logs`, and `seed-mode`) plus the
+list-mode classifier `route-list` each run exactly once. `unit` reads one item per port, invokes
+once, then returns `EndSentinel` forever. Each of these nodes always receives exactly one value on
+every required port, so `unit`'s "`EndSentinel` before data is a `missing_required_inputs` error"
+rule never fires for them. `discover-root` and `prepend-path` are zero-input, which also run once.
+
+The two env-setup orderings are independent data edges, **not** a chain through `ensure-logs`:
+
+- **PATH prepend** — `prepend-path` emits an `env_ready` token wired directly to
+  `cc-run.env_ready` and `sim-run.env_ready`. Each edge is marked **`required: true`** and
+  `env_ready` is in each `run-process`'s `persistent_inputs`: `required` suppresses the module's
+  Python default so the **first** invocation blocks until the `$PATH` mutation is done (a hard
+  dependency), and `persistent` caches the once-emitted token to replay it on the streaming later
+  invocations. See [07 settled 25](07-ambiguities-and-assumptions.md).
+- **`logs/` `mkdir`** — `ensure-logs` takes `work_dir` from `check-cwd` (the validated base
+  directory — a second consumer of `check-cwd`'s outputs, alongside `parse-suite`), `mkdir`s the
+  artefact directory, then emits the resolved `logs_dir` `Path`. The composers consume `logs_dir`
+  as a first-run-required input (no Python default), so they block on it before building a command;
+  because the `mkdir` precedes the emit, the directory provably exists before any subprocess
+  redirects into it. No `env_ready` token is needed for the `mkdir`, and `ensure-logs` depends only
+  on what it reads (`work_dir`) — a missing edge fails edge-validation rather than silently
+  mistargeting.
+
+### `default` — the post-branch run-once nodes (`select`, `list-names`)
+`route-list` emits on exactly **one** of its `run`/`list` ports per run, so the *other*
+branch's downstream node receives only the `EndSentinel` that the harness broadcasts to every
+destination at node end (`node.py` end-of-run propagation). `select` (on `run`) and
+`list-names` (on `list`) are therefore each fed an empty stream whenever the other branch is
+taken. They use `default`, **not** `unit`, precisely because `default` returns `EndSentinel`
+silently when its single required port ends with no data (it only logs `mismatched_end` on a
+*partial* end — some required ports with data, others ended), whereas `unit` would log
+`missing_required_inputs` (an `ERROR`, which flips the harness failure flag → exit 1) for the
+unfired branch. With `default`, a normal run drains `list-names` cleanly and a `--list` run
+drains `select` cleanly — neither raises a spurious error, so list-mode exits 0 and a passing
+run is not forced to exit 1. Each still runs at most once: `route-list` delivers a single
+`suite_cfg`, so the node invokes once and `select`'s generator fans out all tests from that one
+invocation. `select`'s `test_name` is a CLI edge (`has_default`, so non-blocking); it is
+delivered at startup, ahead of the `suite_cfg` that traverses the whole setup + `route-list`
+chain, so the contract's non-blocking read always sees it.
 
 ### `default` (+ `persistent_inputs`) — the linear stages
 Most stages take exactly one work payload (`ctx`, or `command`) plus cached config. The
@@ -141,10 +167,12 @@ One output may feed many destinations (output fan-out is allowed; the single-sou
 constrains *input* ports only). Config broadcasts:
 
 - setup chain: `discover-root` → `parse-root` → `select-platform` → `resolve-builder`
-- env setup: `prepend-path` → `ensure-logs.env_ready`; `check-cwd.work_dir` → `ensure-logs.work_dir`,
-  `filelist.work_dir`, `cc-build.work_dir` (persistent base-dir fan-out: `filelist` roots
-  `run.<tag>.f`, `cc-build` roots `obj_dir_<tag>/`); `ensure-logs.env_ready` → `cc-run.env_ready`,
-  `sim-run.env_ready` (chained token)
+- env setup: `prepend-path` → `cc-run.env_ready`, `sim-run.env_ready` (direct token, each edge
+  `required: true` with `env_ready` persistent on the consumer); `check-cwd.work_dir` →
+  `ensure-logs.work_dir`, `filelist.work_dir`,
+  `cc-build.work_dir` (persistent base-dir fan-out: `filelist` roots `run.<tag>.f`, `cc-build`
+  roots `obj_dir_<tag>/`). `ensure-logs` carries no `env_ready` — its `mkdir` is ordered by the
+  `logs_dir` data edge below.
 - `parse-root.root_cfg` → `select-platform`, `resolve-builder` (`unit`); `sweep`, `preproc` (persistent)
 - `resolve-builder.builder_cfg` → `filter`, `cc-build`, `seed`, `sim-build` (persistent)
 - `parse-suite.suite_cfg` → `route-list`; `route-list.run` → `select`, `route-list.list` → `list-names`

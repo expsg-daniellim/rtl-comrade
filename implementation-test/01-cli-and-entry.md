@@ -83,9 +83,11 @@ the full rationale.
 
 The artefact directory itself is materialised by an [`ensure-logs-dir`](03-module-catalog.md)
 setup node fed by the CLI `logs_dir` edge (default `"logs"` — parity with rtl_buddy). It
-runs once at startup, after `check-suite-cwd` has validated the CWD and after
-`prepend-cwd-path` has fixed `$PATH`, then unblocks every subprocess via the chained
-`env_ready` sequencing surface. See [07 settled 26](07-ambiguities-and-assumptions.md).
+runs once at startup, after `check-suite-cwd` has validated the CWD, and emits the resolved
+`logs_dir` `Path`; the subprocess composers block on that (first-run-required) value before
+building a command, so the `mkdir` is ordered ahead of every redirect by the data edge itself.
+The `$PATH` fix is sequenced separately by `prepend-cwd-path → run-process.env_ready`
+(`required: true`). See [07 settled 25/26](07-ambiguities-and-assumptions.md).
 
 ## What the harness does NOT give us
 

@@ -103,10 +103,13 @@ or scalars (`Path`, `bool`, `str`). Colours:
 - **grey, dashed** — the 13 **unwired** terminal ports routing an item *off the main line*
   (and `git-status`, which falls through to the console);
 - **orange** — setup chain + persistent config broadcasts (`root_cfg`, `builder_cfg`, …);
-- **purple** — env-setup sequencing (`env_ready`) plus artefact-dir provenance: `check-cwd`
-  emits `work_dir`, which `ensure-logs` roots `logs/` on (emitting the resolved directory `Path`
-  to the path composers) and which `filelist` / `cc-build` root `run.<tag>.f` / `obj_dir_<tag>/`
-  on directly — ordering the `$PATH` prepend and `logs/` `mkdir` upstream of every subprocess;
+- **purple** — env-setup ordering plus artefact-dir provenance: the `$PATH` prepend is sequenced
+  by `prepend-path`'s `env_ready` token wired **directly** to each `run-process` (edge
+  `required: true` + `env_ready` persistent — `required` blocks the first subprocess until PATH is
+  set, `persistent` replays the once-emitted token); the `logs/` `mkdir` is ordered by the
+  `logs_dir` **data** edge — `check-cwd` emits `work_dir`, which `ensure-logs` roots `logs/` on
+  (emitting the resolved directory `Path` to the path composers) and which `filelist` / `cc-build`
+  root `run.<tag>.f` / `obj_dir_<tag>/` on directly;
 - **green** — CLI subcommand options (rounded nodes).
 
 `select`/`sweep`/`runs` are the only fan-out generators; `cc-int`/`randseed` the only joins
@@ -114,83 +117,82 @@ or scalars (`Path`, `bool`, `str`). Colours:
 
 ```mermaid
 flowchart TD
-  route_list["route-list"] -->|"run:SuiteConfig"| select["select<br/>(fan-out)"]
-  select -->|"ctx:dict"| filter["filter"]
-  filter -->|"keep:dict"| load_model["load-model"]
-  load_model -->|"ctx:dict"| sweep["sweep<br/>(fan-out)"]
-  sweep -->|"ctx:dict"| preproc["preproc"]
-  preproc -->|"payload:dict"| gate_pre["gate-pre"]
-  gate_pre -->|"go:dict"| filelist["filelist"]
-  filelist -->|"ctx:dict + filelist:dict"| cc_build["cc-build"]
-  cc_build -->|"command:dict"| cc_run["cc-run<br/>(run-process)"]
-  cc_build -->|"ctx:dict"| cc_int["cc-int<br/>(keyed_join)"]
-  cc_run -->|"proc:dict"| cc_int
-  cc_int -->|"ok:dict"| gate_comp["gate-comp"]
-  gate_comp -->|"go:dict"| runs["runs<br/>(fan-out)"]
-  runs -->|"ctx:dict"| seed["seed"]
-  seed -->|"ctx:dict + seed:dict"| sim_build["sim-build"]
-  sim_build -->|"command:dict + timeout:Optional[float]"| sim_run["sim-run<br/>(run-process)"]
-  sim_build -->|"ctx:dict + sim_cmd:dict"| randseed["randseed<br/>(keyed_join)"]
-  sim_run -->|"proc:dict"| randseed
-  randseed -->|"test_run:dict"| link_latest["link-latest"]
-  link_latest -->|"test_run:dict"| sim_int["sim-int"]
-  sim_int -->|"ok:dict"| gate_sim["gate-sim"]
-  gate_sim -->|"go:dict"| route_post["route-post"]
-  route_post -->|"plain:dict"| parse_log["parse-log"]
-  route_post -->|"uvm:dict"| parse_uvm["parse-uvm-log"]
-  route_list -->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
+  route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select<br/>(fan-out)"]
+  select m2@-->|"ctx:dict"| filter["filter"]
+  filter m3@-->|"keep:dict"| load_model["load-model"]
+  load_model m4@-->|"ctx:dict"| sweep["sweep<br/>(fan-out)"]
+  sweep m5@-->|"ctx:dict"| preproc["preproc"]
+  preproc m6@-->|"payload:dict"| gate_pre["gate-pre"]
+  gate_pre m7@-->|"go:dict"| filelist["filelist"]
+  filelist m8@-->|"ctx:dict + filelist:dict"| cc_build["cc-build"]
+  cc_build m9@-->|"command:dict"| cc_run["cc-run<br/>(run-process)"]
+  cc_build m10@-->|"ctx:dict"| cc_int["cc-int<br/>(keyed_join)"]
+  cc_run m11@-->|"proc:dict"| cc_int
+  cc_int m12@-->|"ok:dict"| gate_comp["gate-comp"]
+  gate_comp m13@-->|"go:dict"| runs["runs<br/>(fan-out)"]
+  runs m14@-->|"ctx:dict"| seed["seed"]
+  seed m15@-->|"ctx:dict + seed:dict"| sim_build["sim-build"]
+  sim_build m16@-->|"command:dict + timeout:Optional[float]"| sim_run["sim-run<br/>(run-process)"]
+  sim_build m17@-->|"ctx:dict + sim_cmd:dict"| randseed["randseed<br/>(keyed_join)"]
+  sim_run m18@-->|"proc:dict"| randseed
+  randseed m19@-->|"test_run:dict"| link_latest["link-latest"]
+  link_latest m20@-->|"test_run:dict"| sim_int["sim-int"]
+  sim_int m21@-->|"ok:dict"| gate_sim["gate-sim"]
+  gate_sim m22@-->|"go:dict"| route_post["route-post"]
+  route_post m23@-->|"plain:dict"| parse_log["parse-log"]
+  route_post m24@-->|"uvm:dict"| parse_uvm["parse-uvm-log"]
+  route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
 
-  filter -."skip:SkipResults".-> TERM["unwired terminal ports<br/>each edge carries result:dict = {key:str, result:TestResults}<br/>pass-like: log.info(test_result); fail/timeout: log.error(domain event w/ result,desc) → exit 1<br/>SummaryProcessor watch-list collects them; renders the table in finalise()"]
-  load_model -."fail:TestResults(FAIL)".-> TERM
-  sweep -."fail:TestResults(FAIL)".-> TERM
-  preproc -."fail:TestResults(FAIL)".-> TERM
-  gate_pre -."stop:EarlyStopResults".-> TERM
-  filelist -."fail:TestResults(FAIL)".-> TERM
-  cc_int -."fail:CompileFailResults".-> TERM
-  gate_comp -."stop:EarlyStopResults".-> TERM
-  seed -."fail:TestResults(FAIL)".-> TERM
-  sim_int -."timeout:SimTimeoutResults".-> TERM
-  gate_sim -."stop:EarlyStopResults".-> TERM
-  parse_log -."result:TestResults".-> TERM
-  parse_uvm -."result:TestResults".-> TERM
+  filter t1@-."skip:SkipResults".-> TERM["unwired terminal ports<br/>each edge carries result:dict = {key:str, result:TestResults}<br/>pass-like: log.info(test_result); fail/timeout: log.error(domain event w/ result,desc) → exit 1<br/>SummaryProcessor watch-list collects them; renders the table in finalise()"]
+  load_model t2@-."fail:TestResults(FAIL)".-> TERM
+  sweep t3@-."fail:TestResults(FAIL)".-> TERM
+  preproc t4@-."fail:TestResults(FAIL)".-> TERM
+  gate_pre t5@-."stop:EarlyStopResults".-> TERM
+  filelist t6@-."fail:TestResults(FAIL)".-> TERM
+  cc_int t7@-."fail:CompileFailResults".-> TERM
+  gate_comp t8@-."stop:EarlyStopResults".-> TERM
+  seed t9@-."fail:TestResults(FAIL)".-> TERM
+  sim_int t10@-."timeout:SimTimeoutResults".-> TERM
+  gate_sim t11@-."stop:EarlyStopResults".-> TERM
+  parse_log t12@-."result:TestResults".-> TERM
+  parse_uvm t13@-."result:TestResults".-> TERM
 
-  discover_root["discover-root"] -->|"path:Path"| parse_root["parse-root"]
-  parse_root -->|"root_cfg:RootConfig"| select_platform["select-platform"]
-  select_platform -->|"platform_cfg:PlatformConfigFile"| resolve_builder["resolve-builder"]
-  check_cwd["check-cwd"] -->|"test_config_path:Path"| parse_suite["parse-suite"]
-  parse_root -. "root_cfg:RootConfig" .-> sweep
-  parse_root -. "root_cfg:RootConfig" .-> preproc
-  resolve_builder -. "builder_cfg:RtlBuilderConfig" .-> filter
-  resolve_builder -. "builder_cfg:RtlBuilderConfig" .-> cc_build
-  resolve_builder -. "builder_cfg:RtlBuilderConfig" .-> seed
-  resolve_builder -. "builder_cfg:RtlBuilderConfig" .-> sim_build
-  seed_mode["seed-mode"] -. "seed_mode:SeedMode" .-> seed
-  parse_suite -. "suite_cfg:SuiteConfig" .-> route_list
+  discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
+  parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
+  select_platform c3@-->|"platform_cfg:PlatformConfigFile"| resolve_builder["resolve-builder"]
+  check_cwd["check-cwd"] c4@-->|"test_config_path:Path"| parse_suite["parse-suite"]
+  parse_root c5@-. "root_cfg:RootConfig" .-> sweep
+  parse_root c6@-. "root_cfg:RootConfig" .-> preproc
+  resolve_builder c7@-. "builder_cfg:RtlBuilderConfig" .-> filter
+  resolve_builder c8@-. "builder_cfg:RtlBuilderConfig" .-> cc_build
+  resolve_builder c9@-. "builder_cfg:RtlBuilderConfig" .-> seed
+  resolve_builder c10@-. "builder_cfg:RtlBuilderConfig" .-> sim_build
+  seed_mode["seed-mode"] c11@-. "seed_mode:SeedMode" .-> seed
+  parse_suite c12@-. "suite_cfg:SuiteConfig" .-> route_list
 
-  prepend_path["prepend-path"] -->|"env_ready:bool"| ensure_logs["ensure-logs"]
-  check_cwd -->|"work_dir:Path"| ensure_logs
-  check_cwd -->|"work_dir:Path"| filelist
-  check_cwd -->|"work_dir:Path"| cc_build
-  ensure_logs -->|"env_ready:bool"| cc_run
-  ensure_logs -->|"env_ready:bool"| sim_run
-  ensure_logs -->|"logs_dir:Path"| cc_build
-  ensure_logs -->|"logs_dir:Path"| sim_build
-  ensure_logs -->|"logs_dir:Path"| seed
+  prepend_path["prepend-path"] e1@-->|"env_ready:bool"| cc_run
+  prepend_path e2@-->|"env_ready:bool"| sim_run
+  check_cwd e3@-->|"work_dir:Path"| ensure_logs["ensure-logs"]
+  check_cwd e4@-->|"work_dir:Path"| filelist
+  check_cwd e5@-->|"work_dir:Path"| cc_build
+  ensure_logs e6@-->|"logs_dir:Path"| cc_build
+  ensure_logs e7@-->|"logs_dir:Path"| sim_build
+  ensure_logs e8@-->|"logs_dir:Path"| seed
 
-  c_test_config(["test_config"]) -->|"test_config:str"| check_cwd
-  c_logs_dir(["logs_dir (name)"]) -->|"logs_dir:str"| ensure_logs
-  c_builder(["builder"]) -->|"builder:str"| resolve_builder
-  c_test_name(["test_name"]) -->|"test_name:str"| select
-  c_list(["list"]) -->|"list:bool"| route_list
-  c_rnd_new(["rnd_new"]) -->|"rnd_new:bool"| seed_mode
-  c_rnd_last(["rnd_last"]) -->|"rnd_last:bool"| seed_mode
-  c_builder_mode(["builder_mode"]) -->|"builder_mode:str"| cc_build
-  c_builder_mode -->|"builder_mode:str"| sim_build
-  c_early_stop(["early_stop"]) -->|"early_stop:str"| gate_pre
-  c_early_stop -->|"early_stop:str"| gate_comp
-  c_early_stop -->|"early_stop:str"| gate_sim
+  c_test_config(["test_config"]) g1@-->|"test_config:str"| check_cwd
+  c_logs_dir(["logs_dir (name)"]) g2@-->|"logs_dir:str"| ensure_logs
+  c_builder(["builder"]) g3@-->|"builder:str"| resolve_builder
+  c_test_name(["test_name"]) g4@-->|"test_name:str"| select
+  c_list(["list"]) g5@-->|"list:bool"| route_list
+  c_rnd_new(["rnd_new"]) g6@-->|"rnd_new:bool"| seed_mode
+  c_rnd_last(["rnd_last"]) g7@-->|"rnd_last:bool"| seed_mode
+  c_builder_mode(["builder_mode"]) g8@-->|"builder_mode:str"| cc_build
+  c_builder_mode g9@-->|"builder_mode:str"| sim_build
+  c_early_stop(["early_stop"]) g10@-->|"early_stop:str"| gate_pre
+  c_early_stop g11@-->|"early_stop:str"| gate_comp
+  c_early_stop g12@-->|"early_stop:str"| gate_sim
 
-  git_status["git-status"] -. "log git_state (→ console)" .-> GS(["console"])
+  git_status["git-status"] gs1@-. "log git_state (→ console)" .-> GS(["console"])
 
   classDef fanout fill:#e6f2ff,stroke:#1f6feb;
   classDef join fill:#fff3cd,stroke:#bf8700;
@@ -201,18 +203,20 @@ flowchart TD
   class TERM term;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
-  %% main-line continue ports (blue)
-  linkStyle 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24 stroke:#1f6feb,stroke-width:2px
-  %% terminal routing (grey, dashed via -.->)
-  linkStyle 25,26,27,28,29,30,31,32,33,34,35,36,37 stroke:#6e7781,stroke-width:1px
-  %% setup chain + persistent config (orange)
-  linkStyle 38,39,40,41,42,43,44,45,46,47,48,49 stroke:#bf8700,stroke-width:1.5px
-  %% env sequencing + artefact-dir provenance (purple)
-  linkStyle 50,51,52,53,54,55,56,57,58 stroke:#8250df,stroke-width:1.5px
-  %% CLI options (green)
-  linkStyle 59,60,61,62,63,64,65,66,67,68,69,70 stroke:#1a7f37,stroke-width:1.5px
-  %% git-status (grey)
-  linkStyle 71 stroke:#6e7781,stroke-width:1px
+  %% edge styling by class — each styled edge has a unique ID; per-type class lists below.
+  %% Inserting/removing an edge: add/remove its ID in one list; no positional renumbering.
+  classDef mainEdge stroke:#1f6feb,stroke-width:2px;
+  classDef termEdge stroke:#6e7781,stroke-width:1px;
+  classDef cfgEdge stroke:#bf8700,stroke-width:1.5px;
+  classDef envEdge stroke:#8250df,stroke-width:1.5px;
+  classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
+  classDef gitEdge stroke:#6e7781,stroke-width:1px;
+  class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21,m22,m23,m24,m25 mainEdge;
+  class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 termEdge;
+  class c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
+  class e1,e2,e3,e4,e5,e6,e7,e8 envEdge;
+  class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;
+  class gs1 gitEdge;
 ```
 
 There is **no fan-in node** — the 13 terminal ports are unwired and the summary is a logging

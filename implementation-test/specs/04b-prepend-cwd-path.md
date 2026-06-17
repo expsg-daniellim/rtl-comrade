@@ -64,10 +64,12 @@ In `modules/rtl_buddy/setup.py`:
   (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors
   `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, which does the same once at CLI
   bootstrap; here it is an explicit graph node so the responsibility is visible. Zero
-  input ports; runs once via `unit`. Emits `True` on `default`; the value is consumed by
-  `run-process` as a `env_ready` sequencing input (see [07 settled
-  25](../07-ambiguities-and-assumptions.md)). See [Algorithm](#algorithm) for the numbered
-  steps.
+  input ports; runs once via `unit`. Emits `True` on `default`; the graph wires it **directly**
+  to each `run-process`'s `env_ready` port (no relay through `ensure-logs`), with the edge marked
+  **`required: true`** and `env_ready` in the consumer's `persistent_inputs` — so the first
+  subprocess blocks until the PATH mutation is done (hard ordering) and the once-emitted token is
+  replayed on later invocations (see [07 settled 25](../07-ambiguities-and-assumptions.md)). See
+  [Algorithm](#algorithm) for the numbered steps.
   **Failure handling**: none. Dict mutation cannot meaningfully fail; no failure port,
   no log call.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.

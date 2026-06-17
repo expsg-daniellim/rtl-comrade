@@ -2,10 +2,9 @@
 
 **Depends on:** spec 01 (schema), spec [10a](10a-early-stop-gate.md) /
 [10b](10b-git-status.md) (emit the `test_result` events this processor accumulates). Uses the
-**per-run processor-finalisation hook**, a shipped harness feature: `App.cleanup` finalises the
-run's processors (then handlers), duck-typed, before the failure check and not on a `CRITICAL`
-exit (`docs/logger/implementation.md:95-99`, timing at `:165-167`; see
-[07 item 27](../07-ambiguities-and-assumptions.md)). No dependency on spec 02 — the
+**per-run processor-finalisation hook**: `App.cleanup` finalises the run's processors (then
+handlers), duck-typed, before the failure check and not on a `CRITICAL` exit
+(`docs/logger/implementation.md:95-99`, timing at `:165-167`). No dependency on spec 02 — the
 `fan-in-results` relay was removed by TODO #15.
 **References:** [03 — Control section](../03-module-catalog.md),
 [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node),
@@ -239,9 +238,9 @@ for the suppression cases. No graph/harness needed.
 
 ## Notes
 
-This uses the per-run processor-finalisation hook, a shipped harness feature documented at
+This uses the per-run processor-finalisation hook documented at
 `docs/logger/implementation.md:95-99` (timing at `:165-167`; see
-[07 item 27](../07-ambiguities-and-assumptions.md)) — not an assumed-open gap. Adding a new
+[07 item 27](../07-ambiguities-and-assumptions.md)). Adding a new
 terminal-result source means **either** emitting `test_result` at
 the new site (the parsers / `filter.skip` / `early-stop` pattern) **or** adding the site's own
 event name to the `Config` watch-list (the failure-terminal pattern) — no edge change either way.

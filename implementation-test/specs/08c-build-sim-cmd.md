@@ -120,7 +120,8 @@ In `modules/rtl_buddy/sim.py`:
   `command`) so the downstream `keyed_join` `write-randseed` can perform the
   `"hier_inst_seed" in argv` membership check rtl_buddy does (spec
   [08d](08d-write-randseed.md)). Does not `mkdir(logs_dir)` — `ensure-logs-dir` has already
-  bootstrapped the directory via the env_ready chain. Emits in lockstep:
+  bootstrapped the directory, and this node blocks on its (first-run-required) `logs_dir` input
+  before composing, so the directory exists by the time `run-process` redirects into it. Emits in lockstep:
   `("ctx", ctx)` (unchanged), `("sim_cmd", {"key", "seed", "log", "err", "randseed_path",
   "argv"})`, `("command", {"key", "argv", "stdout_path", "stderr_path"})`,
   `("timeout", float | None)`.

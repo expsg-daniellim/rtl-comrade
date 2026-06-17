@@ -179,10 +179,18 @@ informational.
     [`prepend-cwd-path`](03-module-catalog.md) (spec
     [04](specs/04-setup-modules.md)), a zero-input `unit` setup node that performs
     the same idempotent prepend and emits a `bool` sentinel on `default`.
-    `run-process` declares a generic persistent input `env_ready:bool = True`; the
-    graph wires `prepend-path → cc-run.env_ready` and `prepend-path → sim-run.env_ready`
-    so the harness's data-dependency ordering pins the mutation strictly upstream of
-    every subprocess (no race window). The input name is deliberately generic so any
+    `run-process` declares a generic input `env_ready:bool = True`; the graph wires
+    `prepend-path → cc-run.env_ready` and `prepend-path → sim-run.env_ready` **directly**
+    (no relay through `ensure-logs`), marks each edge **`required: true`**
+    (`docs/harness_configs/graph.md`), **and** lists `env_ready` in each `run-process`'s
+    `persistent_inputs`. The two markings together reproduce the `logs_dir` pattern: `required`
+    has the contract ignore the module's Python default, so the **first** invocation is a blocking
+    required port — pinning the PATH mutation strictly upstream of the first subprocess — while
+    `persistent` caches that one token and replays it on every later invocation (`prepend-path`, a
+    `unit` node, emits `env_ready` once, whereas `cc-run`/`sim-run` run once per test). The Python
+    default `True` is retained so the module stays unit-testable in isolation (tests pass
+    `env_ready=True`); `required`/`persistent` are per-wiring properties, so both that and the
+    blocking ordering hold at once. The input name is deliberately generic so any
     future env-setup node can join the same sequencing surface. **Considered and
     rejected**: (a) doing the mutation inside `run-process` (per-call, mutates
     process-wide state in the inner loop, widens the workhorse's responsibility);
@@ -215,10 +223,18 @@ informational.
     — it is a CLI edge to `ensure-logs-dir` only. `write-randseed` does not consume `logs_dir` —
     `build-sim-cmd` emits `randseed_path` in `sim_cmd` so the `keyed_join` receives it as a
     dedicated keyed port (no persistent config port on keyed_join — see Implementation notes).
-    **Sequencing**: the env-setup chain is `prepend-path → ensure-logs → cc-run/sim-run.env_ready`;
-    `ensure-logs` takes `work_dir` from `check-cwd` as **load-bearing** data (it is read to root
-    the directory, so a missing edge fails edge-validation — superseding the former ordering-only
-    `_cwd` token, whose defaulted-port exemption per item 21 could silently skip the guard).
+    **Sequencing**: `ensure-logs-dir` carries **no `env_ready` token** (revised; an earlier draft
+    relayed one `prepend-path → ensure-logs → cc-run/sim-run`). The two env-setup orderings are now
+    independent data edges: the PATH prepend is sequenced by `prepend-path → cc-run/sim-run.env_ready`
+    (`required: true`, item 25) directly, and the `logs/` `mkdir` is sequenced by the `logs_dir`
+    **data** edge — `ensure-logs-dir` `mkdir`s *before* emitting `logs_dir`, and the composers take
+    `logs_dir` as a first-run-required input (no Python default), so they block on it before building
+    a command and the directory provably exists before any subprocess redirects into it. No relay
+    token is needed for the `mkdir`, which restores `ensure-logs-dir`'s atomicity (it depends only on
+    `work_dir`, which it reads). `ensure-logs` takes `work_dir` from `check-cwd` as **load-bearing**
+    data (read to root the directory, so a missing edge fails edge-validation — superseding the
+    former ordering-only `_cwd` token, whose defaulted-port exemption per item 21 could silently
+    skip the guard).
     **Lifecycle**: never auto-cleaned (parity); user owns purging. **Concurrency**: filenames
     within `logs/` are uniquely keyed by `<test_name>[_NNNN]` (sweep + run-id), so no
     within-directory collisions even when the [item 17](07-ambiguities-and-assumptions.md) interim
@@ -245,17 +261,14 @@ informational.
     spec in [10](specs/10-control-aggregate-modules.md).
 
     **Plugin form revised 2026-06-11 (processor, not handler).** The plugin was first specified
-    as a `SummaryHandler` (`logging.Handler`) + a paired `drop_summary_events` processor — a
-    workaround written when it was believed only handlers got an end-of-run hook, so a stateful
-    aggregator that renders once at run end was forced into a handler. A processor is the right
-    kind (processor classes hold state; a processor sits before `ConsoleRenderer` to
-    intercept-and-accumulate result events; and `DropEvent` — a processor-only mechanism —
-    suppresses their per-event lines in the *same* object, removing the second piece). **The
-    per-run finalisation hook already covers processors:** `App.cleanup` finalises the run's
-    processors (then handlers), duck-typed, before the failure check and not on a `CRITICAL`
-    exit (`docs/logger/implementation.md:95-99`, timing at `:165-167`). So this is a **shipped
-    harness feature, not an assumed-open gap** (review R6); the plugin is now the single
-    `SummaryProcessor` whose `finalise()` renders the table.
+    as a `SummaryHandler` (`logging.Handler`) + a paired `drop_summary_events` processor; it is now
+    a single `SummaryProcessor`. A processor is the right kind: processor classes hold state, a
+    processor sits before `ConsoleRenderer` to intercept-and-accumulate result events, and
+    `DropEvent` — a processor-only mechanism — suppresses their per-event lines in the *same*
+    object, removing the second piece. The per-run finalisation hook covers processors:
+    `App.cleanup` finalises the run's processors (then handlers), duck-typed, before the failure
+    check and not on a `CRITICAL` exit (`docs/logger/implementation.md:95-99`, timing at
+    `:165-167`). The plugin's `finalise()` renders the table.
     **Knock-on:** supersedes items 3 and
     19; revises items 9 and 10. It also disturbed the interim parallel-safety shim (whose lock
     *release* lived on the now-deleted `fan-in` node) — **TODO #30** resolved that by removing

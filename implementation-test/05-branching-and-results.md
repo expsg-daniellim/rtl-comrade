@@ -41,10 +41,23 @@ stream, reproducing `rtl_buddy`. `--early-stop post` (default) means no gate fir
 
 ## `--list` as an empty stream
 
-`select-tests` with `list=True` prints names and emits nothing. The empty stream
-propagates `EndSentinel` through every node; no terminal site fires, so `SummaryProcessor`
-collects zero `test_result` rows and its `finalise()` is a no-op, no `log.error` fires →
-exit 0. No special casing anywhere else.
+In list-mode `route-list` fires its `list` branch: `list-names` prints the suite's test names
+and the `run` branch never fires. `select` therefore receives only the `EndSentinel` the harness
+broadcasts to every destination at node end, fans out nothing, and the empty stream propagates
+`EndSentinel` through the rest of the pipeline; no terminal site fires, so `SummaryProcessor`
+collects zero `test_result` rows and its `finalise()` is a no-op.
+
+The one subtlety that makes this exit 0 is the contract choice on `select` and `list-names`:
+both use **`default`**, not `unit`. A node fed an empty stream (its required port ends before any
+data) is a `missing_required_inputs` **error** under `unit` (`contracts/unit.py`) — an `ERROR`
+that flips the harness failure flag → exit 1 — but under `default` the same empty stream returns
+`EndSentinel` silently (`contract_default.py` logs only on a *partial* end). Because exactly one
+of `route-list`'s branches is unfired on every run, the *other* branch's node is always fed an
+empty stream: in list-mode that is `select`, in run-mode it is `list-names`. Pairing both with
+`default` is what keeps `--list` at exit 0 and keeps a normal passing run from being forced to
+exit 1 by the unfired `list-names`. See
+[04 — Why each contract](04-pipeline-and-contracts.md#default--the-post-branch-run-once-nodes-select-list-names).
+No special casing anywhere else.
 
 ## Re-convergence: the summary is a logging concern, not a graph node
 

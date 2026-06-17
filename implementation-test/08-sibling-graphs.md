@@ -9,9 +9,9 @@ orchestration nodes differ.
 
 The entire main pipeline carries over with the same contracts and wiring:
 
-- setup chain — `discover-config-file`, `prepend-cwd-path` *(wired to both `run-process`
-  instances via `env_ready` in every graph — see [07 settled
-  25](07-ambiguities-and-assumptions.md))*, `parse-root-config`, `select-platform`,
+- setup chain — `discover-config-file`, `prepend-cwd-path` *(wired directly to both `run-process`
+  instances via `env_ready`, edge `required: true` + `env_ready` persistent, in every graph — see
+  [07 settled 25](07-ambiguities-and-assumptions.md))*, `parse-root-config`, `select-platform`,
   `resolve-builder`, `check-suite-cwd` *(test/randtest only — regression chdir's per-suite,
   see structural note #1)*, `parse-suite-config` *(contract switches for regression — see
   below)*, `load-model`

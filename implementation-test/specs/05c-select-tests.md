@@ -28,10 +28,15 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 the catalog is the design view, this is the build view; update both when behaviour changes.
 
 ```
-contract: unit
+contract: default
 inputs:   suite_cfg, test_name:str = ""
 outputs:  default → ctx   (one per selected test)
 ```
+
+> `default`, **not** `unit`: the unfired `run` branch in list-mode leaves this node fed only an
+> `EndSentinel`, which `unit` would treat as `missing_required_inputs` (→ exit 1). It still runs
+> at most once (one `suite_cfg`); `test_name` is a non-blocking CLI edge delivered ahead of it.
+> Rationale in [04 — Why each contract](../04-pipeline-and-contracts.md#default--the-post-branch-run-once-nodes-select-list-names).
 
 ```python
 class SelectTestsMod:
