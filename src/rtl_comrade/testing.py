@@ -61,9 +61,12 @@ class PortMeta:
 
 	Attributes:
 		has_default: Whether the port should report a default value.
+		required: Whether the port is marked required, forcing the default contract to
+			await a real value even when has_default is set.
 	"""
 
 	has_default: bool = False
+	required: bool = False
 
 
 @dataclass
@@ -152,6 +155,7 @@ async def run_contract_scenario(
 			try_get=port.try_get,
 			has_ended=port.has_ended,
 			has_default=port.has_default,
+			required=meta.get(name, _default_meta).required,
 		)
 		for name, port in ports.items()
 	}

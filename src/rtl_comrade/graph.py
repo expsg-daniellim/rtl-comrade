@@ -98,6 +98,8 @@ class Graph:
 				if not module_mappings[node.module].structure.definite_inputs:
 					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id })
 
+				required_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and edge.dst.required ]
+
 				for name, param in node.cli_config.items():
 					if param.cli in cli_kwargs:
 						node.config[name] = cli_kwargs[param.cli]
@@ -107,7 +109,7 @@ class Graph:
 						node.contract_config[name] = cli_kwargs[param.cli]
 
 				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-				graph.nodes[node.id] = Node(id=node.id, module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports)
+				graph.nodes[node.id] = Node(id=node.id, module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports, required_ports=required_ports)
 			else:
 				errors = True
 

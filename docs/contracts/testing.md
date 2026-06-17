@@ -81,6 +81,18 @@ await run_contract_scenario(
 
 When a default-valued port has nothing queued the contract omits its key from the returned dict, so `"b"` does not appear in `expected_outputs` for that step. Ports not listed in `port_meta` default to `has_default=False`.
 
+`PortMeta` also accepts `required=True` to mark a port required, matching a destination marked `required: true` in the graph config. The built-in default contract then awaits a real value on that port even when `has_default=True`, so the key is never omitted. Pair it with `PortTestInput(value, delay=N)` to assert the contract blocks rather than falling back to the default:
+
+```python
+await run_contract_scenario(
+    MyContract,
+    port_inputs={"a": [1], "b": [PortTestInput(99, delay=1)]},
+    expected_outputs=[{"a": 1, "b": 99}],
+    port_meta={"b": PortMeta(has_default=True, required=True)},
+    config=MyContract.Config(),
+)
+```
+
 ## Optional kwargs
 
 | Kwarg | Default | Purpose |

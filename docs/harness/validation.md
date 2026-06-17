@@ -38,9 +38,11 @@ Both functions share the same purpose: reject obviously bad graphs before execut
 
 The current implementation checks:
 
-- every non-default input port has some incoming edge
+- every first-run-required input port has some incoming edge
 - at least one node is source-capable
 - every node is reachable from some source-capable node
+
+An input is first-run-required when it has no Python default **or** its destination is marked `required: true` in the graph config. A required port blocks at runtime even when it carries a default, so it is not satisfiable locally: a node whose only inputs are required (or default-less) is not source-capable.
 
 ## Validation Philosophy
 

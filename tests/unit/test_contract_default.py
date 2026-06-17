@@ -6,20 +6,21 @@ import typer
 from rtl_comrade.api import Payload, EndSentinel, ContractPort
 from rtl_comrade.contract_default import DefaultContract, is_special
 from rtl_comrade.port import Port
-from rtl_comrade.testing import PortMeta, run_contract_scenario
+from rtl_comrade.testing import PortMeta, PortTestInput, run_contract_scenario
 
 
 def _make_port(name, has_default=False):
 	return Port(name=name, has_default=has_default)
 
 
-def _make_contract_port(port: Port):
+def _make_contract_port(port: Port, required=False):
 	return ContractPort(
 		name=port.name,
 		get=port.get,
 		try_get=port.try_get,
 		has_ended=port.has_ended,
 		has_default=port.has_default,
+		required=required,
 	)
 
 
@@ -58,6 +59,20 @@ def test_is_special_persistent_no_last_value():
 	p = _make_contract_port(_make_port("a"))
 	p.state["persistent"] = True
 	p.state["last_value"] = None
+	assert is_special(p) is False
+
+
+def test_is_special_required_overrides_has_default():
+	p = _make_contract_port(_make_port("a", has_default=True), required=True)
+	p.state["persistent"] = False
+	p.state["last_value"] = None
+	assert is_special(p) is False
+
+
+def test_is_special_required_overrides_persistent_cached():
+	p = _make_contract_port(_make_port("a"), required=True)
+	p.state["persistent"] = True
+	p.state["last_value"] = Payload("src", 0, 99)
 	assert is_special(p) is False
 
 
@@ -263,6 +278,25 @@ async def test_default_port_ended_omitted_from_result():
 	result = await contract.get_inputs()
 	assert isinstance(result, dict)
 	assert "b" not in result
+
+
+async def test_required_default_port_blocks_for_payload():
+	# "b" has a default but is marked required, so the contract must await a real value
+	# delivered after it has started running rather than omitting the key. The sentinels
+	# are delayed past the value so the first call pairs a real "b" with "a".
+	await run_contract_scenario(
+		DefaultContract,
+		port_inputs={
+			"a": [1, PortTestInput(EndSentinel("src"), delay=2)],
+			"b": [PortTestInput(99, delay=1), PortTestInput(EndSentinel("src"), delay=2)],
+		},
+		expected_outputs=[
+			{"a": 1, "b": 99},
+			EndSentinel("test"),
+		],
+		port_meta={"b": PortMeta(has_default=True, required=True)},
+		config=DefaultContract.Config(),
+	)
 
 
 async def test_persistent_port_updates_eagerly_then_reuses():

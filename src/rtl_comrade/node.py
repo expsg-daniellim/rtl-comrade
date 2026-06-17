@@ -48,6 +48,7 @@ class Node:
 		contract: Instantiated contract object controlling scheduling.
 		dsts: Outgoing downstream connections; ``None`` until ``set_dsts`` is called.
 		dst_counts: Running message count per ``(node_id, port)`` destination pair.
+		required_ports: Canonical names of input ports marked required in the graph config.
 	"""
 
 	id: str
@@ -57,8 +58,9 @@ class Node:
 	contract: type[Any]
 	dsts: list[Connection]|None = None
 	dst_counts: dict[tuple[str, str], int] = field(default_factory=dict)
+	required_ports: set[str] = field(default_factory=set)
 
-	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None):  # pylint: disable=redefined-builtin
+	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None, required_ports:list[int|str]|None=None):  # pylint: disable=redefined-builtin
 		"""Instantiate one runtime node from a GraphModule descriptor and a contract class.
 
 		Args:
@@ -69,6 +71,7 @@ class Node:
 			contract_config: Optional contract-specific configuration dictionary.
 			relative_path: Base path used to resolve ``{graph}``-relative config paths.
 			ports: Override port mapping for non-definite-input modules; merged on top of the module's own ports.
+			required_ports: Destination-port references (name or 1-based index) marked required in the graph config.
 
 		Returns:
 			None.
@@ -114,6 +117,9 @@ class Node:
 		if ports is not None:
 			self.ports.update(ports)
 
+		# Resolve config-declared required refs to canonical names; edge validation later reports unresolvable refs.
+		self.required_ports = { name for ref in required_ports or [] if (name := self.get_canonical_port(ref)) is not None }
+
 		# Initialise Contract with available init params
 		try:
 			contract_init_sig = inspect.signature(Contract.__init__)
@@ -139,7 +145,7 @@ class Node:
 			contract_init_args['id'] = self.id + '.contract'
 
 		if 'ports' in contract_init_sig.parameters:
-			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default) for (name, port) in self.ports.items() }
+			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, required=name in self.required_ports) for (name, port) in self.ports.items() }
 		else:
 			# Warn for this one because it's a pretty pointless contract that has no input ports
 			log.warn('init.no_ports', context='harness.node.contract', node=self.id, contract=Contract.__name__)

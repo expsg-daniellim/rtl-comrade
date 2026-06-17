@@ -54,6 +54,8 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 - for modules with definite inputs, `GraphModule.ports` is a fully built `OrderedDict` keyed by parameter name, with `has_default` set from the function signature; the deep-copy is the entire port set
 - for modules with non-definite inputs (`*args` or `**kwargs` in `run(...)`), `GraphModule.ports` is empty; `Graph.from_config` builds override ports from the actual incoming edges and passes them to `Node.__init__` via the `ports` parameter, which are merged in after the deep-copy. Keyword-only parameters do not trigger this path; they are treated as ordinary definite inputs
 
+After the ports are assembled, `Node.__init__` resolves the `required_ports` parameter: `Graph.from_config` collects every destination-port reference whose edge sets `required: true` for this node, and the node resolves each (by name or 1-based index, via `get_canonical_port`) into the canonical-name set `Node.required_ports`. The flag stays off the transport-level `Port`: required-ness is wiring policy expressed in port *names*, held on the node alongside `dsts`. That set drives two consumers — the `ContractPort` adapters built just below (`required = name in self.required_ports`), and `validate_no_static_deadlock`, which reads `node.required_ports` during static validation. Unresolvable references are skipped here; the later edge validation reports them.
+
 The raw `Port` objects are harness-owned runtime queues. Contracts do not receive them directly.
 
 ### Contract instantiation
@@ -71,6 +73,7 @@ Each `ContractPort` exposes:
 - non-blocking `try_get()`
 - `has_ended()`
 - `has_default` — whether the corresponding module parameter carries a Python default
+- `required` — whether the graph config marks this port required; the default contract awaits a real value and ignores `has_default` for such ports
 - a `state` dict for contract-owned per-port bookkeeping
 
 This is the main boundary between harness-owned transport and contract-owned scheduling policy.

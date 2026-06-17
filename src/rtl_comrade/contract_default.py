@@ -19,6 +19,9 @@ def is_special(port:ContractPort) -> bool:
 	already has a cached last value. Special ports may still consume a queued
 	real payload via try_get() before falling back to cached/default behavior.
 
+	A required port is never special: it is always awaited, even when it has a
+	default value, so has_default is ignored for required ports.
+
 	Args:
 		port: Contract-owned port object carrying default/persistent state.
 
@@ -26,7 +29,7 @@ def is_special(port:ContractPort) -> bool:
 		``True`` if the port is currently special, otherwise ``False``.
 	"""
 
-	return (port.state['persistent'] and port.state['last_value'] is not None) or port.has_default
+	return not port.required and ((port.state['persistent'] and port.state['last_value'] is not None) or port.has_default)
 
 @dataclass
 class DefaultContract:

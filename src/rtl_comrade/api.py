@@ -46,6 +46,8 @@ class ContractPort(Generic[T]):
 		try_get: Non-blocking read that returns a queued Payload, EndSentinel, or None.
 		has_ended: Callable that reports whether this port has already observed an EndSentinel.
 		has_default: Whether the corresponding module input has a Python default value.
+		required: Whether the graph config marks this port required; the default contract
+			awaits a real value and ignores has_default for this port.
 		state: Contract-owned mutable state associated with this port.
 	"""
 
@@ -54,4 +56,5 @@ class ContractPort(Generic[T]):
 	try_get: Callable[[], Payload[T]|EndSentinel|None]
 	has_ended: Callable[[], bool]
 	has_default: bool = False
+	required: bool = False
 	state: dict[str, Any] = field(default_factory=dict)

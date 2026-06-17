@@ -99,6 +99,16 @@ def test_dst_port_str():
 	assert d.port == "inp"
 
 
+def test_dst_port_required_default():
+	d = from_dict(GraphConfigDstPort, {"node": "b"})
+	assert d.required is False
+
+
+def test_dst_port_required_explicit():
+	d = from_dict(GraphConfigDstPort, {"node": "b", "port": "inp", "required": True})
+	assert d.required is True
+
+
 # --- GraphFileConfig ---
 
 

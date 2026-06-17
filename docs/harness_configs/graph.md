@@ -76,6 +76,7 @@ edges:
   dst:
     node: <str>              # destination node id
     port: <str|int>          # optional — input port name or 1-based index; defaults to 1
+    required: <bool>         # optional — when true, the default contract awaits a real value on this port even if the input has a default; defaults to false
 ```
 
 ### CLI source
@@ -91,11 +92,14 @@ edges:
   dst:
     node: <str>              # destination node id
     port: <str|int>          # optional — input port name or 1-based index; defaults to 1
+    required: <bool>         # optional — when true, the default contract awaits a real value on this port even if the input has a default; defaults to false
 ```
 
 A CLI edge injects a value supplied on the command line directly into a destination node's input port. The harness creates a virtual `ModuleCLI` node for each distinct `cli` name and wires it to the declared destination. The parameter is surfaced as a subcommand option or argument depending on the `option` field. When `option: false`, the positional argument order matches the declaration order of CLI edges in the `edges` list.
 
 The destination `port` field accepts either a string name matching a `run(...)` parameter name or a 1-based integer index into the parameter list.
+
+The optional `required` field overrides the default contract's treatment of a default-bearing input. Normally an input with a Python default value never blocks: if no value is queued, the contract omits it and the module's default applies. Marking the destination `required: true` forces the contract to await a real value on that port before each invocation, ignoring the input's default. This is a per-wiring property of the edge's destination, not of the module signature. (A port that has no default is always awaited regardless.)
 
 ## Logging configuration
 

@@ -98,10 +98,13 @@ class GraphConfigDstPort:
 	Attributes:
 		node: The id of the downstream destination node.
 		port: The destination input port, addressed either by name or by 1-based position.
+		required: When ``True``, the default contract awaits a real value on this port even
+			if the module input has a default; the input's ``has_default`` is ignored.
 	"""
 
 	node: str
 	port: int|str = field(default = 1)
+	required: bool = field(default = False)
 
 @serde(tagging=Untagged)
 @dataclass(slots=True, frozen=True)

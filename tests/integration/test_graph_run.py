@@ -1016,6 +1016,63 @@ def test_it25_duplicate_cli_name_across_edge_and_config(logging_handler, tmp_pat
 
 
 # ---------------------------------------------------------------------------
+# IT-27: required dst on a default-bearing input forces the node to await input
+# ---------------------------------------------------------------------------
+
+
+def test_it27_required_default_input(logging_handler, tmp_path):
+	# "combine" has b=99 default, but its edge marks b required, so the node awaits a
+	# real value on b instead of running with the default. Exercises the full
+	# config → graph → Node → ContractPort path for both index- and name-addressed dsts.
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        class SrcA:
+            def run(self):
+                yield 1
+                yield 2
+                yield 3
+
+        class SrcB:
+            def run(self):
+                yield 10
+                yield 20
+                yield 30
+
+        class Combine:
+            def run(self, a, b=99):
+                import tests.integration.test_graph_run as t
+                t.SIDE_CHANNEL.append(a + b)
+                return None
+    """,
+	)
+
+	config = GraphConfig(
+		nodes=[
+			_node("src_a", "src_a"),
+			_node("src_b", "src_b"),
+			_node("combine", "combine"),
+		],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcPort(node="src_a"),
+				dst=GraphConfigDstPort(node="combine", port=1),  # index-addressed
+			),
+			GraphConfigEdge(
+				src=GraphConfigSrcPort(node="src_b"),
+				dst=GraphConfigDstPort(node="combine", port="b", required=True),  # name-addressed
+			),
+		],
+		modules=[_pfc(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert SIDE_CHANNEL == [11, 22, 33]
+	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
 # IT-26: duplicate cli name across two nodes' cli_config causes fatal error
 # ---------------------------------------------------------------------------
 

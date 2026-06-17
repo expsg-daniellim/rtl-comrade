@@ -97,14 +97,15 @@ def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 
 	# 1. Every first-run-required input must have an incoming edge.
 	# Persistent without default is required on first run; default-bearing ports are satisfiable locally, including persistent + default.
+	# A config-required port always blocks, so it counts as first-run-required even when it has a default.
 	for node_id, node in graph.nodes.items():
 		for port_name, port in node.ports.items():
-			if not port.has_default and port_name not in incoming[node_id]:
+			if (not port.has_default or port_name in node.required_ports) and port_name not in incoming[node_id]:
 				res.edgeless_inputs.append(node_id)
 
 	# 2. At least one node must be source-capable.
-	# A source-capable node has no first-run-required inputs.
-	sources = { node_id for node_id, node in graph.nodes.items() if all(port.has_default for port in node.ports.values()) }
+	# A source-capable node has no first-run-required inputs; a config-required port is not satisfiable locally.
+	sources = { node_id for node_id, node in graph.nodes.items() if all(port.has_default and port_name not in node.required_ports for port_name, port in node.ports.items()) }
 	res.has_source_capable = bool(sources)
 
 	# 3. Every node must be reachable from some source-capable node.

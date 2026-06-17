@@ -110,6 +110,7 @@ def _make_graph(node_specs):
 		node.id = node_id
 		node.ports = OrderedDict({name: Port(name=name, has_default=hd) for name, hd in ports})
 		node.dsts = []
+		node.required_ports = set()
 		graph.nodes[node_id] = node
 	return graph
 
@@ -168,3 +169,16 @@ def test_deadlock_non_reachable():
 	)
 	result = validate_no_static_deadlock(graph)
 	assert "isolated" in result.non_reachable_nodes
+
+
+def test_deadlock_required_default_port_not_source_capable():
+	# A node whose only input has a default but is marked required is not source-capable,
+	# so a graph resting on it as the sole source is a deadlock.
+	graph = _make_graph(
+		[
+			("only", [("inp", True)]),
+		]
+	)
+	graph.nodes["only"].required_ports = {"inp"}
+	result = validate_no_static_deadlock(graph)
+	assert result.has_source_capable is False

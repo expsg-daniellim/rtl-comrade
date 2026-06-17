@@ -89,6 +89,7 @@ Each `ContractPort` provides:
 - `try_get()`: non-blocking read, returns `Payload`, `EndSentinel`, or `None`
 - `has_ended()`: whether the port has already seen an end sentinel
 - `has_default`: whether the corresponding module parameter has a Python default value
+- `required`: whether the graph config marks this port required; the built-in default contract awaits a real value and ignores `has_default` for such ports
 - `state`: a dict for contract-owned per-port state
 
 Important details:
@@ -205,6 +206,8 @@ class TriggerOnContract:
 If a module input has a Python default value in its `run(...)` signature, `has_default` on the corresponding `ContractPort` is `True`.
 
 The contract signals that a default-valued port should use its Python default by **leaving that port's key out of the returned dict**. The harness then calls `module.run()` without that keyword argument, and Python's own default mechanism applies.
+
+A destination port may be marked `required: true` in the graph config (see [graph.md](../harness_configs/graph.md)). The built-in default contract sets `is_special()` to `False` for such ports, so it always awaits a real value and never falls back to the default, even when `has_default` is `True`. A custom contract reads `ContractPort.required` to honor the same intent.
 
 The built-in default contract shows the intended pattern.
 
