@@ -101,7 +101,7 @@ Each node repeatedly:
 3. unwraps `Payload.payload` into module keyword arguments
 4. runs the module, supporting sync, async, generator, and async-generator forms
 5. normalizes outputs through `process_result(...)`
-6. forwards results to every matching downstream connection
+6. forwards results to every matching downstream connection; if the emitted port matches no connection (and the node has at least one wired destination), it logs `no_destination` at INFO and the value is dropped
 
 After the loop exits:
 
@@ -117,6 +117,7 @@ After the loop exits:
 - destination ports can be resolved by name or by 1-based position
 - output tuples must be exactly `(port_name, value)`
 - `None` is treated as "emit nothing"
+- emitting on a port with no matching downstream connection is **not** an error: the node logs `no_destination` at INFO and drops the value. This fires only when the node has at least one wired destination (`len(self.dsts) > 0`); a node with no wired destinations at all emits nothing and logs nothing. This is the runtime path for deliberately unwired terminal/output ports — it is a `node.py` runtime emission, not a `validation.py` static check
 - non-`rtl_comrade` exceptions caught during contract reflection, config deserialization, construction, and runtime execution are logged with `exc_info=e`; module-side reflection exceptions are handled by `GraphModule.from_module` before `Node` is involved
 - error-level and critical-level logs during node execution intentionally participate in the harness failure model: `ERROR` allows best-effort continued execution, while `CRITICAL` aborts immediately
 - `module.finalise` is detected with `hasattr` + `callable`; a non-callable attribute named `finalise` is silently ignored
