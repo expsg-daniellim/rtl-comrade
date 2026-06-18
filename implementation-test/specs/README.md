@@ -1,29 +1,14 @@
 # Implementation specs
 
-Self-contained, dependency-ordered tickets for building the `test` graph and its modules.
-Every `.md` in this directory is a buildable unit; pick them up in order. The plan files in the
-parent directory (`../00`–`../07`) are the reference, and the per-group navigation indexes
-([`../idx-01`](../idx-01-schema.md), [`../idx-04`](../idx-04-setup.md) …
-[`../idx-10`](../idx-10-control-aggregate.md)) live there too — specs point into both rather than
-duplicate.
+Self-contained, dependency-ordered tickets for building the `test` graph and its modules. Every `.md` in this directory is a buildable unit; pick them up in order. The plan files in the parent directory (`../00`–`../07`) are the reference, and the per-group navigation indexes ([`../idx-01`](../idx-01-schema.md), [`../idx-04`](../idx-04-setup.md) … [`../idx-10`](../idx-10-control-aggregate.md)) live there too — specs point into both rather than duplicate.
 
-Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan.
-[`../08-sibling-graphs.md`](../08-sibling-graphs.md) is a modularity analysis showing the
-extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch for
-`regression`, with the rest of the catalogue reused unchanged.
+Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan. [`../08-sibling-graphs.md`](../08-sibling-graphs.md) is a modularity analysis showing the extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch for `regression`, with the rest of the catalogue reused unchanged.
 
-> **Compatibility sources.** Each module ticket carries a `Compatibility source:` bullet
-> naming the rtl_buddy file:line it mirrors — copied from the inline `Source:` line in
-> [`../03-module-catalog.md`](../03-module-catalog.md). All ranges are anchored to rtl_buddy
-> **`v1.4.0`** (commit `a69d962`; see [`../00`](../00-overview.md)). If rtl_buddy is updated,
-> re-verify every cited range in the catalog and propagate the change here.
+> **Compatibility sources.** Each module ticket carries a `Compatibility source:` bullet naming the rtl_buddy file:line it mirrors — copied from the inline `Source:` line in [`../03-module-catalog.md`](../03-module-catalog.md). All ranges are anchored to rtl_buddy **`v1.4.0`** (commit `a69d962`; see [`../00`](../00-overview.md)). If rtl_buddy is updated, re-verify every cited range in the catalog and propagate the change here.
 
 ## Module package layout (pinned)
 
-The package name and file grouping below are **pinned**, not a suggestion — every module spec
-names exactly one target file, and that path must match this table. The reimplemented modules
-live in a single package `modules/rtl_buddy/` (distinct from the upstream `rtl_buddy/src/...`
-tree the specs cite as compatibility sources).
+The package name and file grouping below are **pinned**, not a suggestion — every module spec names exactly one target file, and that path must match this table. The reimplemented modules live in a single package `modules/rtl_buddy/` (distinct from the upstream `rtl_buddy/src/...` tree the specs cite as compatibility sources).
 
 | File | Modules (plugin name → class) |
 |---|---|
@@ -35,18 +20,9 @@ tree the specs cite as compatibility sources).
 | `graphs/log/summary.py` | `SummaryProcessor` logging plugin (per-graph, not a manifest module) |
 | `contracts/any.py` | `any` → `AnyContract` |
 
-The full manifest (`modules/config.yaml`) with every `class_name` is in
-[`../06-graph-yaml.md`](../06-graph-yaml.md#manifest-additions--modulesconfigyaml); the
-[Shared files](#shared-files) table below records create/append order for the multi-writer files.
+The full manifest (`modules/config.yaml`) with every `class_name` is in [`../06-graph-yaml.md`](../06-graph-yaml.md#manifest-additions--modulesconfigyaml); the [Shared files](#shared-files) table below records create/append order for the multi-writer files.
 
-**Plugin-name scope (no namespace prefix).** Plugin `name:` values are flat strings resolved
-within the `modules/config.yaml` manifest — there is no `rtl_buddy:derive-seed-mode` colon
-syntax (see `docs/harness_configs/plugin_manifest.md`). The harness already keeps the module
-and contract plugin sets structurally disjoint by scoping their `sys.modules` keys with the
-`modules`/`contracts` plugin-set namespace (`docs/harness/loader_utils.md`). Sibling graphs
-(`randtest`, `regression`) **reuse** this same `modules/rtl_buddy/` package rather than
-defining their own, so they share these flat names by design — there is no cross-graph
-collision to prefix against, and none is added.
+**Plugin-name scope (no namespace prefix).** Plugin `name:` values are flat strings resolved within the `modules/config.yaml` manifest — there is no `rtl_buddy:derive-seed-mode` colon syntax (see `docs/harness_configs/plugin_manifest.md`). The harness already keeps the module and contract plugin sets structurally disjoint by scoping their `sys.modules` keys with the `modules`/`contracts` plugin-set namespace (`docs/harness/loader_utils.md`). Sibling graphs (`randtest`, `regression`) **reuse** this same `modules/rtl_buddy/` package rather than defining their own, so they share these flat names by design — there is no cross-graph collision to prefix against, and none is added.
 
 ## Priority order
 
@@ -70,11 +46,7 @@ collision to prefix against, and none is added.
 
 ### Per-module child specs
 
-Specs 04–10 group several modules each; each is split into one buildable
-ticket per module. The group index for each was lifted to the parent directory
-([`../idx-04`](../idx-04-setup.md) … [`../idx-10`](../idx-10-control-aggregate.md)), so this
-directory holds only buildable tickets. The children can be picked
-up independently once their group's deps (above) are met.
+Specs 04–10 group several modules each; each is split into one buildable ticket per module. The group index for each was lifted to the parent directory ([`../idx-04`](../idx-04-setup.md) … [`../idx-10`](../idx-10-control-aggregate.md)), so this directory holds only buildable tickets. The children can be picked up independently once their group's deps (above) are met.
 
 | Group | Children |
 |---|---|
@@ -86,18 +58,11 @@ up independently once their group's deps (above) are met.
 | 09 (post) | [09a route-post](09a-route-post.md) · [09b parse-log](09b-parse-log.md) · [09c parse-uvm-log](09c-parse-uvm-log.md) |
 | 10 (control/summary) | [10a early-stop-gate](10a-early-stop-gate.md) · [10b git-status](10b-git-status.md) · [10c summary-handler](10c-summary-handler.md) |
 
-Within a group the children are independent except for shared-file ordering and the
-explicit `Depends on:` lines each child carries: 05f/06a share the `exec_hook` helper; 06b
-feeds 07a; 07a sets `ctx["simv"]` for 07b and 08c; 08c feeds 08d, which feeds 08e/08f;
-10a/10b emit the events 10c collects.
+Within a group the children are independent except for shared-file ordering and the explicit `Depends on:` lines each child carries: 05f/06a share the `exec_hook` helper; 06b feeds 07a; 07a sets `ctx["simv"]` for 07b and 08c; 08c feeds 08d, which feeds 08e/08f; 10a/10b emit the events 10c collects.
 
 ### Shared files
 
-Several specs write into the same Python file. The **first** spec listed *creates* the file
-(and opens its `modules/config.yaml` manifest block); every other spec *appends* — append, do
-not overwrite. Each spec's `## Before you start` section names its own role; this table is the
-overview. Shared-file ordering does not impose a build order beyond each spec's `Depends on:`
-line — whichever appender runs first must tolerate the file already existing or not.
+Several specs write into the same Python file. The **first** spec listed *creates* the file (and opens its `modules/config.yaml` manifest block); every other spec *appends* — append, do not overwrite. Each spec's `## Before you start` section names its own role; this table is the overview. Shared-file ordering does not impose a build order beyond each spec's `Depends on:` line — whichever appender runs first must tolerate the file already existing or not.
 
 | File | Created by | Appended by |
 |---|---|---|
@@ -106,25 +71,8 @@ line — whichever appender runs first must tolerate the file already existing o
 | `modules/rtl_buddy/sim.py` | [08a](08a-expand-runs.md) | 08b–08f, 09a–09c |
 | `modules/config.yaml` (manifest) | first spec of each block above | the same specs that append the `.py` |
 
-`modules/rtl_buddy/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py`
-(02) each have a single writer. The schema specs (01/01a/01b/01c) share the
-`modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`,
-`uvm.py`, `model.py`, `root.py`, `results.py`, `seed_mode.py`), so coordinate the package
-layout, not a single file. Test files are per spec
-group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`,
-`test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that
-group.
+`modules/rtl_buddy/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py` (02) each have a single writer. The schema specs (01/01a/01b/01c) share the `modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`, `uvm.py`, `model.py`, `root.py`, `results.py`, `seed_mode.py`), so coordinate the package layout, not a single file. Test files are per spec group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`, `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that group.
 
-Specs 01, 01a, 01b, 01c, and 02 can all run in parallel from the start (01b has a
-type-annotation dependency on 01c but no logic dependency; 02 has no external blocker).
-Spec 03 (run-process) appends to the shared `build.py` that 06a creates, so it depends on 06a
-for that file (file-creation ordering only — no logic dependency).
-Specs 04, 05, 06, 09, 10 (and their children) can run
-in parallel after their listed deps. Specs 07 and 08 share `run-process` (spec 03)
-and reuse modules from 04/05/06. Schema fan-in: 01a → 05/07/08; 01b →
-04/05/06/07/08/09; 01c → 05/06.
+Specs 01, 01a, 01b, 01c, and 02 can all run in parallel from the start (01b has a type-annotation dependency on 01c but no logic dependency; 02 has no external blocker). Spec 03 (run-process) appends to the shared `build.py` that 06a creates, so it depends on 06a for that file (file-creation ordering only — no logic dependency). Specs 04, 05, 06, 09, 10 (and their children) can run in parallel after their listed deps. Specs 07 and 08 share `run-process` (spec 03) and reuse modules from 04/05/06. Schema fan-in: 01a → 05/07/08; 01b → 04/05/06/07/08/09; 01c → 05/06.
 
-(Spec 00 — framework verification — was retired on 2026-06-02. Its three probes
-(`**kwargs` port inference, persistent-without-edge, `keyed_join` payload unwrap) were
-all settled by reading the harness docs/source. See
-[07](../07-ambiguities-and-assumptions.md) Settled items 19, 21, 22.)
+(Spec 00 — framework verification — was retired on 2026-06-02. Its three probes (`**kwargs` port inference, persistent-without-edge, `keyed_join` payload unwrap) were all settled by reading the harness docs/source. See [07](../07-ambiguities-and-assumptions.md) Settled items 19, 21, 22.)
