@@ -2,7 +2,7 @@
 
 **Depends on:** spec 01 (schema).
 **References:** [03 — Setup section](../03-module-catalog.md). Parent index:
-[04 — Setup modules](04-setup-modules.md).
+[idx-04 — Setup modules](../idx-04-setup.md).
 
 ## Before you start
 
@@ -14,8 +14,8 @@ below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`,
 `a69d962`). This module **creates** `modules/rtl_buddy/setup.py` — it is the first spec to write the
 file, so establish the shared imports and module-level helpers here. The file then receives
 further additions from the rest of the setup chain (`04b`–`04i`, index
-[04](04-setup-modules.md)), the selection/expansion chain (`05a`–`05f`, index
-[05](05-selection-expansion-modules.md)), and git-status (`10b`); coordinate shared imports
+[idx-04](../idx-04-setup.md)), the selection/expansion chain (`05a`–`05f`, index
+[idx-05](../idx-05-selection-expansion.md)), and git-status (`10b`); coordinate shared imports
 and helpers with those specs.
 
 ## Goal
@@ -116,8 +116,7 @@ the `log.fatal` paths.
 
 - Tests pass.
 - Output port `default` exercised: resolves a fixture `root_config.yaml` from a nested CWD
-  and emits its `Path`, stopping at the `max_levels` depth limit (contributes to the
-  setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+  and emits its `Path`, stopping at the `max_levels` depth limit.
 - Failure idiom exercised: no `root_config.yaml` within `max_levels` → `log.fatal`
   (harness exit 1); a `PermissionError` while listing a directory bubbles to the harness
   CRITICAL handler.

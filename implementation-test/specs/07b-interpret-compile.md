@@ -4,7 +4,7 @@
 (`build-compile-cmd` sets `ctx["simv"]`).
 **References:** [03 — Reusable subprocess core section](../03-module-catalog.md),
 [04 — keyed_join paragraph](../04-pipeline-and-contracts.md). Parent index:
-[07 — Compile-cycle modules](07-compile-cycle-modules.md).
+[idx-07 — Compile-cycle modules](../idx-07-compile-cycle.md).
 
 ## Before you start
 
@@ -15,8 +15,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/build.py`, which is created by spec
 [`06a`](06a-run-preproc.md) — append, do not overwrite. The file is shared with run-process
-(`03`), the prep modules (`06a`–`06b`, index [06](06-prep-modules.md)), and the compile-cycle
-modules (`07a`–`07b`, index [07](07-compile-cycle-modules.md)); coordinate shared imports and
+(`03`), the prep modules (`06a`–`06b`, index [idx-06](../idx-06-prep.md)), and the compile-cycle
+modules (`07a`–`07b`, index [idx-07](../idx-07-compile-cycle.md)); coordinate shared imports and
 helpers with those specs.
 
 ## Goal
@@ -106,8 +106,7 @@ the contract's concern.
   `fail` path emits `CompileFailResults` and logs at ERROR on a non-zero `rc`.
 - Wiring `build-compile-cmd` → `run-process` (instance #1) → `interpret-compile` (with
   `keyed_join`) end-to-end against a real builder produces a non-zero `rc` on a known
-  bad source file and surfaces it correctly (see
-  [07 index](07-compile-cycle-modules.md#acceptance-criteria)).
+  bad source file and surfaces it correctly.
 - The `modules/config.yaml` manifest entry `{ name: interpret-compile, class_name: InterpretCompileMod }`
   validates and the harness resolves `interpret-compile` → `InterpretCompileMod`.
 

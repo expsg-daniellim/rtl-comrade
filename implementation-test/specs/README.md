@@ -1,8 +1,11 @@
 # Implementation specs
 
 Self-contained, dependency-ordered tickets for building the `test` graph and its modules.
-Each spec is a buildable unit; pick them up in order. The plan files in the parent
-directory (`../00`–`../07`) are the reference — specs point into them rather than duplicate.
+Every `.md` in this directory is a buildable unit; pick them up in order. The plan files in the
+parent directory (`../00`–`../07`) are the reference, and the per-group navigation indexes
+([`../idx-01`](../idx-01-schema.md), [`../idx-04`](../idx-04-setup.md) …
+[`../idx-10`](../idx-10-control-aggregate.md)) live there too — specs point into both rather than
+duplicate.
 
 Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan.
 [`../08-sibling-graphs.md`](../08-sibling-graphs.md) is a modularity analysis showing the
@@ -49,26 +52,28 @@ collision to prefix against, and none is added.
 
 | # | Spec | Depends on | Notes |
 |---|---|---|---|
-| 01 | [shared-schema](01-shared-schema.md) | — | Reimplemented config dataclasses + `TestResults` + `SeedMode`. |
-| 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (extracted from 01; consumed by 05, 07, 08). |
-| 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (extracted from 01; consumed by 04, 05, 06, 07, 08, 09). |
-| 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (extracted from 01; consumed by 05, 06). |
+| 01 | [core-schema](01-shared-schema.md) | — | `RootConfig` + `TestResults` + `SeedMode` (the core of the schema package; builder/suite/model are 01a/01b/01c — family overview [idx-01](../idx-01-schema.md)). |
+| 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (schema family; consumed by 05, 07, 08). |
+| 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (schema family; consumed by 04, 05, 06, 07, 08, 09). |
+| 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (schema family; consumed by 05, 06). |
 | 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` only (plain, reusable; **unwired** in `test`). Build only if another graph needs it. |
 | 03 | [run-process](03-run-process.md) | 06a (creates `build.py`) | The reusable subprocess star. Appends to the shared `build.py` 06a creates (file-creation ordering only; no logic dependency). |
-| 04 | [setup-modules](04-setup-modules.md) (index) | 01 | Setup chain + suite parse + seed-mode derivation. Split into 04a–04i. |
-| 05 | [selection-expansion-modules](05-selection-expansion-modules.md) (index) | 01 | List routing, select, filter, load-model, sweep. Split into 05a–05f. |
-| 06 | [prep-modules](06-prep-modules.md) (index) | 01 | `run-preproc`, `write-filelist`. Split into 06a–06b. |
-| 07 | [compile-cycle-modules](07-compile-cycle-modules.md) (index) | 03 | `build-compile-cmd`, `interpret-compile`. Split into 07a–07b. |
-| 08 | [sim-cycle-modules](08-sim-cycle-modules.md) (index) | 03 | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`. Split into 08a–08f. |
-| 09 | [post-modules](09-post-modules.md) (index) | 01 | `route-post`, `parse-log`, `parse-uvm-log`. Split into 09a–09c. |
-| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) (index) | 01 | `early-stop-gate`, `git-status`, and the `SummaryProcessor` logging plugin. Split into 10a–10c. |
+| 04 | group index [idx-04](../idx-04-setup.md) | 01 | Setup chain + suite parse + seed-mode derivation. Children 04a–04i. |
+| 05 | group index [idx-05](../idx-05-selection-expansion.md) | 01 | List routing, select, filter, load-model, sweep. Children 05a–05f. |
+| 06 | group index [idx-06](../idx-06-prep.md) | 01 | `run-preproc`, `write-filelist`. Children 06a–06b. |
+| 07 | group index [idx-07](../idx-07-compile-cycle.md) | 03 | `build-compile-cmd`, `interpret-compile`. Children 07a–07b. |
+| 08 | group index [idx-08](../idx-08-sim-cycle.md) | 03 | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`. Children 08a–08f. |
+| 09 | group index [idx-09](../idx-09-post.md) | 01 | `route-post`, `parse-log`, `parse-uvm-log`. Children 09a–09c. |
+| 10 | group index [idx-10](../idx-10-control-aggregate.md) | 01 | `early-stop-gate`, `git-status`, and the `SummaryProcessor` logging plugin. Children 10a–10c. |
 | 11 | [graph-and-manifests](11-graph-and-manifests.md) | 02-10 | `graphs/test.yaml`, plugin manifests, `rtl_comrade_config.yaml` entry. |
 | 12 | [end-to-end](12-end-to-end.md) | 11 | Smoke test against a real rtl_buddy suite. |
 
 ### Per-module child specs
 
 Specs 04–10 group several modules each; each is split into one buildable
-ticket per module, with the numbered file kept as a thin index. The children can be picked
+ticket per module. The group index for each was lifted to the parent directory
+([`../idx-04`](../idx-04-setup.md) … [`../idx-10`](../idx-10-control-aggregate.md)), so this
+directory holds only buildable tickets. The children can be picked
 up independently once their group's deps (above) are met.
 
 | Group | Children |

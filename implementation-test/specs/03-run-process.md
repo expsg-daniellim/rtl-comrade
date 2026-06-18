@@ -13,8 +13,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/build.py`, which is created by spec
 [`06a`](06a-run-preproc.md) — append, do not overwrite. The file is shared with run-process
-(`03`), the prep modules (`06a`–`06b`, index [06](06-prep-modules.md)), and the compile-cycle
-modules (`07a`–`07b`, index [07](07-compile-cycle-modules.md)); coordinate shared imports and
+(`03`), the prep modules (`06a`–`06b`, index [idx-06](../idx-06-prep.md)), and the compile-cycle
+modules (`07a`–`07b`, index [idx-07](../idx-07-compile-cycle.md)); coordinate shared imports and
 helpers with those specs.
 
 ## Goal
@@ -217,13 +217,13 @@ The tests below are testable against a slow-sleep bash fake (a child of the form
   with the parameter omitted, exercising the default) both succeed and produce
   identical output; the parameter never appears in the returned dict. The
   end-to-end PATH-resolution check (PrependCwdPathMod + a `.`-relative binary)
-  lives in `test_setup.py` (spec [04](04-setup-modules.md)), not here, because
+  lives in `test_setup.py` (spec [idx-04](../idx-04-setup.md)), not here, because
   the wiring is what's under test, not the runner.
 
 ### `$PATH` prepend
 
 Owned by `PrependCwdPathMod` (a dedicated setup `unit` node — see spec
-[04](04-setup-modules.md) and [07 settled 25](../07-ambiguities-and-assumptions.md)).
+[idx-04](../idx-04-setup.md) and [07 settled 25](../07-ambiguities-and-assumptions.md)).
 `run-process` itself does **not** mutate `os.environ`; it only declares a generic input
 `env_ready:bool = True` that the graph wires to `prepend-cwd-path`'s output. The value is never
 read or branched on — the input exists so the harness's data-dependency ordering pins the PATH

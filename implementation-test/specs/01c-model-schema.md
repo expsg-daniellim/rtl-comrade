@@ -1,7 +1,7 @@
 # Spec 01c: Model schema (`models.yaml`)
 
 **Depends on:** none. Can run in parallel with specs 01, 01a, 01b.
-**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [01b](01b-suite-schema.md) (`TestConfig.model: ModelConfig | None`), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
+**References:** [idx-01](../idx-01-schema.md) (umbrella), [01b](01b-suite-schema.md) (`TestConfig.model: ModelConfig | None`), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
 **Source:** `rtl_buddy/src/rtl_buddy/config/model.py:1-100` (`ModelConfig`, `ModelConfigFile`, `ModelConfigLoader`).
 
 ## Before you start
@@ -18,8 +18,8 @@ module layout with the others.
 ## Goal
 
 Reimplement the `models.yaml` schema natively so `load-model` (spec
-[05](05-selection-expansion-modules.md)) and the filelist generator (`write-filelist`,
-spec [06](06-prep-modules.md)) can use the schema by field/method without opening
+[idx-05](../idx-05-selection-expansion.md)) and the filelist generator (`write-filelist`,
+spec [idx-06](../idx-06-prep.md)) can use the schema by field/method without opening
 `rtl_buddy`. Preserves the YAML field-name surface so existing `models.yaml` files
 load drop-in (see [07 settled 1](../07-ambiguities-and-assumptions.md)).
 
@@ -31,8 +31,8 @@ A single file, `modules/rtl_buddy/schema/model.py`, exporting `ModelConfig`,
 ### `ModelConfig`
 
 One entry per element in `models.yaml`'s `models:` list. Attached to
-`TestConfig.model` by `load-model` (spec [05](05-selection-expansion-modules.md))
-after lookup by name; consumed by `write-filelist` (spec [06](06-prep-modules.md))
+`TestConfig.model` by `load-model` (spec [idx-05](../idx-05-selection-expansion.md))
+after lookup by name; consumed by `write-filelist` (spec [idx-06](../idx-06-prep.md))
 to construct the compile filelist.
 
 | field      | type           | YAML rename | default    | notes                                                                                                              |
@@ -73,7 +73,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/model.py:53-63`.
 ### `ModelConfigLoader`
 
 Helper that reads `models.yaml` once and answers `get_model(name)` lookups. Owned by
-`load-model` (spec [05](05-selection-expansion-modules.md)); not a graph node itself.
+`load-model` (spec [idx-05](../idx-05-selection-expansion.md)); not a graph node itself.
 
 Construction (`__init__(path: str)`):
 
@@ -89,14 +89,14 @@ Method:
 
 Note the **`path` mutation side effect** at `model.py:97`: `get_model` writes
 `model.path = self.path` before returning. Preserve this — `write-filelist` (spec
-[06](06-prep-modules.md)) relies on `model.path` being set to resolve `filelist`
+[idx-06](../idx-06-prep.md)) relies on `model.path` being set to resolve `filelist`
 entries relative to the `models.yaml`'s directory.
 
 Source: `rtl_buddy/src/rtl_buddy/config/model.py:66-100`.
 
 ## Integration
 
-`load-model` (spec [05](05-selection-expansion-modules.md)) is the only direct
+`load-model` (spec [idx-05](../idx-05-selection-expansion.md)) is the only direct
 consumer of `ModelConfigLoader`. The flow:
 
 1. `load-model` receives `ctx` (with `ctx["test"]` carrying `model_name`,
@@ -104,7 +104,7 @@ consumer of `ModelConfigLoader`. The flow:
 2. Resolves `resolved = ctx["test"].suite_dir / ctx["test"].model_path`.
 3. Constructs `ModelConfigLoader(str(resolved))` — `__init__`'s broad-exception catch
    converts I/O / parse / schema errors to `log.fatal`, but in this plan these are
-   **port-routed `fail` `result`** (spec [05](05-selection-expansion-modules.md) `LoadModelMod`
+   **port-routed `fail` `result`** (spec [idx-05](../idx-05-selection-expansion.md) `LoadModelMod`
    failure-handling block + [07 settled 10](../07-ambiguities-and-assumptions.md)). The
    reimplementation should therefore **let exceptions propagate from `ModelConfigLoader`**
    rather than calling `log.fatal` inside the loader itself; the `LoadModelMod` wrapper
@@ -114,7 +114,7 @@ consumer of `ModelConfigLoader`. The flow:
    propagates rather than crit-logging; `LoadModelMod` catches and routes.
 5. Assigns `ctx["test"].model = the_model` and emits `("default", ctx)`.
 
-`write-filelist` (spec [06](06-prep-modules.md)) consumes `ctx["test"].get_model()`
+`write-filelist` (spec [idx-06](../idx-06-prep.md)) consumes `ctx["test"].get_model()`
 — at that point in the graph, `load-model` has fired and `ctx["test"].model` is a
 populated `ModelConfig`. It reads `.filelist` and `.path` to resolve the model's
 source list (path is the directory `os.path.dirname(model.path)` since `model.path`
@@ -160,8 +160,8 @@ is the file).
 - Loading an unmodified rtl_buddy `models.yaml` produces `ModelConfig` instances
   whose `get_filelist()` / `get_model_path()` return values equal to rtl_buddy's
   on the same input.
-- `load-model` (spec [05](05-selection-expansion-modules.md)) and `write-filelist`
-  (spec [06](06-prep-modules.md)) can be written against this spec without opening
+- `load-model` (spec [idx-05](../idx-05-selection-expansion.md)) and `write-filelist`
+  (spec [idx-06](../idx-06-prep.md)) can be written against this spec without opening
   `rtl_buddy/src/rtl_buddy/config/model.py`.
 
 ## Constraints

@@ -1,11 +1,13 @@
-# Spec 05: Selection and expansion modules (index)
+# idx-05 — Selection and expansion modules (group index)
 
-**Depends on:** spec 01 (schema), spec [01a](01a-builder-schema.md) (builder schema —
-`FilterRegLvlMod` consumes `RtlBuilderConfig`), spec [01b](01b-suite-schema.md)
+> Navigation only — not a build ticket. The buildable units are the child specs under [`specs/`](specs/).
+
+**Depends on:** spec 01 (schema), spec [01a](specs/01a-builder-schema.md) (builder schema —
+`FilterRegLvlMod` consumes `RtlBuilderConfig`), spec [01b](specs/01b-suite-schema.md)
 (`SuiteConfig` / `TestConfig` / `UVMConfig` — every module here reads from
-`ctx["test"]`), spec [01c](01c-model-schema.md) (`LoadModelMod` constructs
+`ctx["test"]`), spec [01c](specs/01c-model-schema.md) (`LoadModelMod` constructs
 `ModelConfigLoader`).
-**References:** [03 — Selection/expansion section](../03-module-catalog.md).
+**References:** [03 — Selection/expansion section](03-module-catalog.md).
 
 ## Goal
 
@@ -18,15 +20,15 @@ in `modules/rtl_buddy/setup.py` (continuing from spec 04); tests in
 
 | Ticket | Module | What it does |
 |---|---|---|
-| [05a](05a-route-list-mode.md) | `RouteListModeMod` | Route list-mode vs run-mode. |
-| [05b](05b-list-test-names.md) | `ListTestNamesMod` | Print test names (list-mode sink). |
-| [05c](05c-select-tests.md) | `SelectTestsMod` | Enter the per-test stream. |
-| [05d](05d-filter-reglvl.md) | `FilterRegLvlMod` | Keep/skip by regression level. |
-| [05e](05e-load-model.md) | `LoadModelMod` | Lazily attach the `ModelConfig`. |
-| [05f](05f-expand-sweep.md) | `ExpandSweepMod` | Expand into N sweep variants. |
+| [05a](specs/05a-route-list-mode.md) | `RouteListModeMod` | Route list-mode vs run-mode. |
+| [05b](specs/05b-list-test-names.md) | `ListTestNamesMod` | Print test names (list-mode sink). |
+| [05c](specs/05c-select-tests.md) | `SelectTestsMod` | Enter the per-test stream. |
+| [05d](specs/05d-filter-reglvl.md) | `FilterRegLvlMod` | Keep/skip by regression level. |
+| [05e](specs/05e-load-model.md) | `LoadModelMod` | Lazily attach the `ModelConfig`. |
+| [05f](specs/05f-expand-sweep.md) | `ExpandSweepMod` | Expand into N sweep variants. |
 
 **Manifest** — these six modules append to the `rtl_buddy/setup.py` block in `modules/config.yaml`
-opened by the setup chain ([`04a`](04a-discover-config-file.md)); each child ticket carries its
+opened by the setup chain ([`04a`](specs/04a-discover-config-file.md)); each child ticket carries its
 own line (append, don't re-create the block):
 
 ```yaml
@@ -41,18 +43,10 @@ own line (append, don't re-create the block):
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- Streamed end-to-end against the reference suite
-  `../rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`: three tests fan out to three
-  `ctx`s with correctly-stamped keys, a sweep script multiplies one of them by 4, and the
-  `route-list-mode`/`filter-reglvl`/`load-model` diversion ports (`list`/`skip`/`fail`) each
-  fire on their respective inputs.
+- Integration coverage lives in the child tickets' own acceptance criteria (test fan-out and
+  key stamping, sweep multiplication, and the `list`/`skip`/`fail` diversion ports); the full
+  selection/expansion stream is wired and exercised end-to-end in
+  [spec 11](specs/11-graph-and-manifests.md) and [spec 12](specs/12-end-to-end.md).
 - Every child's `modules/config.yaml` entry validates and resolves: `route-list-mode`,
   `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep` each map
-  to their `*Mod` class (see [11](11-graph-and-manifests.md#acceptance-criteria)).
-
-## Notes
-
-`expand-sweep` and `run-preproc` (spec [06a](06a-run-preproc.md)) share the same
-`exec`-with-namespace pattern via a small `exec_hook(path, namespace)` helper in
-`modules/rtl_buddy/_hooks.py`. Its signature and exception-propagation contract are defined
-once in spec [05f](05f-expand-sweep.md) Notes; `06a` references it.
+  to their `*Mod` class (see [11](specs/11-graph-and-manifests.md#acceptance-criteria)).

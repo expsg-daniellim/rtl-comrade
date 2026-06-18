@@ -1,7 +1,8 @@
-# Spec 01: Shared schema
+# Spec 01: Core schema (root config, results, seed-mode)
 
 **Depends on:** none.
-**References:** [07 settled 1](../07-ambiguities-and-assumptions.md).
+**References:** [07 settled 1](../07-ambiguities-and-assumptions.md). Schema family overview:
+[idx-01 — Schema](../idx-01-schema.md).
 
 ## Before you start
 
@@ -10,24 +11,27 @@ of rtl_buddy's config types, so the authoritative reference is the rtl_buddy `co
 this spec cites (anchored to `v1.4.0`, commit `a69d962`). The in-repo `@serde` idiom — nested
 types and `field(rename=...)` for verbatim YAML field names — is shown by the config-bearing
 example in `docs/modules/implementation.md`; [`02 — payload conventions`](../02-payload-conventions.md)
-holds the canonical type and `is_pass()` table the port must match. All four schema specs (`01`,
-`01a`, `01b`, `01c`) build into the shared `modules/rtl_buddy/schema/` package — coordinate the
-module layout with the others.
+holds the canonical type and `is_pass()` table the port must match. This spec owns three files
+of the shared `modules/rtl_buddy/schema/` package — `root.py`, `results.py`, `seed_mode.py`; its
+sibling specs `01a`/`01b`/`01c` own the rest of the same package, so coordinate the module layout
+with them (family overview: [idx-01](../idx-01-schema.md)).
 
 ## Goal
 
-Reimplement the configuration dataclasses and shared types — preserving rtl_buddy's YAML
-field names/structure so existing `root_config.yaml`, `tests.yaml`, `models.yaml`, and
-`regressions.yaml` files load drop-in. This is the foundation every setup/post module
-depends on.
+Reimplement the core/shared schema — the root-config types, the `TestResults` hierarchy, and the
+`SeedMode` enum — preserving rtl_buddy's YAML field names/structure so existing
+`root_config.yaml` files load drop-in. These are the foundation every setup/post module depends
+on (the builder/suite/model dataclasses are split into [01a](01a-builder-schema.md) /
+[01b](01b-suite-schema.md) / [01c](01c-model-schema.md)).
 
 ## Deliverables
 
-A new package, `modules/rtl_buddy/schema/`:
+Three files in the shared `modules/rtl_buddy/schema/` package (its `builder.py`/`suite.py`/
+`uvm.py`/`model.py` are owned by 01a/01b/01c — see [idx-01](../idx-01-schema.md)):
 
 - `root.py` — `RootConfigFile`, `RootRtlField`, `PlatformConfigFile` (raw `@serde`
   dataclasses) and the runtime wrapper `RootConfig`. **Field tables in
-  [§ `root.py` schema](#rootpy-schema-detailed) below** — this umbrella spec owns these types
+  [§ `root.py` schema](#rootpy-schema-detailed) below** — this spec owns these types
   outright (no `01d`), so they are specified here to 01a/01b/01c depth. `field(rename=...)`
   matches rtl_buddy names exactly (`rtl-buddy-filetype`, `cfg-rtl-builder`, `cfg-platforms`,
   `cfg-rtl-reg`). **Verible is dropped** (settled, R3): no `VeribleConfigFile`/`VeribleConfig`,
@@ -36,15 +40,6 @@ A new package, `modules/rtl_buddy/schema/`:
   runtime `PlatformConfig` is also **not** built: this plan never calls rtl_buddy's
   `platform.initialise`; platform selection and builder resolution are graph nodes
   ([04d](04d-select-platform.md) / [04e](04e-resolve-builder.md)).
-- `builder.py` — `RtlBuilderConfig`, `RtlBuilderConfigOpts`, `process_opts`. Owned by
-  spec [01a](01a-builder-schema.md); listed here only so this umbrella spec stays
-  complete. Build 01a in parallel with the rest of 01.
-- `suite.py` — `SuiteConfigFile`, `SuiteConfig`, `TestbenchConfig`, `TestConfigFile` (raw),
-  `TestConfig` (runtime); and `uvm.py` — `UVMConfig` (kept separate: `parse-uvm-log` is its
-  only consumer). Owned by spec [01b](01b-suite-schema.md). Build 01b in parallel with the rest
-  of 01.
-- `model.py` — `ModelConfig`, `ModelConfigFile`, `ModelConfigLoader`. Owned by spec
-  [01c](01c-model-schema.md). Build 01c in parallel with the rest of 01.
 - `results.py` — `TestResults` base + `TestPassResults`, `CompileFailResults`,
   `EarlyStopResults(desc)`, `SimTimeoutResults`, `SkipResults(desc)`. `is_pass()` returns
   `True` for `PASS`/`SKIP` only. Also a module-level factory
@@ -116,14 +111,13 @@ dict (mirrors `root.py:94`).
 
 ## Acceptance criteria
 
-- Loading an unmodified rtl_buddy `root_config.yaml` and `tests.yaml` (e.g. from
+- Loading an unmodified rtl_buddy `root_config.yaml` (e.g. from
   `rtl-buddy-proj-template/design/sandbox`) into the new dataclasses succeeds and produces
   field-equivalent objects to rtl_buddy's — **including** files carrying `cfg-verible` and
   per-platform `verible` keys, which load (ignored) without error.
 - `RootConfig(raw)` exposes `platforms`, `rtl_builder_cfgs` (keyed by builder name), and
   `cfg_rtl_reg`; `rtl_builder_cfgs` contains every `cfg-rtl-builder` entry keyed by `get_name()`.
 - `TestResults.is_pass()` matches rtl_buddy semantics exactly (table in [02](../02-payload-conventions.md)).
-- `UVMConfig` rejects negative `max_warns`/`max_errors` at construction.
 
 ## Constraints
 
@@ -134,9 +128,6 @@ dict (mirrors `root.py:94`).
   drop-in file still loads (settled, R3).
 - `TestResults.is_pass()` must return `True` for `PASS`/`SKIP` only — never for FAIL / NA /
   timeout / compile-fail / early-stop.
-- `UVMConfig.__post_init__` must raise `ValueError` (not `log.fatal`) on a negative
-  `max_warns`/`max_errors`; promoting that to `log.fatal` is `parse-suite-config`'s job
-  (spec [04h](04h-parse-suite-config.md)), not this dataclass's.
 - These are pure `@serde` value objects: no `run()`, no ports, no graph awareness, no logging.
   The harness never loads them directly.
 

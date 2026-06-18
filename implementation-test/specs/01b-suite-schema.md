@@ -3,7 +3,7 @@
 **Depends on:** spec [01c](01c-model-schema.md) (`TestConfig.model: ModelConfig | None`
 references the model type). Can run mostly in parallel — only the type annotation needs
 01c's name.
-**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
+**References:** [idx-01](../idx-01-schema.md) (umbrella), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
 **Source:**
 - `rtl_buddy/src/rtl_buddy/config/suite.py:1-88` (`SuiteConfigFile`, `SuiteConfig`).
 - `rtl_buddy/src/rtl_buddy/config/test.py:1-323` (`TestbenchConfig`, `TestConfig`, `TestConfigFile`).
@@ -53,7 +53,7 @@ plain `parse-log` path is taken (else `parse-uvm-log`).
 Validation: `__post_init__` raises `ValueError` if either field is negative. Note this
 is `ValueError`, not `log.fatal` — UVMConfig is constructed during YAML deserialisation,
 where rtl_buddy's serde wraps the `ValueError` into its own error path. In this plan, the
-broad-`Exception` catch in `parse-suite-config` (spec [04](04-setup-modules.md))
+broad-`Exception` catch in `parse-suite-config` (spec [idx-04](../idx-04-setup.md))
 converts the validation failure into `log.fatal`.
 
 Source: `rtl_buddy/src/rtl_buddy/config/uvm.py:1-19`.
@@ -89,7 +89,7 @@ runtime `TestConfig` via `initialise(suite_dir)` (this plan drops rtl_buddy's ea
 | `name`          | `str`                | (none)      | required | Unique test identifier within the suite.                                                                       |
 | `desc`          | `str`                | (none)      | required | Human-readable description.                                                                                    |
 | `model`         | `str`                | (none)      | required | Model name to look up in `models.yaml`. Carried into runtime `TestConfig.model_name`.                          |
-| `model_path`    | `str`                | (none)      | required | Path to `models.yaml` (relative to suite dir). Resolved by `load-model` (spec [05](05-selection-expansion-modules.md)). |
+| `model_path`    | `str`                | (none)      | required | Path to `models.yaml` (relative to suite dir). Resolved by `load-model` (spec [idx-05](../idx-05-selection-expansion.md)). |
 | `_reglvl`       | `int \| dict \| None`| `reglvl`    | (none)   | Regression level — uniform int, builder-keyed dict (with optional `default`), or omitted (→ `0`).              |
 | `pa`            | `dict \| None`       | `plusargs`  | `None`   | Plusargs dict (`{key: value}`); value may be `None` for bare-flag plusargs.                                    |
 | `pd`            | `dict \| None`       | `plusdefines`| `None`  | Plusdefines dict; same `None`-value semantics.                                                                 |
@@ -125,8 +125,8 @@ Differs from rtl_buddy's `TestConfig` in three ways (see Notable divergences bel
 | `desc`           | `str`               | required                | From raw.                                                                                            |
 | `model_name`     | `str`               | required                | From raw (`model: str`). Renamed to avoid clash with the loaded `model` field below.                 |
 | `model_path`     | `str`               | required                | From raw. Path to `models.yaml`, relative to `suite_dir`.                                            |
-| `suite_dir`      | `Path`              | required                | Stamped by `parse-suite-config` (spec [04](04-setup-modules.md)). Resolves `model_path` for `load-model`. |
-| `model`          | `ModelConfig \| None`| `None`                 | Filled in by `load-model` (spec [05](05-selection-expansion-modules.md)). `None` until then.         |
+| `suite_dir`      | `Path`              | required                | Stamped by `parse-suite-config` (spec [idx-04](../idx-04-setup.md)). Resolves `model_path` for `load-model`. |
+| `model`          | `ModelConfig \| None`| `None`                 | Filled in by `load-model` (spec [idx-05](../idx-05-selection-expansion.md)). `None` until then.         |
 | `_reglvl`        | `int \| dict \| None`| from raw               | Underlying storage; access via `get_reglvl(builder)`.                                                |
 | `pa`             | `dict \| None`      | from raw                | Mutable. `set_plusarg`/`set_plusargs` lazily initialise.                                             |
 | `pd`             | `dict \| None`      | from raw                | Mutable. `set_plusdefine`/`set_plusdefines` lazily initialise.                                       |
@@ -173,7 +173,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:11-15`.
 
 ### `SuiteConfig` (runtime)
 
-Constructed by `parse-suite-config` (spec [04](04-setup-modules.md)) from a resolved
+Constructed by `parse-suite-config` (spec [idx-04](../idx-04-setup.md)) from a resolved
 `Path`. Holds the test dict keyed by name.
 
 | field   | type                       | notes                                                                                            |
@@ -202,7 +202,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
 1. **Lazy model loading** ([07 settled 8](../07-ambiguities-and-assumptions.md)). rtl_buddy
    `TestConfigFile.initialise` eagerly calls
    `ModelConfigLoader(model_path).get_model(self.model)` (`test.py:322`). This plan defers
-   this to `load-model` (spec [05](05-selection-expansion-modules.md)), so
+   this to `load-model` (spec [idx-05](../idx-05-selection-expansion.md)), so
    `TestConfig.model` is `None` until that node fires. Consequence: the runtime
    `TestConfig` carries `model_name: str`, `model_path: str`, and `suite_dir: Path` so
    `load-model` can later resolve `suite_dir / model_path` and call
@@ -211,7 +211,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
    for YAML compat). Avoids the rtl_buddy name collision where `TestConfigFile.model:
    str` becomes `TestConfig.model: ModelConfig` after `initialise`.
 3. **`suite_dir` stamped on each test.** Recorded by `parse-suite-config` (spec
-   [04](04-setup-modules.md) — see the existing "binding testbenches within-file,
+   [idx-04](../idx-04-setup.md) — see the existing "binding testbenches within-file,
    recording the suite directory" prose). Replaces rtl_buddy's `config_dir` argument
    to `initialise`, propagating the resolution context downstream rather than
    computing it at parse time.
@@ -280,8 +280,9 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
   (rtl_buddy `config/test.py:81`).
 - `get_plusarg`/`get_plusdefine` raise `AttributeError` when `pa`/`pd` is `None` — preserve
   this; callers must guard with `get_plusargs() is not None` first.
-- `UVMConfig` validation is `ValueError` at construction (see [01](01-shared-schema.md)
-  constraints), not `log.fatal`.
+- `UVMConfig` validation is `ValueError` at construction (see § `UVMConfig` above), not
+  `log.fatal`. Promoting it to `log.fatal` is `parse-suite-config`'s job (spec
+  [04h](04h-parse-suite-config.md)), not this dataclass's.
 
 ## Notes
 
@@ -289,7 +290,7 @@ YAML `field(rename=...)` targets are the **public surface** for downstream rtl_b
 users — do **not** Pythonify them. Preserve hyphens and casing exactly as listed.
 
 `SuiteConfig.get_tests()` returns `dict_values` when `test_name` is omitted (rtl_buddy
-`suite.py:67`). This plan's `select-tests` (spec [05](05-selection-expansion-modules.md))
+`suite.py:67`). This plan's `select-tests` (spec [idx-05](../idx-05-selection-expansion.md))
 iterates and yields per-test — the type doesn't matter for that use, but if other
 callers index or `len()` the result, materialise to `list` first.
 

@@ -151,7 +151,7 @@ terminal's own watched event) that the per-graph `SummaryProcessor` collects via
 and renders in `finalise()`. The `any` contract
 that previously fed `fan-in` is retained (reusable) but unwired in `test`. Details in
 [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
-and [specs/10](specs/10-control-aggregate-modules.md).
+and [specs/10](idx-10-control-aggregate.md).
 
 ## Fan-out points
 

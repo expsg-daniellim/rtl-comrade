@@ -3,7 +3,7 @@
 **Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`RunPreprocMod`
 reads `ctx["test"].get_preproc_path()`).
 **References:** [03 — Per-test preparation section](../03-module-catalog.md). Parent index:
-[06 — Per-test prep modules](06-prep-modules.md).
+[idx-06 — Per-test prep modules](../idx-06-prep.md).
 
 ## Before you start
 
@@ -15,8 +15,8 @@ below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`,
 `a69d962`). This module **creates** `modules/rtl_buddy/build.py` — it is the first spec to write the
 file, so establish the shared imports and module-level helpers here. The file then receives
 further additions from run-process (`03`), the rest of the prep modules (`06b`, index
-[06](06-prep-modules.md)), and the compile-cycle modules (`07a`–`07b`, index
-[07](07-compile-cycle-modules.md)); coordinate shared imports and helpers with those specs.
+[idx-06](../idx-06-prep.md)), and the compile-cycle modules (`07a`–`07b`, index
+[idx-07](../idx-07-compile-cycle.md)); coordinate shared imports and helpers with those specs.
 
 ## Goal
 

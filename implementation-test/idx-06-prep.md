@@ -1,10 +1,12 @@
-# Spec 06: Per-test prep modules (index)
+# idx-06 — Per-test prep modules (group index)
 
-**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`RunPreprocMod`
+> Navigation only — not a build ticket. The buildable units are the child specs under [`specs/`](specs/).
+
+**Depends on:** spec 01 (schema), spec [01b](specs/01b-suite-schema.md) (`RunPreprocMod`
 reads `ctx["test"].get_preproc_path()`; `WriteFilelistMod` reads
-`ctx["test"].get_testbench().get_filelist()`), spec [01c](01c-model-schema.md)
+`ctx["test"].get_testbench().get_filelist()`), spec [01c](specs/01c-model-schema.md)
 (`WriteFilelistMod` reads `ctx["test"].get_model().get_filelist()` and `.path`).
-**References:** [03 — Per-test preparation section](../03-module-catalog.md).
+**References:** [03 — Per-test preparation section](03-module-catalog.md).
 
 ## Goal
 
@@ -17,11 +19,11 @@ in `modules/rtl_buddy/build.py` (continuing from spec 03); tests in
 
 | Ticket | Module | What it does |
 |---|---|---|
-| [06a](06a-run-preproc.md) | `RunPreprocMod` | Optional preprocessing hook (mutates `ctx["test"]`). |
-| [06b](06b-write-filelist.md) | `WriteFilelistMod` | Generate the per-tag `run.{test_tag}.f`. |
+| [06a](specs/06a-run-preproc.md) | `RunPreprocMod` | Optional preprocessing hook (mutates `ctx["test"]`). |
+| [06b](specs/06b-write-filelist.md) | `WriteFilelistMod` | Generate the per-tag `run.{test_tag}.f`. |
 
 **Manifest** — these two modules open the `rtl_buddy/build.py` block in `modules/config.yaml`; the
-compile cycle (`07a`, [`03`](03-run-process.md), `07b`) appends to the same block:
+compile cycle (`07a`, [`03`](specs/03-run-process.md), `07b`) appends to the same block:
 
 ```yaml
 - file: rtl_buddy/build.py
@@ -34,11 +36,10 @@ compile cycle (`07a`, [`03`](03-run-process.md), `07b`) appends to the same bloc
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- End-to-end against a real rtl_buddy fixture (the reference suite
-  `../rtl-buddy-proj-template/design/sandbox/verif`): `run-preproc` forwards/mutates `ctx`
-  and `write-filelist` reproduces the byte-for-byte output of rtl_buddy's `VlogFilelist` on
-  the same inputs (modulo ordering if dedup is non-stable), with both modules' `fail` ports
-  exercised.
+- Integration coverage lives in the child tickets' own acceptance criteria (`ctx`
+  forward/mutate, byte-for-byte `VlogFilelist` parity, and both `fail` ports); the prep leg is
+  wired and exercised end-to-end in [spec 11](specs/11-graph-and-manifests.md) and
+  [spec 12](specs/12-end-to-end.md).
 - Both children's `modules/config.yaml` entries validate and resolve: `run-preproc` →
   `RunPreprocMod`, `write-filelist` → `WriteFilelistMod` (see
-  [11](11-graph-and-manifests.md#acceptance-criteria)).
+  [11](specs/11-graph-and-manifests.md#acceptance-criteria)).

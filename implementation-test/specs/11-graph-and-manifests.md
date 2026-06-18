@@ -148,4 +148,4 @@ The 13 terminal ports are **unwired**. Each
 terminal node logs a `test_result` event; the `SummaryProcessor` plugin (declared in the
 `logging` block) accumulates the rows and renders the table in `finalise()`, and per-emission
 `log.error` drives the exit code. At runtime the node logs the unwired ports as `no_destination` at INFO, not errors (a `node.py` runtime emission, not a `validation.py` check).
-See [spec 10](10-control-aggregate-modules.md) for the plugin.
+See [spec 10c](10c-summary-handler.md) for the plugin.

@@ -2,7 +2,7 @@
 
 **Depends on:** spec 03 (run-process), spec 07 (compile cycle).
 **References:** [03 — Run expansion section](../03-module-catalog.md). Parent index:
-[08 — Sim-cycle modules](08-sim-cycle-modules.md).
+[idx-08 — Sim-cycle modules](../idx-08-sim-cycle.md).
 
 ## Before you start
 
@@ -14,8 +14,8 @@ below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`,
 `a69d962`). This module **creates** `modules/rtl_buddy/sim.py` — it is the first spec to write the file,
 so establish the shared imports and module-level helpers here. The file then receives further
 additions from the rest of the sim-cycle modules (`08b`–`08f`, index
-[08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`, index
-[09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
+[idx-08](../idx-08-sim-cycle.md)) and the post modules (`09a`–`09c`, index
+[idx-09](../idx-09-post.md)); coordinate shared imports and helpers with those specs.
 
 ## Goal
 

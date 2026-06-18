@@ -3,7 +3,7 @@
 **Depends on:** spec 01 (schema).
 **References:** [03 — Setup section](../03-module-catalog.md),
 [07 settled 25](../07-ambiguities-and-assumptions.md). Parent index:
-[04 — Setup modules](04-setup-modules.md). Sequencing consumer:
+[idx-04 — Setup modules](../idx-04-setup.md). Sequencing consumer:
 [spec 03 — run-process](03-run-process.md) (`env_ready`).
 
 ## Before you start
@@ -15,8 +15,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/setup.py`, which is created by spec
 [`04a`](04a-discover-config-file.md) — append, do not overwrite. The file is shared with the
-setup chain (`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain
-(`05a`–`05f`, index [05](05-selection-expansion-modules.md)), and git-status (`10b`);
+setup chain (`04a`–`04i`, index [idx-04](../idx-04-setup.md)), the selection/expansion chain
+(`05a`–`05f`, index [idx-05](../idx-05-selection-expansion.md)), and git-status (`10b`);
 coordinate shared imports and helpers with those specs.
 
 ## Goal
@@ -104,8 +104,7 @@ case.
 
 - Tests pass.
 - Output port `default` exercised: emits `True` and leaves `os.environ["PATH"]` starting
-  with `.` for the duration of the run (contributes to the setup-only end-to-end graph —
-  see [04 index](04-setup-modules.md#acceptance-criteria)).
+  with `.` for the duration of the run.
 - No failure path: the module always emits and never logs an error.
 - The `modules/config.yaml` manifest entry `{ name: prepend-cwd-path, class_name: PrependCwdPathMod }`
   validates and the harness resolves `prepend-cwd-path` → `PrependCwdPathMod`.

@@ -3,7 +3,7 @@
 **Depends on:** spec 01 (schema).
 **References:** [03 — Setup section](../03-module-catalog.md),
 [01 — Where to invoke `rtl-comrade test` from](../01-cli-and-entry.md). Parent index:
-[04 — Setup modules](04-setup-modules.md).
+[idx-04 — Setup modules](../idx-04-setup.md).
 
 ## Before you start
 
@@ -14,8 +14,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/setup.py`, which is created by spec
 [`04a`](04a-discover-config-file.md) — append, do not overwrite. The file is shared with the
-setup chain (`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain
-(`05a`–`05f`, index [05](05-selection-expansion-modules.md)), and git-status (`10b`);
+setup chain (`04a`–`04i`, index [idx-04](../idx-04-setup.md)), the selection/expansion chain
+(`05a`–`05f`, index [idx-05](../idx-05-selection-expansion.md)), and git-status (`10b`);
 coordinate shared imports and helpers with those specs.
 
 ## Goal
@@ -119,8 +119,7 @@ lay out the (mis)placed files/symlinks; `logging_handler` for the `log.fatal` pa
 
 - Tests pass.
 - Output ports exercised: `default` emits the resolved suite-config `Path` and `work_dir`
-  emits the validated base directory when invoked from the suite directory (contributes to the
-  setup-only end-to-end graph — see [04 index](04-setup-modules.md#acceptance-criteria)).
+  emits the validated base directory when invoked from the suite directory.
 - Failure idioms exercised: invoked from outside the suite dir → `log.fatal` (harness
   exit 1); the resolved `test_config` not a file → `log.fatal`.
 - The `modules/config.yaml` manifest entry `{ name: check-suite-cwd, class_name: CheckSuiteCwdMod }`

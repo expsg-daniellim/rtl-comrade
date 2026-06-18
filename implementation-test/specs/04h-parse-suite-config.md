@@ -3,7 +3,7 @@
 **Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md)
 (`ParseSuiteConfigMod` produces `SuiteConfig` / `TestConfig` / `TestbenchConfig`).
 **References:** [03 — Setup section](../03-module-catalog.md). Parent index:
-[04 — Setup modules](04-setup-modules.md).
+[idx-04 — Setup modules](../idx-04-setup.md).
 
 ## Before you start
 
@@ -14,8 +14,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/setup.py`, which is created by spec
 [`04a`](04a-discover-config-file.md) — append, do not overwrite. The file is shared with the
-setup chain (`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain
-(`05a`–`05f`, index [05](05-selection-expansion-modules.md)), and git-status (`10b`);
+setup chain (`04a`–`04i`, index [idx-04](../idx-04-setup.md)), the selection/expansion chain
+(`05a`–`05f`, index [idx-05](../idx-05-selection-expansion.md)), and git-status (`10b`);
 coordinate shared imports and helpers with those specs.
 
 ## Goal
@@ -73,7 +73,7 @@ In `modules/rtl_buddy/setup.py`:
   raw `TestConfigFile.tb` (YAML `testbench`) to the corresponding `TestbenchConfig`
   in-file via the `tbs = {tb.get_name(): tb for tb in raw.testbenches}` dict, stamps
   `suite_dir = test_config_path.parent` onto each test (so `load-model` in spec
-  [05](05-selection-expansion-modules.md) can resolve `suite_dir / test.model_path`),
+  [idx-05](../idx-05-selection-expansion.md) can resolve `suite_dir / test.model_path`),
   and emits `suite_cfg: SuiteConfig` (`tests: dict[str, TestConfig]`, `path: Path`).
   **Module is contract-agnostic** — pairs with `unit` in test/randtest graphs,
   `default` in regression (see [08](../08-sibling-graphs.md)). The constructor flow
@@ -117,8 +117,7 @@ the happy path; `tmp_path` crafted YAML for the failure cases; `logging_handler`
 - Output port `default` exercised: produces a correct `suite_cfg` value (with bound
   testbenches and stamped `suite_dir`) from a real rtl_buddy `tests.yaml` fixture (the
   reference suite `../rtl-buddy-proj-template/design/sandbox/verif`, per `rtl_buddy/AGENTS.md`)
-  — contributes to the setup-only end-to-end graph (see
-  [04 index](04-setup-modules.md#acceptance-criteria)).
+ .
 - Failure idioms exercised: load/parse/validation errors (incl. `UVMConfig` negative
   `max_warns`/`max_errors`) and a test referencing an unknown testbench → `log.fatal`
   (harness exit 1).

@@ -98,7 +98,7 @@ informational.
 
 15. **`ParseLogMod` corrects all three `VlogPost` quirks** (settled 2026-06-05). Decision:
     fix, not replicate. Three corrections applied to `ParseLogMod` in
-    [spec 09](specs/09-post-modules.md):
+    [spec 09](idx-09-post.md):
     (1) **Word-boundary guard**: `re.match(r"PASS\b\s*(.*)", line)` and
     `re.match(r"FAIL\b\s*(.*)", line)` replace rtl_buddy's `re.search(r"^PASS\s*(.*)")` /
     `re.search(r"^FAIL\s*(.*)")` so `PASSTHROUGH`/`FAILING` do not misclassify.
@@ -163,7 +163,7 @@ informational.
     `rtl-comrade test` / `randtest`, matching the `rtl_buddy/AGENTS.md` validation
     example (`cd .../verif && python -m rtl_buddy test basic`). A new setup node
     [`check-suite-cwd`](03-module-catalog.md) (spec
-    [04](specs/04-setup-modules.md)) enforces the convention by failing fast with
+    [04](idx-04-setup.md)) enforces the convention by failing fast with
     `log.fatal` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
     or if the resolved file doesn't exist. This catches `-c /abs/elsewhere/tests.yaml`,
     `-c ../sibling/tests.yaml`, and `-c subdir/tests.yaml` — three monorepo-mistarget
@@ -177,7 +177,7 @@ informational.
     `os.environ["PATH"]` once at CLI bootstrap so a CWD-local simulator (`simv`,
     `verilator`) is discoverable. This plan reproduces this as an explicit graph node:
     [`prepend-cwd-path`](03-module-catalog.md) (spec
-    [04](specs/04-setup-modules.md)), a zero-input `unit` setup node that performs
+    [04](idx-04-setup.md)), a zero-input `unit` setup node that performs
     the same idempotent prepend and emits a `bool` sentinel on `default`.
     `run-process` declares a generic input `env_ready:bool = True`; the graph wires
     `prepend-path → cc-run.env_ready` and `prepend-path → sim-run.env_ready` **directly**
@@ -204,7 +204,7 @@ informational.
     (settled 2026-06-02; **provenance centralised 2026-06-16**). Artefact location is
     decided in **one** place and flows as data — the leaf writers do not re-derive it from the
     ambient CWD. [`check-suite-cwd`](03-module-catalog.md) emits the validated base directory
-    `work_dir`; [`ensure-logs-dir`](03-module-catalog.md) (spec [04](specs/04-setup-modules.md),
+    `work_dir`; [`ensure-logs-dir`](03-module-catalog.md) (spec [04](idx-04-setup.md),
     a `unit` node) roots the artefact directory on it — `(Path(work_dir) /
     logs_dir).mkdir(parents=True, exist_ok=True)` once at startup; no other module calls `mkdir`
     — and **emits the resolved directory `Path`** on its `logs_dir` port. That `Path` fans out
@@ -258,7 +258,7 @@ informational.
     and prints at run start. The exit code is driven solely by per-emission `log.error`
     (item 10). Rationale, sketches, and the CRITICAL path in
     [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
-    spec in [10](specs/10-control-aggregate-modules.md).
+    spec in [10](idx-10-control-aggregate.md).
 
     **Plugin form revised 2026-06-11 (processor, not handler).** The plugin was first specified
     as a `SummaryHandler` (`logging.Handler`) + a paired `drop_summary_events` processor; it is now

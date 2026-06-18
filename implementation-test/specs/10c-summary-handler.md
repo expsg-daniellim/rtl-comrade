@@ -9,7 +9,7 @@ handlers), duck-typed, before the failure check and not on a `CRITICAL` exit
 [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node),
 [07 item 27](../07-ambiguities-and-assumptions.md), `docs/logger/implementation.md`,
 `docs/harness/logging.md`. Parent index:
-[10 — Control module, git-status, and the summary logging plugin](10-control-aggregate-modules.md).
+[idx-10 — Control module, git-status, and the summary logging plugin](../idx-10-control-aggregate.md).
 
 ## Goal
 

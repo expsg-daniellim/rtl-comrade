@@ -4,7 +4,7 @@
 **References:** [03 — Simulation section](../03-module-catalog.md),
 [04 — keyed_join paragraph](../04-pipeline-and-contracts.md),
 [02 — Shape 2](../02-payload-conventions.md). Parent index:
-[08 — Sim-cycle modules](08-sim-cycle-modules.md).
+[idx-08 — Sim-cycle modules](../idx-08-sim-cycle.md).
 
 ## Before you start
 
@@ -15,8 +15,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/sim.py`, which is created by spec
 [`08a`](08a-expand-runs.md) — append, do not overwrite. The file is shared with the sim-cycle
-modules (`08a`–`08f`, index [08](08-sim-cycle-modules.md)) and the post modules (`09a`–`09c`,
-index [09](09-post-modules.md)); coordinate shared imports and helpers with those specs.
+modules (`08a`–`08f`, index [idx-08](../idx-08-sim-cycle.md)) and the post modules (`09a`–`09c`,
+index [idx-09](../idx-09-post.md)); coordinate shared imports and helpers with those specs.
 
 ## Goal
 

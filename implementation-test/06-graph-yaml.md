@@ -319,7 +319,7 @@ Referenced by the `logging` block in `graphs/test.yaml`. Contains the single `Su
 (a stateful structlog processor — **not** a `logging.Handler`; it accumulates `test_result`
 rows, `DropEvent`s them, and renders the results table in `finalise()`; sketch in
 [05](05-branching-and-results.md#the-summaryprocessor-logging-plugin); spec in
-[specs/10](specs/10-control-aggregate-modules.md)). It is selected by `path`/`name`, not via a
+[specs/10](idx-10-control-aggregate.md)). It is selected by `path`/`name`, not via a
 plugin manifest — per-graph logging entries resolve files relative to the graph file's
 directory (`docs/harness_configs/graph.md`).
 

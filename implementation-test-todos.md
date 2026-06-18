@@ -27,13 +27,13 @@ end-to-end) is implicit in the per-module annotation pass. New Notable divergenc
 rtl_buddy (per-test FAIL routing for preproc/sweep/load-model/write-filelist crashes)
 are recorded in `07-ambiguities-and-assumptions.md`.
 
-Several `specs/` tickets contain unresolved design questions phrased *as* spec prose. The clearest example is `specs/08-sim-cycle-modules.md:24-26` for `ResolveSeedMod`'s REPLAY-missing path:
+Several `specs/` tickets contain unresolved design questions phrased *as* spec prose. The clearest example is `idx-08-sim-cycle.md:24-26` for `ResolveSeedMod`'s REPLAY-missing path:
 
 > "on missing/invalid file, emit a `result` envelope with `SimTimeoutResults`-style FAIL? — actually per [03] writes a FAIL stub log + symlinks (verify against rtl_buddy `VlogSim.execute` REPLAY-missing path)."
 
 A build ticket should never contain a question the implementer cannot answer from the ticket alone. This is upstream of every other todo in this file — none of the per-spec polish below is meaningful until specs are actually answerable.
 
-The specific `ResolveSeedMod` REPLAY-missing example cited above is now resolved (see TODO #2) and the spec file (`specs/08-sim-cycle-modules.md:19-27`) has been updated. The broader audit — scanning every `specs/` file for hedge phrases — remains open.
+The specific `ResolveSeedMod` REPLAY-missing example cited above is now resolved (see TODO #2) and the spec file (`idx-08-sim-cycle.md:19-27`) has been updated. The broader audit — scanning every `specs/` file for hedge phrases — remains open.
 
 #### Concrete steps
 
@@ -239,7 +239,7 @@ Path.cwd().resolve()` or if the resolved file doesn't exist — catching three
 monorepo-mistarget cases (`-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`,
 `-c subdir/tests.yaml`) that the existing `parse-suite-config` file-missing check does
 not. Wired in `test` and `randtest`; not wired in `regression` (which `chdir`s
-per-suite). Spec in [`specs/04-setup-modules.md`](implementation-test/specs/04-setup-modules.md);
+per-suite). Spec in [`idx-04-setup.md`](implementation-test/idx-04-setup.md);
 catalog entry in [`03-module-catalog.md`](implementation-test/03-module-catalog.md);
 node row S4.5 in [`04`](implementation-test/04-pipeline-and-contracts.md); log-idiom
 row in [`05`](implementation-test/05-branching-and-results.md#log-idioms-per-failure-site);
@@ -265,7 +265,7 @@ Settled item 24 + updated "CWD assumptions preserved" implementation note in
 ### 8. Prepend `.` to `$PATH` for CWD-local tool discovery
 
 **Status: Resolved (2026-06-02).** Owner chosen: a new dedicated `prepend-cwd-path`
-setup `unit` node (spec [04](implementation-test/specs/04-setup-modules.md), catalog
+setup `unit` node (spec [04](implementation-test/idx-04-setup.md), catalog
 entry in [03](implementation-test/03-module-catalog.md)), zero-input, that mirrors
 `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` and idempotently prepends `.` to
 `os.environ["PATH"]`. Sequencing is provided by a generic persistent input
@@ -283,7 +283,7 @@ edits: catalog entries and provenance row in
 [`04`](implementation-test/04-pipeline-and-contracts.md); graph node + two
 `env_ready` edges + manifest line in
 [`06`](implementation-test/06-graph-yaml.md); deliverable + tests + acceptance
-criterion in [`specs/04-setup-modules.md`](implementation-test/specs/04-setup-modules.md);
+criterion in [`idx-04-setup.md`](implementation-test/idx-04-setup.md);
 ownership resolution + `env_ready` test bullet in
 [`specs/03-run-process.md`](implementation-test/specs/03-run-process.md); sibling-graph
 reuse note in [`08`](implementation-test/08-sibling-graphs.md); promotion of the
@@ -295,7 +295,7 @@ reuse note in [`08`](implementation-test/08-sibling-graphs.md); promotion of the
 #### Concrete steps
 
 1. Decide which module owns the `$PATH` mutation: `run-process` (per-subprocess) or `resolve-builder` (one-shot during setup). Decide once; do not duplicate.
-2. Record the chosen owner in `03-module-catalog.md` and in either `specs/03-run-process.md` or `specs/04-setup-modules.md`.
+2. Record the chosen owner in `03-module-catalog.md` and in either `specs/03-run-process.md` or `idx-04-setup.md`.
 3. Add a test: a subprocess invocation through the chosen module resolves a `.`-relative binary that is not on the inherited `$PATH`.
 4. Promote the implementation note from "informational" status to a settled item in `07-ambiguities-and-assumptions.md` once the owner is chosen.
 
@@ -323,9 +323,9 @@ referenced from every caller spec rather than duplicated. Knock-on edits:
 drops the `RtlBuilderConfig` line and adds a `builder.py` reference pointing to 01a;
 [`specs/README.md`](implementation-test/specs/README.md) adds row 01a and updates the
 parallelism narrative; consumer specs
-[`05`](implementation-test/specs/05-selection-expansion-modules.md),
-[`07`](implementation-test/specs/07-compile-cycle-modules.md), and
-[`08`](implementation-test/specs/08-sim-cycle-modules.md) now name methods
+[`05`](implementation-test/idx-05-selection-expansion.md),
+[`07`](implementation-test/idx-07-compile-cycle.md), and
+[`08`](implementation-test/idx-08-sim-cycle.md) now name methods
 explicitly (`builder_cfg.get_name()`, `get_exe()`, `get_compile_time_opts(mode)`,
 `get_run_time_opts(mode, seed)`) with the verilator switch shown at the use site;
 [`03-module-catalog.md`](implementation-test/03-module-catalog.md) `filter-reglvl`
@@ -385,29 +385,29 @@ Knock-on edits:
 `suite.py` / `model.py` / `uvm.py` bullets and adds pointers to 01b / 01c;
 [`specs/README.md`](implementation-test/specs/README.md) adds rows 01b and 01c and
 updates the parallelism narrative + schema fan-in summary;
-[`specs/04-setup-modules.md`](implementation-test/specs/04-setup-modules.md)
+[`idx-04-setup.md`](implementation-test/idx-04-setup.md)
 `ParseSuiteConfigMod` now names the binding step (`tbs = {tb.get_name(): tb for tb in
 raw.testbenches}`), the `suite_dir` stamp, and the `UVMConfig` `ValueError` catch;
-[`specs/05-selection-expansion-modules.md`](implementation-test/specs/05-selection-expansion-modules.md)
+[`idx-05-selection-expansion.md`](implementation-test/idx-05-selection-expansion.md)
 `SelectTestsMod` / `LoadModelMod` / `ExpandSweepMod` reference fields by name
 (`suite_cfg.get_test_names()`, `suite_cfg.get_tests(test_name or None)`,
 `ctx["test"].suite_dir`, `ctx["test"].model_path`, `ctx["test"].model_name`,
 `ctx["test"].get_sweep_path()`);
-[`specs/06-prep-modules.md`](implementation-test/specs/06-prep-modules.md)
+[`idx-06-prep.md`](implementation-test/idx-06-prep.md)
 `RunPreprocMod` / `WriteFilelistMod` name the field reads (`ctx["test"].get_preproc_path()`,
 `ctx["test"].get_testbench().get_filelist()`, `ctx["test"].get_model().get_filelist()`,
 `.path`);
-[`specs/07-compile-cycle-modules.md`](implementation-test/specs/07-compile-cycle-modules.md)
+[`idx-07-compile-cycle.md`](implementation-test/idx-07-compile-cycle.md)
 `BuildCompileCmdMod` names the plusdefines source and the `test_tag` regex (mirrors
 `vlog_sim.py:65`);
-[`specs/08-sim-cycle-modules.md`](implementation-test/specs/08-sim-cycle-modules.md)
+[`idx-08-sim-cycle.md`](implementation-test/idx-08-sim-cycle.md)
 `BuildSimCmdMod` names the plusargs/plusdefines sources and the `get_timeout()` tuple
 shape;
-[`specs/09-post-modules.md`](implementation-test/specs/09-post-modules.md)
+[`idx-09-post.md`](implementation-test/idx-09-post.md)
 `RoutePostMod` / `ParseUvmLogMod` reference `ctx["test"].uvm` and its fields
 explicitly.
 
-`parse-suite-config` reads `tests.yaml` and deserialises "into the schema (spec 01)" (`specs/04-setup-modules.md:24`); `load-model` later reads `models.yaml`. Neither schema is committed to in `specs/01-shared-schema.md` or `02-payload-conventions.md`. (As with TODO #9, `07-ambiguities-and-assumptions.md` item 1 settles that the YAML surface is preserved drop-in but does not name the Python types.)
+`parse-suite-config` reads `tests.yaml` and deserialises "into the schema (spec 01)" (`idx-04-setup.md:24`); `load-model` later reads `models.yaml`. Neither schema is committed to in `specs/01-shared-schema.md` or `02-payload-conventions.md`. (As with TODO #9, `07-ambiguities-and-assumptions.md` item 1 settles that the YAML surface is preserved drop-in but does not name the Python types.)
 
 #### Concrete steps
 
@@ -437,7 +437,7 @@ needed. The plain `test` graph's unwired persistent inputs (`expand-runs.run_ids
 
 **Status: Resolved (2026-06-02).** Ownership lifted out of per-test lazy `makedirs`
 into a dedicated [`ensure-logs-dir`](implementation-test/03-module-catalog.md) `unit`
-setup node (spec [`04`](implementation-test/specs/04-setup-modules.md)), pinned to
+setup node (spec [`04`](implementation-test/idx-04-setup.md)), pinned to
 `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59`. Location stays CWD-relative `logs/`
 by default — parity with rtl_buddy's hard-coded literal — but is now overridable via a
 new `-L/--logs-dir` CLI flag (recorded as a small Notable divergence in
@@ -461,13 +461,13 @@ Settled 26 + updated "CWD assumptions preserved" note + Notable divergence bulle
 for `log` / `randseed_path` and path-composition rule in
 [`02-payload-conventions.md`](implementation-test/02-payload-conventions.md); consumer
 deliverable + test updates in
-[`specs/07-compile-cycle-modules.md`](implementation-test/specs/07-compile-cycle-modules.md)
-and [`specs/08-sim-cycle-modules.md`](implementation-test/specs/08-sim-cycle-modules.md).
+[`idx-07-compile-cycle.md`](implementation-test/idx-07-compile-cycle.md)
+and [`idx-08-sim-cycle.md`](implementation-test/idx-08-sim-cycle.md).
 Regression sibling deferred to [`08`](implementation-test/08-sibling-graphs.md) (its
 per-suite `chdir` needs a per-suite bootstrap rather than the once-at-startup `unit`
 node used here).
 
-Multiple modules write to `logs/<test>...` (compile log `03-module-catalog.md:150`, sim log/err `:225-226`, randseed `:237`, parse-log input `specs/09-post-modules.md:16`). Who creates `logs/`, when, where (relative to what), and how it interacts with concurrency is not specified. (`07-ambiguities-and-assumptions.md` item 17 defers the broader concurrency story; the "CWD assumptions preserved" implementation note in 07 confirms `logs/` is currently CWD-relative.)
+Multiple modules write to `logs/<test>...` (compile log `03-module-catalog.md:150`, sim log/err `:225-226`, randseed `:237`, parse-log input `idx-09-post.md:16`). Who creates `logs/`, when, where (relative to what), and how it interacts with concurrency is not specified. (`07-ambiguities-and-assumptions.md` item 17 defers the broader concurrency story; the "CWD assumptions preserved" implementation note in 07 confirms `logs/` is currently CWD-relative.)
 
 #### Concrete steps
 
@@ -487,13 +487,13 @@ three `VlogPost` quirks — FAIL wins over PASS, safe FAIL-without-ERR (no crash
 word-boundary guard. Recorded in `07` Settled item 15 and specified in `specs/09b-parse-log.md`.
 
 The original problem: rtl_buddy's `VlogPost` let a later `PASS` line override an earlier `FAIL`
-in the same log, and partial regex matches behaved subtly. `specs/09-post-modules.md` and
+in the same log, and partial regex matches behaved subtly. `idx-09-post.md` and
 `specs/12-end-to-end.md` both depended on the decision.
 
 #### Concrete steps
 
 1. Take a position: replicate the quirks bit-for-bit, or fix them (PASS+FAIL = FAIL; partial match = explicit error).
-2. Write the chosen behaviour into `specs/09-post-modules.md` for `ParseLogMod`, naming the fixtures that exercise the chosen edge case.
+2. Write the chosen behaviour into `idx-09-post.md` for `ParseLogMod`, naming the fixtures that exercise the chosen edge case.
 3. Move the decision out of `07-ambiguities-and-assumptions.md` "Open" into "Settled" (if replicating) or "Notable divergences" (if fixing).
 4. Cross-reference from `specs/12-end-to-end.md` so the smoke test asserts the chosen behaviour.
 
@@ -548,7 +548,7 @@ entirely. Concretely:
 
 Design, sketches, and the CRITICAL-path reasoning are in
 [`05 — Re-convergence`](implementation-test/05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
-spec in [`specs/10`](implementation-test/specs/10-control-aggregate-modules.md); graph + logging
+spec in [`specs/10`](implementation-test/idx-10-control-aggregate.md); graph + logging
 block + manifest in [`06`](implementation-test/06-graph-yaml.md); node rows in
 [`04`](implementation-test/04-pipeline-and-contracts.md); catalog entry +
 `fan-in`/`aggregate` removal in [`03`](implementation-test/03-module-catalog.md);
@@ -718,7 +718,7 @@ chose "keep the parent file as a thin index" over removal.
 
 The original ticket text is kept below for the record.
 
-`specs/` tickets currently group 4–6 modules per file (e.g., `specs/08-sim-cycle-modules.md` covers `ExpandRuns`, `ResolveSeed`, `BuildSimCmd`, `WriteRandseed`, `LinkLatest`, `InterpretSim`). This makes work units large, parallelisation graphs coarse, and crowds each module's signature, tests, and constraints into shared space.
+`specs/` tickets currently group 4–6 modules per file (e.g., `idx-08-sim-cycle.md` covers `ExpandRuns`, `ResolveSeed`, `BuildSimCmd`, `WriteRandseed`, `LinkLatest`, `InterpretSim`). This makes work units large, parallelisation graphs coarse, and crowds each module's signature, tests, and constraints into shared space.
 
 #### Concrete steps
 
@@ -1217,7 +1217,7 @@ exempt, and TODO #20 step 2 names a reading list for every spec category.
 
 ### 28. Pin the module file-layout and package conventions
 
-`06-graph-yaml.md` suggests grouping modules into `setup.py`, `build.py`, `sim.py`, `control.py` (also implicit in `specs/04-setup-modules.md:13` → `modules/rtl_buddy/setup.py`). This is described as a "suggestion" rather than a pinned layout, leaving the package shape ambiguous.
+`06-graph-yaml.md` suggests grouping modules into `setup.py`, `build.py`, `sim.py`, `control.py` (also implicit in `idx-04-setup.md:13` → `modules/rtl_buddy/setup.py`). This is described as a "suggestion" rather than a pinned layout, leaving the package shape ambiguous.
 
 #### Concrete steps
 
@@ -1240,7 +1240,7 @@ Every module spec names exactly one file path, and that file path matches the co
   `06-graph-yaml.md` and the "e.g." / "either inlined or split for taste" hedges in the schema
   specs (01/01a/01b/01c). Each schema spec now names exactly one file; `01b` pins `UVMConfig` +
   `TestbenchConfig` inlined into `suite.py`.
-- **Mapping recorded** in a new pinned [Module package layout](specs/README.md#module-package-layout-pinned)
+- **Mapping recorded** in a new pinned [Module package layout](implementation-test/specs/README.md#module-package-layout-pinned)
   section in `specs/README.md`, cross-linked from `06-graph-yaml.md`.
 - **Step 3 de-scoped (Document & de-scope).** The harness has no `rtl_buddy:derive-seed-mode`
   colon-namespace syntax — plugin `name:` values are flat strings in `modules/config.yaml`

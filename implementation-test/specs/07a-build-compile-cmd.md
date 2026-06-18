@@ -5,7 +5,7 @@
 [01b](01b-suite-schema.md) (`BuildCompileCmdMod` reads
 `ctx["test"].get_name()`/`get_plusdefines()`).
 **References:** [03 — Reusable subprocess core section](../03-module-catalog.md). Parent
-index: [07 — Compile-cycle modules](07-compile-cycle-modules.md).
+index: [idx-07 — Compile-cycle modules](../idx-07-compile-cycle.md).
 
 ## Before you start
 
@@ -16,8 +16,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/build.py`, which is created by spec
 [`06a`](06a-run-preproc.md) — append, do not overwrite. The file is shared with run-process
-(`03`), the prep modules (`06a`–`06b`, index [06](06-prep-modules.md)), and the compile-cycle
-modules (`07a`–`07b`, index [07](07-compile-cycle-modules.md)); coordinate shared imports and
+(`03`), the prep modules (`06a`–`06b`, index [idx-06](../idx-06-prep.md)), and the compile-cycle
+modules (`07a`–`07b`, index [idx-07](../idx-07-compile-cycle.md)); coordinate shared imports and
 helpers with those specs.
 
 ## Goal
@@ -170,8 +170,7 @@ passed as the base-dir port; `logging_handler` for the bad-mode path.
 - No port-routed failure path (the compile `rc` is interpreted downstream by
   `interpret-compile`).
 - Wiring `build-compile-cmd` → `run-process` (instance #1) → `interpret-compile` end-to-end
-  against a real builder surfaces a non-zero `rc` on a known bad source file (see
-  [07 index](07-compile-cycle-modules.md#acceptance-criteria)).
+  against a real builder surfaces a non-zero `rc` on a known bad source file.
 - The `modules/config.yaml` manifest entry `{ name: build-compile-cmd, class_name: BuildCompileCmdMod }`
   validates and the harness resolves `build-compile-cmd` → `BuildCompileCmdMod`.
 

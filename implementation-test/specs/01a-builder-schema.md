@@ -1,7 +1,7 @@
 # Spec 01a: Builder schema (`RtlBuilderConfig`)
 
 **Depends on:** none. Can run in parallel with spec 01.
-**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [07 settled 1](../07-ambiguities-and-assumptions.md).
+**References:** [idx-01](../idx-01-schema.md) (umbrella), [07 settled 1](../07-ambiguities-and-assumptions.md).
 **Source:** `rtl_buddy/src/rtl_buddy/config/rtl.py:8-126` (`process_opts` + `RtlBuilderConfigOpts` + `RtlBuilderConfig`).
 
 ## Before you start
@@ -133,8 +133,8 @@ the schema stays a pure value object.
 - Loading an unmodified rtl_buddy `root_config.yaml` produces `RtlBuilderConfig`
   instances whose `get_*` methods return values equal to those produced by
   `from rtl_buddy.config.rtl import RtlBuilderConfig` over the same file.
-- Every downstream consumer spec ([05](05-selection-expansion-modules.md),
-  [07](07-compile-cycle-modules.md), [08](08-sim-cycle-modules.md)) references methods
+- Every downstream consumer spec ([idx-05](../idx-05-selection-expansion.md),
+  [idx-07](../idx-07-compile-cycle.md), [idx-08](../idx-08-sim-cycle.md)) references methods
   by name (`builder_cfg.get_exe()`, `builder_cfg.get_seed()`,
   `builder_cfg.get_run_time_opts(mode, seed)`, etc.) without forcing the implementer
   to open `rtl_buddy/src/rtl_buddy/config/rtl.py`.

@@ -2,7 +2,7 @@
 
 **Depends on:** spec 01 (schema — `SeedMode`).
 **References:** [03 — Setup section](../03-module-catalog.md). Parent index:
-[04 — Setup modules](04-setup-modules.md).
+[idx-04 — Setup modules](../idx-04-setup.md).
 
 ## Before you start
 
@@ -13,8 +13,8 @@ are the shipped examples. Open the rtl_buddy source named in the **Compatibility
 below before writing the body (every citation is anchored to rtl_buddy `v1.4.0`, commit
 `a69d962`). This module appends to `modules/rtl_buddy/setup.py`, which is created by spec
 [`04a`](04a-discover-config-file.md) — append, do not overwrite. The file is shared with the
-setup chain (`04a`–`04i`, index [04](04-setup-modules.md)), the selection/expansion chain
-(`05a`–`05f`, index [05](05-selection-expansion-modules.md)), and git-status (`10b`);
+setup chain (`04a`–`04i`, index [idx-04](../idx-04-setup.md)), the selection/expansion chain
+(`05a`–`05f`, index [idx-05](../idx-05-selection-expansion.md)), and git-status (`10b`);
 coordinate shared imports and helpers with those specs.
 
 ## Goal
@@ -80,8 +80,7 @@ In `modules/tests/test_setup.py`. Pure function — no fixtures needed.
 
 - Tests pass.
 - Output port `default` exercised: maps the two CLI booleans to the correct `SeedMode` for
-  all three precedence cases (contributes to the setup-only end-to-end graph — see
-  [04 index](04-setup-modules.md#acceptance-criteria)).
+  all three precedence cases.
 - No failure path: every input pair maps to a `SeedMode`; the module never logs an error.
 - The `modules/config.yaml` manifest entry `{ name: derive-seed-mode, class_name: DeriveSeedModeMod }`
   validates and the harness resolves `derive-seed-mode` → `DeriveSeedModeMod`.

@@ -485,7 +485,7 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 >
 > The `any` contract is retained as a reusable (plain) contract but has no consumer in the
 > `test` graph. The `SummaryProcessor` plugin is specified in
-> [spec 10](specs/10-control-aggregate-modules.md).
+> [spec 10](idx-10-control-aggregate.md).
 
 ## Module → rtl_buddy provenance
 
