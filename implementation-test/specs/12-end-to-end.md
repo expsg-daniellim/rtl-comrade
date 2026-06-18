@@ -126,7 +126,7 @@ The fixed-`simv` concurrency hole is a known limitation until the upstream rtl_b
 per-invocation-subdir change ([07 KIV 17](../07-ambiguities-and-assumptions.md)) is ported into
 rtl_comrade and integrated with the existing modules: on a non-verilator builder a concurrent
 multi-test run can **silently** simulate the wrong binary (rc 0, green summary). The graph has
-**no built-in serialisation** (the lock shim was removed by TODO #30 and not replaced), so the
+**no built-in serialisation**, so the
 interim workaround is operational — invoke such suites one test per `rtl-comrade test` call —
 and the limitation is documented as KIV. Verilator builders are unaffected (per-tag artefacts).
 

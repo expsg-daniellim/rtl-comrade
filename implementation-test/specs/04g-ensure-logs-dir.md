@@ -30,11 +30,9 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 the catalog is the design view, this is the build view; update both when behaviour changes.
 `work_dir` is a **load-bearing** input (the validated base directory from `check-suite-cwd`) —
 it is read to root the logs directory, so it is a required (non-defaulted) port the harness
-edge-validates. This node takes **no** `env_ready` input and emits **no** `env_ready` token: the
-`logs/` `mkdir` it performs is ordered ahead of every subprocess by the `logs_dir` **data** edge
-(the composers block on `logs_dir` before building a command, and the directory is created before
-that value is emitted), while the PATH prepend is sequenced separately by `prepend-cwd-path →
-run-process.env_ready` (`required: true`). See [07 settled 25/26](../07-ambiguities-and-assumptions.md).
+edge-validates. The `mkdir` is ordered ahead of every subprocess by the `logs_dir` **data**
+edge: the composers block on `logs_dir` before building a command, and the directory is created
+before that value is emitted. See [07 settled 25/26](../07-ambiguities-and-assumptions.md).
 
 ```
 contract: unit
@@ -56,7 +54,7 @@ class EnsureLogsDirMod:
 1. Resolve the artefact directory against the provided base: `path = Path(work_dir) / logs_dir`.
    `work_dir` is the validated base directory emitted by `check-suite-cwd` (its sole artefact-
    location source); `logs_dir` is the **subdirectory name** (CLI `--logs-dir`, default
-   `"logs"`). The location no longer depends on the ambient process CWD.
+   `"logs"`). The location is rooted on the validated base dir, independent of the ambient process CWD.
 2. Create it idempotently: `path.mkdir(parents=True, exist_ok=True)` — `exist_ok=True` makes
    re-runs a no-op; `parents=True` accepts nested names like `build/logs`.
 3. Record it for auditability: `log.info("logs_dir_ready", path=str(path.resolve()))`.
@@ -64,9 +62,9 @@ class EnsureLogsDirMod:
    first-run-required persistent input by `build-compile-cmd` / `build-sim-cmd` / `resolve-seed`
    so they join filenames onto a ready-made path. Because the `mkdir` runs *before* this value is
    emitted and those consumers block on it before composing a command, the directory provably
-   exists before any subprocess redirects into it — no `env_ready` token is needed for the `mkdir`
-   ordering. The composers no longer re-derive the directory from a bare `logs_dir` name, so the
-   CWD-relative assumption lives nowhere but the `check-suite-cwd` → `ensure-logs-dir` provider pair.
+   exists before any subprocess redirects into it. The composers consume the resolved directory
+   directly rather than re-deriving it from a bare `logs_dir` name, so the CWD-relative assumption
+   lives nowhere but the `check-suite-cwd` → `ensure-logs-dir` provider pair.
 5. **Failure — unwritable parent.** A `PermissionError`/`OSError` from `mkdir` is a
    setup-domain config error, left to propagate uncaught (harness CRITICAL via the
    bubbling-SystemExit catch, same idiom as `DiscoverConfigFileMod`) — no port-routed fail.
@@ -88,11 +86,9 @@ In `modules/rtl_buddy/setup.py`:
   read to root the logs dir, so a missing edge fails edge-validation rather than silently
   mistargeting) and the CLI `logs_dir:str` subdirectory name (default `"logs"`; `rtl_buddy` has no
   override, this is a small Notable divergence — see [07](../07-ambiguities-and-assumptions.md)).
-  Takes **no** `env_ready` and emits **no** `env_ready`: the PATH prepend is sequenced directly by
-  `prepend-cwd-path → run-process.env_ready` (`required: true`), and this node's `mkdir` is ordered
-  by the `logs_dir` **data** edge (it `mkdir`s *before* emitting `logs_dir`, and the composers
-  block on that value before building a command, so the directory exists before any redirect).
-  Runs once via `unit`. See [Algorithm](#algorithm) for the numbered steps.
+  Runs once via `unit`; its `mkdir` runs *before* it emits `logs_dir`, and the composers block on
+  that value before building a command, so the directory exists before any subprocess redirects
+  into it. See [Algorithm](#algorithm) for the numbered steps.
   Emits `("logs_dir", path)` — the resolved `Path(work_dir) / logs_dir` — as a **first-run-required
   persistent input** consumed by the path composers. The path is **not** stamped into `ctx`; it is
   the resolved directory the composers join filenames onto. The two legs name files differently:
@@ -159,7 +155,7 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` as the `work_dir`;
 - `unit` contract, runs once — create the directory with `(Path(work_dir) /
   logs_dir).mkdir(parents=True, exist_ok=True)` (idempotent; nested names allowed).
 - `work_dir` is **load-bearing** — it is read to root the logs directory (so it is a required,
-  non-defaulted port the harness edge-validates). The node takes **no** `env_ready` input.
+  non-defaulted port the harness edge-validates).
 - Do **not** root the directory on the ambient process CWD (`Path(logs_dir).mkdir()` is wrong) —
   always join `logs_dir` onto the provided `work_dir`.
 - Emit the resolved `Path` on the `logs_dir` port (consumed as a persistent input by
@@ -168,26 +164,12 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` as the `work_dir`;
   `mkdir` must run **before** the emit, so the value's arrival attests the directory exists.
 - `PermissionError`/`OSError` from `mkdir` propagate uncaught (harness CRITICAL) — no
   port-routed fail; this is a setup-domain error, not per-test.
-- Do **not** add an `env_ready` input or output — the `mkdir` ordering is carried by the `logs_dir`
-  data edge, and the PATH prepend by `prepend-cwd-path → run-process.env_ready` (`required: true`).
 
 ## Notes
 
 `EnsureLogsDirMod` is wired in `test`/`randtest` only: regression's per-suite `chdir`
 means a once-at-startup bootstrap targets the wrong place; the regression
 equivalent runs **per chdir'd suite** and is owned by [08](../08-sibling-graphs.md).
-Because the directory is now rooted on the `work_dir` *input* rather than the ambient CWD, the
+Because the directory is rooted on the `work_dir` *input* rather than the ambient CWD, the
 regression equivalent differs only in **which `work_dir` it is fed** (the per-suite base),
 not in any path logic here — the centralisation makes that sibling cheaper, not harder.
-
-This node carries **no ordering token at all** — both `work_dir` (in) and `logs_dir` (out) are
-real data the consumers read, so their edges are required and validated, and the `mkdir`-before-
-subprocess ordering falls out of the `logs_dir` data dependency for free. Earlier drafts threaded
-an `env_ready` token through this node (`prepend-path → ensure-logs → cc-run/sim-run`) to fold the
-PATH prepend and the `mkdir` into one sequencing surface; that relay was removed once the
-`required: true` edge marking (see [07 settled 25](../07-ambiguities-and-assumptions.md)) let
-`prepend-cwd-path` sequence the PATH prepend directly onto each `run-process`, and once it was
-clear the `mkdir` was already ordered by the `logs_dir` data edge. Removing it restores this
-node's atomicity (it now depends only on what it reads). The earlier `_cwd` ordering-only token —
-whose defaulted-port exemption (Settled item 21) meant a forgotten edge silently skipped the
-guard — is likewise gone; `work_dir` is the load-bearing, validated replacement.

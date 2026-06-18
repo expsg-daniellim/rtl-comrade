@@ -4,8 +4,7 @@
 [10b](10b-git-status.md) (emit the `test_result` events this processor accumulates). Uses the
 **per-run processor-finalisation hook**: `App.cleanup` finalises the run's processors (then
 handlers), duck-typed, before the failure check and not on a `CRITICAL` exit
-(`docs/logger/implementation.md:95-99`, timing at `:165-167`). No dependency on spec 02 — the
-`fan-in-results` relay was removed by TODO #15.
+(`docs/logger/implementation.md:95-99`, timing at `:165-167`).
 **References:** [03 — Control section](../03-module-catalog.md),
 [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node),
 [07 item 27](../07-ambiguities-and-assumptions.md), `docs/logger/implementation.md`,
@@ -17,7 +16,7 @@ handlers), duck-typed, before the failure check and not on a `CRITICAL` exit
 Implement the per-graph logging **processor** that accumulates the per-test outcome rows from a
 **`Config` watch-list of event names** (`test_result` from the otherwise-silent paths, plus the
 failure terminals' `compile_failed`/`sim_timeout`/`*_failed`) and renders the summary table once,
-in its `finalise()` teardown hook — replacing the removed `aggregate-results` sink (TODO #15).
+in its `finalise()` teardown hook.
 Its role is deliberately narrow: **collect the watch-list outcomes only.** `git_state` and every
 other non-watched event pass straight through to the console untouched; there is no git stateline
 in the table. The exit code is driven solely by the per-emission `log.error` at each failure
@@ -159,9 +158,8 @@ In `graphs/log/summary.py` — a single `SummaryProcessor` class:
   rtl_buddy's `test_name` column). It is a **no-op when `self._rows` is empty**
   (list-mode, or a CRITICAL abort before any result). It drives **no** exit code.
 
-There is **no** separate `drop_summary_events` processor: the single `SummaryProcessor` both
-accumulates the rows and suppresses the summary-only ones. The summary plugin's *only* job is to
-collect outcomes and render them once at the end.
+The single `SummaryProcessor` both accumulates the rows and suppresses the summary-only ones.
+The summary plugin's *only* job is to collect outcomes and render them once at the end.
 
 Sketches in [05 — The `SummaryProcessor` logging plugin](../05-branching-and-results.md#the-summaryprocessor-logging-plugin).
 **CRITICAL path**: on a `CRITICAL` record the harness exits before the per-run teardown runs,
@@ -212,11 +210,10 @@ for the suppression cases. No graph/harness needed.
 - Exit-code semantics: a run with any FAIL/NA emits ≥1 `log.error` → harness exit 1; an
   all-PASS/SKIP run emits none → exit 0. This reproduces rtl_buddy's
   `exit_code |= 0 if is_pass() else 1` via the per-emission `log.error`, not an aggregator.
-- The summary table content matches what `aggregate-results.finalise()` previously produced,
-  with `test_name` as the first column (rtl_buddy parity) followed by `result`/`desc`.
-- No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
-  `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
-  single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
+- The summary table renders `test_name` as the first column (rtl_buddy parity) followed by
+  `result`/`desc`.
+- The `logging` block resolves `graphs/log/summary.py` to the single `SummaryProcessor`, which
+  renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
 
 ## Constraints
 
@@ -233,8 +230,8 @@ for the suppression cases. No graph/harness needed.
   `self._git_state`, or render git state in the table.
 - `finalise()` renders the table once; it is a **no-op when `self._rows` is empty** (list-mode /
   CRITICAL abort) and drives **no** exit code (the per-emission `log.error` does).
-- Do **not** add a separate `drop_summary_events` processor — accumulation and suppression live
-  in this one object.
+- Keep accumulation and suppression in the one `SummaryProcessor` object — do not split them
+  across two processors.
 
 ## Notes
 

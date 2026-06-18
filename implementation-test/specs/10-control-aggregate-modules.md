@@ -1,7 +1,6 @@
 # Spec 10: Control module, git-status, and the summary logging plugin (index)
 
-**Depends on:** spec 01 (schema). No dependency on spec 02 any more — the `fan-in-results`
-relay was removed by TODO #15.
+**Depends on:** spec 01 (schema).
 **References:** [03 — Control section](../03-module-catalog.md),
 [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node),
 [07 item 27](../07-ambiguities-and-assumptions.md), `docs/logger/implementation.md`,
@@ -11,7 +10,7 @@ relay was removed by TODO #15.
 
 Implement the cross-cutting early-stop gate (reused at three boundaries), the `git-status`
 setup node, and the per-graph **logging plugin** that renders the summary table and drives
-exit semantics — replacing the removed `aggregate-results` sink (TODO #15).
+exit semantics.
 
 This spec is split into one ticket per deliverable — build them as independent units.
 
@@ -37,14 +36,14 @@ the `rtl_buddy/setup.py` block ([`10b`](10b-git-status.md)). `graphs/log/summary
   `--early-stop` run exits **0** — a deliberate divergence from rtl_buddy's exit 1
   (see [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)
   and [10a](10a-early-stop-gate.md)).
-- The summary table content matches what `aggregate-results.finalise()` previously produced
-  (same `key`/`result`/`desc` columns), collected from the `Config` watch-list events
+- The summary table renders `test_name`/`result`/`desc` columns (`test_name` first, for
+  rtl_buddy parity; `key` is retained only for correlation, not rendered), collected from the
+  `Config` watch-list events
   (`test_result` + `compile_failed`/`sim_timeout`/`*_failed`). The table is **outcomes only** —
   git state is logged separately by `git-status` and falls through to the console, not into the
   table.
-- No `fan-in`/`agg` node exists in `graphs/test.yaml`, and there is **no** separate
-  `drop_summary_events` entry; the `logging` block resolves `graphs/log/summary.py` to the
-  single `SummaryProcessor` and renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
+- The `logging` block resolves `graphs/log/summary.py` to the single `SummaryProcessor`, which
+  renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
 - `early-stop-gate` exercises both `go`/`stop` ports and `git-status` emits its
   `git_state`/`git_state_unavailable` events; both resolve from `modules/config.yaml` to
   `EarlyStopGateMod` / `GitStatusMod`, and the `logging` block resolves `SummaryProcessor`

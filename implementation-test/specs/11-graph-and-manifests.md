@@ -9,8 +9,9 @@ Read the harness config-file docs this spec assembles: `docs/harness_configs/gra
 edges, node/CLI edge sources, and the "Logging configuration" section that wires the
 `SummaryProcessor` plugin), `docs/harness_configs/plugin_manifest.md` (the module/contract
 `config.yaml` shape), and `docs/harness_configs/rtl_comrade_config.md` (registering the `test`
-subcommand). `docs/harness/validation.md` explains the checks the acceptance criteria rely on
-(cycles, overloaded inputs, `no_destination` at INFO for the unwired terminal ports).
+subcommand). `docs/harness/validation.md` explains the static checks the acceptance criteria rely on
+(cycles, overloaded inputs). The `no_destination` INFO log for the unwired terminal ports is a
+**runtime** node emission, not a static check — see `docs/harness/node.md` ("Key Behaviors").
 [`06 — graphs/test.yaml`](../06-graph-yaml.md) is the design source to copy verbatim. This spec
 is the sole owner of `graphs/test.yaml`, `modules/config.yaml`, `contracts/config.yaml`, and the
 `rtl_comrade_config.yaml` entry — no sibling specs append to those files.
@@ -23,7 +24,7 @@ subcommand in `rtl_comrade_config.yaml`.
 ## Deliverables
 
 - **`graphs/test.yaml`** — verbatim from [06](../06-graph-yaml.md): all nodes (including the
-  `git-status` setup node; **no** `fan-in`/`agg` nodes — removed by TODO #15), CLI edges
+  `git-status` setup node), CLI edges
   (including `test_name` as positional with `option: false, default: ""`), setup chain,
   persistent-config fan-out, list-mode routing, main-line continue ports, the **unwired**
   terminal ports (no edges), and the `logging` block that wires the `SummaryProcessor` plugin.
@@ -75,9 +76,9 @@ subcommand in `rtl_comrade_config.yaml`.
     - { name: early-stop-gate,   class_name: EarlyStopGateMod }
   ```
 - **`contracts/config.yaml`** — the `any` registration from spec 02 (registered for reuse but
-  **unwired** in `test`). There is **no** `serial_acquire` contract: the interim parallel-safety
-  lock shim was removed (TODO #30) in favour of per-tag artefact naming — see
-  [06](../06-graph-yaml.md) and [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
+  **unwired** in `test`). Parallel safety comes from per-tag artefact naming — see
+  [06](../06-graph-yaml.md) and
+  [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
   ```yaml
   - file: any.py
     plugins:
@@ -103,23 +104,22 @@ test runner) for the `--help` cases.
   (boundary: no dangling manifest reference).
 - `validation.py` on the loaded graph → reports **no** cycles and **no** overloaded inputs
   (single-source-per-port holds).
-- `validation.py` on the loaded graph → reports the 13 terminal ports as `no_destination` at
-  INFO, **not** as errors (boundary: unwired-by-design terminal ports).
+- Running the graph → each emission on an unwired terminal port logs `no_destination` at INFO
+  (a `node.py` runtime emission), **not** an error or a validation failure (boundary:
+  unwired-by-design terminal ports). This is runtime behavior, not a `validation.py` check.
 - `uv run rtl-comrade --help` → output lists `test` with the help string `"Compile and
   simulate a SystemVerilog/UVM test suite."`.
-- `uv run rtl-comrade test --help` → output lists every CLI edge (`test_config`, `builder`,
-  `test_name` positional with `option: false, default: ""`, `list`, `rnd_new`, `rnd_last`,
-  `builder_mode`, `early_stop`) with the types/defaults from [06](../06-graph-yaml.md).
-- Regression guard — the assembled graph/manifests contain **no** `fan-in`/`agg` node, **no**
-  `serial_acquire` contract / `serial.py`, and **no** `drop_summary_events` processor (assert
-  their absence; all were removed by TODO #15/#30 and must not reappear).
+- `uv run rtl-comrade test --help` → output lists every CLI edge (`test_config`, `logs_dir`
+  type `str` default `"logs"`, `builder`, `test_name` positional with `option: false, default: ""`,
+  `list`, `rnd_new`, `rnd_last`, `builder_mode`, `early_stop`) with the types/defaults from
+  [06](../06-graph-yaml.md).
 
 ## Acceptance criteria
 
 - `uv run rtl-comrade --help` lists `test` with the help string.
 - `uv run rtl-comrade test --help` lists every CLI edge from [06](../06-graph-yaml.md)
-  (`test_config`, `builder`, `test_name` positional, `list`, `rnd_new`, `rnd_last`,
-  `builder_mode`, `early_stop`) with correct types/defaults.
+  (`test_config`, `logs_dir` type `str` default `"logs"`, `builder`, `test_name` positional,
+  `list`, `rnd_new`, `rnd_last`, `builder_mode`, `early_stop`) with correct types/defaults.
 - Graph loads without validation errors — `Graph.from_file("graphs/test.yaml")` succeeds.
 - `validation.py` reports no cycles or overloaded inputs.
 - Every module name registered in `modules/config.yaml` and every contract name in
@@ -131,12 +131,11 @@ test runner) for the `--help` cases.
 - Copy [06](../06-graph-yaml.md) **verbatim**; if a node/port name drifted between
   [03](../03-module-catalog.md) and what specs 04–10 actually built, reconcile **toward the
   built module signatures**, not the plan.
-- The 13 terminal ports stay **unwired** — do **not** add a `fan-in`/`agg` node (removed by
-  TODO #15). `validation.py` reports them as `no_destination` at INFO, **not** errors.
-- Register the `any` contract for reuse but leave it **unwired** in `test`. There is **no**
-  `serial_acquire` contract / `serial.py` (TODO #30 removed the shim).
+- The 13 terminal ports stay **unwired**. At runtime the node logs `no_destination` at INFO for
+  them, **not** errors; this is a `node.py` runtime emission, not a `validation.py` static check.
+- Register the `any` contract for reuse but leave it **unwired** in `test`.
 - The summary is wired only via the `logging` block (`graphs/log/summary.py` → `SummaryProcessor`);
-  it is **not** a module manifest entry, and there is **no** separate `drop_summary_events`.
+  it is **not** a module manifest entry.
 - The assembled graph must load with no cycles and no overloaded inputs (single-source-per-port).
 
 ## Notes
@@ -145,8 +144,8 @@ This spec is mostly assembly — copy [06](../06-graph-yaml.md) faithfully. If a
 node/port name diverged between [03](../03-module-catalog.md) and what got built in specs
 04–10, reconcile here (prefer matching the actual module signatures over the plan).
 
-The 13 terminal ports are **unwired** (TODO #15) — there is no `fan-in`/`agg` node. Each
+The 13 terminal ports are **unwired**. Each
 terminal node logs a `test_result` event; the `SummaryProcessor` plugin (declared in the
 `logging` block) accumulates the rows and renders the table in `finalise()`, and per-emission
-`log.error` drives the exit code. `validation.py` reports the unwired ports as `no_destination` at INFO, not errors.
+`log.error` drives the exit code. At runtime the node logs the unwired ports as `no_destination` at INFO, not errors (a `node.py` runtime emission, not a `validation.py` check).
 See [spec 10](10-control-aggregate-modules.md) for the plugin.

@@ -1,7 +1,7 @@
 # Spec 01a: Builder schema (`RtlBuilderConfig`)
 
 **Depends on:** none. Can run in parallel with spec 01.
-**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [07 settled 1](../07-ambiguities-and-assumptions.md), TODO #9 (resolution).
+**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [07 settled 1](../07-ambiguities-and-assumptions.md).
 **Source:** `rtl_buddy/src/rtl_buddy/config/rtl.py:8-126` (`process_opts` + `RtlBuilderConfigOpts` + `RtlBuilderConfig`).
 
 ## Before you start

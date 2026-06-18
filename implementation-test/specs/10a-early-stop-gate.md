@@ -90,7 +90,7 @@ enum-validate it). Compares `early_stop` against `phase` using the ordering `pre
 post`; if stop here → `("stop", {"key": payload["key"], "result": EarlyStopResults(f"Stopped
 early at {phase}")})` **and** `log.info("test_result", key=..., test_name=payload["test"].get_name(),
 result="NA", desc=...)`; else `("go", payload)`. Three node instances, differing only in
-`config.phase`. The `stop` port is **unwired** (TODO #15) — the harness logs `no_destination`
+`config.phase`. The `stop` port is **unwired** — the harness logs `no_destination`
 at INFO.
 **Failure handling**: routing only — no `log.error` (a `stop` is a normal terminal, not a
 failure). One guard: an `early_stop` value outside `{pre,comp,sim,post}` →

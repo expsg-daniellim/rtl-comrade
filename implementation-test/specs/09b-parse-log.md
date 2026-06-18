@@ -52,7 +52,7 @@ class ParseLogMod:
 1. Read the log: `text = Path(test_run["log"]).read_text()`.
 2. Scan line-by-line, recording the first match of each: `re.match(r"PASS\b\s*(.*)", line)`,
    `re.match(r"FAIL\b\s*(.*)", line)`, and `re.match(r"(ERR|FAT):\s*(.*)", line)`. The `\b` word
-   boundary is correction #3 — a line like `PASSTHROUGH ...` no longer matches PASS.
+   boundary is correction #3 — it keeps a line like `PASSTHROUGH ...` from matching PASS.
 3. Resolve the verdict (correction #1 — FAIL wins): `if match_fail` → FAIL; `elif match_pass` →
    PASS; else NA (`{"result": "NA", "desc": "test result unknown"}`). Correction #2: when
    `match_fail` is set but `match_err` is not, take `desc = match_fail.group(1)` rather than
@@ -65,8 +65,8 @@ class ParseLogMod:
    `default` port stays unwired.
 5. **Failure — unreadable log.** Wrap step 1 in `try/except OSError` (incl. `FileNotFoundError`)
    → build a FAIL `result` carrying `str(e)` as `desc` and fall through to step 4 (logged as a
-   non-pass `test_result`, so it drives the exit). No separate `parse_log_read_failed` /
-   `test_failed` event.
+   non-pass `test_result`, so it drives the exit) — a read failure goes through the same
+   `test_result` path, not a distinct event.
 
 ## Deliverables
 
@@ -84,7 +84,7 @@ In `modules/rtl_buddy/sim.py` (continuing from spec 08):
   `not result.is_pass()` (FAIL **and NA**; the ERROR is the exit driver), `log.info` when PASS
   (carrying `key`/`result`/`desc`). `FileNotFoundError`/`OSError` opening `test_run["log"]` →
   build a FAIL `result` with the exception string as `desc` and log it through the same
-  `test_result` path. There is **no** separate `test_failed` / `parse_log_read_failed` event.
+  `test_result` path — not a distinct event.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results` (corrected per [07 settled 15](../07-ambiguities-and-assumptions.md)).
 
 **Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`
@@ -141,7 +141,7 @@ cases.
 - Default verdict is NA with `desc = "test result unknown"`.
 - Log every verdict once as `test_result`: `log.error("test_result", key, result, desc)` when
   `not is_pass()` (FAIL **and NA** — the deferred-exit driver), else `log.info("test_result", …)`
-  (PASS). Do **not** emit a separate `test_failed` event.
+  (PASS). Every verdict goes through the one `test_result` path — do **not** add a distinct event.
 - Catch `OSError`/`FileNotFoundError` opening `test_run["log"]` → build a FAIL `result` carrying
   `str(e)` as `desc` and log it through the same `test_result` path. Emit the result on the
   string-literal `default` port.

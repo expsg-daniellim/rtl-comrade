@@ -1,7 +1,7 @@
 # Spec 01c: Model schema (`models.yaml`)
 
 **Depends on:** none. Can run in parallel with specs 01, 01a, 01b.
-**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [01b](01b-suite-schema.md) (`TestConfig.model: ModelConfig | None`), [07 settled 1, 8](../07-ambiguities-and-assumptions.md), TODO #10 (resolution).
+**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [01b](01b-suite-schema.md) (`TestConfig.model: ModelConfig | None`), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
 **Source:** `rtl_buddy/src/rtl_buddy/config/model.py:1-100` (`ModelConfig`, `ModelConfigFile`, `ModelConfigLoader`).
 
 ## Before you start

@@ -160,14 +160,13 @@ fixture carrying a resolved model + testbench; `logging_handler` for the fail pa
 
 - Write the per-tag filename `run.{test_tag}.f` (`test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
   ctx["test"].get_name())`, the same regex `build-compile-cmd` uses) — **never** the bare
-  `run.f`. This per-tag naming is the interim concurrency mitigation; do **not** reintroduce a
-  serialising lock (the `serial_acquire` shim was removed, TODO #30).
+  `run.f`. This per-tag naming is the interim concurrency mitigation, and needs no serialising lock.
 - Root the filename on the provided `work_dir`: `Path(work_dir) / f"run.{test_tag}.f"` — `work_dir`
   is the validated base directory from `check-suite-cwd` (the same provider `ensure-logs-dir`
   consumes), supplied as a **load-bearing** persistent input. Do **not** compose a CWD-relative
   `Path(f"run.{test_tag}.f")` or read the ambient process CWD — location is decided by the
   provider, so a relocation (`--work-dir`, regression's per-suite root) is a one-node change.
-- Use the plain `default` contract (reverted from `serial_acquire`).
+- Use the plain `default` contract.
 - On success emit `("ctx", ctx)` then `("filelist", {key, filelist: <Path>})` in lockstep via
   the generator.
 - Catch broad `Exception` from the resolve/write (`OSError`/`PermissionError`/`FileNotFoundError`/
@@ -184,16 +183,16 @@ unroll, `+incdir+`/`+libext+` handling, dedup, and the existence checks are all
 behaviour worth replicating. See `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py` for
 the reference.
 
-Filelist filename (TODO #30 / KIV 17): rtl_buddy writes a single `run.f` in CWD per compile,
+Filelist filename: rtl_buddy writes a single `run.f` in CWD per compile,
 so concurrent compiles would collide. `write-filelist` therefore writes a **per-tag** path
 `run.{test_tag}.f`, where `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
 ctx["test"].get_name())` (the same regex `build-compile-cmd` uses — spec
 [07a](07a-build-compile-cmd.md)), rooted on the `work_dir` provider
 (`Path(work_dir) / f"run.{test_tag}.f"`), and emits that `Path` on its `filelist` port.
 `build-compile-cmd` passes `filelist["filelist"]` straight to `-f`, so it needs no change.
-The per-tag naming is the interim concurrency mitigation that replaced the removed
-`serial_acquire` lock shim; rooting on `work_dir` is the R14 slice that brings `run.f` under the
-same artefact-location provider model as `logs/` (`check-suite-cwd` → consumers). The residual
+The per-tag naming is the interim concurrency mitigation; rooting on `work_dir` is the R14
+slice that brings `run.f` under the same artefact-location provider model as `logs/`
+(`check-suite-cwd` → consumers). The residual
 CWD-relative artefacts this does **not** cover (non-verilator configured `simv`, `test.*`
 symlinks, tool-internal files) wait on the upstream per-invocation-subdir change
 ([07 item 17](../07-ambiguities-and-assumptions.md)), the reference fix that supersedes both when

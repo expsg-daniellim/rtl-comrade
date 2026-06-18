@@ -482,7 +482,13 @@ No spec writes to `logs/...` without referencing the documented ownership rule.
 
 ### 13. Decide `VlogPost` quirks — replicate or fix
 
-`07` item 15 explicitly defers this: rtl_buddy's `VlogPost` lets a later `PASS` line override an earlier `FAIL` in the same log; partial regex matches behave subtly. `specs/09-post-modules.md:42` and `specs/12-end-to-end.md:34` both depend on the decision.
+**Status: Resolved (2026-06-05).** Decision: **fix, not replicate.** `ParseLogMod` corrects all
+three `VlogPost` quirks — FAIL wins over PASS, safe FAIL-without-ERR (no crash), and the `\b`
+word-boundary guard. Recorded in `07` Settled item 15 and specified in `specs/09b-parse-log.md`.
+
+The original problem: rtl_buddy's `VlogPost` let a later `PASS` line override an earlier `FAIL`
+in the same log, and partial regex matches behaved subtly. `specs/09-post-modules.md` and
+`specs/12-end-to-end.md` both depended on the decision.
 
 #### Concrete steps
 

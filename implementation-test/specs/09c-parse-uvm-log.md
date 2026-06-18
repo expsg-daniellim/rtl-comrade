@@ -71,7 +71,7 @@ class ParseUvmLogMod:
    port stays unwired.
 5. **Failure — unreadable log.** Wrap step 1's read in `try/except OSError` → build a FAIL
    `result` carrying `str(e)` as `desc` and fall through to step 4 (logged as an ERROR
-   `test_result`). No separate `parse_uvm_read_failed` / `test_failed` event.
+   `test_result`) — a read failure goes through the same `test_result` path, not a distinct event.
 
 ## Deliverables
 
@@ -87,9 +87,9 @@ In `modules/rtl_buddy/sim.py` (continuing from spec 08):
   **Failure handling**: the verdict is logged once as `test_result` — `log.error` when `not
   result.is_pass()` (FAIL; the exit driver), `log.info` when PASS (carrying `key`/`result`/`desc`).
   `FileNotFoundError`/`OSError` reading `test_run["log"]` → build a FAIL `result` with the
-  exception string as `desc` and log it through the same `test_result` path. Missing Report
-  Summary block is already a FAIL (explicit message); `int()` on regex-matched `[0-9]+` cannot
-  raise `ValueError`. No separate `test_failed` / `parse_uvm_read_failed` event.
+  exception string as `desc` and log it through the same `test_result` path — not a distinct
+  event. Missing Report Summary block is already a FAIL (explicit message); `int()` on
+  regex-matched `[0-9]+` cannot raise `ValueError`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`; thresholds from `UVMConfig` (`config/uvm.py:3-19`).
 
 **Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`
@@ -146,7 +146,8 @@ against rtl_buddy `UvmVlogPost`.
 - Do **not** re-validate the thresholds — their non-negative invariant is enforced at YAML
   deserialisation (spec [01b](01b-suite-schema.md)).
 - Log the verdict once as `test_result`: `log.error("test_result", key, result, desc)` when
-  `not is_pass()` (FAIL — the exit driver), else `log.info("test_result", …)` (PASS). Do **not**
-  emit a separate `test_failed` event. Catch `OSError`/`FileNotFoundError` reading the log → build
-  a FAIL `result` with `str(e)` in `desc` and log it through the same `test_result` path.
+  `not is_pass()` (FAIL — the exit driver), else `log.info("test_result", …)` (PASS). Every
+  verdict goes through the one `test_result` path — do **not** add a distinct event. Catch
+  `OSError`/`FileNotFoundError` reading the log → build a FAIL `result` with `str(e)` in `desc`
+  and log it through the same `test_result` path.
 - `int()` over a regex-matched `[0-9]+` cannot raise — no guard needed there.

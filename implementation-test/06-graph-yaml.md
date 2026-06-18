@@ -68,7 +68,7 @@ nodes:
 - id: filelist
   module: write-filelist
   contract: default
-  contract_config: { persistent_inputs: [ work_dir ] }   # writes <work_dir>/run.<tag>.f (per-tag, TODO #30)
+  contract_config: { persistent_inputs: [ work_dir ] }   # writes <work_dir>/run.<tag>.f (per-tag)
 
 # --- compile (run-process #1) ---
 - id: cc-build
@@ -122,7 +122,7 @@ nodes:
 - { id: route-post,    module: route-post,        contract: default }
 - { id: parse-log,     module: parse-log,         contract: default }
 - { id: parse-uvm-log, module: parse-uvm-log,     contract: default }
-# (no fan-in / agg nodes — removed by TODO #15; summary is a logging concern, see below)
+# (no fan-in / agg nodes; summary is a logging concern, see below)
 
 # --- per-graph logging: accumulate result rows, render the summary table ---
 logging:
@@ -220,7 +220,7 @@ edges:
 - { src: { node: route-post,port: plain },   dst: { node: parse-log,     port: test_run } }
 - { src: { node: route-post,port: uvm },     dst: { node: parse-uvm-log, port: test_run } }
 
-# ---- terminal result ports are UNWIRED (TODO #15) ----
+# ---- terminal result ports are UNWIRED ----
 # The 13 terminal outcomes below have NO edge: filter.skip, gate-pre.stop, cc-int.fail,
 # gate-comp.stop, sim-int.timeout, gate-sim.stop, parse-log.default, parse-uvm-log.default,
 # load-model.fail, sweep.fail, preproc.fail, filelist.fail, seed.fail. Each terminal node
@@ -310,7 +310,7 @@ Notes:
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate,   class_name: EarlyStopGateMod }
-  # fan-in-results / aggregate-results removed by TODO #15 — summary is a logging plugin
+  # no fan-in-results / aggregate-results node — summary is a logging plugin
 ```
 
 ## Logging plugin — `graphs/log/summary.py`
@@ -332,10 +332,9 @@ directory (`docs/harness_configs/graph.md`).
 ```
 
 `any.py` contains `AnyContract` (sketch in [spec 02](specs/02-any-contract-and-fan-in.md)),
-a plain general-purpose contract. **It is registered for reuse but is no longer wired in the
-`test` graph** (its only consumer, `fan-in`, was removed by TODO #15). There is **no**
-`serial.py` / `serial_acquire` contract: the interim parallel-safety lock shim was removed
-(TODO #30) in favour of per-tag artefact naming (`write-filelist` writes `run.<tag>.f`; see
+a plain general-purpose contract. **It is registered for reuse but is not wired in the
+`test` graph.** There is **no** `serial.py` / `serial_acquire` contract; parallel safety comes
+from per-tag artefact naming (`write-filelist` writes `run.<tag>.f`; see
 [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
 Do not re-introduce a lock for the residual CWD collisions — those are the job of the upstream
 per-invocation-subdir change ([07](07-ambiguities-and-assumptions.md) item 17).

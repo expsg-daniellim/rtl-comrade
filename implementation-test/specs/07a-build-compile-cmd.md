@@ -194,7 +194,7 @@ passed as the base-dir port; `logging_handler` for the bad-mode path.
   not per-test.
 - Emit `("ctx", ...)` then `("command", ...)` in lockstep via the generator.
 - `build_dir`/verilator `simv` are already per-tag **and** now rooted on `work_dir` (R14); do
-  **not** add a lock for the residual non-verilator configured `simv` (TODO #30) — that fixed,
+  **not** add a lock for the residual non-verilator configured `simv` — that fixed,
   config-supplied name the graph can't redirect waits on
   [07 item 17](../07-ambiguities-and-assumptions.md).
 
@@ -203,7 +203,7 @@ passed as the base-dir port; `logging_handler` for the bad-mode path.
 `simv` is set by `build-compile-cmd` and carried in `ctx` — `build-sim-cmd` reads it
 directly. `build_dir` is not in `ctx` (not needed downstream).
 
-**Concurrency note (TODO #30 / item 17 / R14).** `build_dir = str(Path(work_dir) /
+**Concurrency note (item 17 / R14).** `build_dir = str(Path(work_dir) /
 f"obj_dir_{test_tag}")` and the verilator `simv = f"{build_dir}/simv"` are per-tag **and** rooted
 on the `work_dir` provider (R14), so they don't collide across concurrent tests and relocate as a
 one-node change — the same artefact-location model `logs/` uses. The `-f` filelist is likewise
@@ -213,5 +213,5 @@ f"run.{test_tag}.f"` (spec [06b](06b-write-filelist.md)) and this module passes
 builders `simv = builder_cfg.get_simv()` is a *fixed configured* name with no per-tag prefix that
 the graph can't freely redirect; its isolation waits on the upstream per-invocation-subdir change
 ([07 item 17](../07-ambiguities-and-assumptions.md)).
-Do not add a lock for it — the `serial_acquire` shim was removed (TODO #30); see
+Do not add a lock for it; see
 [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).

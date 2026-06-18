@@ -123,6 +123,6 @@ the skip path logs one INFO `test_result` and keeps `failure` `False`.
   `sim-build` downstream.
 - SKIP is a **pass-like routing decision, not a failure** — on skip, log `test_result` at INFO
   (`log.info`, **never** `log.error`/`log.fatal`) and emit `("skip", {key, result:
-  SkipResults})`. The `skip` port is unwired (TODO #15); the INFO `test_result` is what reaches
+  SkipResults})`. The `skip` port is unwired; the INFO `test_result` is what reaches
   the summary.
 - Use string-literal port names (`keep`/`skip`); stay graph-agnostic.

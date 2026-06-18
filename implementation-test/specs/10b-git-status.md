@@ -20,8 +20,8 @@ coordinate shared imports and helpers with those specs.
 
 ## Goal
 
-Record git state once as a structured log event for reproducibility (TODO #15 — a logging
-concern, not a graph-routed payload).
+Record git state once as a structured log event for reproducibility — a logging
+concern, not a graph-routed payload.
 
 ## Surface
 

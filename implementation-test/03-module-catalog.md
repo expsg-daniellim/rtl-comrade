@@ -158,7 +158,7 @@ Record the repository's git state once at run start, for reproducibility and bug
 graph**: the `git_state` event falls through the `SummaryProcessor` logging plugin (which
 accumulates results only) to the console, printing at run start (see
 [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)).
-This is the resolution of TODO #15 — git state is recorded as a logging concern, not a
+Git state is recorded as a logging concern, not a
 graph-routed payload, which is what makes it a one-line setup node.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev`: the `git status -sb` / `git log -1 --pretty=%h` subprocess calls and the branch/mod/staged derivation (here emitted as one structured `log.info("git_state", ...)` rather than printed).
@@ -267,8 +267,8 @@ second port (both consumed in lockstep by `build-compile-cmd`, which passes
 - **In:** `ctx`, `work_dir:Path` (validated base dir from `check-suite-cwd`; **load-bearing** persistent input)
 - **Out:** `("ctx", ctx)`, `("filelist", {key, filelist})` | `("fail", result)`
 - **Log idiom:** port-routed `fail` `result` on filelist generation failure (e.g. unresolved source file); `log.error` at emission. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
-- **Concurrency:** the per-tag `run.{test_tag}.f` name is the graph-local interim mitigation
-  (TODO #30) that replaces the removed lock shim; rooting it on `work_dir` (R14) brings it under
+- **Concurrency:** the per-tag `run.{test_tag}.f` name is the graph-local interim mitigation;
+  rooting it on `work_dir` (R14) brings it under
   the same artefact-location provider model as `logs/`. The residual shared-CWD artefacts neither
   covers (non-verilator configured `simv`, `test.*` symlinks, tool-internal files) wait on the
   upstream per-invocation-subdir change — see [07 item 17](07-ambiguities-and-assumptions.md) and
@@ -468,10 +468,10 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 - **Out:** `("go", payload)` | `("stop", result)`
 - **Log idiom:** port-routed `stop` `result` (`EarlyStopResults`); no log call (a normal terminal, not a failure). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
-### ~~`fan-in-results`~~ / ~~`aggregate-results`~~ — removed (TODO #15)
+### No terminal-aggregation node
 
-> **Removed by the TODO #15 redesign (2026-06-10).** Both nodes are gone. The summary table
-> and the exit code are no longer produced by a graph sink:
+> The `test` graph has no terminal-aggregation node. The summary table and the exit code are
+> not produced by a graph sink:
 >
 > - **Summary** is rendered by a per-graph `SummaryProcessor` (a stateful structlog processor
 >   in `log/summary.py`, **not** a `logging.Handler`) from the outcome events each terminal logs
@@ -480,16 +480,12 @@ The work port is named `payload` so it accepts either `ctx` (gate-pre, gate-comp
 >   only**. It renders the table in its `finalise()` teardown hook. The `git_state` event from
 >   `git-status` is not collected; it falls through to the console. See
 >   [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
-> - **Exit code** is driven solely by the per-emission `log.error` at each failure site —
->   the old belt-and-braces `aggregate-results.finalise()` `log.error` is gone.
-> - The 13 terminal ports that used to feed `fan-in-results` are now **unwired** (the
->   harness logs `no_destination` at INFO); their modules' signatures are unchanged.
+> - **Exit code** is driven solely by the per-emission `log.error` at each failure site.
+> - The 13 terminal ports are **unwired** — the harness logs `no_destination` at INFO.
 >
-> The `any` contract that `fan-in-results` used is retained as a reusable (plain) contract but
-> has no consumer in the `test` graph. The `SummaryProcessor` plugin is
-> specified in [spec 10](specs/10-control-aggregate-modules.md). (The interim parallel-safety
-> lock shim that once hung off `any.release_lock` was removed entirely by
-> [TODO #30](../implementation-test-todos.md) in favour of per-tag artefact naming.)
+> The `any` contract is retained as a reusable (plain) contract but has no consumer in the
+> `test` graph. The `SummaryProcessor` plugin is specified in
+> [spec 10](specs/10-control-aggregate-modules.md).
 
 ## Module → rtl_buddy provenance
 
@@ -540,8 +536,7 @@ wins; keep this table in step when a range there changes.
 For the rtl_buddy behaviour each departure in this plan leaves behind, see
 [07 — Notable divergences](07-ambiguities-and-assumptions.md).
 
-> `fan-in-results` and `aggregate-results` were removed by the TODO #15 redesign — the
-> `do_cmd_test` summary (`rtl_buddy.py:203-207`) is now reproduced by the `SummaryProcessor`
-> logging plugin and the OR-accumulated exit (`rtl_buddy.py:206`) by per-emission
+> The `do_cmd_test` summary (`rtl_buddy.py:203-207`) is reproduced by the `SummaryProcessor`
+> logging plugin, and the OR-accumulated exit (`rtl_buddy.py:206`) by per-emission
 > `log.error`. See
 > [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).

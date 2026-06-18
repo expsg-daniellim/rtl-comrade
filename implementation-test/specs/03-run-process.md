@@ -225,20 +225,16 @@ The tests below are testable against a slow-sleep bash fake (a child of the form
 Owned by `PrependCwdPathMod` (a dedicated setup `unit` node — see spec
 [04](04-setup-modules.md) and [07 settled 25](../07-ambiguities-and-assumptions.md)).
 `run-process` itself does **not** mutate `os.environ`; it only declares a generic input
-`env_ready:bool = True` that the graph wires **directly** to `prepend-cwd-path`'s output (no
-relay through `ensure-logs`). The value is never read or branched on — the input exists so the
-harness's data-dependency ordering pins the PATH mutation strictly upstream of every subprocess.
+`env_ready:bool = True` that the graph wires to `prepend-cwd-path`'s output. The value is never
+read or branched on — the input exists so the harness's data-dependency ordering pins the PATH
+mutation strictly upstream of every subprocess.
 In the production graph that edge is marked **`required: true`** (`docs/harness_configs/graph.md`)
 **and** the node lists `env_ready` in `persistent_inputs`: `required` suppresses the Python default
 so the **first** invocation is a blocking required port (PATH mutation strictly precedes the first
 subprocess), and `persistent` caches `prepend-path`'s once-emitted token to replay it on the
 streaming later invocations. The Python default `True` is retained so the module stays testable in
 isolation (called with no `env_ready`); `required`/`persistent` are per-wiring properties, not of
-this signature, so both hold. See [07 settled 25](../07-ambiguities-and-assumptions.md). The
-`mkdir` of the artefact dir is **not** sequenced through `env_ready` — it is ordered by the
-`logs_dir` data edge
-feeding `build-*-cmd` (the command this node runs cannot exist until that resolved dir was emitted,
-which happens after the `mkdir`). See spec [04g](04g-ensure-logs-dir.md).
+this signature, so both hold. See [07 settled 25](../07-ambiguities-and-assumptions.md).
 
 ### Manifest
 

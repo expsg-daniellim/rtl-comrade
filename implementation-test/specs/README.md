@@ -50,10 +50,10 @@ collision to prefix against, and none is added.
 | # | Spec | Depends on | Notes |
 |---|---|---|---|
 | 01 | [shared-schema](01-shared-schema.md) | — | Reimplemented config dataclasses + `TestResults` + `SeedMode`. |
-| 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (extracted from 01 per TODO #9; consumed by 05, 07, 08). |
-| 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (extracted from 01 per TODO #10; consumed by 04, 05, 06, 07, 08, 09). |
-| 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (extracted from 01 per TODO #10; consumed by 05, 06). |
-| 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` only (plain, reusable; **unwired** in `test`). `FanInResultsMod` removed by TODO #15 — build only if another graph needs it. |
+| 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (extracted from 01; consumed by 05, 07, 08). |
+| 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (extracted from 01; consumed by 04, 05, 06, 07, 08, 09). |
+| 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (extracted from 01; consumed by 05, 06). |
+| 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` only (plain, reusable; **unwired** in `test`). Build only if another graph needs it. |
 | 03 | [run-process](03-run-process.md) | 06a (creates `build.py`) | The reusable subprocess star. Appends to the shared `build.py` 06a creates (file-creation ordering only; no logic dependency). |
 | 04 | [setup-modules](04-setup-modules.md) (index) | 01 | Setup chain + suite parse + seed-mode derivation. Split into 04a–04i. |
 | 05 | [selection-expansion-modules](05-selection-expansion-modules.md) (index) | 01 | List routing, select, filter, load-model, sweep. Split into 05a–05f. |
@@ -61,13 +61,13 @@ collision to prefix against, and none is added.
 | 07 | [compile-cycle-modules](07-compile-cycle-modules.md) (index) | 03 | `build-compile-cmd`, `interpret-compile`. Split into 07a–07b. |
 | 08 | [sim-cycle-modules](08-sim-cycle-modules.md) (index) | 03 | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`. Split into 08a–08f. |
 | 09 | [post-modules](09-post-modules.md) (index) | 01 | `route-post`, `parse-log`, `parse-uvm-log`. Split into 09a–09c. |
-| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) (index) | 01 | `early-stop-gate`, `git-status`, and the `SummaryProcessor` logging plugin (replaces `aggregate-results`, TODO #15). Split into 10a–10c. |
+| 10 | [control-aggregate-modules](10-control-aggregate-modules.md) (index) | 01 | `early-stop-gate`, `git-status`, and the `SummaryProcessor` logging plugin. Split into 10a–10c. |
 | 11 | [graph-and-manifests](11-graph-and-manifests.md) | 02-10 | `graphs/test.yaml`, plugin manifests, `rtl_comrade_config.yaml` entry. |
 | 12 | [end-to-end](12-end-to-end.md) | 11 | Smoke test against a real rtl_buddy suite. |
 
 ### Per-module child specs
 
-Specs 04–10 group several modules each; per TODO #17 each is split into one buildable
+Specs 04–10 group several modules each; each is split into one buildable
 ticket per module, with the numbered file kept as a thin index. The children can be picked
 up independently once their group's deps (above) are met.
 

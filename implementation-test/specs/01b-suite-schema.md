@@ -3,7 +3,7 @@
 **Depends on:** spec [01c](01c-model-schema.md) (`TestConfig.model: ModelConfig | None`
 references the model type). Can run mostly in parallel — only the type annotation needs
 01c's name.
-**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [07 settled 1, 8](../07-ambiguities-and-assumptions.md), TODO #10 (resolution).
+**References:** [01-shared-schema](01-shared-schema.md) (umbrella), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
 **Source:**
 - `rtl_buddy/src/rtl_buddy/config/suite.py:1-88` (`SuiteConfigFile`, `SuiteConfig`).
 - `rtl_buddy/src/rtl_buddy/config/test.py:1-323` (`TestbenchConfig`, `TestConfig`, `TestConfigFile`).

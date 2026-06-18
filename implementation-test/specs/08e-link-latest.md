@@ -56,12 +56,12 @@ In `modules/rtl_buddy/sim.py`:
 - `LinkLatestMod` — `(test_run)` → force CWD symlinks `test.log`/`test.err`/`test.randseed`
   to this run's files (paths from `test_run["log"]`, `test_run["err"]`,
   `test_run["randseed_path"]`); emits `test_run` unchanged. Symlinks themselves are
-  always placed in CWD, matching rtl_buddy. **Concurrency note (TODO #30 / item 17):** these
+  always placed in CWD, matching rtl_buddy. **Concurrency note (item 17):** these
   are fixed "latest" pointer names, so concurrent tests race on them (last-writer-wins). They
   are convenience pointers, not corrupting — the targets they point to are per-tag. Per-tag
-  naming (TODO #30) deliberately does **not** rename these; isolating them is the upstream
+  naming deliberately does **not** rename these; isolating them is the upstream
   per-invocation-subdir change ([07 item 17](../07-ambiguities-and-assumptions.md)). Do not add
-  a lock — the `serial_acquire` shim was removed.
+  a lock.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:271-273` — the three `force_symlink` calls; helper at `vlog_sim.py:26-30`.
 
 **Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml`

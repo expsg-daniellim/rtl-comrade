@@ -64,8 +64,8 @@ In `modules/rtl_buddy/setup.py`:
   (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors
   `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, which does the same once at CLI
   bootstrap; here it is an explicit graph node so the responsibility is visible. Zero
-  input ports; runs once via `unit`. Emits `True` on `default`; the graph wires it **directly**
-  to each `run-process`'s `env_ready` port (no relay through `ensure-logs`), with the edge marked
+  input ports; runs once via `unit`. Emits `True` on `default`; the graph wires it to each
+  `run-process`'s `env_ready` port, with the edge marked
   **`required: true`** and `env_ready` in the consumer's `persistent_inputs` — so the first
   subprocess blocks until the PATH mutation is done (hard ordering) and the once-emitted token is
   replayed on later invocations (see [07 settled 25](../07-ambiguities-and-assumptions.md)). See
@@ -117,5 +117,5 @@ case.
 - Idempotent: prepend `.` only if it is **not already present anywhere** in the split `PATH`;
   otherwise leave `PATH` untouched.
 - No failure path — dict mutation cannot meaningfully fail; no failure port, no log call.
-- Emit `("default", True)` as a sequencing token only; the boolean is never branched on by
-  receivers (`run-process`/`ensure-logs-dir` use it purely for edge ordering).
+- Emit `("default", True)` as a sequencing token only; the boolean is never branched on — the
+  consuming `run-process` uses it purely for edge ordering.
