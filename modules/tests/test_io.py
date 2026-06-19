@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+import typer
 
 from rtl_comrade.testing import run_module_scenario
 
@@ -56,7 +57,7 @@ async def test_fileread_empty_file(tmp_path):
 
 
 async def test_fileread_not_found(logging_handler):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		await run_module_scenario(
 			FileReadMod,
 			input_sequence=[{}],
@@ -66,7 +67,7 @@ async def test_fileread_not_found(logging_handler):
 
 
 async def test_fileread_is_directory(logging_handler, tmp_path):
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		await run_module_scenario(
 			FileReadMod,
 			input_sequence=[{}],
@@ -78,7 +79,7 @@ async def test_fileread_is_directory(logging_handler, tmp_path):
 async def test_fileread_unicode_error(logging_handler, tmp_path):
 	f = tmp_path / "bad.txt"
 	f.write_bytes(b"\x80\x81invalid utf-8")
-	with pytest.raises(SystemExit):
+	with pytest.raises(typer.Exit):
 		await run_module_scenario(
 			FileReadMod,
 			input_sequence=[{}],
@@ -91,7 +92,7 @@ async def test_fileread_os_error(logging_handler, tmp_path):
 	f = tmp_path / "data.txt"
 	f.write_text("hello")
 	with patch("builtins.open", side_effect=OSError(5, "Input/output error")):
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			await run_module_scenario(
 				FileReadMod,
 				input_sequence=[{}],
@@ -105,7 +106,7 @@ async def test_fileread_permission_denied(logging_handler, tmp_path):
 	f.write_text("secret data")
 	f.chmod(0o000)
 	try:
-		with pytest.raises(SystemExit):
+		with pytest.raises(typer.Exit):
 			await run_module_scenario(
 				FileReadMod,
 				input_sequence=[{}],

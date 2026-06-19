@@ -69,11 +69,13 @@ def test_is_special_required_overrides_has_default():
 	assert is_special(p) is False
 
 
-def test_is_special_required_overrides_persistent_cached():
+def test_is_special_required_persistent_cached_still_special():
+	# required only suppresses the has_default branch; a persistent port with a cached
+	# value remains special so its last value can be reused without blocking.
 	p = _make_contract_port(_make_port("a"), required=True)
 	p.state["persistent"] = True
 	p.state["last_value"] = Payload("src", 0, 99)
-	assert is_special(p) is False
+	assert is_special(p) is True
 
 
 # --- DefaultContract.get_inputs — required inputs ---

@@ -1,6 +1,7 @@
 """Unit tests for loader_logger.py — logging-plugin selection, signature validation,
 and construction (LoggingPlugin.construct)."""
 
+import inspect
 import logging
 from pathlib import Path
 import textwrap
@@ -35,6 +36,25 @@ def test_construct_passes_callable_through():
 	def proc(logger, method_name, event_dict):
 		return event_dict
 	assert LoggingPlugin(plugin=proc, config={}, relative_path=Path(), name="x").construct() is proc
+
+
+class _Plugin:
+	def __init__(self):
+		pass
+
+
+def test_construct_unavailable_signature_type_error_fatal(logging_handler):
+	# A class plugin whose __init__ signature raises TypeError on inspection is fatal.
+	with patch.object(inspect, "signature", side_effect=TypeError("uninspectable")):
+		with pytest.raises(typer.Exit):
+			LoggingPlugin(plugin=_Plugin, config={}, relative_path=Path(), name="x").construct()
+
+
+def test_construct_unavailable_signature_value_error_fatal(logging_handler):
+	# A class plugin whose __init__ signature raises ValueError on inspection is fatal.
+	with patch.object(inspect, "signature", side_effect=ValueError("no signature")):
+		with pytest.raises(typer.Exit):
+			LoggingPlugin(plugin=_Plugin, config={}, relative_path=Path(), name="x").construct()
 
 
 # ---------------------------------------------------------------------------

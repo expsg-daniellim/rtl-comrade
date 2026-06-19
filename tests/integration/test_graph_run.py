@@ -1095,3 +1095,70 @@ def test_it26_duplicate_cli_name_across_nodes(logging_handler):
 	)
 	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(config)
+
+
+# ---------------------------------------------------------------------------
+# IT-28: blank cli name in cli_contract_config causes fatal error
+# ---------------------------------------------------------------------------
+
+
+def test_it28_blank_cli_name_in_cli_contract_config(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="")},
+			)
+		],
+		edges=[],
+	)
+	with pytest.raises(typer.Exit):
+		GraphConfig.from_file_config(config)
+
+
+# ---------------------------------------------------------------------------
+# IT-29: duplicate cli name across two nodes' cli_contract_config causes fatal error
+# ---------------------------------------------------------------------------
+
+
+def test_it29_duplicate_cli_name_across_contract_configs(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+			),
+			GraphConfigNode(
+				id="n2",
+				module="m",
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+			),
+		],
+		edges=[],
+	)
+	with pytest.raises(typer.Exit):
+		GraphConfig.from_file_config(config)
+
+
+# ---------------------------------------------------------------------------
+# IT-30: cli_contract_config over a static contract_config field warns (CLI wins)
+# ---------------------------------------------------------------------------
+
+
+def test_it30_cli_contract_config_overrides_static(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				contract_config={"limit": 0},
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")},
+			)
+		],
+		edges=[],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert "n" in graph_config.sig.parameters
+	assert logging_handler.failure is False
