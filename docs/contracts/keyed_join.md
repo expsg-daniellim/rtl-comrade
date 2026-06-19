@@ -17,12 +17,29 @@ contract_config:
 | Field | Type | Purpose |
 |---|---|---|
 | `key_field` | `str` | Name of the field within each payload dict used as the correlation key |
+| `persistent_inputs` | `list[str]` | Input-port names whose latest value is cached and replayed on every keyed assembly. Optional; omit if no persistent ports are needed |
 
-Each payload must be a `dict` containing `key_field`. The key type must support `<` comparison (e.g. `int`, `str`) because ties between simultaneously complete keys are broken by minimum value.
+Each keyed payload must be a `dict` containing `key_field`. The key type must support `<` comparison (e.g. `int`, `str`) because ties between simultaneously complete keys are broken by minimum value.
+
+## Persistent inputs
+
+A port named in `persistent_inputs` is a singleton side-channel: its latest value is cached and replayed on every keyed assembly, mirroring `persistent_inputs` on the [`default`](default.md) contract. This lets a `keyed_join` node receive runtime-computed config singletons alongside its keyed streams.
+
+- A persistent input does **not** need to carry `key_field`. Key completeness is decided by the keyed (non-persistent) ports only.
+- If a persistent payload **does** carry `key_field`, its value is additionally cached per key. A keyed assembly for key `K` then prefers the value cached for `K`, falling back to the most-recent value when none was cached for `K`. Keyless persistents always use the most-recent value.
+- The first keyed assembly **blocks** until every persistent port has delivered at least one value (first-run-required, matching `default`). A persistent port that ends before ever delivering is logged as an error and omitted from the assembly, so the module's Python default applies.
+- A persistent port ending neither terminates the join nor participates in key completeness — termination is driven by the keyed ports.
+
+```yaml
+contract: keyed_join
+contract_config:
+  key_field: test_id
+  persistent_inputs: [builder_cfg, logs_dir]
+```
 
 ## Termination
 
-Ends when any port ends. Buffered items whose key is incomplete at that point are logged as an error.
+Ends when any keyed port ends. Buffered items whose key is incomplete at that point are logged as an error. Persistent ports do not drive termination.
 
 ## Example use cases
 
