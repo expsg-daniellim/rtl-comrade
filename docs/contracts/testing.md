@@ -142,7 +142,7 @@ Pre-loading all items before `get_inputs()` is called means queues are never emp
 **Error and mismatch paths**
 
 - If your contract logs `ERROR` (e.g., mismatched stream endings), include a test that triggers it and asserts `logging_handler.failure is True` after the scenario.
-- If your contract calls `log.fatal` / `log.critical` for invariant violations, include a test with `pytest.raises(SystemExit)`.
+- If your contract calls `log.fatal` / `log.critical` for invariant violations, include a test with `pytest.raises(typer.Exit)`.
 
 **State edge cases**
 

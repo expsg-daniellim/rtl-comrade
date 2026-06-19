@@ -60,10 +60,10 @@ In `modules/rtl_buddy/setup.py`:
 In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `tests.yaml` fixture for the happy path; `tmp_path` crafted YAML for the failure cases; `logging_handler` for the `log.fatal` paths.
 
 - A real `tests.yaml` `Path` → emits `("default", suite_cfg)` with `tests: dict[str, TestConfig]`, each `test.tb` bound to its `TestbenchConfig` instance, and `suite_dir == test_config_path.parent` stamped on every test.
-- Path to a nonexistent file → `FileNotFoundError` caught → `log.fatal` → `pytest.raises(SystemExit)`.
-- Path to malformed-YAML → parse error caught → `log.fatal` → `pytest.raises(SystemExit)`.
-- A test references a `testbench` name not in the file's `testbenches` → `KeyError` from `tbs[t.tb]` → `log.fatal("… references unknown testbench …")` → `pytest.raises(SystemExit)`.
-- A test's `uvm` block has negative `max_warns` (or `max_errors`) → `UVMConfig.__post_init__` `ValueError` caught → `log.fatal` → `pytest.raises(SystemExit)` (boundary: validation).
+- Path to a nonexistent file → `FileNotFoundError` caught → `log.fatal` → `pytest.raises(typer.Exit)`.
+- Path to malformed-YAML → parse error caught → `log.fatal` → `pytest.raises(typer.Exit)`.
+- A test references a `testbench` name not in the file's `testbenches` → `KeyError` from `tbs[t.tb]` → `log.fatal("… references unknown testbench …")` → `pytest.raises(typer.Exit)`.
+- A test's `uvm` block has negative `max_warns` (or `max_errors`) → `UVMConfig.__post_init__` `ValueError` caught → `log.fatal` → `pytest.raises(typer.Exit)` (boundary: validation).
 
 ## Acceptance criteria
 

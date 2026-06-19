@@ -57,10 +57,10 @@ In `modules/rtl_buddy/setup.py`:
 In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `root_config.yaml` fixture for the happy path; `tmp_path` files for the malformed cases; `logging_handler` for the `log.fatal` paths.
 
 - A valid `root_config.yaml` path → emits `("default", RootConfig)`; every field round-trips equal to the equivalent rtl_buddy `RootConfig` over the same YAML.
-- Path to a nonexistent file → `FileNotFoundError` caught → `log.fatal` → `pytest.raises(SystemExit)`.
-- Path to a malformed-YAML file (`tmp_path` with unparseable text) → `yaml.YAMLError` caught → `log.fatal` → `pytest.raises(SystemExit)`.
-- Path to schema-mismatched YAML (required field missing / wrong type) → `TypeError`/`KeyError` caught → `log.fatal` → `pytest.raises(SystemExit)`.
-- Path to a directory rather than a file → `IsADirectoryError` caught → `log.fatal` → `pytest.raises(SystemExit)` (boundary: I/O-class error).
+- Path to a nonexistent file → `FileNotFoundError` caught → `log.fatal` → `pytest.raises(typer.Exit)`.
+- Path to a malformed-YAML file (`tmp_path` with unparseable text) → `yaml.YAMLError` caught → `log.fatal` → `pytest.raises(typer.Exit)`.
+- Path to schema-mismatched YAML (required field missing / wrong type) → `TypeError`/`KeyError` caught → `log.fatal` → `pytest.raises(typer.Exit)`.
+- Path to a directory rather than a file → `IsADirectoryError` caught → `log.fatal` → `pytest.raises(typer.Exit)` (boundary: I/O-class error).
 
 ## Acceptance criteria
 

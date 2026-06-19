@@ -59,7 +59,7 @@ Methods:
 | `get_simv() -> str`                                             | `self.simv` (callers handle the verilator override themselves — see below)                                           | none                                                                                                                                                       |
 | `get_seed() -> int`                                             | `self.sim_rand_seed`                                                                                                 | none                                                                                                                                                       |
 | `get_modes() -> list[str]`                                      | `list(self.opts.keys())`                                                                                             | none                                                                                                                                                       |
-| `get_compile_time_opts(mode: str) -> list[str]`                 | a **fresh copy** of `self.opts[mode].compile_time`                                                                   | `log.fatal` if `mode not in self.opts` or `self.opts[mode].compile_time is None`; immediate `SystemExit(1)` per [05](../05-branching-and-results.md#log-idioms-per-failure-site). |
+| `get_compile_time_opts(mode: str) -> list[str]`                 | a **fresh copy** of `self.opts[mode].compile_time`                                                                   | `log.fatal` if `mode not in self.opts` or `self.opts[mode].compile_time is None`; immediate `typer.Exit(1)` per [05](../05-branching-and-results.md#log-idioms-per-failure-site). |
 | `get_run_time_opts(mode: str, seed: int \| None = None) -> list[str]` | a **fresh copy** of `self.opts[mode].run_time`, with `self.sim_rand_prefix + str(seed)` appended if `seed is not None` | same `log.fatal` conditions as `get_compile_time_opts`.                                                                                                  |
 
 Both `get_*_opts` methods return *fresh* lists (rtl_buddy uses `list(...)` at `rtl.py:102,120`). Mutating the return value must not corrupt the underlying config; preserve this in the reimplementation.
@@ -85,7 +85,7 @@ Mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:73-80`. The detection is on `
 - **`process_opts` happy path.** `"-Wall  -Wextra"` → `["-Wall", "-Wextra"]`; `"  -single-flag  "` → `["-single-flag"]`; `"a\n\tb"` → `["a", "b"]`.
 - **`process_opts` `None` passthrough.** A YAML omitting `compile-time` leaves `RtlBuilderConfigOpts.compile_time is None`; same for `run-time`.
 - **`get_compile_time_opts("debug")`** returns the deserialised list for that mode.
-- **`get_compile_time_opts("missing-mode")`** calls `log.fatal` (assert via `caplog` plus the bubbling-`SystemExit` contract).
+- **`get_compile_time_opts("missing-mode")`** calls `log.fatal` (assert via `caplog` plus the bubbling-`typer.Exit` contract).
 - **`get_compile_time_opts(mode)` where `compile_time is None`** likewise criticals.
 - **`get_run_time_opts("debug", seed=42)`** appends `sim_rand_prefix + "42"` to the list.
 - **`get_run_time_opts("debug")` with no seed** returns the list unchanged.
@@ -100,7 +100,7 @@ Mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:73-80`. The detection is on `
 ## Constraints
 
 - Preserve the YAML renames exactly (`builder`, `builder-simv`, `sim-rand-seed`, `sim-rand-seed-prefix`, `builder-opts`, `compile-time`, `run-time`). Do **not** Pythonify them — they are the public surface for drop-in `root_config.yaml` loading.
-- `get_compile_time_opts(mode)` / `get_run_time_opts(mode, seed)` must `log.fatal` (immediate `SystemExit(1)`) when `mode not in self.opts` or the mode's list is `None` — not a port-routed result (this is system-wide misconfiguration). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
+- `get_compile_time_opts(mode)` / `get_run_time_opts(mode, seed)` must `log.fatal` (immediate `typer.Exit(1)`) when `mode not in self.opts` or the mode's list is `None` — not a port-routed result (this is system-wide misconfiguration). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
 - Both `get_*_opts` must return a **fresh** `list(...)` copy — mutating the return must not corrupt the underlying `self.opts[mode]` lists.
 - `get_run_time_opts` appends `sim_rand_prefix + str(seed)` **only when `seed is not None`**, and only once — callers must **not** add the seed again.
 - Keep the verilator simv switch in **callers** (on `os.path.basename(get_exe())`), never on the schema or on `name` — the schema stays a pure value object.

@@ -78,7 +78,7 @@ In `modules/rtl_buddy/control.py` — `EarlyStopGateMod`:
 - `phase="comp", early_stop="post"` (default) → `("go", payload)` and emits **no** `test_result` event (boundary: the default `post` never stops any phase).
 - A `stop` emits no `log.error`/`log.fatal` — `logging_handler.failure` stays `False` (a stop is a normal terminal, not a failure).
 - `payload` agnosticism: a `ctx`-shaped payload at `phase="pre"` and a `test_run`-shaped payload at `phase="sim"` both route on `payload["key"]`/`payload["test"]`, which exist in either shape.
-- `early_stop="bogus"` (not a phase token) → `log.fatal("invalid_early_stop", …)` → `pytest.raises(SystemExit)` (boundary: invalid `--early-stop` value, since the CLI edge is an unvalidated `str`).
+- `early_stop="bogus"` (not a phase token) → `log.fatal("invalid_early_stop", …)` → `pytest.raises(typer.Exit)` (boundary: invalid `--early-stop` value, since the CLI edge is an unvalidated `str`).
 
 ## Acceptance criteria
 

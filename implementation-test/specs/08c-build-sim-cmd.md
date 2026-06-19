@@ -51,7 +51,7 @@ class BuildSimCmdMod:
 2. Build plusdefines from `ctx["test"].get_plusdefines()` exactly as in `build-compile-cmd`, and plusargs from `ctx["test"].get_plusargs()` (spec 01b → `dict | None`): each entry `f"+{k}={v}"`, or `f"+{k}"` when `v is None`.
 3. Assemble the argv: `[simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed["seed"]), *plusdefines, *plusargs]`. `get_run_time_opts` already appends `sim_rand_prefix + str(seed)` internally — do **not** add the seed again.
 4. Resolve the timeout: `(timeout, is_custom) = ctx["test"].get_timeout()` (spec 01b — `(self.timeout, True)` on a per-test override, else `(60, False)`); when `is_custom`, log `log.warning("custom_sim_timeout", …)` (rtl_buddy parity, `vlog_sim.py:233-234`); emit `timeout` as `float`.
-5. Compose the log/randseed paths off one stem `stem = logs_dir / f"{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err = f"{stem}.err"`, `randseed_path = f"{stem}.randseed"`. `logs_dir` is the resolved `Path` from `ensure-logs-dir` (join onto it — no ambient-CWD assumption). `run_suffix(ctx)` returns `""` when `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) — rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 5 → `<logs_dir>/my_test_0005.log`. Do not `mkdir(logs_dir)` — already bootstrapped.
+5. Compose the log/randseed paths off one stem `stem = logs_dir / f"{ctx['test'].get_name()}{run_suffix(ctx)}"` → `log = f"{stem}.log"`, `err = f"{stem}.err"`, `randseed_path = f"{stem}.randseed"`. `logs_dir` is the resolved `Path` from `ensure-logs-dir` (join onto it — no ambient-CWD assumption). `run_suffix(ctx)` is the shared `sim.py` helper defined in spec [08a](08a-expand-runs.md); it returns `""` when `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) — rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 5 → `<logs_dir>/my_test_0005.log`. Do not `mkdir(logs_dir)` — already bootstrapped.
 6. Emit in lockstep: `("ctx", ctx)`; `("sim_cmd", {"key": ctx["key"], "seed": seed["seed"], "log": log, "err": err, "randseed_path": randseed_path, "argv": argv})`; `("command", {"key": ctx["key"], "argv": argv, "stdout_path": log, "stderr_path": err})`; `("timeout", float(timeout))`. The `argv` rides `sim_cmd` as well as `command` so the downstream `keyed_join` `write-randseed` can check it for `hier_inst_seed` (spec 08d).
 7. **Failure — bad builder mode.** No catch: `builder_cfg.get_run_time_opts(builder_mode, seed)` `log.fatal`s if `builder_mode` is unknown or its `run_time` is `None` (spec 01a).
 
@@ -78,7 +78,7 @@ In `modules/tests/test_sim_cycle.py`. Fixtures: a `builder_cfg` double exposing 
 - `get_plusargs()` `{"X": 5, "Y": None}` and `get_plusdefines()` `{"D": None}` → `argv` contains `"+X=5"`, `"+Y"`, and `"+define+D"` (boundary: `None`-valued plus formats without `=`).
 - `logs_dir=Path("/work/custom")` (resolved dir from `ensure-logs-dir`) → `command["stdout_path"]`/`stderr_path` and `sim_cmd["log"]`/`["err"]`/`["randseed_path"]` all carry the `/work/custom/` prefix (paths joined onto the provided directory; no CWD-relative `"logs"` assumption).
 - `ctx["run_id"]` set (e.g. `5`) → every path stem includes the `_0005` run suffix (boundary: run-id suffix); `sim_cmd["argv"]` equals `command["argv"]` (so `write-randseed` can run the `hier_inst_seed` membership check).
-- `builder_mode` unknown → `get_run_time_opts` `log.fatal`s → `pytest.raises(SystemExit)` (not caught here).
+- `builder_mode` unknown → `get_run_time_opts` `log.fatal`s → `pytest.raises(typer.Exit)` (not caught here).
 
 ## Acceptance criteria
 
@@ -95,3 +95,7 @@ In `modules/tests/test_sim_cycle.py`. Fixtures: a `builder_cfg` double exposing 
 - Emit `timeout` as `float | None`. Emit all four ports in lockstep via the generator.
 - When `get_timeout()` reports `is_custom` (a per-test `sim_timeout` override), log `log.warning("custom_sim_timeout", …)` — rtl_buddy parity (`vlog_sim.py:233-234`).
 - Do **not** catch `get_run_time_opts` — it `log.fatal`s on an unknown mode / `None` opts (spec [01a](01a-builder-schema.md)); system-wide misconfiguration, not per-test.
+
+## Notes
+
+**Input-pairing assumption (TO DOCUMENT).** Like `build-compile-cmd` (spec [07a](07a-build-compile-cmd.md)), this is a `default` node with two per-test streaming inputs — `ctx` and `seed` — that must correspond. They pair correctly only because their shared producer (`resolve-seed`, spec [08b](08b-resolve-seed.md)) emits `("ctx", …)` and `("seed", …)` in lockstep, and `default` pairs its inputs positionally (it is **not** `keyed_join`). The positional-pairing guarantee of the `default` contract is load-bearing here and is not yet spelled out in `docs/contracts/default.md` — document it there.

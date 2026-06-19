@@ -32,7 +32,10 @@ class WriteFilelistMod:
         test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", ctx["test"].get_name())
         path = Path(work_dir) / f"run.{test_tag}.f"   # rooted on the validated base dir, not ambient CWD
         try:
-            write_output(path, ctx["test"], unroll=True, deduplicate=True)
+            # native reimplementation of VlogFilelist.write_output — module-private logic, no rtl_buddy import
+            self._write_filelist(output_path=path, model=ctx["test"].get_model(),
+                                 test_filelist=ctx["test"].get_testbench().get_filelist(),
+                                 unroll=True, flatten=False, strip=False, deduplicate=True)
         except Exception as e:
             result = make_fail_result(desc=str(e))
             log.error("filelist_failed", key=ctx["key"], test_name=ctx["test"].get_name(), path=str(path), err=str(e),
@@ -94,6 +97,6 @@ In `modules/tests/test_prep.py`. Fixtures: a committed `models.yaml` + testbench
 
 ## Notes
 
-`write-filelist` is one of the few modules reimplementing nontrivial rtl_buddy logic (`VlogFilelist`). Port it carefully — the option-parsing regex, `-F` recursion with unroll, `+incdir+`/`+libext+` handling, dedup, and the existence checks are all behaviour worth replicating. See `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py` for the reference.
+`write-filelist` is one of the few modules reimplementing nontrivial rtl_buddy logic. **The module *is* the native reimplementation of `VlogFilelist` — do not import or construct rtl_buddy's `VlogFilelist`** (that would break the layering: the reimplemented modules under `modules/rtl_buddy/` are deliberately distinct from the upstream `rtl_buddy/src/...` tree the specs cite only as compatibility sources). Port the *behaviour* of `VlogFilelist.write_output`/`_extract`/`_process` into module-private code (a `_write_filelist` helper plus whatever private helpers you factor out) — the option-parsing regex, `-F` recursion with unroll, `+incdir+`/`+libext+` handling, dedup, and the existence checks. `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:137-159` (`write_output`, with `_extract`/`_process`) is the authoritative algorithm to mirror, invoked by rtl_buddy with the option set this module fixes — `unroll=True, flatten=False, strip=False, deduplicate=True, test_filelist=ctx["test"].get_testbench().get_filelist()` (matching `VlogSim._write_filelist`, `tools/vlog_sim.py:88-93`). The model comes from `ctx["test"].get_model()` (the `ModelConfig` `load-model` attached); the port reads its `get_model_path()`/`get_filelist()` to resolve `-F` includes relative to the output `.f`'s directory. Read the reference for the algorithm, but the code lives here, native.
 
 Filelist filename: rtl_buddy writes a single `run.f` in CWD per compile, so concurrent compiles would collide. `write-filelist` therefore writes a **per-tag** path `run.{test_tag}.f`, where `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", ctx["test"].get_name())` (the same regex `build-compile-cmd` uses — spec [07a](07a-build-compile-cmd.md)), rooted on the `work_dir` provider (`Path(work_dir) / f"run.{test_tag}.f"`), and emits that `Path` on its `filelist` port. `build-compile-cmd` passes `filelist["filelist"]` straight to `-f`, so it needs no change. The per-tag naming is the interim concurrency mitigation; rooting on `work_dir` is the R14 slice that brings `run.f` under the same artefact-location provider model as `logs/` (`check-suite-cwd` → consumers). The residual CWD-relative artefacts this does **not** cover (non-verilator configured `simv`, `test.*` symlinks, tool-internal files) wait on the upstream per-invocation-subdir change ([07 item 17](../07-ambiguities-and-assumptions.md)), the reference fix that supersedes both when it lands. See [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).

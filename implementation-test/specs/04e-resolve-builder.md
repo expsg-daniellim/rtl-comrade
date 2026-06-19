@@ -58,9 +58,9 @@ In `modules/tests/test_setup.py`. Fixtures: a `root_cfg` fixture carrying an `rt
 
 - `builder=""` (no override) with `platform_cfg.builder` present in `rtl_builder_cfgs` → emits `("default", rtl_builder_cfgs[platform_cfg.builder])` (empty string falls back to the platform's declared builder).
 - `builder="<name>"` override naming a configured builder → emits `("default", rtl_builder_cfgs["<name>"])` (override wins over the platform default).
-- `builder="<unknown>"` not in `rtl_builder_cfgs` → `builder_cfg is None` → `log.fatal` → `pytest.raises(SystemExit)`.
-- `builder=""` with `platform_cfg.builder = None` (platform declares no builder, no override) → lookup yields `None` → `log.fatal` → `pytest.raises(SystemExit)` (boundary: unset builder).
-- `builder=""` with an empty `rtl_builder_cfgs` dict (no builders configured) → lookup yields `None` → `log.fatal` → `pytest.raises(SystemExit)` (boundary: empty configured list).
+- `builder="<unknown>"` not in `rtl_builder_cfgs` → `builder_cfg is None` → `log.fatal` → `pytest.raises(typer.Exit)`.
+- `builder=""` with `platform_cfg.builder = None` (platform declares no builder, no override) → lookup yields `None` → `log.fatal` → `pytest.raises(typer.Exit)` (boundary: unset builder).
+- `builder=""` with an empty `rtl_builder_cfgs` dict (no builders configured) → lookup yields `None` → `log.fatal` → `pytest.raises(typer.Exit)` (boundary: empty configured list).
 
 ## Acceptance criteria
 

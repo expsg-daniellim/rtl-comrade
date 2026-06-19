@@ -42,6 +42,17 @@ In `modules/rtl_buddy/sim.py`:
 - `ExpandRunsMod` — `(ctx, run_ids:list=[None])` → generator yielding one fresh `ctx` per `run_id`, with `ctx["run_id"]` set and key suffixed `#run_id` (when `run_id is not None`). For `run_ids=[None]` emits one `ctx` unchanged (key unmodified, `run_id=None`).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:82-117` — `run_multiple`'s run-id loop (vs `run` at `:51-80`); dispatch at `rtl_buddy.py:297-299`.
 
+- **`run_suffix(ctx)` — shared module-level helper.** This spec creates `sim.py` and owns the canonical definition (consumed by `resolve-seed` [08b], `build-sim-cmd` [08c]; `write-randseed` [08d] receives the pre-composed paths and does not call it). It mirrors the run-id suffixing in rtl_buddy's `_get_log_path`:
+
+  ```python
+  # modules/rtl_buddy/sim.py  (module-level helper)
+  def run_suffix(ctx) -> str:
+      return "" if ctx["run_id"] is None else f"_{ctx['run_id']:04d}"   # run-id zero-padded to four digits
+  ```
+
+  Returns `""` when `ctx["run_id"] is None` (single run), else `f"_{run_id:04d}"` — e.g. run-id 3 → `_0003`. The `is None` test (not falsiness) keeps run-id `0` suffixed. Downstream callers join `run_suffix(ctx)` onto the test-name stem they compose under `logs_dir`.
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:82-86` — `VlogSim._get_log_path`'s `if run_id is not None: log_path += f"_{run_id:04d}"`.
+
 **Manifest** — this module opens the `rtl_buddy/sim.py` block in `modules/config.yaml` (later appended to by `08b`–`08f`, `09a`–`09c`):
 
 ```yaml

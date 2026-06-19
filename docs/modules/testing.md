@@ -129,11 +129,11 @@ async def test_invalid_op_logs_error(logging_handler):
     assert logging_handler.failure is True
 ```
 
-`CRITICAL` (and `fatal`) log calls raise `SystemExit(1)`. Use `pytest.raises`:
+`CRITICAL` (and `fatal`) log calls raise `typer.Exit(1)` (a `BaseException` subclass via `click.Exit`, distinct from `SystemExit`). Use `pytest.raises`:
 
 ```python
 async def test_file_not_found_is_fatal(logging_handler):
-    with pytest.raises(SystemExit):
+    with pytest.raises(typer.Exit):
         await run_module_scenario(
             FileReadMod,
             input_sequence=[{}],
@@ -177,7 +177,7 @@ Key branches to cover:
 **Error and fatal paths**
 
 - If your module logs `ERROR` for a bad input or unsupported operation, include a test that passes that input and asserts `logging_handler.failure is True`.
-- If your module calls `log.fatal` / `log.critical`, include a test with `pytest.raises(SystemExit)`.
+- If your module calls `log.fatal` / `log.critical`, include a test with `pytest.raises(typer.Exit)`.
 
 **Config validation**
 
@@ -186,4 +186,4 @@ Key branches to cover:
 **`finalise` teardown**
 
 - If your module defines `finalise()`, test that it runs after all `run(...)` invocations: check side effects (flushed state, closed resources, etc.) after `run_module_scenario` returns.
-- If `finalise()` can raise, include a test that triggers that path with `pytest.raises(SystemExit)`.
+- If `finalise()` can raise, include a test that triggers that path with `pytest.raises(typer.Exit)`.

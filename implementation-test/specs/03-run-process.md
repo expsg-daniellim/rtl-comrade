@@ -118,7 +118,7 @@ The tests below are testable against a slow-sleep bash fake (a child of the form
 - **Timeout path — cooperative child.** Child runs `trap 'echo got_QUIT; exit 0' QUIT; sleep 30`; `timeout=0.1`. Expect SIGQUIT delivered to the group, child exits during grace. `rc=4444`, `timed_out=True`, stdout file contains `got_QUIT`.
 - **Timeout path — uncooperative child (SIGKILL escalation).** Child runs `trap '' QUIT; sleep 30`; `timeout=0.1`, `_TIMEOUT_GRACE_S=0.5` (monkeypatched). Expect SIGKILL after ~0.5 s, `rc=4444`, `timed_out=True`. Test completes in well under 30 s.
 - **Process-group reach.** Child spawns a grandchild that also sleeps; on timeout, both die. Verify by `os.kill(grandchild_pid, 0)` raising `ProcessLookupError` after the call returns.
-- **Launch failure.** `command["argv"] = ["/no/such/binary"]`. Module catches `FileNotFoundError` and calls `log.fatal`; the harness exits 1 (asserted via `caplog` plus the bubbling-`SystemExit` contract).
+- **Launch failure.** `command["argv"] = ["/no/such/binary"]`. Module catches `FileNotFoundError` and calls `log.fatal`; the harness exits 1 (asserted via `caplog` plus the bubbling-`typer.Exit` contract).
 - **External kill.** Child runs a 10 s sleep; a sibling task sends SIGKILL at 0.1 s. `rc = -signal.SIGKILL`, `timed_out=False`. The module returns normally.
 - **Cancellation cleanup.** Wrap `run()` in an `asyncio.Task` that is `cancel()`-ed mid-wait. Assert: `CancelledError` propagates from the task; the child PID is no longer alive (`os.kill(pid, 0)` → `ProcessLookupError`); the stdout file is closed; `os.waitpid(-1, os.WNOHANG)` reports no orphans.
 - **Independent `timed_out` flag.** A child that explicitly `exit(4444)` (no timeout) produces `rc=4444`, `timed_out=False` — i.e. the flag is not derived from `rc`.
@@ -148,7 +148,7 @@ In `modules/tests/test_run_process.py` (async tests via `await run_module_scenar
 - `argv=["sh","-c","echo partial; sleep 5"]`, `timeout=0.1` → `rc: 4444, timed_out: True`; the already-written `partial` line is preserved in `stdout_path`, and `os.waitpid(-1, WNOHANG)` finds no stale children (Lifecycle 2b → 3a; process-group reap).
 - `argv=["sh","-c","trap '' QUIT; sleep 30"]`, `timeout=0.1` → SIGKILL escalation completes within `_TIMEOUT_GRACE_S + ε` of the timeout; `rc: 4444, timed_out: True` (boundary: SIGQUIT ignored → SIGKILL escalation in step 3a).
 - A monkeypatched child whose `returncode` is `4444` on a **normal** exit → `timed_out: False` (boundary: `timed_out` is set at the return site, never derived from `rc == 4444`, so an organic 4444 is not misclassified).
-- `argv=["./nonexistent-binary"]` → `create_subprocess_exec` raises `FileNotFoundError` → launch-failure `log.fatal` → `pytest.raises(SystemExit)` (Failure case (a)).
+- `argv=["./nonexistent-binary"]` → `create_subprocess_exec` raises `FileNotFoundError` → launch-failure `log.fatal` → `pytest.raises(typer.Exit)` (Failure case (a)).
 - Wrap `run()` in a task and cancel it while the child sleeps → the child is SIGKILLed and reaped under `asyncio.shield`, `CancelledError` re-raises, **no** `proc` payload is emitted, partial stdout on disk is preserved, and no zombies remain (Lifecycle 2c → 3b).
 
 ## Acceptance criteria

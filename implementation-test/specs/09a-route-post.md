@@ -1,6 +1,6 @@
 # Spec 09a: route-post (`RoutePostMod`)
 
-**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`RoutePostMod` reads `ctx["test"].uvm`).
+**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`RoutePostMod` reads `test_run["test"].uvm`).
 **References:** [03 — Post-processing section](../03-module-catalog.md). Parent index: [idx-09 — Post-processing modules](../idx-09-post.md).
 
 ## Before you start
@@ -57,7 +57,7 @@ In `modules/tests/test_post.py`. Fixtures: `test_run` dicts whose `test.uvm` is 
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`uvm`, `plain`) are exercised, routing on `ctx["test"].uvm`; each carries `test_run` unchanged.
+- Both output ports (`uvm`, `plain`) are exercised, routing on `test_run["test"].uvm`; each carries `test_run` unchanged.
 - No failure path: pure classifier, no `log` call.
 - The `modules/config.yaml` manifest entry `{ name: route-post, class_name: RoutePostMod }` validates and the harness resolves `route-post` → `RoutePostMod`.
 

@@ -53,7 +53,7 @@ class ResolveSeedMod:
    - `NEW` → `seed = random.randrange(1_000_000)` (upper bound exclusive).
    - `DEFAULT` → `seed = builder_cfg.get_seed()`.
    - `REPLAY` → go to step 2.
-2. **REPLAY read.** Compose `path = logs_dir / f"{ctx['test'].get_name()}{run_suffix(ctx)}.randseed"` (joining onto the resolved `logs_dir` `Path` from `ensure-logs-dir` — no ambient-CWD assumption) and parse `seed = int(Path(path).open().readline().strip())`. `run_suffix(ctx)` returns `""` when `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) — matching rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 3 reads `<logs_dir>/my_test_0003.randseed`.
+2. **REPLAY read.** Compose `path = logs_dir / f"{ctx['test'].get_name()}{run_suffix(ctx)}.randseed"` (joining onto the resolved `logs_dir` `Path` from `ensure-logs-dir` — no ambient-CWD assumption) and parse `seed = int(Path(path).open().readline().strip())`. `run_suffix(ctx)` is the shared `sim.py` helper defined in spec [08a](08a-expand-runs.md); it returns `""` when `ctx["run_id"] is None`, else `f"_{ctx['run_id']:04d}"` (run-id zero-padded to four digits) — matching rtl_buddy `_get_log_path` (`tools/vlog_sim.py:82-86`); e.g. run-id 3 reads `<logs_dir>/my_test_0003.randseed`.
 3. On success (any mode) emit in lockstep: `("ctx", ctx)` then `("seed", {"key": ctx["key"], "seed": seed})`.
 4. **Failure — REPLAY missing/malformed.** REPLAY only: wrap step 2 in `try/except (FileNotFoundError, ValueError, PermissionError)` → `log.error("replay_seed_invalid", key=ctx["key"], path=str(path), result=…, desc=…)` (the `result`/`desc` kwargs let `SummaryProcessor`'s watch-list collect the row), emit `("fail", {"key": ctx["key"], "result": <FAIL whose desc is f"Replay seed missing or invalid at {path}">})`, and return. `NEW`/`DEFAULT` have no failure path.
 
@@ -83,7 +83,7 @@ In `modules/tests/test_sim_cycle.py`. Fixtures: `tmp_path` passed as the resolve
 - `seed_mode=DEFAULT` → yields `ctx` + `seed` with `seed == builder_cfg.get_seed()`.
 - `seed_mode=REPLAY` with a written `.randseed` (under the resolved `logs_dir` `Path`, with the `run_id` suffix) → reads it back, yields `ctx` + `seed` equal to the written integer (round-trip).
 - `seed_mode=REPLAY` with `logs_dir=Path("/work/custom_logs")` → writes/reads under that directory; the path is joined onto the provided `logs_dir` `Path`, not a hard-coded `logs/` or the ambient CWD.
-- `seed_mode=REPLAY` with a missing `.randseed` → `FileNotFoundError` → yields `("fail", {"key", "result"})` whose `desc` is `f"Replay seed missing or invalid at {path}"` and quotes the `logs_dir`-prefixed path, `logging_handler.failure is True`, no `SystemExit`.
+- `seed_mode=REPLAY` with a missing `.randseed` → `FileNotFoundError` → yields `("fail", {"key", "result"})` whose `desc` is `f"Replay seed missing or invalid at {path}"` and quotes the `logs_dir`-prefixed path, `logging_handler.failure is True`, no `typer.Exit`.
 - `seed_mode=REPLAY` with a `.randseed` whose first line is not an int → `ValueError` → yields `("fail", …)`, `log.error` (boundary: malformed file routes like a missing one).
 
 ## Acceptance criteria

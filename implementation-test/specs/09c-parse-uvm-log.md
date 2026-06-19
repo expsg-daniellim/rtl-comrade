@@ -1,6 +1,6 @@
 # Spec 09c: parse-uvm-log (`ParseUvmLogMod`)
 
-**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`ParseUvmLogMod` reads `ctx["test"].uvm.max_warns` / `.max_errors` — `UVMConfig` lives in 01b).
+**Depends on:** spec 01 (schema), spec [01b](01b-suite-schema.md) (`ParseUvmLogMod` reads `test_run["test"].uvm.max_warns` / `.max_errors` — `UVMConfig` lives in 01b).
 **References:** [03 — Post-processing section](../03-module-catalog.md), [07 settled 14, 15](../07-ambiguities-and-assumptions.md). Parent index: [idx-09 — Post-processing modules](../idx-09-post.md).
 
 ## Before you start
@@ -52,7 +52,7 @@ class ParseUvmLogMod:
 
 In `modules/rtl_buddy/sim.py` (continuing from spec 08):
 
-- `ParseUvmLogMod` — reimplements rtl_buddy `UvmVlogPost.get_results()` only: extract the UVM Report Summary "Report counts by severity" block; PASS iff `WARNING <= ctx["test"].uvm.max_warns and ERROR <= ctx["test"].uvm.max_errors and FATAL == 0`, else FAIL with the counts summary in `desc`. Both thresholds are `int` per spec [01b — `UVMConfig`](01b-suite-schema.md); their non-negative invariant is enforced at YAML deserialisation, so this module does not re-validate. Emits `{"key": ctx["key"], "result": TestResults(...)}`.
+- `ParseUvmLogMod` — reimplements rtl_buddy `UvmVlogPost.get_results()` only: extract the UVM Report Summary "Report counts by severity" block; PASS iff `WARNING <= test_run["test"].uvm.max_warns and ERROR <= test_run["test"].uvm.max_errors and FATAL == 0`, else FAIL with the counts summary in `desc`. Both thresholds are `int` per spec [01b — `UVMConfig`](01b-suite-schema.md); their non-negative invariant is enforced at YAML deserialisation, so this module does not re-validate. Emits `{"key": test_run["key"], "result": TestResults(...)}`.
   **Failure handling**: the verdict is logged once as `test_result` — `log.error` when `not result.is_pass()` (FAIL; the exit driver), `log.info` when PASS (carrying `key`/`result`/`desc`). `FileNotFoundError`/`OSError` reading `test_run["log"]` → build a FAIL `result` with the exception string as `desc` and log it through the same `test_result` path — not a distinct event. Missing Report Summary block is already a FAIL (explicit message); `int()` on regex-matched `[0-9]+` cannot raise `ValueError`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`; thresholds from `UVMConfig` (`config/uvm.py:3-19`).
 

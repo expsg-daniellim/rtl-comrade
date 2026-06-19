@@ -45,8 +45,9 @@ from .port import Port
 def logging_handler():
 	"""Pytest fixture that installs the rtl-comrade log handler for the duration of a test.
 
-	Fatal log calls (CRITICAL) raise SystemExit(1). Error log calls set
-	handler.failure = True without raising. Both are reset after each test.
+	Fatal log calls (CRITICAL) raise typer.Exit(1) (a BaseException subclass via
+	click.Exit, distinct from SystemExit). Error log calls set handler.failure = True
+	without raising. Both are reset after each test.
 	"""
 	structlog.reset_defaults()
 	handler, _ = initialise_logging(logging.DEBUG)

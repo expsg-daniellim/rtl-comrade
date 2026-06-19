@@ -56,7 +56,7 @@ class DiscoverConfigFileMod:
 In `modules/rtl_buddy/setup.py`:
 
 - `DiscoverConfigFileMod` — walks up the dir tree from CWD for a filename (config: `filename:str`, `max_levels:int = 8`); stops at the filesystem root (no `.git` boundary — rtl_buddy parity); emits the resolved `Path`. Zero input ports; runs once via `unit`.
-  **Failure handling**: post-loop check — if walked to the root without finding the file, call `log.fatal(f"{filename} not found walking up from CWD")` (mirrors `rtl_buddy/src/rtl_buddy/config/root.py:35`). `PermissionError` from directory listing propagates uncaught (becomes harness CRITICAL via the bubbling-SystemExit catch). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
+  **Failure handling**: post-loop check — if walked to the root without finding the file, call `log.fatal(f"{filename} not found walking up from CWD")` (mirrors `rtl_buddy/src/rtl_buddy/config/root.py:35`). `PermissionError` from directory listing propagates uncaught (becomes harness CRITICAL via the bubbling-typer.Exit catch). See [05 — Log idioms](../05-branching-and-results.md#log-idioms-per-failure-site).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:16-36` — `_discover_root_cfg`.
 
 **Manifest** — this module opens the `rtl_buddy/setup.py` block in `modules/config.yaml` (later appended to by `04b`–`04i`, `05a`–`05f`, `10b`):
@@ -74,7 +74,7 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` nested dirs + `monkeypatc
 - CWD already holds `root_config.yaml` → emits `("default", cwd / "root_config.yaml")` on the first iteration (boundary: depth 0).
 - File sits `N` levels up (e.g. `tmp_path/a/b` is CWD, file in `tmp_path`) → walk ascends and emits `("default", tmp_path / "root_config.yaml")`.
 - A `.git` dir sits between CWD and the file → the walk does **not** stop at it; the file is still found and emitted (boundary: rtl_buddy parity — no git boundary).
-- File absent within the depth limit (`max_levels=2`, file 3 levels up) → loop exhausts → not-found `log.fatal` → `pytest.raises(SystemExit)` (boundary: `max_levels` exhausted).
+- File absent within the depth limit (`max_levels=2`, file 3 levels up) → loop exhausts → not-found `log.fatal` → `pytest.raises(typer.Exit)` (boundary: `max_levels` exhausted).
 - A directory in the walk raises `PermissionError` on `.is_file()` (monkeypatch `Path.is_file`) → propagates uncaught → `pytest.raises(PermissionError)`.
 
 ## Acceptance criteria
@@ -88,7 +88,7 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` nested dirs + `monkeypatc
 
 - `unit` contract, zero-input — runs exactly once.
 - Walk at most `max_levels` (default `8`); stop climbing only at the filesystem root (`d == d.parent`). Do **not** stop at a `.git` directory — rtl_buddy's `_discover_root_cfg` has no git boundary, and adding one would fail to find a `root_config.yaml` above a nested `.git`.
-- Not-found (loop exhausted / boundary reached) → `log.fatal` (harness exit 1) — this is a setup-domain config error, never a port-routed result. A `PermissionError` while listing a directory propagates uncaught (becomes harness CRITICAL via the bubbling-`SystemExit` catch).
+- Not-found (loop exhausted / boundary reached) → `log.fatal` (harness exit 1) — this is a setup-domain config error, never a port-routed result. A `PermissionError` while listing a directory propagates uncaught (becomes harness CRITICAL via the bubbling-`typer.Exit` catch).
 - Emit on the string-literal `default` port; stay graph-agnostic.
 
 ## Notes

@@ -58,7 +58,7 @@ Specs 04–10 group several modules each; each is split into one buildable ticke
 | 09 (post) | [09a route-post](09a-route-post.md) · [09b parse-log](09b-parse-log.md) · [09c parse-uvm-log](09c-parse-uvm-log.md) |
 | 10 (control/summary) | [10a early-stop-gate](10a-early-stop-gate.md) · [10b git-status](10b-git-status.md) · [10c summary-handler](10c-summary-handler.md) |
 
-Within a group the children are independent except for shared-file ordering and the explicit `Depends on:` lines each child carries: 05f/06a share the `exec_hook` helper; 06b feeds 07a; 07a sets `ctx["simv"]` for 07b and 08c; 08c feeds 08d, which feeds 08e/08f; 10a/10b emit the events 10c collects.
+Within a group the children are independent except for shared-file ordering and the explicit `Depends on:` lines each child carries: 06b feeds 07a; 07a sets `ctx["simv"]` for 07b and 08c; 08c feeds 08d, which feeds 08e/08f; 10a/10b emit the events 10c collects.
 
 ### Shared files
 

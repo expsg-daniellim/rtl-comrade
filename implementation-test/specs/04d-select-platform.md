@@ -59,7 +59,7 @@ In `modules/tests/test_setup.py`. Fixtures: `monkeypatch` on `subprocess.run` to
 - `uname` matches the first platform's `unames` → emits `("default", <first platform_cfg>)`.
 - `uname` matches only a later platform → emits `("default", <that platform_cfg>)` (iterates in declaration order).
 - `uname` is present in two platforms' `unames` → emits the **first** in declaration order (boundary: first-match wins).
-- `uname` matches no platform → no-match `log.fatal` → `pytest.raises(SystemExit)`.
+- `uname` matches no platform → no-match `log.fatal` → `pytest.raises(typer.Exit)`.
 - `subprocess.run(["uname"])` raises `FileNotFoundError` (no `uname` binary) → propagates uncaught → `pytest.raises(FileNotFoundError)` (boundary: surprising tool-missing error).
 
 ## Acceptance criteria
