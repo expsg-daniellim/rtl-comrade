@@ -1,6 +1,8 @@
-# Edge-split redesign — authoritative design
+# Edge-split redesign — rationale (folded into 06)
 
-**Status:** ACTIVE. The blocker is resolved — commit `3068cda` (`feat: persistent port support for keyed_join`) lets a `keyed_join` node declare `persistent_inputs`, so the full bag-split is buildable. This doc is the source of truth; the per-ticket edits below apply it.
+**Status:** APPLIED. The bag-split below has been folded into [`06-graph-yaml.md`](06-graph-yaml.md), which is now the **wiring authority** — its `graphs/test.yaml` carries the canonical split-edge nodes/contracts + edge list. This doc is retained as the rationale/derivation (conventions C1–C5, bag lifetimes, the two careful nodes, the co-gating rule); for the canonical wiring read 06. The blocker was resolved by commit `3068cda` (`feat: persistent port support for keyed_join`), which lets a `keyed_join` node declare `persistent_inputs`.
+
+> **Correction folded into 06:** the prose in "Early-stop gates" below says `gate-comp` is wired `{test}`/`default`, but the edge-wiring list (and the data dependency — `expand-runs` needs `simv`) require `gate-comp` to be wired `{test, simv}`/`keyed_join` so it co-gates both. 06 encodes the corrected `keyed_join`. Spec 10a's `gate-comp` labelling still needs the same correction.
 
 ## Goal
 

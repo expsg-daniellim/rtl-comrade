@@ -5,7 +5,7 @@
 
 ## Before you start
 
-Read the harness config-file docs this spec assembles: `docs/harness_configs/graph.md` (nodes, edges, node/CLI edge sources, and the "Logging configuration" section that wires the `SummaryProcessor` plugin), `docs/harness_configs/plugin_manifest.md` (the module/contract `config.yaml` shape), and `docs/harness_configs/rtl_comrade_config.md` (registering the `test` subcommand). `docs/harness/validation.md` explains the static checks the acceptance criteria rely on (cycles, overloaded inputs). The `no_destination` INFO log for the unwired terminal ports is a **runtime** node emission, not a static check — see `docs/harness/node.md` ("Key Behaviors"). **[`edge-split-redesign.md`](../edge-split-redesign.md) is the wiring authority** (its node/contract/edge table + edge-wiring list); it supersedes the `ctx`/`test_run` wiring in [`06 — graphs/test.yaml`](../06-graph-yaml.md), which predates the bag-split. This spec is the sole owner of `graphs/test.yaml`, `modules/config.yaml`, `contracts/config.yaml`, and the `rtl_comrade_config.yaml` entry — no sibling specs append to those files.
+Read the harness config-file docs this spec assembles: `docs/harness_configs/graph.md` (nodes, edges, node/CLI edge sources, and the "Logging configuration" section that wires the `SummaryProcessor` plugin), `docs/harness_configs/plugin_manifest.md` (the module/contract `config.yaml` shape), and `docs/harness_configs/rtl_comrade_config.md` (registering the `test` subcommand). `docs/harness/validation.md` explains the static checks the acceptance criteria rely on (cycles, overloaded inputs). The `no_destination` INFO log for the unwired terminal ports is a **runtime** node emission, not a static check — see `docs/harness/node.md` ("Key Behaviors"). **[`06 — graphs/test.yaml`](../06-graph-yaml.md) is the wiring authority** — its `graphs/test.yaml` (nodes/contracts + edge list) carries the split-edge model. This spec is the sole owner of `graphs/test.yaml`, `modules/config.yaml`, `contracts/config.yaml`, and the `rtl_comrade_config.yaml` entry — no sibling specs append to those files.
 
 ## Goal
 
@@ -13,7 +13,7 @@ Assemble the test graph YAML, finalise plugin manifests, and register the `test`
 
 ## Deliverables
 
-- **`graphs/test.yaml`** — per the edge-split design ([edge-split-redesign.md](../edge-split-redesign.md): node/contract/edge table + edge-wiring list): all nodes (including the `git-status` setup node), CLI edges (including `test_name` as positional with `option: false, default: ""`), the setup chain, persistent-config fan-out (config singletons feed `keyed_join`/`default` nodes via `persistent_inputs`), list-mode routing, and the **split per-test/per-run edges** (`test`/`simv`/`run_id`/`seed`/`filelist`/`command`/`timeout`/`proc`/`randseed`/`randseed_done`) wired through the `keyed_join` command-builders and the two parallel post-sim branches (side-effects ∥ classification); the **unwired** terminal result ports (no edges); and the `logging` block that wires the `SummaryProcessor` plugin. **`ctx` and `test_run` no longer exist** — the per-test bag is split into keyed edges.
+- **`graphs/test.yaml`** — per the wiring authority [`06 — graphs/test.yaml`](../06-graph-yaml.md) (the split-edge nodes/contracts + edge list): all nodes (including the `git-status` setup node), CLI edges (including `test_name` as positional with `option: false, default: ""`), the setup chain, persistent-config fan-out (config singletons feed `keyed_join`/`default` nodes via `persistent_inputs`), list-mode routing, and the **split per-test/per-run edges** (`test`/`simv`/`run_id`/`seed`/`filelist`/`command`/`timeout`/`proc`/`randseed`/`randseed_done`) wired through the `keyed_join` command-builders and the two parallel post-sim branches (side-effects ∥ classification); the **unwired** terminal result ports (no edges); and the `logging` block that wires the `SummaryProcessor` plugin. **`ctx` and `test_run` no longer exist** — the per-test bag is split into keyed edges.
 - **`graphs/log/summary.py`** — the `SummaryProcessor` logging plugin (a single structlog processor; spec 10), referenced by `path`/`name` from the `logging` block.
 - **`modules/config.yaml`** — full manifest covering every module from specs 03–10 (`run-process`, the setup chain incl. `git-status`, selection/expansion, prep, compile cycle, sim cycle, post, control). The four file blocks each child spec contributes to (verbatim from [06](../06-graph-yaml.md)):
   ```yaml
@@ -91,7 +91,7 @@ Graph-assembly checks in `tests/test_graph_assembly.py` (or similar) — the inp
 
 ## Constraints
 
-- Wire per the edge-split design ([edge-split-redesign.md](../edge-split-redesign.md)), which supersedes [06](../06-graph-yaml.md)'s pre-split `ctx`/`test_run` wiring. Reconcile **toward the built module signatures** (specs 03–10 as converted to the split), not the older plan docs.
+- Wire per [`06 — graphs/test.yaml`](../06-graph-yaml.md), the wiring authority (its `graphs/test.yaml` carries the split-edge model). Reconcile **toward the built module signatures** (specs 03–10 as converted to the split).
 - The 13 terminal ports stay **unwired**. At runtime the node logs `no_destination` at INFO for them, **not** errors; this is a `node.py` runtime emission, not a `validation.py` static check.
 - Register the `any` contract for reuse but leave it **unwired** in `test`.
 - The summary is wired only via the `logging` block (`graphs/log/summary.py` → `SummaryProcessor`); it is **not** a module manifest entry.
@@ -99,6 +99,6 @@ Graph-assembly checks in `tests/test_graph_assembly.py` (or similar) — the inp
 
 ## Notes
 
-This spec is mostly assembly — wire per [edge-split-redesign.md](../edge-split-redesign.md) (the node/contract/edge table + edge-wiring list), the post-split wiring authority. [06](../06-graph-yaml.md) predates the split and is superseded for wiring; prefer the converted module signatures (specs 03–10).
+This spec is mostly assembly — wire per [`06 — graphs/test.yaml`](../06-graph-yaml.md), the wiring authority (its split-edge `graphs/test.yaml` + node/edge layout); prefer the converted module signatures (specs 03–10).
 
 The 13 terminal ports are **unwired**. Each terminal node logs a `test_result` event; the `SummaryProcessor` plugin (declared in the `logging` block) accumulates the rows and renders the table in `finalise()`, and per-emission `log.error` drives the exit code. At runtime the node logs the unwired ports as `no_destination` at INFO, not errors (a `node.py` runtime emission, not a `validation.py` check). See [spec 10c](10c-summary-handler.md) for the plugin.

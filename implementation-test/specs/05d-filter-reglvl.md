@@ -27,18 +27,22 @@ outputs:           test → {key, value}   (the test edge, forwarded)
 class FilterRegLvlMod:
     def run(self, test, builder_cfg, reg_level = None, start_level = None):
         lvl = test["value"].get_reglvl(builder_cfg.get_name())
-        if (reg_level is not None and lvl > reg_level) or (start_level is not None and lvl < start_level):
-            result = SkipResults(desc=...)
-            log.info("test_result", key=test["key"], test_name=test["value"].get_name(),  # SKIP is pass-like → INFO (no exit)
-                     result=result.results["result"], desc=result.results["desc"])
-            return ("skip", { "key": test["key"], "result": result })
-        return ("test", test)
+        if reg_level is not None and lvl > reg_level:
+            desc = f"lvl {lvl} > cmd end_level {reg_level}"          # rtl_buddy.py:352
+        elif start_level is not None and lvl < start_level:
+            desc = f"lvl {lvl} < cmd start_level {start_level}"      # rtl_buddy.py:355
+        else:
+            return ("test", test)
+        result = SkipResults(desc=desc)
+        log.info("test_result", key=test["key"], test_name=test["value"].get_name(),  # SKIP is pass-like → INFO (no exit)
+                 result=result.results["result"], desc=result.results["desc"])
+        return ("skip", { "key": test["key"], "result": result })
 ```
 
 ## Algorithm
 
 1. Read the test's level: `lvl = test["value"].get_reglvl(builder_cfg.get_name())` — only the builder *name* is needed; the whole `RtlBuilderConfig` rides the persistent port because the same payload feeds `cc-build`/`seed`/`sim-build` downstream.
-2. Test the window: if `reg_level is not None and lvl > reg_level`, or `start_level is not None and lvl < start_level`, the level is outside `[start_level, reg_level]` → build `result = SkipResults(desc=...)`, log it directly as `log.info("test_result", key=test["key"], result=..., desc=...)` (SKIP is pass-like, so **INFO** — it does **not** drive the exit), and emit `("skip", {"key": test["key"], "result": result})`.
+2. Test the window. Above the upper bound (`reg_level is not None and lvl > reg_level`) → `desc = f"lvl {lvl} > cmd end_level {reg_level}"`; below the lower bound (`start_level is not None and lvl < start_level`) → `desc = f"lvl {lvl} < cmd start_level {start_level}"` — the two distinct rtl_buddy messages (`rtl_buddy.py:352,355`). Build `result = SkipResults(desc=desc)`, log it directly as `log.info("test_result", key=test["key"], result=..., desc=...)` (SKIP is pass-like, so **INFO** — it does **not** drive the exit), and emit `("skip", {"key": test["key"], "result": result})`.
 3. Otherwise (inside the window, or both bounds `None`) forward the test edge unchanged: emit `("test", test)`.
 
 No failure path: SKIP is a pass-like routing decision, not an error — it logs `test_result` at INFO (collected by `SummaryProcessor`), never `log.error`.

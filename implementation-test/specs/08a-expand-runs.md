@@ -58,6 +58,18 @@ In `modules/rtl_buddy/sim.py`:
   Returns `""` when `run_id is None` (single run), else `f"_{run_id:04d}"` — e.g. run-id 3 → `_0003`. The `is None` test (not falsiness) keeps run-id `0` suffixed. Callers pass the `run_id` edge's value (`run_suffix(run_id["value"])`) and join the result onto the test-name stem they compose under `logs_dir`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:82-86` — `VlogSim._get_log_path`'s `if run_id is not None: log_path += f"_{run_id:04d}"`.
 
+- **`force_symlink(target, link_name)` — shared module-level helper.** This spec also owns the canonical definition (consumed by `link-latest` [08e] for its three `test.*` symlinks). It force-replaces an existing link **atomically** — unlike rtl_buddy's non-atomic `os.remove` + `os.symlink`, this plan symlinks to a unique temp name then `os.replace`s it over `link_name` (the atomicity 08e's constraint requires):
+
+  ```python
+  # modules/rtl_buddy/sim.py  (module-level helper)
+  def force_symlink(target, link_name) -> None:
+      tmp = f"{link_name}.{os.getpid()}.tmp"
+      os.symlink(target, tmp)
+      os.replace(tmp, link_name)   # atomic rename over any existing link (or absent target)
+  ```
+
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:26-30` — `force_symlink` (this plan makes the replace atomic; recorded as a Notable divergence).
+
 **Manifest** — this module opens the `rtl_buddy/sim.py` block in `modules/config.yaml` (later appended to by `08b`–`08f`, `09a`–`09c`):
 
 ```yaml

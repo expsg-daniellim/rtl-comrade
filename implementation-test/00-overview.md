@@ -79,14 +79,14 @@ concurrency. The chosen strategy (see [02](02-payload-conventions.md)):
   `sweep`→`name#i`, `runs`→`name#i#run`) and carried on **every** edge.
 - **Joins are by key, pervasively.** Every node consuming ≥2 keyed edges is a `keyed_join`
   correlating them by key — the command-builders, the interpret/route/parse nodes, and the
-  multi-edge gates; config singletons reach them as `persistent_inputs` (the capability commit
-  `3068cda` added). Single-keyed-input nodes stay `default`. This replaces the bag design's
+  multi-edge gates; config singletons reach them as `persistent_inputs`.
+  Single-keyed-input nodes stay `default`. This replaces the bag design's
   reliance on lockstep arrival order with explicit key correlation.
 
 This is the explicit difference from the rejected single-envelope design: there is no envelope
 at all — each node's inbound edges are exactly its inputs, modules read only the ports they
 declare, and no module contains scheduling. The full node/contract/edge table and edge-wiring
-list are in [`edge-split-redesign.md`](edge-split-redesign.md).
+list are in [`06-graph-yaml.md`](06-graph-yaml.md).
 
 ## End-to-end dataflow at a glance
 

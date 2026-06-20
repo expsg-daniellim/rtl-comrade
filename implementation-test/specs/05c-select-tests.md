@@ -33,7 +33,7 @@ class SelectTestsMod:
 ## Algorithm
 
 1. Resolve the selection: `suite_cfg.get_tests(test_name or None)` (spec 01b — a one-element list when `test_name` is given, the all-tests view when empty).
-2. For each `TestConfig` returned, yield `("test", {"key": test.get_name(), "value": test})` — one `test` edge (`{key, value}`, value being the `TestConfig`) per selected test. `run_id` is **not** stamped here; it is born at `expand-runs` (edge-split design — see [`edge-split-redesign.md`](../edge-split-redesign.md)). `--list` is handled upstream, so there is no mode logic here.
+2. For each `TestConfig` returned, yield `("test", {"key": test.get_name(), "value": test})` — one `test` edge (`{key, value}`, value being the `TestConfig`) per selected test. `run_id` is **not** stamped here; it is born at `expand-runs` (the split-edge design). `--list` is handled upstream, so there is no mode logic here.
 3. **Failure — unknown test name.** No `try/except` at this layer: when `test_name` is supplied but absent, `SuiteConfig.get_tests` itself calls `log.fatal(f"test_name {test_name} not found in suite {self.path}")` (spec 01b).
 
 ## Deliverables

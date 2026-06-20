@@ -2,6 +2,8 @@
 
 Self-contained, dependency-ordered tickets for building the `test` graph and its modules. Every `.md` in this directory is a buildable unit; pick them up in order. The plan files in the parent directory (`../00`–`../07`) are the reference, and the per-group navigation indexes ([`../idx-01`](../idx-01-schema.md), [`../idx-04`](../idx-04-setup.md) … [`../idx-10`](../idx-10-control-aggregate.md)) live there too — specs point into both rather than duplicate.
 
+Each module ticket's **Tests** section uses the shared test-harness fixtures — `logging_handler` (with its `.failure` flag), `run_module_scenario`, and `run_contract_scenario` (the `any` contract) — plus the `caplog` + bubbling-`typer.Exit` idiom for `log.fatal` paths. Their APIs live in [`docs/modules/testing.md`](../../docs/modules/testing.md) and [`docs/contracts/testing.md`](../../docs/contracts/testing.md); read those before writing a ticket's tests rather than re-deriving the fixture surface per spec.
+
 Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan. [`../08-sibling-graphs.md`](../08-sibling-graphs.md) is a modularity analysis showing the extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch for `regression`, with the rest of the catalogue reused unchanged.
 
 > **Compatibility sources.** Each module ticket carries a `Compatibility source:` bullet naming the rtl_buddy file:line it mirrors — copied from the inline `Source:` line in [`../03-module-catalog.md`](../03-module-catalog.md). All ranges are anchored to rtl_buddy **`v1.4.0`** (commit `a69d962`; see [`../00`](../00-overview.md)). If rtl_buddy is updated, re-verify every cited range in the catalog and propagate the change here.
@@ -12,7 +14,7 @@ The package name and file grouping below are **pinned**, not a suggestion — ev
 
 | File | Modules (plugin name → class) |
 |---|---|
-| `modules/rtl_buddy/schema/` (package) | config dataclasses only: `builder.py` (01a), `suite.py` (01b), `uvm.py` (01b), `model.py` (01c), `root.py` (01), `results.py` (01), `seed_mode.py` (01). No plugins. |
+| `modules/rtl_buddy/schema/` (package) | config dataclasses only: `builder.py` (01a), `suite.py` (01b), `uvm.py` (01b), `model.py` (01c), `root.py` (01), `results.py` (01), `seed_mode.py` (01), `run_depth.py` (01). No plugins. |
 | `modules/rtl_buddy/setup.py` | `discover-config-file`, `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`, `check-suite-cwd`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode`, `git-status`, `route-list-mode`, `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep` |
 | `modules/rtl_buddy/build.py` | `run-preproc`, `write-filelist`, `build-compile-cmd`, `run-process`, `interpret-compile` |
 | `modules/rtl_buddy/sim.py` | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`, `route-post`, `parse-log`, `parse-uvm-log` |

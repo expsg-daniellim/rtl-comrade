@@ -33,7 +33,7 @@ class LinkLatestMod:
 
 ## Algorithm
 
-1. Force the three CWD "latest" symlinks to this run's files: `force_symlink(proc["stdout_path"], "test.log")`, `force_symlink(proc["stderr_path"], "test.err")`, `force_symlink(randseed["randseed_path"], "test.randseed")`. `log`/`err` are read from `proc` (which echoes the redirect paths); `randseed_path` from the `randseed` edge. `randseed_done` is joined only to **order** this node after `write-randseed` (so `test.randseed` points at a written file) and is otherwise unread. `force_symlink` replaces any existing link atomically (unlink+symlink, or `os.replace` of a temp link).
+1. Force the three CWD "latest" symlinks to this run's files: `force_symlink(proc["stdout_path"], "test.log")`, `force_symlink(proc["stderr_path"], "test.err")`, `force_symlink(randseed["randseed_path"], "test.randseed")`. `log`/`err` are read from `proc` (which echoes the redirect paths); `randseed_path` from the `randseed` edge. `randseed_done` is joined only to **order** this node after `write-randseed` (so `test.randseed` points at a written file) and is otherwise unread. `force_symlink` is the shared `sim.py` helper owned by spec [08a](08a-expand-runs.md) — it replaces any existing link atomically (`os.symlink` to a temp name then `os.replace`).
 2. Emit nothing — terminal leaf of the side-effect branch. No failure path; the links are convenience pointers (last-writer-wins under concurrency — see the concurrency note).
 
 ## Deliverables

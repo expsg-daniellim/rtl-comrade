@@ -50,7 +50,7 @@ inputs:   command:{key, argv, stdout_path, stderr_path}, timeout:{key, value} | 
 outputs:  default → proc:{key, rc, timed_out, stdout_path, stderr_path}
 ```
 
-**Per-instance contract.** The module is contract-agnostic and wired twice: the **compile** instance (`cc-run`) is `default` over `command` alone (`timeout` unwired → module default `None`); the **sim** instance (`sim-run`) is `keyed_join` over `command` + `timeout` joined by key, so the right per-test timeout pairs with the right command (a non-keyed timeout would mispair). `env_ready` is a `persistent_input` on **both** instances (keyed_join supports persistents since commit `3068cda`). `timeout` is a single-value `{key, value}` edge from `build-sim-cmd`; the module reads `timeout["value"]`. `command` and `proc` keep their named-field shapes (cohesive messages, not wrapped).
+**Per-instance contract.** The module is contract-agnostic and wired twice: the **compile** instance (`cc-run`) is `default` over `command` alone (`timeout` unwired → module default `None`); the **sim** instance (`sim-run`) is `keyed_join` over `command` + `timeout` joined by key, so the right per-test timeout pairs with the right command (a non-keyed timeout would mispair). `env_ready` is a `persistent_input` on **both** instances. `timeout` is a single-value `{key, value}` edge from `build-sim-cmd`; the module reads `timeout["value"]`. `command` and `proc` keep their named-field shapes (cohesive messages, not wrapped).
 
 ```python
 class RunProcessMod:

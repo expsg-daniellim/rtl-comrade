@@ -27,8 +27,8 @@ class WriteRandseedMod:
     def run(self, randseed, proc):   # proc joined as a completion gate (rc/timed_out unread)
         Path(randseed["randseed_path"]).write_text(f"{randseed['seed']}\n")
         if "hier_inst_seed" in randseed["argv"]:   # rtl_buddy membership check against the sim argv
-            with open("HierInstanceSeed.txt") as f:
-                Path(randseed["randseed_path"]).open("a").writelines(f)
+            with open("HierInstanceSeed.txt") as f, Path(randseed["randseed_path"]).open("a") as out:
+                out.writelines(f)   # both handles closed via the with (rtl_buddy vlog_sim.py:263-269 parity)
         return ("randseed_done", { "key": randseed["key"] })   # side-effect leaf; no test_run assembly
 ```
 

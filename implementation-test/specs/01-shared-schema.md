@@ -9,15 +9,27 @@ These are `@serde`-decorated dataclasses that the harness never loads directly �
 
 ## Goal
 
-Reimplement the core/shared schema — the root-config types, the `TestResults` hierarchy, and the `SeedMode` enum — preserving rtl_buddy's YAML field names/structure so existing `root_config.yaml` files load drop-in. These are the foundation every setup/post module depends on (the builder/suite/model dataclasses are split into [01a](01a-builder-schema.md) / [01b](01b-suite-schema.md) / [01c](01c-model-schema.md)).
+Reimplement the core/shared schema — the root-config types, the `TestResults` hierarchy, the `SeedMode` enum, and the `RunDepth` phase enum — preserving rtl_buddy's YAML field names/structure so existing `root_config.yaml` files load drop-in. These are the foundation every setup/post module depends on (the builder/suite/model dataclasses are split into [01a](01a-builder-schema.md) / [01b](01b-suite-schema.md) / [01c](01c-model-schema.md)).
 
 ## Deliverables
 
-Three files in the shared `modules/rtl_buddy/schema/` package (its `builder.py`/`suite.py`/ `uvm.py`/`model.py` are owned by 01a/01b/01c — see [idx-01](../idx-01-schema.md)):
+Four files in the shared `modules/rtl_buddy/schema/` package (its `builder.py`/`suite.py`/ `uvm.py`/`model.py` are owned by 01a/01b/01c — see [idx-01](../idx-01-schema.md)):
 
 - `root.py` — `RootConfigFile`, `RootRtlField`, `PlatformConfigFile` (raw `@serde` dataclasses) and the runtime wrapper `RootConfig`. **Field tables in [§ `root.py` schema](#rootpy-schema-detailed) below** — this spec owns these types outright (no `01d`), so they are specified here to 01a/01b/01c depth. `field(rename=...)` matches rtl_buddy names exactly (`rtl-buddy-filetype`, `cfg-rtl-builder`, `cfg-platforms`, `cfg-rtl-reg`). **Verible is dropped** (settled, R3): no `VeribleConfigFile`/`VeribleConfig`, and the `cfg-verible` (root) / `verible` (per-platform) keys are left **unparsed** — pyserde silently ignores unknown keys, so a real `root_config.yaml` still loads drop-in. The resolved runtime `PlatformConfig` is also **not** built: this plan never calls rtl_buddy's `platform.initialise`; platform selection and builder resolution are graph nodes ([04d](04d-select-platform.md) / [04e](04e-resolve-builder.md)).
-- `results.py` — `TestResults` base + `TestPassResults`, `CompileFailResults`, `EarlyStopResults(desc)`, `SimTimeoutResults`, `SkipResults(desc)`. `is_pass()` returns `True` for `PASS`/`SKIP` only. Also a module-level factory `make_fail_result(desc: str) -> TestResults` returning a base `TestResults` with `results={"result": "FAIL", "desc": desc}` — the generic per-test FAIL used by the modules that have no dedicated subclass (`load-model`, `expand-sweep`, `run-preproc`, `write-filelist`, `resolve-seed`, `parse-log`, `parse-uvm-log`; mirrors rtl_buddy's direct `TestResults(... {"result": "FAIL", ...})` construction in `vlog_post.py`).
+- `results.py` — `TestResults` base + `TestPassResults`, `CompileFailResults`, `EarlyStopResults(desc)`, `SimTimeoutResults`, `SkipResults(desc)`. Each subclass's `results` dict is a faithful port of rtl_buddy `runner/test_results.py:10-78` — the **exact** `{result, desc}` per class (no `name` key in this plan; the key rides the edge, not the object):
+
+  | class | `result` | `desc` |
+  |---|---|---|
+  | base `TestResults` (default) | `"NA"` | `"NA"` |
+  | `TestPassResults` | `"PASS"` | `"Generic test pass"` |
+  | `CompileFailResults` | `"FAIL"` | `"Compile failed"` |
+  | `SimTimeoutResults` | `"FAIL"` | `"Sim hit timeout"` |
+  | `EarlyStopResults(desc)` | `"NA"` | caller's `desc` (gate passes `f"Stopped early at {phase}"`, spec [10a](10a-early-stop-gate.md)) |
+  | `SkipResults(desc)` | `"SKIP"` | caller's `desc` (filter passes the `lvl … cmd …level …` string, spec [05d](05d-filter-reglvl.md)) |
+
+  `is_pass()` returns `True` for `PASS`/`SKIP` only. Also a module-level factory `make_fail_result(desc: str) -> TestResults` returning a base `TestResults` with `results={"result": "FAIL", "desc": desc}` — the generic per-test FAIL used by the modules that have no dedicated subclass (`load-model`, `expand-sweep`, `run-preproc`, `write-filelist`, `resolve-seed`, `parse-log`, `parse-uvm-log`; mirrors rtl_buddy's direct `TestResults(... {"result": "FAIL", ...})` construction in `vlog_post.py`).
 - `seed_mode.py` — `SeedMode` enum with `NEW`/`REPLAY`/`DEFAULT`.
+- `run_depth.py` — `RunDepth` enum with `PRE = "pre"`, `COMP = "comp"`, `SIM = "sim"`, `POST = "post"`, in that declaration order (a faithful port of rtl_buddy's `RunDepth` at `runner/test_runner.py:14-18`). This is the **single source** of the early-stop phase ordering: `early-stop-gate` (spec [10a](10a-early-stop-gate.md)) derives its `order` from `[d.value for d in RunDepth]` (`pre < comp < sim < post`) rather than re-listing the tokens. Pure enum — no methods, no graph awareness.
 
 ## `root.py` schema (detailed)
 
