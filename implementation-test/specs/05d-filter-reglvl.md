@@ -9,7 +9,7 @@ Read `docs/modules/implementation.md` — how the harness infers input ports fro
 
 ## Goal
 
-Route each `ctx` keep/skip based on whether the test's regression level falls inside the configured `[start_level, reg_level]` window.
+Route each `test` edge — forward or skip — based on whether the test's regression level falls inside the configured `[start_level, reg_level]` window.
 
 ## Surface
 
@@ -18,28 +18,28 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 ```
 contract:          default
 persistent_inputs: [builder_cfg, reg_level, start_level]
-inputs:            ctx, builder_cfg, reg_level=None, start_level=None
-outputs:           keep → ctx
-                   skip → result
+inputs:            test, builder_cfg, reg_level=None, start_level=None
+outputs:           test → {key, value}   (the test edge, forwarded)
+                   skip → {key, result}
 ```
 
 ```python
 class FilterRegLvlMod:
-    def run(self, ctx, builder_cfg, reg_level = None, start_level = None):
-        lvl = ctx["test"].get_reglvl(builder_cfg.get_name())
+    def run(self, test, builder_cfg, reg_level = None, start_level = None):
+        lvl = test["value"].get_reglvl(builder_cfg.get_name())
         if (reg_level is not None and lvl > reg_level) or (start_level is not None and lvl < start_level):
             result = SkipResults(desc=...)
-            log.info("test_result", key=ctx["key"], test_name=ctx["test"].get_name(),  # SKIP is pass-like → INFO (no exit)
+            log.info("test_result", key=test["key"], test_name=test["value"].get_name(),  # SKIP is pass-like → INFO (no exit)
                      result=result.results["result"], desc=result.results["desc"])
-            return ("skip", { "key": ctx["key"], "result": result })
-        return ("keep", ctx)
+            return ("skip", { "key": test["key"], "result": result })
+        return ("test", test)
 ```
 
 ## Algorithm
 
-1. Read the test's level: `lvl = ctx["test"].get_reglvl(builder_cfg.get_name())` — only the builder *name* is needed; the whole `RtlBuilderConfig` rides the persistent port because the same payload feeds `cc-build`/`seed`/`sim-build` downstream.
-2. Test the window: if `reg_level is not None and lvl > reg_level`, or `start_level is not None and lvl < start_level`, the level is outside `[start_level, reg_level]` → build `result = SkipResults(desc=...)`, log it directly as `log.info("test_result", key=ctx["key"], result=..., desc=...)` (SKIP is pass-like, so **INFO** — it does **not** drive the exit), and emit `("skip", {"key": ctx["key"], "result": result})`.
-3. Otherwise (inside the window, or both bounds `None`) emit `("keep", ctx)`.
+1. Read the test's level: `lvl = test["value"].get_reglvl(builder_cfg.get_name())` — only the builder *name* is needed; the whole `RtlBuilderConfig` rides the persistent port because the same payload feeds `cc-build`/`seed`/`sim-build` downstream.
+2. Test the window: if `reg_level is not None and lvl > reg_level`, or `start_level is not None and lvl < start_level`, the level is outside `[start_level, reg_level]` → build `result = SkipResults(desc=...)`, log it directly as `log.info("test_result", key=test["key"], result=..., desc=...)` (SKIP is pass-like, so **INFO** — it does **not** drive the exit), and emit `("skip", {"key": test["key"], "result": result})`.
+3. Otherwise (inside the window, or both bounds `None`) forward the test edge unchanged: emit `("test", test)`.
 
 No failure path: SKIP is a pass-like routing decision, not an error — it logs `test_result` at INFO (collected by `SummaryProcessor`), never `log.error`.
 
@@ -47,7 +47,7 @@ No failure path: SKIP is a pass-like routing decision, not an error — it logs 
 
 In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 
-- `FilterRegLvlMod` — `(ctx, builder_cfg, reg_level=None, start_level=None)` → `("keep", ctx)` if level inside `[start_level, reg_level]` window (or both `None`), else `("skip", {"key": ctx["key"], "result": SkipResults(desc)})`. The per-test level comes from `ctx["test"].get_reglvl(builder_cfg.get_name())` (mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:350`) — only the builder *name* is needed, not the full config object, but the persistent port carries the whole `RtlBuilderConfig` (see spec [01a](01a-builder-schema.md)) because the same payload feeds `cc-build`, `seed`, and `sim-build` downstream. On skip it logs `test_result` at INFO directly (`log.info("test_result", key, result, desc)`) so `SummaryProcessor` collects the row; SKIP is pass-like, so it never `log.error`s / drives the exit. No other failure path.
+- `FilterRegLvlMod` — `(test, builder_cfg, reg_level=None, start_level=None)` → `("test", test)` (forward the test edge unchanged) if level inside `[start_level, reg_level]` window (or both `None`), else `("skip", {"key": test["key"], "result": SkipResults(desc)})`. The per-test level comes from `test["value"].get_reglvl(builder_cfg.get_name())` (mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:350`) — only the builder *name* is needed, not the full config object, but the persistent port carries the whole `RtlBuilderConfig` (see spec [01a](01a-builder-schema.md)) because the same payload feeds `cc-build`, `seed`, and `sim-build` downstream. On skip it logs `test_result` at INFO directly (`log.info("test_result", key, result, desc)`) so `SummaryProcessor` collects the row; SKIP is pass-like, so it never `log.error`s / drives the exit. No other failure path.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:349-357` — `_do_test_suite` level filter; `get_reglvl` at `config/test.py:287-299`; `SkipResults` at `runner/test_results.py:71-78`.
 
 **Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml` (opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
@@ -58,18 +58,18 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`. Fixtures: a `ctx` fixture whose `test.get_reglvl(name)` returns a controlled int; a `builder_cfg` fixture with `get_name()`; `logging_handler` to assert the skip path logs one INFO `test_result` and keeps `failure` `False`.
+In `modules/tests/test_selection.py`. Fixtures: a `test` edge fixture (`{key, value}`) whose `value.get_reglvl(name)` returns a controlled int; a `builder_cfg` fixture with `get_name()`; `logging_handler` to assert the skip path logs one INFO `test_result` and keeps `failure` `False`.
 
-- `(ctx, builder_cfg, reg_level=None, start_level=None)`, any `lvl` → emits `("keep", ctx)` (both bounds `None` keeps every test); no log.
-- `lvl` strictly inside `[start_level, reg_level]` (e.g. `lvl=3`, window `[1, 5]`) → emits `("keep", ctx)`; no log.
-- `lvl == reg_level` and `lvl == start_level` (window edges) → emits `("keep", ctx)` (boundary: window is inclusive, `> / <` are strict).
-- `lvl > reg_level` (e.g. `lvl=6`, `reg_level=5`) → emits `("skip", {"key": ctx["key"], "result": SkipResults})` and one `log.info("test_result", result="SKIP", …)`; `logging_handler.failure is False` (boundary: above the upper bound; SKIP does not drive exit).
-- `lvl < start_level` (e.g. `lvl=0`, `start_level=1`) → emits `("skip", {"key": ctx["key"], "result": SkipResults})` and one INFO `test_result` (boundary: below the lower bound).
+- `(test, builder_cfg, reg_level=None, start_level=None)`, any `lvl` → emits `("test", test)` (both bounds `None` keeps every test); no log.
+- `lvl` strictly inside `[start_level, reg_level]` (e.g. `lvl=3`, window `[1, 5]`) → emits `("test", test)`; no log.
+- `lvl == reg_level` and `lvl == start_level` (window edges) → emits `("test", test)` (boundary: window is inclusive, `> / <` are strict).
+- `lvl > reg_level` (e.g. `lvl=6`, `reg_level=5`) → emits `("skip", {"key": test["key"], "result": SkipResults})` and one `log.info("test_result", result="SKIP", …)`; `logging_handler.failure is False` (boundary: above the upper bound; SKIP does not drive exit).
+- `lvl < start_level` (e.g. `lvl=0`, `start_level=1`) → emits `("skip", {"key": test["key"], "result": SkipResults})` and one INFO `test_result` (boundary: below the lower bound).
 
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`keep`, `skip`) are exercised: `keep` forwards `ctx`, and the `skip` diversion path emits a `SkipResults` `result` and logs one INFO `test_result` (collected by `SummaryProcessor`, [10c](10c-summary-handler.md); no exit contribution).
+- Both output ports (`test`, `skip`) are exercised: `test` forwards the `test` edge unchanged, and the `skip` diversion path emits a `SkipResults` `result` and logs one INFO `test_result` (collected by `SummaryProcessor`, [10c](10c-summary-handler.md); no exit contribution).
 - The `modules/config.yaml` manifest entry `{ name: filter-reglvl, class_name: FilterRegLvlMod }` validates and the harness resolves `filter-reglvl` → `FilterRegLvlMod`.
 
 ## Constraints
@@ -77,4 +77,5 @@ In `modules/tests/test_selection.py`. Fixtures: a `ctx` fixture whose `test.get_
 - Window test is `[start_level, reg_level]`; when both bounds are `None`, every test is kept.
 - Pass only the builder **name** to `get_reglvl(builder_cfg.get_name())`; the persistent port carries the whole `RtlBuilderConfig` because the same payload feeds `cc-build`/`seed`/ `sim-build` downstream.
 - SKIP is a **pass-like routing decision, not a failure** — on skip, log `test_result` at INFO (`log.info`, **never** `log.error`/`log.fatal`) and emit `("skip", {key, result: SkipResults})`. The `skip` port is unwired; the INFO `test_result` is what reaches the summary.
-- Use string-literal port names (`keep`/`skip`); stay graph-agnostic.
+- Forward the test edge unchanged on the `test` port (`("test", test)`); read fields as `test["value"]` / `test["key"]` (the `{key, value}` edge shape).
+- Use string-literal port names (`test`/`skip`); stay graph-agnostic.

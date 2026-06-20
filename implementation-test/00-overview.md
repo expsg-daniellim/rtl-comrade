@@ -69,23 +69,24 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
 With no god-object carrying everything, a stage needs its inputs *matched up* under
 concurrency. The chosen strategy (see [02](02-payload-conventions.md)):
 
-- A stable **`ctx` record** `{key, test, run_id}` rides the main line from `select` through
-  `write-randseed`. It is assembled at fan-out points and never modified: no stage adds
-  fields. `simv` is set by `build-compile-cmd` and carried in `ctx` to `sim-build`.
-  `seed`/`log`/`err`/`randseed_path` travel as `sim_cmd`, a keyed
-  payload from `sim-build` to `write-randseed`. `write-randseed` assembles `test_run` once
-  (from `ctx`, `proc`, and `sim_cmd`); the post-sim chain receives `test_run` in place of
-  `ctx`. No `result` field ever enters either record.
+- **Per-test data rides as separate keyed edges, not a bag.** Each is a `{key, value}` dict
+  (Shape 1 in [02](02-payload-conventions.md)): `test` threads the whole pipeline; `simv`,
+  `run_id`, and `seed` are born at `build-compile-cmd` / `expand-runs` / `resolve-seed` and
+  **die at `build-sim-cmd`**. There is **no `ctx` and no `test_run`** — the post-sim region
+  consumes `test` + `proc` + `randseed` directly. Cohesive multi-field messages (`command`,
+  `proc`, `randseed`) keep named fields (Shape 2). No `result` field ever enters a main-line edge.
 - A stable **correlation key** is stamped at each fan-out (`select`→`name`,
-  `sweep`→`name#i`, `runs`→`name#i#run`).
-- **Joins happen only where a fast path meets a slow path**: the direct `ctx` edge meets
-  the subprocess `proc` result at `interpret-compile` and `write-randseed` (the first sim-side
-  node needing both). Those two nodes use `keyed_join` on the key. Everywhere else, a stage's
-  inputs come from a single upstream in lockstep, so a plain `default` contract suffices.
+  `sweep`→`name#i`, `runs`→`name#i#run`) and carried on **every** edge.
+- **Joins are by key, pervasively.** Every node consuming ≥2 keyed edges is a `keyed_join`
+  correlating them by key — the command-builders, the interpret/route/parse nodes, and the
+  multi-edge gates; config singletons reach them as `persistent_inputs` (the capability commit
+  `3068cda` added). Single-keyed-input nodes stay `default`. This replaces the bag design's
+  reliance on lockstep arrival order with explicit key correlation.
 
-This is the explicit difference from the rejected single-envelope design: `ctx` is a
-*minimal, bounded* record of genuinely-pervasive values (not an accumulator), modules read
-only the ports they declare, and no module contains scheduling.
+This is the explicit difference from the rejected single-envelope design: there is no envelope
+at all — each node's inbound edges are exactly its inputs, modules read only the ports they
+declare, and no module contains scheduling. The full node/contract/edge table and edge-wiring
+list are in [`edge-split-redesign.md`](edge-split-redesign.md).
 
 ## End-to-end dataflow at a glance
 
@@ -93,9 +94,9 @@ The whole graph in one Mermaid flowchart, rebuilt from the authoritative edge li
 [`06-graph-yaml.md`](06-graph-yaml.md). Edges are **colour- and style-coded by type** so a
 reviewer can trace any one type without another crossing it:
 
-Each edge is labelled `name:type` (lockstep multi-payload edges as `a:type + b:type`); the
-work-spine payloads (`ctx`, `test_run`, `command`, `proc`, `filelist`, `seed`, `sim_cmd`,
-`result`) are plain dicts whose shapes are pinned in [02](02-payload-conventions.md), while
+Edges are labelled with the payload(s) they carry (multi-edge lockstep edges as `a + b`); the
+work-spine payloads (`test`, `simv`, `run_id`, `seed`, `timeout`, `command`, `proc`, `filelist`,
+`randseed`, `randseed_done`, `result`) are plain dicts whose shapes are pinned in [02](02-payload-conventions.md), while
 config/setup edges carry concrete classes (`RootConfig`, `RtlBuilderConfig`, `SuiteConfig`, …)
 or scalars (`Path`, `bool`, `str`). Colours:
 
@@ -112,35 +113,39 @@ or scalars (`Path`, `bool`, `str`). Colours:
   root `run.<tag>.f` / `obj_dir_<tag>/` on directly;
 - **green** — CLI subcommand options (rounded nodes).
 
-`select`/`sweep`/`runs` are the only fan-out generators; `cc-int`/`randseed` the only joins
-(`keyed_join`). The same node names appear in the [04 node table](04-pipeline-and-contracts.md#node-table).
+`select`/`sweep`/`runs` are the only fan-out generators; under the split **most main-line nodes
+are now `keyed_join`** (correlation by key is pervasive) — the command-builders, the interpret/
+route/parse nodes, and the multi-edge gates. The same node names appear in the [04 node table](04-pipeline-and-contracts.md#node-table).
 
 ```mermaid
 flowchart TD
   route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select<br/>(fan-out)"]
-  select m2@-->|"ctx:dict"| filter["filter"]
-  filter m3@-->|"keep:dict"| load_model["load-model"]
-  load_model m4@-->|"ctx:dict"| sweep["sweep<br/>(fan-out)"]
-  sweep m5@-->|"ctx:dict"| preproc["preproc"]
-  preproc m6@-->|"payload:dict"| gate_pre["gate-pre"]
-  gate_pre m7@-->|"go:dict"| filelist["filelist"]
-  filelist m8@-->|"ctx:dict + filelist:dict"| cc_build["cc-build"]
-  cc_build m9@-->|"command:dict"| cc_run["cc-run<br/>(run-process)"]
-  cc_build m10@-->|"ctx:dict"| cc_int["cc-int<br/>(keyed_join)"]
-  cc_run m11@-->|"proc:dict"| cc_int
-  cc_int m12@-->|"ok:dict"| gate_comp["gate-comp"]
-  gate_comp m13@-->|"go:dict"| runs["runs<br/>(fan-out)"]
-  runs m14@-->|"ctx:dict"| seed["seed"]
-  seed m15@-->|"ctx:dict + seed:dict"| sim_build["sim-build"]
-  sim_build m16@-->|"command:dict + timeout:Optional[float]"| sim_run["sim-run<br/>(run-process)"]
-  sim_build m17@-->|"ctx:dict + sim_cmd:dict"| randseed["randseed<br/>(keyed_join)"]
-  sim_run m18@-->|"proc:dict"| randseed
-  randseed m19@-->|"test_run:dict"| link_latest["link-latest"]
-  link_latest m20@-->|"test_run:dict"| sim_int["sim-int"]
-  sim_int m21@-->|"ok:dict"| gate_sim["gate-sim"]
-  gate_sim m22@-->|"go:dict"| route_post["route-post"]
-  route_post m23@-->|"plain:dict"| parse_log["parse-log"]
-  route_post m24@-->|"uvm:dict"| parse_uvm["parse-uvm-log"]
+  select m2@-->|"test"| filter["filter"]
+  filter m3@-->|"test"| load_model["load-model"]
+  load_model m4@-->|"test"| sweep["sweep<br/>(fan-out)"]
+  sweep m5@-->|"test"| preproc["preproc"]
+  preproc m6@-->|"test"| gate_pre["gate-pre"]
+  gate_pre m7@-->|"test"| filelist["filelist"]
+  filelist m8@-->|"test + filelist"| cc_build["cc-build<br/>(keyed_join)"]
+  cc_build m9@-->|"command"| cc_run["cc-run<br/>(run-process)"]
+  cc_build m10@-->|"test + simv"| cc_int["cc-int<br/>(keyed_join)"]
+  cc_run m11@-->|"proc"| cc_int
+  cc_int m12@-->|"test + simv"| gate_comp["gate-comp<br/>(keyed_join)"]
+  gate_comp m13@-->|"test + simv"| runs["runs<br/>(fan-out)"]
+  runs m14@-->|"test + run_id + simv"| seed["seed<br/>(keyed_join)"]
+  seed m15@-->|"test + run_id + simv + seed"| sim_build["sim-build<br/>(keyed_join)"]
+  sim_build m16@-->|"command + timeout"| sim_run["sim-run<br/>(run-process)"]
+  sim_build m17@-->|"randseed"| randseed["write-randseed<br/>(keyed_join · leaf)"]
+  sim_build m17b@-->|"randseed"| link_latest["link-latest<br/>(keyed_join · terminal)"]
+  sim_build m17c@-->|"test"| sim_int["sim-int<br/>(keyed_join)"]
+  sim_run m18@-->|"proc (gate)"| randseed
+  sim_run m18b@-->|"proc"| link_latest
+  sim_run m18c@-->|"proc"| sim_int
+  randseed m19@-->|"randseed_done"| link_latest
+  sim_int m21@-->|"test + proc"| gate_sim["gate-sim<br/>(keyed_join)"]
+  gate_sim m22@-->|"test + proc"| route_post["route-post<br/>(keyed_join)"]
+  route_post m23@-->|"plain: test + proc"| parse_log["parse-log<br/>(keyed_join)"]
+  route_post m24@-->|"uvm: test + proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
   route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
 
   filter t1@-."skip:SkipResults".-> TERM["unwired terminal ports<br/>each edge carries result:dict = {key:str, result:TestResults}<br/>pass-like: log.info(test_result); fail/timeout: log.error(domain event w/ result,desc) → exit 1<br/>SummaryProcessor watch-list collects them; renders the table in finalise()"]
@@ -199,7 +204,7 @@ flowchart TD
   classDef term fill:#f5f5f5,stroke:#888888,stroke-dasharray:4 3;
   classDef cli fill:#eef7ee,stroke:#2da44e;
   class select,sweep,runs fanout;
-  class cc_int,randseed join;
+  class cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class TERM term;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
@@ -211,7 +216,7 @@ flowchart TD
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
-  class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m18,m19,m20,m21,m22,m23,m24,m25 mainEdge;
+  class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
   class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 termEdge;
   class c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
   class e1,e2,e3,e4,e5,e6,e7,e8 envEdge;
@@ -220,8 +225,9 @@ flowchart TD
 ```
 
 There is **no fan-in node** — the 13 terminal ports are unwired and the summary is a logging
-concern (TODO #15). Apart from the three fan-out generators and the two joins, every node is
-single-input / single-output on a plain `default` contract.
+concern (TODO #15). Under the split, most main-line nodes are `keyed_join` (they correlate ≥2
+keyed edges by key); only the single-keyed-input nodes (`filter`, `load-model`, `sweep`,
+`preproc`, `gate-pre`) stay `default`, with `select`/`sweep`/`runs` the fan-out generators.
 
 ## Why this maps cleanly
 
@@ -232,7 +238,7 @@ single-input / single-output on a plain `default` contract.
 | early `return CompileFailResults` etc. | named output port routes the item off the main line |
 | `--early-stop` phase truncation | `early-stop-gate` nodes emitting on `stop` |
 | compile vs sim | one reusable `run-process` module + two command builders |
-| matching async results to their test | `keyed_join` on the correlation key at `cc-int`/`randseed` |
+| matching async results to their test | `keyed_join` on the correlation key (at `cc-int`, the sim-side nodes, and every multi-edge node) |
 | collecting all outcomes | each terminal logs its outcome (`test_result` from the silent paths; `compile_failed`/`sim_timeout`/`*_failed` from the failure terminals) → `SummaryProcessor` watch-list collects and renders the table |
 | OR-accumulated exit code | per-emission `log.error` at each failure site (harness maps ERROR → exit 1) |
 | git state recorded | `git-status` setup node `log.info("git_state", …)` → falls through to the console (not in the summary table) |

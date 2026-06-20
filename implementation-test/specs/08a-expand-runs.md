@@ -9,48 +9,53 @@ Read `docs/modules/implementation.md` — how the harness infers input ports fro
 
 ## Goal
 
-Fan out a compiled `ctx` into one `ctx` per run-id at the head of the simulate leg.
+Fan out the per-test edges (`test` + `simv`) into one set per run-id at the head of the simulate leg — `run_id` is born here.
 
 ## Surface
 
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry — the catalog is the design view, this is the build view; update both when behaviour changes.
 
 ```
-contract:          default
+contract:          keyed_join
+contract_config:   key_field: key
 persistent_inputs: [run_ids]
-inputs:            ctx, run_ids:list = [None]
-outputs:           default → ctx   (one per run-id; key suffixed #run_id when not None)
+inputs:            test, simv, run_ids:list = [None]   (test+simv joined at the test-level key)
+outputs:           test   → {key, value}   (×N, key re-suffixed #run_id when not None)
+                   run_id → {key, value}   (×N — born here)
+                   simv   → {key, value}   (×N — rebroadcast across the fan-out)
 ```
 
 ```python
 class ExpandRunsMod:
-    def run(self, ctx, run_ids:list = [None]):
+    def run(self, test, simv, run_ids:list = [None]):
         for run_id in run_ids:
-            key = ctx["key"] if run_id is None else f"{ctx['key']}#{run_id}"
-            yield ("default", { **ctx, "key": key, "run_id": run_id })
+            nk = test["key"] if run_id is None else f"{test['key']}#{run_id}"   # per-test key → per-run key
+            yield ("test",   { "key": nk, "value": test["value"] })
+            yield ("run_id", { "key": nk, "value": run_id })                    # run_id born here
+            yield ("simv",   { "key": nk, "value": simv["value"] })             # rebroadcast per run
 ```
 
 ## Algorithm
 
-1. For each `run_id` in `run_ids` (default `[None]`), compute the key: `ctx["key"]` unchanged when `run_id is None`, else `f"{ctx['key']}#{run_id}"`.
-2. Yield `("default", {**ctx, "key": key, "run_id": run_id})` — one fresh `ctx` per run-id. `run_ids=[None]` therefore emits a single passthrough. No failure path.
+1. `keyed_join` joins `test` + `simv` at the **test-level** key (e.g. `mytest`). For each `run_id` in `run_ids` (persistent, default `[None]`), compute the **run-level** key `nk`: `test["key"]` unchanged when `run_id is None`, else `f"{test['key']}#{run_id}"`.
+2. Re-emit all three edges at `nk`: `("test", {"key": nk, "value": test["value"]})`, `("run_id", {"key": nk, "value": run_id})` (run_id is **born here**), `("simv", {"key": nk, "value": simv["value"]})` (rebroadcast so each run carries the per-test compile result). `run_ids=[None]` therefore emits a single passthrough per edge with the key unchanged. No failure path.
 
 ## Deliverables
 
 In `modules/rtl_buddy/sim.py`:
 
-- `ExpandRunsMod` — `(ctx, run_ids:list=[None])` → generator yielding one fresh `ctx` per `run_id`, with `ctx["run_id"]` set and key suffixed `#run_id` (when `run_id is not None`). For `run_ids=[None]` emits one `ctx` unchanged (key unmodified, `run_id=None`).
+- `ExpandRunsMod` — `(test, simv, run_ids:list=[None])`, `keyed_join` over `test` + `simv` (joined at the test-level key) with `run_ids` as a `persistent_input` → generator that, per `run_id`, re-emits `test`/`run_id`/`simv` at the run-level key `f"{test['key']}#{run_id}"` (key unchanged when `run_id is None`). `run_id` is born here; `simv` is rebroadcast across the fan-out. For `run_ids=[None]` emits one passthrough per edge (key unmodified, `run_id` value `None`).
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:82-117` — `run_multiple`'s run-id loop (vs `run` at `:51-80`); dispatch at `rtl_buddy.py:297-299`.
 
-- **`run_suffix(ctx)` — shared module-level helper.** This spec creates `sim.py` and owns the canonical definition (consumed by `resolve-seed` [08b], `build-sim-cmd` [08c]; `write-randseed` [08d] receives the pre-composed paths and does not call it). It mirrors the run-id suffixing in rtl_buddy's `_get_log_path`:
+- **`run_suffix(run_id)` — shared module-level helper.** This spec creates `sim.py` and owns the canonical definition (consumed by `resolve-seed` [08b], `build-sim-cmd` [08c] as `run_suffix(run_id["value"])`; `write-randseed` [08d] receives the pre-composed paths and does not call it). It mirrors the run-id suffixing in rtl_buddy's `_get_log_path`:
 
   ```python
   # modules/rtl_buddy/sim.py  (module-level helper)
-  def run_suffix(ctx) -> str:
-      return "" if ctx["run_id"] is None else f"_{ctx['run_id']:04d}"   # run-id zero-padded to four digits
+  def run_suffix(run_id) -> str:
+      return "" if run_id is None else f"_{run_id:04d}"   # run-id zero-padded to four digits
   ```
 
-  Returns `""` when `ctx["run_id"] is None` (single run), else `f"_{run_id:04d}"` — e.g. run-id 3 → `_0003`. The `is None` test (not falsiness) keeps run-id `0` suffixed. Downstream callers join `run_suffix(ctx)` onto the test-name stem they compose under `logs_dir`.
+  Returns `""` when `run_id is None` (single run), else `f"_{run_id:04d}"` — e.g. run-id 3 → `_0003`. The `is None` test (not falsiness) keeps run-id `0` suffixed. Callers pass the `run_id` edge's value (`run_suffix(run_id["value"])`) and join the result onto the test-name stem they compose under `logs_dir`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:82-86` — `VlogSim._get_log_path`'s `if run_id is not None: log_path += f"_{run_id:04d}"`.
 
 **Manifest** — this module opens the `rtl_buddy/sim.py` block in `modules/config.yaml` (later appended to by `08b`–`08f`, `09a`–`09c`):
@@ -63,23 +68,23 @@ In `modules/rtl_buddy/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`. Fixtures: a `ctx` fixture. Pure generator — no `logging_handler` needed.
+In `modules/tests/test_sim_cycle.py`. Fixtures: `test` and `simv` edge dicts (`{key, value}`) at a shared test-level key. Pure generator — no `logging_handler` needed. Drive `run(test, simv, run_ids=…)` directly — the `keyed_join` is the contract's concern.
 
-- `(ctx, run_ids=[None])` (default) → yields a single `("default", ctx)` with key unmodified and `run_id=None` (boundary: default passthrough).
-- `(ctx, run_ids=[1, 2, 3])` → yields 3 ctxs with keys `key#1`/`key#2`/`key#3` and `run_id` set to `1`/`2`/`3` respectively.
-- `(ctx, run_ids=[0])` → yields one ctx with key `key#0`, `run_id=0` (boundary: `0` is not `None`, so it is suffixed — confirms the `is None` test, not falsiness).
-- `(ctx, run_ids=[])` → yields nothing (boundary: empty list).
-- Inbound `ctx` is not mutated in place — each yielded dict is a fresh copy (assert the original `ctx["key"]`/`run_id` are untouched after iterating).
+- `(test, simv, run_ids=[None])` (default) → yields one `("test", …)`, `("run_id", {"value": None})`, `("simv", …)`, each with the key unmodified (boundary: default passthrough).
+- `(test, simv, run_ids=[1, 2, 3])` → yields the three edges ×3, with keys `key#1`/`key#2`/`key#3` and `run_id` values `1`/`2`/`3`; each run's `test`/`simv` carry the same `value` as the inputs (rebroadcast).
+- `(test, simv, run_ids=[0])` → keys `key#0`, `run_id` value `0` (boundary: `0` is not `None`, so it is suffixed — confirms the `is None` test, not falsiness).
+- `(test, simv, run_ids=[])` → yields nothing (boundary: empty list).
+- Inbound `test`/`simv` are not mutated in place — each yielded dict is a fresh `{key, value}` (assert the originals' `key`/`value` are untouched after iterating).
 
 ## Acceptance criteria
 
 - Tests pass.
-- Output port `default` exercised: default `[None]` emits a single passthrough `ctx`; an explicit multi-id list fans out one `ctx` per run-id with keys suffixed `#run_id`.
+- All three output ports (`test`, `run_id`, `simv`) exercised: default `[None]` emits one passthrough triple at the unchanged key; an explicit multi-id list fans out the triple once per run-id with keys suffixed `#run_id`.
 - No failure path.
 - The `modules/config.yaml` manifest entry `{ name: expand-runs, class_name: ExpandRunsMod }` validates and the harness resolves `expand-runs` → `ExpandRunsMod`.
 
 ## Constraints
 
-- `run_ids` default `[None]` → a single passthrough (`ctx` unchanged, `run_id=None`); a non-`None` `run_id` suffixes the key `#run_id`.
-- Yield one fresh `ctx` per `run_id` via the generator; do not mutate the inbound `ctx` in place.
-- No failure path. Emit on the string-literal `default` port.
+- `run_ids` default `[None]` → a single passthrough per edge (key unchanged, `run_id` value `None`); a non-`None` `run_id` suffixes the key `#run_id`.
+- Yield fresh `{key, value}` edges per `run_id` via the generator; do not mutate the inbound `test`/`simv` in place.
+- No failure path. `keyed_join` over `test` + `simv` (key_field `key`), `run_ids` persistent; emit on string-literal `test`/`run_id`/`simv` ports.

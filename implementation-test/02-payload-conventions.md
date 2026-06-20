@@ -19,77 +19,55 @@ produces variants**:
 The suffix is only added when the fan-out emits more than the single passthrough item; the
 invariant the joins rely on is uniqueness, not a fixed `#i#run` shape.
 
-The key exists so the two join nodes can match a subprocess result back to the test it
-came from. It appears as a field only on payloads that actually enter a `keyed_join`
-(the `ctx` and `proc` payloads). Modules copy it forward; they never parse or branch on it.
+The key exists so the `keyed_join` nodes can correlate a node's inputs back to the test
+they came from. Under the split it appears on **every** main-line edge (all are `{key, …}`
+dicts) — each `keyed_join` reads `payload["key"]` to match its ports. Modules copy it
+forward; they never parse or branch on it.
 
-## Shape 1 — `ctx`: the main-line correlation record
+## Shape 1 — the split per-test/per-run edges (`{key, value}`)
 
-A stable 3-field dict from `select` through the compile join (`cc-int`) and on through to
-`write-randseed`:
+There is **no `ctx` bag**. Per-test data rides the main line as **separate keyed edges**, each a `{key, value}` dict — the port/edge name says what `value` is:
 
 ```python
-ctx = {
-    "key":    "alu_smoke#0#0",  # correlation key — stamped at select/sweep/runs fan-outs
-    "test":   <TestConfig>,     # mutated in-place by preproc/sweep; model attached by load-model
-    "run_id": int | None,       # set by expand-runs; None for plain test (R=1)
-    "simv":   <Path>,           # set by build-compile-cmd; absent on the pre-compile segment
-}
+test    = { "key": "alu_smoke#0#0", "value": <TestConfig> }  # select → … → parse-*  (the long-lived edge)
+simv    = { "key": k, "value": <str> }                       # build-compile-cmd → … → build-sim-cmd, then dies
+run_id  = { "key": k, "value": int | None }                  # expand-runs → … → build-sim-cmd, then dies
+seed    = { "key": k, "value": int }                         # resolve-seed → build-sim-cmd, then dies
+timeout = { "key": k, "value": float | None }                # build-sim-cmd → sim-run
+filelist= { "key": k, "value": <Path> }                      # write-filelist → build-compile-cmd
 ```
 
-- **One addition, at one boundary.** `build-compile-cmd` sets `simv` in `ctx` — the only
-  field added after `select` creates the record. After that point no further fields are
-  added. `seed`, `log`, `err`, and `randseed_path` travel as a separate `sim_cmd` keyed
-  payload (Shape 2) from `sim-build` to `write-randseed`.
-- **Always a dict** — `keyed_join` reads `payload["key"]` to correlate ports; `ctx`
-  satisfies this at both join points (`cc-int`, `write-randseed`).
-- **`ctx["test"]` is the live `TestConfig`**, mutated in-place by `run-preproc` /
-  `expand-sweep`; `ctx["test"].model` carries the loaded `ModelConfig` after `load-model`.
-  These reimplement rtl_buddy `TestConfig` (`rtl_buddy/src/rtl_buddy/config/test.py:43-302`)
-  and `ModelConfig` (`config/model.py:9-51`); the field renames in this plan are pinned in
-  specs [01b](specs/01b-suite-schema.md) / [01c](specs/01c-model-schema.md). The `seed_mode`
-  payload is the `SeedMode` enum (`rtl_buddy/src/rtl_buddy/seed_mode.py:4-7`).
-- **No `result` field, ever.** Terminal outcomes leave as Shape-3 payloads, removing the
-  need for any guard inside modules.
-- Modules forward `ctx` unchanged on their continue-port and read only the fields they use.
+- **`key`** is the synthesized correlation string, stamped/re-suffixed at the fan-outs (`select`→`name`, `sweep`→`name#i`, `expand-runs`→`name#i#run`). Every edge carries it so `keyed_join` nodes correlate ports by it. Nothing intrinsic to `test`/`simv` is unique post-fan-out (names collide across sweep variants and run-ids; `simv` is a shared/fixed string), so the explicit synthesized key is required.
+- **`value`** is the generic single-value slot: the edge name conveys the type, so the field is just `value` (`test["value"]` is the `TestConfig`, `simv["value"]` the simv path, …). *Multi-field* cohesive messages (`proc`, `command`, `randseed`) keep named fields instead (Shape 2).
+- **Edge lifetimes are bounded and visible:** `test` threads the whole pipeline; `simv` lives `[build-compile-cmd, build-sim-cmd]`; `run_id` `[expand-runs, build-sim-cmd]`; `seed` `[resolve-seed, build-sim-cmd]` — `simv`/`run_id`/`seed` all die at `build-sim-cmd`.
+- **`test["value"]` is the live `TestConfig`**, mutated in-place by `run-preproc`/`expand-sweep`; `.model` attached by `load-model`. These reimplement rtl_buddy `TestConfig` (`config/test.py:43-302`) and `ModelConfig` (`config/model.py:9-51`); renames pinned in specs [01b](specs/01b-suite-schema.md)/[01c](specs/01c-model-schema.md). The `seed_mode` payload is the `SeedMode` enum (`seed_mode.py:4-7`).
+- **No `result` field, ever.** Terminal outcomes leave as Shape-3 result edges.
+- **Why split, not bagged:** the per-field edges expose true data dependencies (each node's inputs = exactly what it reads) and let `keyed_join` correlate by key rather than relying on lockstep arrival order. Config singletons (`builder_cfg`, `logs_dir`, …) reach the command-builders as `persistent_inputs` on those same `keyed_join` nodes (the capability commit `3068cda` added). Full rationale + the node/contract/edge table + edge-wiring list: [`edge-split-redesign.md`](edge-split-redesign.md).
 
-## Shape 1b — `test_run`: the post-sim context record
+## Shape 1b — `test_run`: dissolved
 
-Assembled once by `write-randseed` (the sim-side join) from `ctx`, `proc`, and `sim_cmd`.
-Replaces `ctx` as the main payload from `write-randseed` onward: `link-latest` →
-`sim-int` → `gate-sim` → `route-post` → `parse-log` / `parse-uvm-log`:
+There is **no post-sim bag**. The split runs all the way through. After `run-process` (sim), the post-sim region consumes the `test` edge + `proc` (the subprocess result — it echoes the sim log/err paths as `stdout_path`/`stderr_path`) + `randseed`, joined by key. `write-randseed` **no longer assembles a `test_run` record** — it is a side-effect leaf (write the seed file, emit a `randseed_done` ordering signal). The post-sim region is **two parallel branches off `proc`**:
+
+- **side-effects:** `write-randseed` (writes `.randseed`; emits `randseed_done`) → `link-latest` (forces the `test.*` symlinks; terminal).
+- **classification:** `interpret-sim` → `gate-sim` → `route-post` → `parse-log` / `parse-uvm-log`, each `keyed_join`ing `test` + `proc`.
+
+`run_id` is **dead post-sim** (it survives only in the `key` suffix and the already-composed paths), so it is not carried past `build-sim-cmd`. Removing the assembly was the atomicity fix — `write-randseed`'s function is "persist the seed record", not "build the result bundle".
+
+## Shape 2 — multi-field cohesive messages
+
+Payloads produced whole by one node for specific consumers, carrying the key so a `keyed_join` can match. These keep **named fields** (not the `{key, value}` slot) because each is one cohesive message with several parts produced in one shot:
 
 ```python
-test_run = {
-    "key":          "alu_smoke#0#0",
-    "test":         <TestConfig>,
-    "run_id":       int | None,
-    "rc":           int,
-    "timed_out":    bool,
-    "log":          <Path>,         # sim .log path (parse-log / parse-uvm-log / link-latest)
-    "err":          <Path>,         # sim .err path (link-latest)
-    "randseed_path":<Path>,         # .randseed path (link-latest)
-}
-```
-
-Assembled once at `write-randseed`; no downstream node adds to it.
-
-## Shape 2 — work payloads (local, single-hop)
-
-Values produced by one stage for the next, carrying the key so a downstream join can match:
-
-```python
-filelist = { "key": k, "filelist": <Path> }                 # write-filelist  → build-compile-cmd
 command  = { "key": k, "argv": [ ... ],                      # build-*-cmd     → run-process
              "stdout_path": Path, "stderr_path": Path }
-proc     = { "key": k, "rc": int, "timed_out": bool,         # run-process     → interpret-*
-             "stdout_path": Path, "stderr_path": Path }
-seed     = { "key": k, "seed": int }                         # resolve-seed    → build-sim-cmd
-sim_cmd  = { "key": k, "seed": int, "log": Path,             # sim-build        → write-randseed
-             "err": Path, "randseed_path": Path, "argv": [ ... ] }
+proc     = { "key": k, "rc": int, "timed_out": bool,         # run-process     → interpret-* (and, sim leg,
+             "stdout_path": Path, "stderr_path": Path }       #                   → write-randseed gate + link-latest)
+randseed = { "key": k, "seed": int, "randseed_path": Path,   # build-sim-cmd   → write-randseed + link-latest
+             "argv": [ ... ] }                                #                   (argv: the hier_inst_seed check)
+randseed_done = { "key": k }                                 # write-randseed  → link-latest (ordering signal only)
 ```
 
-These never accumulate. Each is consumed by exactly the next stage(s).
+`proc` echoes the redirect paths (`stdout_path`/`stderr_path` = the sim log/err), so the post-sim parsers read the log from `proc` — there is no separate `sim_cmd` bag (its parts became `command` + `randseed`). Single-value edges (`filelist`, `seed`, `timeout`) use the `{key, value}` form (Shape 1). These never accumulate; each is consumed by exactly the next stage(s).
 
 ## Shape 3 — result payloads (terminal; port unwired, row logged)
 

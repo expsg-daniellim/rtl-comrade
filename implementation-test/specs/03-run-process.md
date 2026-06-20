@@ -17,7 +17,7 @@ Each `RunProcessMod.run()` call traverses exactly one terminal state between lau
 
 1. **Launch.** `asyncio.create_subprocess_exec(*argv, stdout=out_fp, stderr=err_fp, preexec_fn=os.setpgrp)`. The `preexec_fn` makes the child a process-group leader so the entire subtree can later be signalled in one syscall. Stdout/stderr are bound to caller-supplied files (opened by this module under `with`); no `PIPE`, no `communicate()`. Launch can fail — see Failure case (a).
 
-2. **Wait.** `await asyncio.wait_for(proc.wait(), timeout)`. With `timeout=None` (compile cycle), `wait_for` is equivalent to a plain `proc.wait()`. Four mutually-exclusive resolutions:
+2. **Wait.** `await asyncio.wait_for(proc.wait(), timeout["value"] if timeout else None)`. `timeout` is the `{key, value}` edge from `build-sim-cmd` (sim cycle); the compile cycle leaves it unwired (`None`), so `wait_for` is equivalent to a plain `proc.wait()`. Four mutually-exclusive resolutions:
 
    - **2a. Normal exit (or externally killed).** `proc.wait()` returns; `rc = proc.returncode` (non-negative for `exit(N)`, negative `-signum` for a death by signal — POSIX convention). `timed_out = False`. Go to step 4. See Failure case (b) for the externally-killed sub-case.
    - **2b. Timeout (`asyncio.TimeoutError`).** The per-call timeout elapsed without the child exiting. Go to step 3a.
@@ -45,20 +45,22 @@ Each `RunProcessMod.run()` call traverses exactly one terminal state between lau
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry — the catalog is the design view; the Lifecycle above and this spec are the authoritative build view. `env_ready` is an ordering-only input (never read or branched on); its edge from `prepend-cwd-path` is marked `required: true` and the node lists it in `persistent_inputs`, so the first invocation blocks until PATH is set and later ones replay the cached token (see [`$PATH` prepend](#path-prepend) below).
 
 ```
-contract: default
-inputs:   command:{key, argv, stdout_path, stderr_path}, timeout:float | None = None, env_ready:bool = True
+contract: default (compile instance: command only) / keyed_join over command+timeout (sim instance)
+inputs:   command:{key, argv, stdout_path, stderr_path}, timeout:{key, value} | None = None, env_ready:bool = True
 outputs:  default → proc:{key, rc, timed_out, stdout_path, stderr_path}
 ```
 
+**Per-instance contract.** The module is contract-agnostic and wired twice: the **compile** instance (`cc-run`) is `default` over `command` alone (`timeout` unwired → module default `None`); the **sim** instance (`sim-run`) is `keyed_join` over `command` + `timeout` joined by key, so the right per-test timeout pairs with the right command (a non-keyed timeout would mispair). `env_ready` is a `persistent_input` on **both** instances (keyed_join supports persistents since commit `3068cda`). `timeout` is a single-value `{key, value}` edge from `build-sim-cmd`; the module reads `timeout["value"]`. `command` and `proc` keep their named-field shapes (cohesive messages, not wrapped).
+
 ```python
 class RunProcessMod:
-    async def run(self, command:dict, timeout:float | None = None, env_ready:bool = True):
+    async def run(self, command:dict, timeout:dict | None = None, env_ready:bool = True):
         with open(command["stdout_path"], "wb") as out, open(command["stderr_path"], "wb") as err:
             proc = await asyncio.create_subprocess_exec(*command["argv"],
                      stdout=out, stderr=err, preexec_fn=os.setpgrp)
             timed_out = False
             try:
-                await asyncio.wait_for(proc.wait(), timeout)
+                await asyncio.wait_for(proc.wait(), timeout["value"] if timeout else None)   # timeout: {key, value} edge or None
                 rc = proc.returncode
             except asyncio.TimeoutError:
                 # Lifecycle step 3a: SIGQUIT to group, grace, SIGKILL escalation
@@ -115,8 +117,8 @@ The tests below are testable against a slow-sleep bash fake (a child of the form
 
 - **Normal exit (rc 0).** Child writes "hello" to stdout, exits 0. Output dict has `rc=0`, `timed_out=False`; stdout file contains "hello".
 - **Non-zero `rc`.** Child exits 7. `rc=7`, `timed_out=False`. No exception.
-- **Timeout path — cooperative child.** Child runs `trap 'echo got_QUIT; exit 0' QUIT; sleep 30`; `timeout=0.1`. Expect SIGQUIT delivered to the group, child exits during grace. `rc=4444`, `timed_out=True`, stdout file contains `got_QUIT`.
-- **Timeout path — uncooperative child (SIGKILL escalation).** Child runs `trap '' QUIT; sleep 30`; `timeout=0.1`, `_TIMEOUT_GRACE_S=0.5` (monkeypatched). Expect SIGKILL after ~0.5 s, `rc=4444`, `timed_out=True`. Test completes in well under 30 s.
+- **Timeout path — cooperative child.** Child runs `trap 'echo got_QUIT; exit 0' QUIT; sleep 30`; `timeout={"value": 0.1}`. Expect SIGQUIT delivered to the group, child exits during grace. `rc=4444`, `timed_out=True`, stdout file contains `got_QUIT`.
+- **Timeout path — uncooperative child (SIGKILL escalation).** Child runs `trap '' QUIT; sleep 30`; `timeout={"value": 0.1}`, `_TIMEOUT_GRACE_S=0.5` (monkeypatched). Expect SIGKILL after ~0.5 s, `rc=4444`, `timed_out=True`. Test completes in well under 30 s.
 - **Process-group reach.** Child spawns a grandchild that also sleeps; on timeout, both die. Verify by `os.kill(grandchild_pid, 0)` raising `ProcessLookupError` after the call returns.
 - **Launch failure.** `command["argv"] = ["/no/such/binary"]`. Module catches `FileNotFoundError` and calls `log.fatal`; the harness exits 1 (asserted via `caplog` plus the bubbling-`typer.Exit` contract).
 - **External kill.** Child runs a 10 s sleep; a sibling task sends SIGKILL at 0.1 s. `rc = -signal.SIGKILL`, `timed_out=False`. The module returns normally.
@@ -145,8 +147,8 @@ In `modules/tests/test_run_process.py` (async tests via `await run_module_scenar
 - `command` with `argv=["sh","-c","echo hi; exit 0"]`, `timeout=None` → emits `("default", {key, rc: 0, timed_out: False, stdout_path, stderr_path})`; the `stdout_path` file contains `hi` (Lifecycle 2a, normal exit).
 - `argv=["sh","-c","exit 7"]` → `rc: 7, timed_out: False`, **no** log (a non-zero `rc` is not a failure at this layer — `interpret-*` classifies it downstream).
 - A child killed by a signal externally → `rc: -<signum>` (negative, POSIX convention), `timed_out: False` (Lifecycle 2a externally-killed sub-case).
-- `argv=["sh","-c","echo partial; sleep 5"]`, `timeout=0.1` → `rc: 4444, timed_out: True`; the already-written `partial` line is preserved in `stdout_path`, and `os.waitpid(-1, WNOHANG)` finds no stale children (Lifecycle 2b → 3a; process-group reap).
-- `argv=["sh","-c","trap '' QUIT; sleep 30"]`, `timeout=0.1` → SIGKILL escalation completes within `_TIMEOUT_GRACE_S + ε` of the timeout; `rc: 4444, timed_out: True` (boundary: SIGQUIT ignored → SIGKILL escalation in step 3a).
+- `argv=["sh","-c","echo partial; sleep 5"]`, `timeout={"value": 0.1}` → `rc: 4444, timed_out: True`; the already-written `partial` line is preserved in `stdout_path`, and `os.waitpid(-1, WNOHANG)` finds no stale children (Lifecycle 2b → 3a; process-group reap).
+- `argv=["sh","-c","trap '' QUIT; sleep 30"]`, `timeout={"value": 0.1}` → SIGKILL escalation completes within `_TIMEOUT_GRACE_S + ε` of the timeout; `rc: 4444, timed_out: True` (boundary: SIGQUIT ignored → SIGKILL escalation in step 3a).
 - A monkeypatched child whose `returncode` is `4444` on a **normal** exit → `timed_out: False` (boundary: `timed_out` is set at the return site, never derived from `rc == 4444`, so an organic 4444 is not misclassified).
 - `argv=["./nonexistent-binary"]` → `create_subprocess_exec` raises `FileNotFoundError` → launch-failure `log.fatal` → `pytest.raises(typer.Exit)` (Failure case (a)).
 - Wrap `run()` in a task and cancel it while the child sleeps → the child is SIGKILLed and reaped under `asyncio.shield`, `CancelledError` re-raises, **no** `proc` payload is emitted, partial stdout on disk is preserved, and no zombies remain (Lifecycle 2c → 3b).

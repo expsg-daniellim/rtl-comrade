@@ -18,47 +18,47 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 ```
 contract:          default
 persistent_inputs: [root_cfg]
-inputs:            ctx, root_cfg
-outputs:           default → ctx   (one per sweep variant; key suffixed #i)
-                   fail    → result
+inputs:            test, root_cfg
+outputs:           test → {key, value}   (one per sweep variant; key suffixed #i)
+                   fail → {key, result}
 ```
 
 ```python
 class ExpandSweepMod:
-    def run(self, ctx, root_cfg):
-        sweep = ctx["test"].get_sweep_path()
+    def run(self, test, root_cfg):
+        sweep = test["value"].get_sweep_path()
         if sweep is None:
-            yield ("default", ctx)
+            yield ("test", test)
             return
         ns = {"logger": logger, "TestConfig": TestConfig,
-              "test_cfg": ctx["test"], "root_cfg": root_cfg, "out_test_cfgs": []}
+              "test_cfg": test["value"], "root_cfg": root_cfg, "out_test_cfgs": []}
         try:
             with open(sweep) as f:
                 code = f.read()
             exec(compile(code, sweep, "exec"), ns)   # read + exec the sweep script; populates ns["out_test_cfgs"]
         except Exception as e:
             result = make_fail_result(desc=str(e))
-            log.error("sweep_failed", key=ctx["key"], test_name=ctx["test"].get_name(), exc_info=e,
+            log.error("sweep_failed", key=test["key"], test_name=test["value"].get_name(), exc_info=e,
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
-            yield ("fail", { "key": ctx["key"], "result": result })
+            yield ("fail", { "key": test["key"], "result": result })
             return
         for i, variant in enumerate(ns["out_test_cfgs"]):
-            yield ("default", { **ctx, "key": f"{ctx['key']}#{i}", "test": variant })
+            yield ("test", { "key": f"{test['key']}#{i}", "value": variant })   # fresh test edge per variant, key suffixed
 ```
 
 ## Algorithm
 
-1. Branch on the sweep path: `sweep = ctx["test"].get_sweep_path()` (spec 01b → `str | None`). If `None`, yield `("default", ctx)` once and return — no sweep configured.
-2. Build a fresh namespace `ns = {"logger": logger, "TestConfig": TestConfig, "test_cfg": ctx["test"], "root_cfg": root_cfg, "out_test_cfgs": []}` (matches rtl_buddy's `_expand_tests_with_sweep` namespace), then read the script and `exec` it into `ns` (`with open(sweep) as f: code = f.read()` then `exec(compile(code, sweep, "exec"), ns)`), populating `ns["out_test_cfgs"]`.
-3. Fan out: for each variant `TestConfig` accumulated in `ns["out_test_cfgs"]`, yield `("default", {**ctx, "key": f"{ctx['key']}#{i}", "test": variant})`.
-4. **Failure — script error.** Wrap the read + `exec` (step 2) in `try/except Exception`: any exception raised inside the user script, plus `FileNotFoundError`/`PermissionError` reading the script → emit `("fail", {"key": ctx["key"], "result": <FAIL with str(e) + traceback summary>})` and `log.error("sweep_failed", …, exc_info=e, result=…, desc=…)` (the `result`/`desc` kwargs let `SummaryProcessor`'s watch-list collect the row). Notable divergence: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
+1. Branch on the sweep path: `sweep = test["value"].get_sweep_path()` (spec 01b → `str | None`). If `None`, yield `("test", test)` once (forward the edge unchanged) and return — no sweep configured.
+2. Build a fresh namespace `ns = {"logger": logger, "TestConfig": TestConfig, "test_cfg": test["value"], "root_cfg": root_cfg, "out_test_cfgs": []}` (matches rtl_buddy's `_expand_tests_with_sweep` namespace), then read the script and `exec` it into `ns` (`with open(sweep) as f: code = f.read()` then `exec(compile(code, sweep, "exec"), ns)`), populating `ns["out_test_cfgs"]`.
+3. Fan out: for each variant `TestConfig` accumulated in `ns["out_test_cfgs"]`, yield a fresh `test` edge `("test", {"key": f"{test['key']}#{i}", "value": variant})` (suffixed key, the variant as `value`).
+4. **Failure — script error.** Wrap the read + `exec` (step 2) in `try/except Exception`: any exception raised inside the user script, plus `FileNotFoundError`/`PermissionError` reading the script → emit `("fail", {"key": test["key"], "result": <FAIL with str(e) + traceback summary>})` and `log.error("sweep_failed", …, exc_info=e, result=…, desc=…)` (the `result`/`desc` kwargs let `SummaryProcessor`'s watch-list collect the row). Notable divergence: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
 
 ## Deliverables
 
 In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 
-- `ExpandSweepMod` — `(ctx, root_cfg)` → branches on `ctx["test"].get_sweep_path()` (spec [01b](01b-suite-schema.md) — returns `str | None`). If `None`, yield `("default", ctx)` once. Else read the file at that path and `exec(code, ns)` with `ns = {"logger": logger, "TestConfig": TestConfig, "test_cfg": ctx["test"], "root_cfg": root_cfg, "out_test_cfgs": []}`; after the exec, yield one `("default", ctx_with_test=variant)` per `TestConfig` in `ns["out_test_cfgs"]` (key suffixed `#i`).
-  **Failure handling**: wrap the file-read + `exec(code, ns)` in `try/except Exception as e:` (any exception raised inside the user-supplied script, plus `FileNotFoundError` / `PermissionError` reading the sweep script itself; mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:279-281`). Emit `("fail", {"key": ctx["key"], "result": <FAIL payload with `str(e)` and traceback summary>})` and call `log.error("sweep_failed", …)` at emission with `exc_info=e` **and `result`/`desc`** (so the `SummaryProcessor` watch-list, [10c](10c-summary-handler.md), renders the row). **Notable divergence from rtl_buddy**: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
+- `ExpandSweepMod` — `(test, root_cfg)` → branches on `test["value"].get_sweep_path()` (spec [01b](01b-suite-schema.md) — returns `str | None`). If `None`, yield `("test", test)` once. Else read the file at that path and `exec(code, ns)` with `ns = {"logger": logger, "TestConfig": TestConfig, "test_cfg": test["value"], "root_cfg": root_cfg, "out_test_cfgs": []}`; after the exec, yield one `("test", {"key": f"{test['key']}#{i}", "value": variant})` per `TestConfig` in `ns["out_test_cfgs"]` (key suffixed `#i`).
+  **Failure handling**: wrap the file-read + `exec(code, ns)` in `try/except Exception as e:` (any exception raised inside the user-supplied script, plus `FileNotFoundError` / `PermissionError` reading the sweep script itself; mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:279-281`). Emit `("fail", {"key": test["key"], "result": <FAIL payload with `str(e)` and traceback summary>})` and call `log.error("sweep_failed", …)` at emission with `exc_info=e` **and `result`/`desc`** (so the `SummaryProcessor` watch-list, [10c](10c-summary-handler.md), renders the row). **Notable divergence from rtl_buddy**: per-test FAIL vs rtl_buddy's `logger.critical → typer.Abort`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:264-283` — `_expand_tests_with_sweep`.
 
 **Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml` (opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
@@ -69,24 +69,24 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
 
 ## Tests
 
-In `modules/tests/test_selection.py`. Fixtures: `tmp_path` sweep scripts (valid, raising, empty); a `ctx` fixture whose `test.get_sweep_path()` returns the script path or `None`; a `root_cfg` fixture; `logging_handler` to assert `failure is True` without `typer.Exit`.
+In `modules/tests/test_selection.py`. Fixtures: `tmp_path` sweep scripts (valid, raising, empty); a `test` edge fixture (`{key, value}`) whose `value.get_sweep_path()` returns the script path or `None`; a `root_cfg` fixture; `logging_handler` to assert `failure is True` without `typer.Exit`.
 
-- `ctx` whose `get_sweep_path()` is `None` → yields `("default", ctx)` exactly once, key unchanged (boundary: no sweep configured).
-- `ctx` with a sweep script that appends 4 variants to `out_test_cfgs` → yields 4 `("default", variant_ctx)` with keys `f"{key}#0"`…`#3` and `test` set to each variant.
-- `ctx` with a sweep script that raises (e.g. `raise RuntimeError("boom")`) → yields `("fail", {"key", "result": <FAIL with str(e)>})`, `logging_handler.failure is True`, no `typer.Exit`.
-- `ctx` whose sweep path points at a missing file → `FileNotFoundError` reading the script → yields `("fail", …)`, `log.error`, no abort (boundary: read error routed like a script error).
-- `ctx` with a sweep script that leaves `out_test_cfgs` empty → yields nothing on `default` (boundary: zero-variant fan-out).
+- `test` whose `value.get_sweep_path()` is `None` → yields `("test", test)` exactly once, key unchanged (boundary: no sweep configured).
+- `test` with a sweep script that appends 4 variants to `out_test_cfgs` → yields 4 `("test", payload)` with keys `f"{key}#0"`…`#3` and `value` set to each variant.
+- `test` with a sweep script that raises (e.g. `raise RuntimeError("boom")`) → yields `("fail", {"key", "result": <FAIL with str(e)>})`, `logging_handler.failure is True`, no `typer.Exit`.
+- `test` whose sweep path points at a missing file → `FileNotFoundError` reading the script → yields `("fail", …)`, `log.error`, no abort (boundary: read error routed like a script error).
+- `test` with a sweep script that leaves `out_test_cfgs` empty → yields nothing on `test` (boundary: zero-variant fan-out).
 
 ## Acceptance criteria
 
 - Tests pass.
-- Both output ports (`default`, `fail`) are exercised: a sweep script multiplies one fixture test by 4 (one `ctx` per variant, key suffixed `#i`); a raising sweep script routes a per-test FAIL `result` and logs at ERROR.
+- Both output ports (`test`, `fail`) are exercised: a sweep script multiplies one fixture test by 4 (one `test` edge per variant, key suffixed `#i`); a raising sweep script routes a per-test FAIL `result` and logs at ERROR.
 - The `modules/config.yaml` manifest entry `{ name: expand-sweep, class_name: ExpandSweepMod }` validates and the harness resolves `expand-sweep` → `ExpandSweepMod`.
 
 ## Constraints
 
-- No sweep configured (`get_sweep_path()` is `None`) → yield `("default", ctx)` exactly once.
-- Fan out one `("default", variant_ctx)` per `TestConfig` in `ns["out_test_cfgs"]`, keys suffixed `#i`.
+- No sweep configured (`get_sweep_path()` is `None`) → yield `("test", test)` exactly once (forward the edge).
+- Fan out one `("test", {"key": f"{test['key']}#{i}", "value": variant})` per `TestConfig` in `ns["out_test_cfgs"]`, keys suffixed `#i`.
 - Catch broad `Exception` around the read + `exec` (user-script errors plus `FileNotFoundError`/`PermissionError`) → emit `("fail", {key, result: <FAIL with str(e) + traceback>})` on the **unwired** `fail` port and `log.error("sweep_failed", …, exc_info=e)` carrying **`result`/`desc`** (so the `SummaryProcessor` watch-list collects the row). Per-test FAIL, **not** `log.fatal`/abort (divergence from rtl_buddy's `typer.Abort`).
 - Inline the read + `exec` directly (`with open(sweep) as f: code = f.read()` then `exec(compile(code, sweep, "exec"), ns)`); `run-preproc` (spec [06a](06a-run-preproc.md)) inlines the same three lines independently. The pattern is deliberately **not** abstracted into a shared helper.
 
