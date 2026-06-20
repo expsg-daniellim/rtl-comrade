@@ -144,7 +144,7 @@ Be deliberate here. Contract termination is part of graph liveness behavior.
 Two useful examples in the current codebase:
 
 - [src/rtl_comrade/contract_default.py](../../src/rtl_comrade/contract_default.py): ends when any required input ends
-- [contracts/contracts.py](../../contracts/contracts.py): zip-style behavior; if any port ends, the node ends, and mismatched endings are logged as an error
+- [contracts/zip.py](../../contracts/zip.py): zip-style behavior; if any port ends, the node ends, and mismatched endings are logged as an error
 
 ## Minimal Contract Template
 
@@ -260,7 +260,7 @@ In the current codebase, many unexpected exceptions during `get_inputs()` are ca
 
 The two shipped contracts illustrate a useful split:
 
-- [contracts/contracts.py](../../contracts/contracts.py) uses `ERROR` for a runtime mismatch in stream endings, then returns `EndSentinel`
+- [contracts/zip.py](../../contracts/zip.py) uses `ERROR` for a runtime mismatch in stream endings, then returns `EndSentinel`
 - [src/rtl_comrade/contract_default.py](../../src/rtl_comrade/contract_default.py) uses fatal logging for broken invariants such as invalid persistent-port configuration
 
 ## Manifest Registration
@@ -269,14 +269,14 @@ To expose a contract plugin by name, add it to a plugin file and register it in 
 
 Current example:
 
-- [contracts/contracts.py](../../contracts/contracts.py)
+- [contracts/zip.py](../../contracts/zip.py)
 - [contracts/config.yaml](../../contracts/config.yaml)
 
 Example manifest entry:
 
 ```yaml
 files:
-- file: contracts.py
+- file: zip.py
   plugins:
   - name: zip
     class_name: ZipContract

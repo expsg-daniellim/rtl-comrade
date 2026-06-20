@@ -1,6 +1,6 @@
 # `unit`
 
-**Class:** `UnitContract` (`contracts/unit_contract.py`)
+**Class:** `UnitContract` (`contracts/unit.py`)
 
 [Back to index](index.md)
 

@@ -1,6 +1,6 @@
 # `zip`
 
-**Class:** `ZipContract` (`contracts/contracts.py`)
+**Class:** `ZipContract` (`contracts/zip.py`)
 
 [Back to index](index.md)
 
