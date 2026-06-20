@@ -27,7 +27,9 @@ A port named in `persistent_inputs` is a singleton side-channel: its latest valu
 
 - A persistent input does **not** need to carry `key_field`. Key completeness is decided by the keyed (non-persistent) ports only.
 - If a persistent payload **does** carry `key_field`, its value is additionally cached per key. A keyed assembly for key `K` then prefers the value cached for `K`, falling back to the most-recent value when none was cached for `K`. Keyless persistents always use the most-recent value.
-- The first keyed assembly **blocks** until every persistent port has delivered at least one value (first-run-required, matching `default`). A persistent port that ends before ever delivering is logged as an error and omitted from the assembly, so the module's Python default applies.
+- The first keyed assembly **blocks** until every persistent port that cannot fall back to a module default has delivered at least one value (first-run-required, matching `default`). Whether a port can default is read from `ContractPort.has_default`, gated by `required`, exactly as `DefaultContract` does.
+- A persistent port whose module parameter **has a default** (and is not marked `required`) never blocks the first assembly: until it delivers a real value its key is omitted so the module's Python default applies, mirroring `default`. Once it delivers, its value is cached and replayed. Such a port ending without ever delivering is **not** an error — its default simply applies.
+- A persistent port that **cannot** default ending before ever delivering is logged as an error and omitted from the assembly.
 - A persistent port ending neither terminates the join nor participates in key completeness — termination is driven by the keyed ports.
 
 ```yaml

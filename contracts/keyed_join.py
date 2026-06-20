@@ -8,6 +8,10 @@ from rtl_comrade.logging import HarnessLogger
 
 log: HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
+# A port may use its module default when it has one and the graph does not mark it required.
+def _can_default(port: ContractPort) -> bool:
+	return port.has_default and not port.required
+
 
 @dataclass
 class KeyedJoinContract:
@@ -21,8 +25,11 @@ class KeyedJoinContract:
 	A persistent input need not carry ``key_field``; when it does, its latest value is
 	additionally cached per key, and a keyed assembly prefers the value cached for that key,
 	falling back to the most-recent value. The first keyed assembly blocks until every
-	persistent port has delivered a value. A persistent port ending neither terminates the
-	join nor participates in key completeness.
+	persistent port that cannot fall back to a module default has delivered a value; a
+	persistent port whose module parameter has a default (and is not marked required) never
+	blocks, its key being omitted so the Python default applies until a real value arrives,
+	mirroring ``DefaultContract``. A persistent port ending neither terminates the join nor
+	participates in key completeness.
 	"""
 
 	@dataclass(frozen=True)
@@ -88,10 +95,13 @@ class KeyedJoinContract:
 
 				blocking = self._keyed
 
-			# Block on a port whose arrival can unblock emission. Persistent ports already
-			# holding a value are skipped; keyed ports have no 'last_value' so are never skipped.
+			# Block on a port whose arrival can unblock emission. Ports already holding a value,
+			# ended, or able to fall back to their module default are skipped; keyed ports have no
+			# 'last_value' and cannot default, so they are never skipped.
 			for name, port in blocking.items():
 				if port.has_ended() or port.state.get('last_value') is not None:
+					continue
+				if name in self._persistent and _can_default(port):
 					continue
 				val = await port.get()
 				if isinstance(val, EndSentinel):
@@ -113,7 +123,7 @@ class KeyedJoinContract:
 	def _on_end(self, name: str, saw_end: list[str]) -> None:
 		if name in self._keyed:
 			saw_end.append(name)  # keyed endings drive termination
-		elif self._persistent[name].state['last_value'] is None:
+		elif self._persistent[name].state['last_value'] is None and not _can_default(self._persistent[name]):
 			log.error("persistent_input_ended_without_value", contract=self.id, port=name)
 
 	def _find_complete_key(self) -> Any:
@@ -130,4 +140,4 @@ class KeyedJoinContract:
 		return [k for k in all_keys if not all(k in self._buffers.get(n, {}) for n in self._keyed)]
 
 	def _persistent_ready(self) -> bool:
-		return all(port.state['last_value'] is not None or port.has_ended() for port in self._persistent.values())
+		return all(port.state['last_value'] is not None or port.has_ended() or _can_default(port) for port in self._persistent.values())

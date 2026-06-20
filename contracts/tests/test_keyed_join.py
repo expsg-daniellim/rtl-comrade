@@ -4,7 +4,7 @@ import pytest
 import typer
 
 from rtl_comrade.api import EndSentinel
-from rtl_comrade.testing import run_contract_scenario, PortTestInput
+from rtl_comrade.testing import run_contract_scenario, PortTestInput, PortMeta
 
 from contracts.keyed_join import KeyedJoinContract
 
@@ -213,6 +213,83 @@ async def test_multiple_persistent_inputs_block_independently():
 			{"a": {"id": 1}, "cfg1": {"opt": "X"}, "cfg2": {"opt": "Y"}},
 			EndSentinel("test"),
 		],
+		config=KeyedJoinContract.Config(key_field="id", persistent_inputs=["cfg1", "cfg2"]),
+	)
+
+
+async def test_persistent_with_default_does_not_block_first_run(logging_handler):
+	# A persistent port whose module parameter has a default never blocks the first assembly:
+	# its key is omitted (Python default applies) until it delivers a real value, mirroring default.
+	# The first group emits while cfg is still absent; cfg then arrives and is replayed thereafter.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1}, PortTestInput({"id": 2}, delay=2), PortTestInput(EndSentinel("src"), delay=3)],
+			"cfg": [PortTestInput({"opt": "late"}, delay=1), PortTestInput(EndSentinel("src"), delay=3)],
+		},
+		expected_outputs=[
+			{"a": {"id": 1}},
+			{"a": {"id": 2}, "cfg": {"opt": "late"}},
+			EndSentinel("test"),
+		],
+		port_meta={"cfg": PortMeta(has_default=True)},
+		config=_PERSIST_CFG,
+	)
+	assert logging_handler.failure is False
+
+
+async def test_persistent_with_default_ended_without_value_is_not_error(logging_handler):
+	# A persistent port that can default and ends before delivering is not an error;
+	# its key is omitted so the module's Python default applies.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1}, EndSentinel("src")],
+			"cfg": [PortTestInput(EndSentinel("src"), delay=2)],
+		},
+		expected_outputs=[
+			{"a": {"id": 1}},
+			EndSentinel("test"),
+		],
+		port_meta={"cfg": PortMeta(has_default=True)},
+		config=_PERSIST_CFG,
+	)
+	assert logging_handler.failure is False
+
+
+async def test_required_persistent_blocks_despite_default():
+	# A persistent port marked required is awaited even when it has a default, mirroring
+	# DefaultContract: the complete keyed group is withheld until the value arrives.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1}, EndSentinel("src")],
+			"cfg": [PortTestInput({"opt": "X"}, delay=2), PortTestInput(EndSentinel("src"), delay=3)],
+		},
+		expected_outputs=[
+			{"a": {"id": 1}, "cfg": {"opt": "X"}},
+			EndSentinel("test"),
+		],
+		port_meta={"cfg": PortMeta(has_default=True, required=True)},
+		config=_PERSIST_CFG,
+	)
+
+
+async def test_default_persistent_skipped_while_blocking_on_required_one():
+	# With one defaulting persistent port (never delivers) and one that must deliver late, only
+	# the latter blocks emission; the defaulting port's key is omitted, the other is replayed.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1}, EndSentinel("src")],
+			"cfg1": [PortTestInput(EndSentinel("src"), delay=4)],
+			"cfg2": [PortTestInput({"opt": "Y"}, delay=2), PortTestInput(EndSentinel("src"), delay=3)],
+		},
+		expected_outputs=[
+			{"a": {"id": 1}, "cfg2": {"opt": "Y"}},
+			EndSentinel("test"),
+		],
+		port_meta={"cfg1": PortMeta(has_default=True)},
 		config=KeyedJoinContract.Config(key_field="id", persistent_inputs=["cfg1", "cfg2"]),
 	)
 
