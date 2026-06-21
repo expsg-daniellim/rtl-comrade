@@ -1,5 +1,8 @@
 """Tests for KeyedJoinContract."""
 
+from dataclasses import dataclass
+from typing import Any
+
 import pytest
 import typer
 
@@ -9,6 +12,13 @@ from rtl_comrade.testing import run_contract_scenario, PortTestInput, PortMeta
 from contracts.keyed_join import KeyedJoinContract
 
 _CFG = KeyedJoinContract.Config(key_field="id")
+
+
+@dataclass(frozen=True)
+class _Keyed:
+	"""A non-dict payload that exposes its correlation key as an attribute."""
+	key: Any
+	v: str = ""
 
 
 async def test_single_key_two_ports():
@@ -92,7 +102,43 @@ async def test_incomplete_key_at_stream_end_logs_error(logging_handler):
 	assert logging_handler.failure is True
 
 
+async def test_object_payloads_keyed_by_attribute():
+	# Payloads are objects exposing a `key` attribute rather than dicts; the contract
+	# correlates them by that attribute, ignoring key_field.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [_Keyed(key=1, v="A"), _Keyed(key=2, v="A2"), EndSentinel("src")],
+			"b": [_Keyed(key=2, v="B2"), _Keyed(key=1, v="B"), EndSentinel("src")],
+		},
+		expected_outputs=[
+			{"a": _Keyed(key=1, v="A"), "b": _Keyed(key=1, v="B")},
+			{"a": _Keyed(key=2, v="A2"), "b": _Keyed(key=2, v="B2")},
+			EndSentinel("test"),
+		],
+		config=_CFG,
+	)
+
+
 _PERSIST_CFG = KeyedJoinContract.Config(key_field="id", persistent_inputs=["cfg"])
+
+
+async def test_persistent_object_payload_cached_by_attribute():
+	# A persistent input delivering an object with a `key` attribute is cached per key;
+	# the keyed assembly for that key prefers it, other keys fall back to the latest value.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [_Keyed(key=1), _Keyed(key=2), EndSentinel("src")],
+			"cfg": [_Keyed(key=1, v="for-1"), _Keyed(key="x", v="latest"), EndSentinel("src")],
+		},
+		expected_outputs=[
+			{"a": _Keyed(key=1), "cfg": _Keyed(key=1, v="for-1")},
+			{"a": _Keyed(key=2), "cfg": _Keyed(key="x", v="latest")},
+			EndSentinel("test"),
+		],
+		config=_PERSIST_CFG,
+	)
 
 
 async def test_persistent_singleton_replayed_across_keys():

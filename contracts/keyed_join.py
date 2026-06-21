@@ -12,17 +12,22 @@ log: HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 def _can_default(port: ContractPort) -> bool:
 	return port.has_default and not port.required
 
+# The correlation key is a payload's ``key`` attribute when present, else its ``key_field`` dict entry.
+def _key_of(payload: Any, key_field: str) -> Any:
+	return payload.key if hasattr(payload, 'key') else payload[key_field]
+
 
 @dataclass
 class KeyedJoinContract:
 	"""Invokes the module when all keyed ports have data for the same correlation key.
 
-	Items from keyed ports are matched by a field in their payload dict (``key_field``).
-	Keys may arrive interleaved across ports; partial groups are buffered until complete.
-	When any keyed port ends with buffered incomplete keys, those keys are logged as an error.
+	Items from keyed ports are matched by a correlation key: a payload's ``key`` attribute
+	when present, otherwise the ``key_field`` entry of a payload dict. Keys may arrive
+	interleaved across ports; partial groups are buffered until complete. When any keyed
+	port ends with buffered incomplete keys, those keys are logged as an error.
 
 	Ports named in ``persistent_inputs`` are singletons replayed on every keyed assembly.
-	A persistent input need not carry ``key_field``; when it does, its latest value is
+	A persistent input need not carry a key; when it does, its latest value is
 	additionally cached per key, and a keyed assembly prefers the value cached for that key,
 	falling back to the most-recent value. The first keyed assembly blocks until every
 	persistent port that cannot fall back to a module default has delivered a value; a
@@ -114,10 +119,10 @@ class KeyedJoinContract:
 		if name in self._persistent:
 			port = self._persistent[name]
 			port.state['last_value'] = val
-			if isinstance(val.payload, dict) and self.config.key_field in val.payload:
-				port.state['keyed'][val.payload[self.config.key_field]] = val
+			if hasattr(val.payload, 'key') or (isinstance(val.payload, dict) and self.config.key_field in val.payload):
+				port.state['keyed'][_key_of(val.payload, self.config.key_field)] = val
 		else:
-			key = val.payload[self.config.key_field]
+			key = _key_of(val.payload, self.config.key_field)
 			self._buffers.setdefault(name, {})[key] = val
 
 	def _on_end(self, name: str, saw_end: list[str]) -> None:

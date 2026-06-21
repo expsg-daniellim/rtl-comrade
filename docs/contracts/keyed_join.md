@@ -4,7 +4,7 @@
 
 [Back to index](index.md)
 
-Groups incoming items by a correlation key extracted from each payload dict and invokes the module when all required ports have delivered a value for the same key. Items may arrive interleaved across ports and are buffered until a complete group is available. `required_inputs_by_key` is an alias for the same class.
+Groups incoming items by a correlation key and invokes the module when all required ports have delivered a value for the same key. The key is a payload's `key` attribute when present, otherwise the `key_field` entry of a payload dict, so the contract works on any object exposing a `key` attribute as well as on plain dicts. Items may arrive interleaved across ports and are buffered until a complete group is available. `required_inputs_by_key` is an alias for the same class.
 
 ## Config
 
@@ -16,17 +16,17 @@ contract_config:
 
 | Field | Type | Purpose |
 |---|---|---|
-| `key_field` | `str` | Name of the field within each payload dict used as the correlation key |
+| `key_field` | `str` | Name of the dict field used as the correlation key when a payload has no `key` attribute |
 | `persistent_inputs` | `list[str]` | Input-port names whose latest value is cached and replayed on every keyed assembly. Optional; omit if no persistent ports are needed |
 
-Each keyed payload must be a `dict` containing `key_field`. The key type must support `<` comparison (e.g. `int`, `str`) because ties between simultaneously complete keys are broken by minimum value.
+Each keyed payload must either expose a `key` attribute or be a `dict` containing `key_field`. The `key` attribute takes precedence when both are present. The key type must support `<` comparison (e.g. `int`, `str`) because ties between simultaneously complete keys are broken by minimum value.
 
 ## Persistent inputs
 
 A port named in `persistent_inputs` is a singleton side-channel: its latest value is cached and replayed on every keyed assembly, mirroring `persistent_inputs` on the [`default`](default.md) contract. This lets a `keyed_join` node receive runtime-computed config singletons alongside its keyed streams.
 
-- A persistent input does **not** need to carry `key_field`. Key completeness is decided by the keyed (non-persistent) ports only.
-- If a persistent payload **does** carry `key_field`, its value is additionally cached per key. A keyed assembly for key `K` then prefers the value cached for `K`, falling back to the most-recent value when none was cached for `K`. Keyless persistents always use the most-recent value.
+- A persistent input does **not** need to carry a key (a `key` attribute or `key_field` dict entry). Key completeness is decided by the keyed (non-persistent) ports only.
+- If a persistent payload **does** carry a key, its value is additionally cached per key. A keyed assembly for key `K` then prefers the value cached for `K`, falling back to the most-recent value when none was cached for `K`. Keyless persistents always use the most-recent value.
 - The first keyed assembly **blocks** until every persistent port that cannot fall back to a module default has delivered at least one value (first-run-required, matching `default`). Whether a port can default is read from `ContractPort.has_default`, gated by `required`, exactly as `DefaultContract` does.
 - A persistent port whose module parameter **has a default** (and is not marked `required`) never blocks the first assembly: until it delivers a real value its key is omitted so the module's Python default applies, mirroring `default`. Once it delivers, its value is cached and replayed. Such a port ending without ever delivering is **not** an error — its default simply applies.
 - A persistent port that **cannot** default ending before ever delivering is logged as an error and omitted from the assembly.
