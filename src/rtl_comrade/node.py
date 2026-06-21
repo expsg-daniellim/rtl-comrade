@@ -132,6 +132,11 @@ class Node:
 			if hasattr(Contract, 'Config'):
 				try:
 					contract_config = from_dict(Contract.Config, contract_config)
+
+					# Relativise config paths (if not absolute)
+					for (attr, val) in [ (attr, getattr(contract_config, attr)) for attr in dir(contract_config) if not callable(getattr(contract_config, attr)) and not (attr.startswith('__') and attr.endswith('__')) ]:
+						if isinstance(val, Path) and not val.is_absolute() and val.parts[0] == '{graph}':
+							setattr(contract_config, attr, relative_path / Path(*val.parts[1:]))
 				except SerdeError as e:
 					log.fatal('config.deserialise.serde_error', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
 				except UserError as e:

@@ -50,7 +50,7 @@ Possible injected arguments are:
 
 If `__init__` accepts `config`, the harness passes `contract_config` from the graph YAML.
 
-If the contract defines a nested `Config` class, that config is deserialized through `serde.from_dict(...)` before construction.
+If the contract defines a nested `Config` class, that config is deserialized through `serde.from_dict(...)` before construction. A `Config` field declared as `Path` (rather than `str`) supports the `{graph}` prefix as its first path component, which the harness resolves to the graph file's directory at construction time, the same as module and logger configs (see [graph.md](../harness_configs/graph.md)).
 
 ### `id`
 

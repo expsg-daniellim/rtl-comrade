@@ -63,7 +63,7 @@ The raw `Port` objects are harness-owned runtime queues. Contracts do not receiv
 `Node.__init__` inspects the contract constructor separately with `inspect.signature(...)`.
 
 - If contract `__init__` accepts `config`, the node passes `contract_config`.
-- If the contract defines a nested `Config` type, `contract_config` is deserialized through `serde.from_dict(...)` first.
+- If the contract defines a nested `Config` type, `contract_config` is deserialized through `serde.from_dict(...)` first. After deserialization, any `Path`-typed field that is not absolute and whose first path component is `{graph}` is replaced with `relative_path / <remaining components>`, the same as module configs above.
 - If contract `__init__` accepts `id`, the node passes `<node-id>.contract`.
 - If contract `__init__` accepts `ports`, the node passes a mapping of [ContractPort](api.md) adapters built from the underlying `Port`s.
 
