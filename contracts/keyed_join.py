@@ -12,17 +12,18 @@ log: HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 def _can_default(port: ContractPort) -> bool:
 	return port.has_default and not port.required
 
-# The correlation key is a payload's ``key`` attribute when present, else its ``key_field`` dict entry.
+# The correlation key is a payload's ``key_field`` attribute when present, else its ``key_field`` dict entry.
 def _key_of(payload: Any, key_field: str) -> Any:
-	return payload.key if hasattr(payload, 'key') else payload[key_field]
+	return getattr(payload, key_field) if hasattr(payload, key_field) else payload[key_field]
 
 
 @dataclass
 class KeyedJoinContract:
 	"""Invokes the module when all keyed ports have data for the same correlation key.
 
-	Items from keyed ports are matched by a correlation key: a payload's ``key`` attribute
-	when present, otherwise the ``key_field`` entry of a payload dict. Keys may arrive
+	Items from keyed ports are matched by a correlation key: a payload's ``key_field`` attribute
+	when present, otherwise the ``key_field`` entry of a payload dict. ``key_field`` names the
+	field in both cases and defaults to ``"key"``. Keys may arrive
 	interleaved across ports; partial groups are buffered until complete. When any keyed
 	port ends with buffered incomplete keys, those keys are logged as an error.
 
@@ -39,7 +40,7 @@ class KeyedJoinContract:
 
 	@dataclass(frozen=True)
 	class Config:
-		key_field: str
+		key_field: str = "key"
 		persistent_inputs: list[str] = field(default_factory=list)
 
 	id: str
@@ -119,7 +120,7 @@ class KeyedJoinContract:
 		if name in self._persistent:
 			port = self._persistent[name]
 			port.state['last_value'] = val
-			if hasattr(val.payload, 'key') or (isinstance(val.payload, dict) and self.config.key_field in val.payload):
+			if hasattr(val.payload, self.config.key_field) or (isinstance(val.payload, dict) and self.config.key_field in val.payload):
 				port.state['keyed'][_key_of(val.payload, self.config.key_field)] = val
 		else:
 			key = _key_of(val.payload, self.config.key_field)

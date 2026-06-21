@@ -22,7 +22,7 @@ For the expected structure of per-contract files, see [doc-structure.md](doc-str
 | [default](default.md) | General-purpose; blocks on required inputs, supports persistent cached ports and default-valued ports |
 | [zip](zip.md) | Pairs items by position across all ports; all ports must deliver at the same rate |
 | [unit](unit.md) | Runs the module exactly once; errors if any port delivers more than one item |
-| [keyed\_join](keyed_join.md) | Joins items from all ports by a correlation key — a payload's `key` attribute or its `key_field` dict entry |
+| [keyed\_join](keyed_join.md) | Joins items from all ports by a correlation key — the `key_field` attribute or dict entry of each payload (default `"key"`) |
 | [latest](latest.md) | Caches the most-recent value from state ports; triggers on each item from trigger ports |
 | [group\_until\_end](group_until_end.md) | Accumulates items into a list until a `GroupEnd` sentinel; passes the full batch to the module |
 | [branch\_aware\_join](branch_aware_join.md) | Like `keyed_join` but handles control-flow branches that intentionally skip some ports via `BranchSkip` |

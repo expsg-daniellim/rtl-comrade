@@ -103,8 +103,8 @@ async def test_incomplete_key_at_stream_end_logs_error(logging_handler):
 
 
 async def test_object_payloads_keyed_by_attribute():
-	# Payloads are objects exposing a `key` attribute rather than dicts; the contract
-	# correlates them by that attribute, ignoring key_field.
+	# Payloads are objects exposing the key_field as an attribute rather than dicts; the
+	# contract correlates them by that attribute. key_field defaults to "key" here.
 	await run_contract_scenario(
 		KeyedJoinContract,
 		port_inputs={
@@ -116,7 +116,7 @@ async def test_object_payloads_keyed_by_attribute():
 			{"a": _Keyed(key=2, v="A2"), "b": _Keyed(key=2, v="B2")},
 			EndSentinel("test"),
 		],
-		config=_CFG,
+		config=KeyedJoinContract.Config(),
 	)
 
 
@@ -137,7 +137,7 @@ async def test_persistent_object_payload_cached_by_attribute():
 			{"a": _Keyed(key=2), "cfg": _Keyed(key="x", v="latest")},
 			EndSentinel("test"),
 		],
-		config=_PERSIST_CFG,
+		config=KeyedJoinContract.Config(persistent_inputs=["cfg"]),
 	)
 
 
