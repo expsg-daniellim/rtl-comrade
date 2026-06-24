@@ -32,7 +32,7 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 ## GraphFileConfig Schema
 
 - `modules`, `contracts`: `list[Path]` plugin paths from the YAML file
-- `nodes`: node definitions with `id`, `module`, `config`, `contract`, `contract_config`, `cli_config`, and `cli_contract_config`
+- `nodes`: node definitions with `id`, `module`, `config`, `contract`, `contract_config`, `cli_config`, `cli_contract_config`, and `contract_port_mappings`
 - `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
 - `logging`: `LoggingConfig` (defined in [loader_logger.md](loader_logger.md)) — optional per-graph custom logging configuration; defaults to an empty config. Carried through to `GraphConfig` unchanged. See [logging.md](logging.md) and the [config schema](../harness_configs/graph.md).
 
@@ -41,6 +41,8 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 `GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string). Used both as edge sources and as values in `GraphConfigNode.cli_config` / `GraphConfigNode.cli_contract_config`.
 
 `GraphConfigNode.cli_config` and `GraphConfigNode.cli_contract_config` are `dict[str, GraphConfigSrcCLI]` where the dict key is the module or contract `Config` field name to inject into, and the value is the CLI parameter descriptor. The file defines `GraphConfigSrcCLI` before `GraphConfigNode` so the field type is directly resolvable at class definition time.
+
+`GraphConfigNode.contract_port_mappings` is `dict[str, list[str]] | None` (default `None`). It declares the contract-port input surface the node presents to the validator: keys are contract-accepted port names (where edges deliver), values are the module `run(...)` parameters each forwards to. `Graph.from_config` consumes it to build the node's port surface and definiteness; see [graph.md](graph.md) and the [config schema](../harness_configs/graph.md).
 
 ## Port Conventions
 

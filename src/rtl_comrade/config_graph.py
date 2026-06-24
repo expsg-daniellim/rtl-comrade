@@ -24,7 +24,7 @@ from .validation import validate_acyclic
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 @dataclass(slots=True, frozen=True)
-class GraphConfig:
+class GraphConfig:  # pylint: disable=too-many-instance-attributes
 	"""Normalised graph config with all edges resolved to SrcPort sources.
 
 	Attributes:

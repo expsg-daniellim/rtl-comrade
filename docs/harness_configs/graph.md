@@ -33,6 +33,8 @@ nodes:
     <field>: <cli-param>     # field name maps to a CLI parameter descriptor
   cli_contract_config:       # optional — CLI-supplied contract config fields
     <field>: <cli-param>     # field name maps to a CLI parameter descriptor
+  contract_port_mappings:    # optional — declares the contract-port input surface (see below)
+    <contract-port>: [<module-param>, ...]  # contract port name → module run(...) params it forwards to
 ```
 
 `<cli-param>` has the same fields as a CLI edge source:
@@ -50,6 +52,24 @@ Each `<field>` under `cli_config` or `cli_contract_config` is the name of the co
 If a field name appears in both `config` and `cli_config` (or both `contract_config` and `cli_contract_config`), the CLI value takes precedence and the harness emits a warning at startup.
 
 CLI parameter names (the `cli` field) must be unique across all edges, `cli_config`, and `cli_contract_config` entries in the graph.
+
+### Contract port mappings
+
+`contract_port_mappings` declares the input surface a contract presents when it differs from the module's own `run(...)` signature — typically a contract wrapping a `**kwargs` module that reads its own named "contract ports" and forwards them to module parameters internally. Each key is a contract-accepted port name (where edges deliver and what the contract reads); its value lists the module parameters that port forwards to.
+
+```yaml
+nodes:
+- id: agg
+  module: collect          # e.g. run(self, **kwargs)
+  contract: keyed_join
+  contract_port_mappings:
+    left: [a]              # edges to port "left" feed module param a
+    right: [b]
+```
+
+Declaring it makes the node's input surface the contract ports rather than the module signature, so edge destination validation and static deadlock screening run against the true surface. The node becomes **definite** even over a `**kwargs` module: an edge to an undeclared contract port is rejected as an invalid destination port instead of being silently accepted. A contract port is treated as default-bearing only when **every** module parameter it forwards to has a Python default; over a `**kwargs` module no parameter has a signature default, so contract ports are first-run-required unless fed by an edge. The harness performs no forwarding itself — the contract already returns module-parameter-keyed results — so this is a static-analysis declaration with no runtime effect.
+
+When the module is definite, every listed target must name a real `run(...)` parameter; an unknown target is a fatal configuration error. Over a non-definite (`**kwargs`) module the target names are unconstrained, so that check is skipped while edge validation against the contract ports stays strict. A contract port mapping to an empty target list forwards to nothing, so it cannot inherit a default and stays first-run-required (it must be fed by an edge).
 
 ### Path-relative config values
 

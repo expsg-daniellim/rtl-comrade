@@ -92,12 +92,25 @@ class Graph:
 				log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, contract=node.contract)
 				has_error = True
 
+			# Determine the node's input-port surface and definiteness.
+			ports = None
+			definite_inputs_override = node.contract_port_mappings is not None
 			if not has_error:
-				# Assemble port mappings if node module has non-definite inputs
-				ports = None
-				if not module_mappings[node.module].structure.definite_inputs:
+				mod = module_mappings[node.module]
+				if node.contract_port_mappings is not None:
+					# A module's inputs need to be definite in order to assert facts about them. Gate the list comprehension to avoid unnecessary computation.
+					invalid_targets = [ target for targets in node.contract_port_mappings.values() for target in targets if target not in mod.ports ] if mod.structure.definite_inputs else []
+					if len(invalid_targets) > 0:
+						log.error('invalid_mapping_target', context='harness.graph.node', index=i, id=node.id, targets=invalid_targets)
+						has_error = True
+
+					# An empty target list forwards to nothing, so it cannot inherit a default and stays first-run-required.
+					ports = OrderedDict({ cport: Port(cport, has_default=len(targets) > 0 and all(name in mod.ports and mod.ports[name].has_default for name in targets)) for cport, targets in node.contract_port_mappings.items() })
+				elif not mod.structure.definite_inputs:
+					# Assemble port mappings from incoming edges for non-definite-input modules.
 					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id })
 
+			if not has_error:
 				required_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and edge.dst.required ]
 
 				for name, param in node.cli_config.items():
@@ -109,7 +122,7 @@ class Graph:
 						node.contract_config[name] = cli_kwargs[param.cli]
 
 				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-				graph.nodes[node.id] = Node(id=node.id, module=module_mappings[node.module], config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports, required_ports=required_ports)
+				graph.nodes[node.id] = Node(id=node.id, module=mod, config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
 			else:
 				errors = True
 
@@ -136,7 +149,7 @@ class Graph:
 					has_error = False
 					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
 					if dst_name is None:
-						if graph.nodes[edge.dst.node].structure.definite_inputs or not isinstance(edge.dst.port, str):
+						if graph.nodes[edge.dst.node].definite_inputs or not isinstance(edge.dst.port, str):
 							has_error = True
 							log.error('invalid_dst_port', context='harness.graph.edge', edge=edge)
 						else:  # pragma: no cover
@@ -165,7 +178,7 @@ class Graph:
 			dsts.sort(key=lambda conn: conn.self_port)
 			node.set_dsts(dsts)
 
-			if not node.structure.definite_inputs:
+			if not node.definite_inputs:
 				log.warn('non_definite_inputs', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
 
 		if errors:

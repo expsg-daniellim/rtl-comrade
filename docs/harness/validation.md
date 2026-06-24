@@ -44,6 +44,8 @@ The current implementation checks:
 
 An input is first-run-required when it has no Python default **or** its destination is marked `required: true` in the graph config. A required port blocks at runtime even when it carries a default, so it is not satisfiable locally: a node whose only inputs are required (or default-less) is not source-capable.
 
+`validate_no_static_deadlock` reads `node.ports` and `port.has_default` directly, so it screens against whatever surface the node carries. For a node declaring `contract_port_mappings` that surface is the contract ports, and each contract port's `has_default` reflects whether every module parameter it forwards to has a default (see [graph.md](graph.md)); the screening then operates on the contract ports automatically with no special-casing here.
+
 ## Validation Philosophy
 
 This layer is intentionally front-loaded and conservative.

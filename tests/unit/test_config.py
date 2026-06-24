@@ -44,6 +44,23 @@ def test_node_full():
 	assert n.contract_config == {"x": 2}
 
 
+def test_node_contract_port_mappings_absent_is_none():
+	n = from_dict(GraphConfigNode, {"id": "foo", "module": "bar"})
+	assert n.contract_port_mappings is None
+
+
+def test_node_contract_port_mappings():
+	n = from_dict(
+		GraphConfigNode,
+		{
+			"id": "n1",
+			"module": "m1",
+			"contract_port_mappings": {"cp_a": ["a"], "cp_both": ["x", "y"]},
+		},
+	)
+	assert n.contract_port_mappings == {"cp_a": ["a"], "cp_both": ["x", "y"]}
+
+
 def test_node_cli_config():
 	n = from_dict(
 		GraphConfigNode,

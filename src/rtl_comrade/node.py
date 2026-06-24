@@ -37,7 +37,7 @@ class Connection:
 	other_port: str
 
 @dataclass(slots=True)
-class Node:
+class Node:  # pylint: disable=too-many-instance-attributes
 	"""A live runtime node binding together a module, contract, and input ports.
 
 	Attributes:
@@ -46,6 +46,7 @@ class Node:
 		structure: Parsed module structure derived from the module class.
 		ports: Ordered input ports keyed by port name.
 		contract: Instantiated contract object controlling scheduling.
+		definite_inputs: Whether the node's input surface is a known finite set. Defaults to the module's own ``structure.definite_inputs``, but a ``contract_port_mappings`` node is definite even over a ``**kwargs`` module.
 		dsts: Outgoing downstream connections; ``None`` until ``set_dsts`` is called.
 		dst_counts: Running message count per ``(node_id, port)`` destination pair.
 		required_ports: Canonical names of input ports marked required in the graph config.
@@ -56,11 +57,12 @@ class Node:
 	structure: ModuleStructure
 	ports: OrderedDict[str, Port]
 	contract: type[Any]
+	definite_inputs: bool = True
 	dsts: list[Connection]|None = None
 	dst_counts: dict[tuple[str, str], int] = field(default_factory=dict)
 	required_ports: set[str] = field(default_factory=set)
 
-	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None, required_ports:list[int|str]|None=None):  # pylint: disable=redefined-builtin
+	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], *, contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None, required_ports:list[int|str]|None=None, definite_inputs_override:bool=False):  # pylint: disable=redefined-builtin,too-many-arguments
 		"""Instantiate one runtime node from a GraphModule descriptor and a contract class.
 
 		Args:
@@ -70,8 +72,9 @@ class Node:
 			Contract: Contract plugin class controlling this node's scheduling.
 			contract_config: Optional contract-specific configuration dictionary.
 			relative_path: Base path used to resolve ``{graph}``-relative config paths.
-			ports: Override port mapping for non-definite-input modules; merged on top of the module's own ports.
+			ports: Replacement input-port surface; when given, it becomes the node's ports outright instead of the module's own. Used for non-definite-input modules (built from incoming edges) and for ``contract_port_mappings`` nodes (the contract-port surface).
 			required_ports: Destination-port references (name or 1-based index) marked required in the graph config.
+			definite_inputs_override: When ``True``, forces the node's input surface to be treated as definite regardless of the module; ``False`` inherits ``module.structure.definite_inputs``. Definiteness only ever widens, so there is no need to force it off.
 
 		Returns:
 			None.
@@ -112,10 +115,10 @@ class Node:
 
 		# Initialise ports
 		self.structure = module.structure # It's a reference, should be fine
+		self.definite_inputs = definite_inputs_override or module.structure.definite_inputs
 
-		self.ports = copy.deepcopy(module.ports)
-		if ports is not None:
-			self.ports.update(ports)
+		# A given surface replaces the module's own ports outright (contract-port surface or edge-derived non-definite ports).
+		self.ports = ports if ports is not None else copy.deepcopy(module.ports)
 
 		# Resolve config-declared required refs to canonical names; edge validation later reports unresolvable refs.
 		self.required_ports = { name for ref in required_ports or [] if (name := self.get_canonical_port(ref)) is not None }

@@ -34,6 +34,7 @@ This split means that the cost of `inspect.signature`, `ModuleStructure` analysi
 - `has_config` and `has_id` are derived from the module constructor signature; they control which harness-managed keyword arguments are passed to `Module(**args)` in `Node.__init__`
 - `defines_config` is true when the module class defines a nested `Config` type; when `has_config` is true but `defines_config` is false, `GraphModule.from_module` logs a `config.mismatch` warning
 - `ports` is a fully built `OrderedDict[str, Port]` for modules with definite inputs (no `*args`/`**kwargs` parameters); it is empty for non-definite-input modules — `Graph.from_config` supplies those ports separately from edge definitions. Keyword-only parameters (those after a bare `*`) do not make inputs non-definite; they become ordinary ports
+- module-level definiteness (`structure.definite_inputs`) is a property of the `run(...)` signature alone. A node over a non-definite (`**kwargs`) module can still be made definite at the node level by declaring `contract_port_mappings`, which gives the node an explicit finite contract-port surface; see [node.md](node.md) and the [config schema](../harness_configs/graph.md)
 - `structure` is a reference to the `ModuleStructure` built during `from_module`; it is shared by all nodes using the same module class
 
 ## Caveats

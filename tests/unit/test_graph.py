@@ -70,6 +70,13 @@ class _KwargsModule:
 		return 1
 
 
+class _MixedDefaultModule:
+	"""One default-less input (a) and one default-bearing input (b)."""
+
+	def run(self, a, b=0):
+		return None
+
+
 # Mapping helpers
 _MODULE_MAP = {
 	"source_mod": _SourceModule,
@@ -77,6 +84,8 @@ _MODULE_MAP = {
 	"two_input_mod": _TwoInputModule,
 	"named_emit_mod": _NamedEmitModule,
 	"dynamic_emit_mod": _DynamicEmitModule,
+	"kwargs_mod": _KwargsModule,
+	"mixed_mod": _MixedDefaultModule,
 }
 _CONTRACT_MAP = {
 	"basic_contract": _BasicContract,
@@ -85,6 +94,10 @@ _CONTRACT_MAP = {
 
 def _node(id_, module, contract=""):
 	return GraphConfigNode(id=id_, module=module, contract=contract)
+
+
+def _mapping_node(id_, module, mappings, contract=""):
+	return GraphConfigNode(id=id_, module=module, contract=contract, contract_port_mappings=mappings)
 
 
 def _edge(src_node, src_port, dst_node, dst_port):
@@ -472,3 +485,99 @@ def test_no_source_capable_node_detected(logging_handler):
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		with pytest.raises(typer.Exit):
 			Graph.from_config(config)
+
+
+# --- contract_port_mappings ---
+
+
+def test_contract_port_mappings_definite_surface_resolves(logging_handler):
+	# Edges resolve to declared contract ports; Node.ports keys are exactly the contract ports.
+	config = _make_config(
+		[_node("src", "source_mod"), _mapping_node("dst", "mixed_mod", {"cp_a": ["a"], "cp_b": ["b"]})],
+		[_edge("src", "default", "dst", "cp_a")],
+	)
+	graph = _from_config(config)
+	assert set(graph.nodes["dst"].ports.keys()) == {"cp_a", "cp_b"}
+	assert graph.nodes["src"].dsts[0].other_port == "cp_a"
+	# has_default is derived from the targets: a has no default, b does.
+	assert graph.nodes["dst"].ports["cp_a"].has_default is False
+	assert graph.nodes["dst"].ports["cp_b"].has_default is True
+	assert logging_handler.failure is False
+
+
+def test_contract_port_mappings_default_target_source_capable(logging_handler):
+	# A lone node whose only contract port forwards to a defaulted target is source-capable → valid standalone.
+	config = _make_config([_mapping_node("n", "mixed_mod", {"cp_b": ["b"]})], [])
+	graph = _from_config(config)
+	assert graph.nodes["n"].ports["cp_b"].has_default is True
+	assert logging_handler.failure is False
+
+
+def test_contract_port_mappings_defaultless_target_edgeless_fatal(logging_handler):
+	# cp_a forwards to default-less a → first-run-required; with no incoming edge it is edgeless → deadlock fatal.
+	config = _make_config([_mapping_node("n", "mixed_mod", {"cp_a": ["a"]})], [])
+	with pytest.raises(typer.Exit):
+		_from_config(config)
+
+
+def test_contract_port_mappings_bad_target_fatal(logging_handler):
+	# Definite module: a target absent from the run(...) signature is fatal (invalid_mapping_target).
+	config = _make_config(
+		[_node("src", "source_mod"), _mapping_node("dst", "mixed_mod", {"cp_a": ["nonexistent"]})],
+		[_edge("src", "default", "dst", "cp_a")],
+	)
+	with pytest.raises(typer.Exit):
+		_from_config(config)
+
+
+def test_contract_port_mappings_empty_targets_no_default(logging_handler):
+	# A contract port mapping to no targets forwards to nothing, so it cannot default; fed by an edge the graph is valid.
+	config = _make_config(
+		[_node("src", "source_mod"), _mapping_node("dst", "mixed_mod", {"cp_a": []})],
+		[_edge("src", "default", "dst", "cp_a")],
+	)
+	graph = _from_config(config)
+	assert graph.nodes["dst"].ports["cp_a"].has_default is False
+	assert logging_handler.failure is False
+
+
+def test_contract_port_mappings_empty_targets_edgeless_fatal(logging_handler):
+	# An empty target list is first-run-required, so with no incoming edge it is edgeless → deadlock fatal.
+	config = _make_config([_mapping_node("n", "mixed_mod", {"cp_a": []})], [])
+	with pytest.raises(typer.Exit):
+		_from_config(config)
+
+
+def test_contract_port_mappings_undeclared_dst_port_definite_fatal(logging_handler):
+	# An edge to an undeclared contract port is fatal even over a definite module.
+	config = _make_config(
+		[_node("src", "source_mod"), _mapping_node("dst", "mixed_mod", {"cp_a": ["a"]})],
+		[_edge("src", "default", "dst", "cp_unknown")],
+	)
+	with pytest.raises(typer.Exit):
+		_from_config(config)
+
+
+def test_contract_port_mappings_undeclared_dst_port_kwargs_fatal(logging_handler):
+	# Node-level definiteness forces strict edge validation even over a **kwargs module.
+	config = _make_config(
+		[_node("src", "source_mod"), _mapping_node("dst", "kwargs_mod", {"cp_a": ["x"]})],
+		[_edge("src", "default", "dst", "cp_unknown")],
+	)
+	with pytest.raises(typer.Exit):
+		_from_config(config)
+
+
+def test_contract_port_mappings_kwargs_valid_no_warning(logging_handler, caplog):
+	# Over a **kwargs module: target check skipped, contract ports are the strict surface, node is definite (no warning).
+	config = _make_config(
+		[_node("src", "source_mod"), _mapping_node("dst", "kwargs_mod", {"cp_a": ["x"]})],
+		[_edge("src", "default", "dst", "cp_a")],
+	)
+	graph = _from_config(config)
+	assert set(graph.nodes["dst"].ports.keys()) == {"cp_a"}
+	assert graph.nodes["dst"].definite_inputs is True
+	# No signature defaults over a **kwargs module → contract port is first-run-required.
+	assert graph.nodes["dst"].ports["cp_a"].has_default is False
+	assert logging_handler.failure is False
+	assert "non_definite_inputs" not in caplog.text

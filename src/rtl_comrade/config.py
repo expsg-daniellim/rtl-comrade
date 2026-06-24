@@ -69,7 +69,7 @@ class GraphConfigSrcCLI:
 
 @serde
 @dataclass(slots=True, frozen=True)
-class GraphConfigNode:
+class GraphConfigNode:  # pylint: disable=too-many-instance-attributes
 	"""One node definition from a graph YAML file.
 
 	Attributes:
@@ -80,6 +80,7 @@ class GraphConfigNode:
 		contract_config: Contract-specific configuration passed to the contract constructor when supported.
 		cli_config: CLI parameter descriptors that supply module config fields at construction time.
 		cli_contract_config: CLI parameter descriptors that supply contract config fields at construction time.
+		contract_port_mappings: Declares the contract-port input surface the node presents to the validator. Keys are the contract-accepted port names (where edges deliver); values are the module ``run(...)`` signature ports each contract port forwards to. ``None`` (the default) means the surface is the module signature itself.
 	"""
 
 	id: str
@@ -89,6 +90,7 @@ class GraphConfigNode:
 	contract_config: dict = field(default_factory=dict)
 	cli_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
 	cli_contract_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
+	contract_port_mappings: dict[str, list[str]]|None = field(default=None)
 
 @serde
 @dataclass(slots=True, frozen=True)

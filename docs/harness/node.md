@@ -49,10 +49,13 @@ This file defines the runtime execution unit of the harness. A `Node` binds toge
 
 ### Port construction
 
-`Node.__init__` deep-copies the port template from `GraphModule.ports` to give each node instance its own independent queues.
+`Node.__init__` deep-copies the port template from `GraphModule.ports` to give each node instance its own independent queues, unless `Graph.from_config` passes an explicit `ports` surface — in which case that surface *replaces* the module template outright (it is not merged onto it).
 
-- for modules with definite inputs, `GraphModule.ports` is a fully built `OrderedDict` keyed by parameter name, with `has_default` set from the function signature; the deep-copy is the entire port set
-- for modules with non-definite inputs (`*args` or `**kwargs` in `run(...)`), `GraphModule.ports` is empty; `Graph.from_config` builds override ports from the actual incoming edges and passes them to `Node.__init__` via the `ports` parameter, which are merged in after the deep-copy. Keyword-only parameters do not trigger this path; they are treated as ordinary definite inputs
+- for modules with definite inputs and no `contract_port_mappings`, no `ports` override is given; the node's surface is the deep-copy of `GraphModule.ports`, a fully built `OrderedDict` keyed by parameter name with `has_default` set from the function signature. Keyword-only parameters do not change this; they are treated as ordinary definite inputs
+- for modules with non-definite inputs (`*args` or `**kwargs` in `run(...)`), `GraphModule.ports` is empty; `Graph.from_config` builds the surface from the actual incoming edges and passes it as the `ports` override
+- for nodes declaring `contract_port_mappings`, `Graph.from_config` builds the contract-port surface (keyed by contract port name, `has_default` true only when every forwarded-to module parameter has a default) and passes it as the `ports` override, replacing the module signature surface
+
+`Node.definite_inputs` records whether the node's input surface is a known finite set. It defaults to the module's own `structure.definite_inputs`, but `Graph.from_config` passes `definite_inputs_override=True` for a `contract_port_mappings` node so it validates strictly even over a `**kwargs` module. Edge destination validation and the `non_definite_inputs` warning key off this node-level value, not the shared module property.
 
 After the ports are assembled, `Node.__init__` resolves the `required_ports` parameter: `Graph.from_config` collects every destination-port reference whose edge sets `required: true` for this node, and the node resolves each (by name or 1-based index, via `get_canonical_port`) into the canonical-name set `Node.required_ports`. The flag stays off the transport-level `Port`: required-ness is wiring policy expressed in port *names*, held on the node alongside `dsts`. That set drives two consumers — the `ContractPort` adapters built just below (`required = name in self.required_ports`), and `validate_no_static_deadlock`, which reads `node.required_ports` during static validation. Unresolvable references are skipped here; the later edge validation reports them.
 
