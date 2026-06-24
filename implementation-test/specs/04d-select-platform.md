@@ -23,7 +23,7 @@ outputs:  default → platform_cfg
 
 ```python
 class SelectPlatformMod:
-    def run(self, root_cfg):
+    def run(self, root_cfg:RootConfig):
         try:
             uname = subprocess.run(["uname"], capture_output=True, text=True).stdout.strip()
         except FileNotFoundError as e:

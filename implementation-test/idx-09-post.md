@@ -18,8 +18,8 @@ in `modules/rtl_buddy/sim.py` (continuing from spec 08); tests in
 | Ticket | Module | What it does |
 |---|---|---|
 | [09a](specs/09a-route-post.md) | `RoutePostMod` | Route uvm vs plain. |
-| [09b](specs/09b-parse-log.md) | `ParseLogMod` | Parse a plain sim log → `TestResults`. |
-| [09c](specs/09c-parse-uvm-log.md) | `ParseUvmLogMod` | Parse a UVM Report Summary → `TestResults`. |
+| [09b](specs/09b-parse-log.md) | `ParseLogMod` | Parse a plain sim log → `TestResult`. |
+| [09c](specs/09c-parse-uvm-log.md) | `ParseUvmLogMod` | Parse a UVM Report Summary → `TestResult`. |
 
 **Manifest** — these three modules append to the `rtl_buddy/sim.py` block in `modules/config.yaml`
 opened by the sim chain ([`08a`](specs/08a-expand-runs.md)):

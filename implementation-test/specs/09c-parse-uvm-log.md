@@ -19,25 +19,26 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 contract:        keyed_join
 contract_config: key_field: key
 inputs:          test, proc   (joined by key — uvm branch of route-post)
-outputs:         default → {key, result}
+outputs:         default → TestResult (self-keyed)
 ```
 
-`parse_uvm_summary` / `uvm_verdict` below are **illustrative stand-ins** for the inline logic in Algorithm steps 2–3 — implement that logic in the module, do not import them (they are not symbols anyone delivers). The only imported symbol here is `make_fail_result` (spec [01](01-shared-schema.md)). rtl_buddy's `UvmVlogPost` is the reimplementation reference and parity oracle, **not** an import — see the [specs README preamble](README.md).
+`parse_uvm_summary` / `uvm_verdict` below are **illustrative stand-ins** for the inline logic in Algorithm steps 2–3 — implement that logic in the module, do not import them (they are not symbols anyone delivers). The only imported symbol here is `TestResult` (spec [01](01-shared-schema.md)); every verdict (and the unreadable-log FAIL) is built via its `TestResult.parse(...)` `@classmethod` (`type_=PARSE`). rtl_buddy's `UvmVlogPost` is the reimplementation reference and parity oracle, **not** an import — see the [specs README preamble](README.md).
 
 ```python
 class ParseUvmLogMod:
-    def run(self, test, proc):
+    def run(self, test:TestConfig, proc:Proc):
         uvm = test.uvm
         try:
             text = Path(proc.stdout_path).read_text()   # log = proc's echoed stdout_path
             counts = parse_uvm_summary(text)         # stand-in: inline Report-Summary parse (step 2); missing summary → FAIL
-            result = uvm_verdict(counts, uvm.max_warns, uvm.max_errors)   # stand-in: inline verdict (step 3)
+            verdict, desc = uvm_verdict(counts, uvm.max_warns, uvm.max_errors)   # stand-in: inline verdict (step 3)
+            result = TestResult.parse(test.key, verdict, desc)   # self-keyed PARSE result
         except OSError as e:
-            result = make_fail_result(desc=str(e))   # unreadable log → FAIL
+            result = TestResult.parse(test.key, "FAIL", str(e))   # unreadable log → FAIL (still a PARSE-originated result)
         log_fn = log.error if not result.is_pass() else log.info   # ERROR drives exit on non-pass
         log_fn("test_result", key=test.key, test_name=test.get_name(),
-               result=result.results["result"], desc=result.results["desc"])
-        return ("default", Result(test.key, result))
+               result=result.result, desc=result.desc)
+        return ("default", result)
 ```
 
 ## Algorithm
@@ -48,14 +49,14 @@ class ParseUvmLogMod:
    - the block matches but **WARNING/ERROR/FATAL are not all present** in the parsed counts → `desc = f"Invalid UVM Report Summary detected. See {path}"`.
    `int()` over a regex-matched `[0-9]+` cannot raise.
 3. Verdict: PASS iff `WARNING <= uvm.max_warns and ERROR <= uvm.max_errors and FATAL == 0`, else FAIL with the counts summary in `desc`.
-4. **Log the verdict directly, then emit.** One `test_result` event: `log.error("test_result", key=, result=, desc=)` when `not result.is_pass()` (FAIL — the exit driver), else `log.info("test_result", ...)` (PASS); then return `("default", Result(test.key, result))`. `SummaryProcessor` watches `test_result`; the `default` port stays unwired.
+4. **Log the verdict directly, then emit.** One `test_result` event: `log.error("test_result", key=, result=, desc=)` when `not result.is_pass()` (FAIL — the exit driver), else `log.info("test_result", ...)` (PASS); then return `("default", result)` (the self-keyed `TestResult.parse`). `SummaryProcessor` watches `test_result`; the `default` port stays unwired.
 5. **Failure — unreadable log.** Wrap step 1's read in `try/except OSError` → build a FAIL `result` carrying `str(e)` as `desc` and fall through to step 4 (logged as an ERROR `test_result`) — a read failure goes through the same `test_result` path, not a distinct event.
 
 ## Deliverables
 
 In `modules/rtl_buddy/sim.py` (continuing from spec 08):
 
-- `ParseUvmLogMod` — `(test, proc)`, `keyed_join`; reimplements rtl_buddy `UvmVlogPost.get_results()` only: extract the UVM Report Summary "Report counts by severity" block; PASS iff `WARNING <= test.uvm.max_warns and ERROR <= test.uvm.max_errors and FATAL == 0`, else FAIL with the counts summary in `desc`. Both thresholds are `int` per spec [01b — `UVMConfig`](01b-suite-schema.md); their non-negative invariant is enforced at YAML deserialisation, so this module does not re-validate. Emits `Result(test.key, TestResults(...))`.
+- `ParseUvmLogMod` — `(test, proc)`, `keyed_join`; reimplements rtl_buddy `UvmVlogPost.get_results()` only: extract the UVM Report Summary "Report counts by severity" block; PASS iff `WARNING <= test.uvm.max_warns and ERROR <= test.uvm.max_errors and FATAL == 0`, else FAIL with the counts summary in `desc`. Both thresholds are `int` per spec [01b — `UVMConfig`](01b-suite-schema.md); their non-negative invariant is enforced at YAML deserialisation, so this module does not re-validate. Builds the verdict via `TestResult.parse(test.key, verdict, desc)` (`type_=PARSE`) and emits it directly on `default` (self-keyed; no `Result` wrapper).
   **Failure handling**: the verdict is logged once as `test_result` — `log.error` when `not result.is_pass()` (FAIL; the exit driver), `log.info` when PASS (carrying `key`/`result`/`desc`). `FileNotFoundError`/`OSError` reading `proc.stdout_path` → build a FAIL `result` with the exception string as `desc` and log it through the same `test_result` path — not a distinct event. Missing Report Summary block is already a FAIL (explicit message); `int()` on regex-matched `[0-9]+` cannot raise `ValueError`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`; thresholds from `UVMConfig` (`config/uvm.py:3-19`).
 
@@ -81,7 +82,7 @@ In `modules/tests/test_post.py`. Fixtures: `tmp_path` UVM log fixtures (varying 
 ## Acceptance criteria
 
 - Tests pass.
-- Output port `default` exercised: a fixture-by-fixture comparison against rtl_buddy `UvmVlogPost` on the same log files produces identical `TestResults`.
+- Output port `default` exercised: a fixture-by-fixture comparison against rtl_buddy `UvmVlogPost` on the same log files produces identical `TestResult`.
 - Failure idioms exercised: a log with no UVM summary → a FAIL `result`; a missing `proc.stdout_path` → `OSError` caught → FAIL with `str(e)` in `desc`. Every verdict is logged once as `test_result` — ERROR on FAIL (exit driver), INFO on PASS — which `SummaryProcessor` collects ([10c](10c-summary-handler.md)).
 - The `modules/config.yaml` manifest entry `{ name: parse-uvm-log, class_name: ParseUvmLogMod }` validates and the harness resolves `parse-uvm-log` → `ParseUvmLogMod`.
 

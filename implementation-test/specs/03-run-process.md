@@ -59,7 +59,7 @@ class RunProcessMod:
         grace_s: float = 5.0   # SIGQUIT→SIGKILL escalation grace; per-node, default 5.0 s
     def __init__(self, config):
         self.grace_s = config.grace_s
-    async def run(self, command:dict, work_dir:Path, timeout:dict | None = None, env_ready:bool = True):
+    async def run(self, command:Command, work_dir:Path, timeout:KeyedValue[float | None] | None = None, env_ready:bool = True):
         with open(command.stdout_path, "wb") as out, open(command.stderr_path, "wb") as err:
             try:
                 proc = await asyncio.create_subprocess_exec(*command.argv,
@@ -193,11 +193,11 @@ This is the workhorse — both compile and sim are wired instances of this singl
 1. rtl_buddy `vlog_sim.py:259` signals only the process-group leader (`process.send_signal(SIGQUIT)`); processes the simulator spawned (licence servers, helper shells) are not reached. This plan uses `os.killpg` to signal the whole group.
 2. rtl_buddy has no SIGKILL escalation — a SIGQUIT-trapping simulator would hang the suite. This plan adds a `grace_s` window followed by SIGKILL.
 
-Both should be recorded under "Notable divergences" in [07](../07-ambiguities-and-assumptions.md) when implementation lands.
+Both should be recorded in [`divergences.md`](../../divergences.md) when implementation lands.
 
-**Subprocess `cwd` replaces a process-wide `chdir`.** rtl_buddy's regression `os.chdir`s the whole process into each suite's directory and back (`rtl_buddy.py:404,436`) — safe only because it runs suites serially. rtl-comrade runs tests concurrently, so a process-wide `chdir` would race (one node's `chdir` corrupts every concurrent node's relative paths). This module instead passes `cwd=work_dir` to each `create_subprocess_exec`, which is per-child and shares no global state — so each subprocess resolves its relative inputs/outputs (the `-f` filelist contents, `HierInstanceSeed.txt`, tool scratch) against its own `work_dir` while the harness process never `chdir`s. This is what makes `work_dir` (from `work-dir`) the genuine single artefact-location source: the leaf modules root *paths* on it and the runner roots the *child's CWD* on it. Record under "Notable divergences" in [07](../07-ambiguities-and-assumptions.md) when implementation lands.
+**Subprocess `cwd` replaces a process-wide `chdir`.** rtl_buddy's regression `os.chdir`s the whole process into each suite's directory and back (`rtl_buddy.py:404,436`) — safe only because it runs suites serially. rtl-comrade runs tests concurrently, so a process-wide `chdir` would race (one node's `chdir` corrupts every concurrent node's relative paths). This module instead passes `cwd=work_dir` to each `create_subprocess_exec`, which is per-child and shares no global state — so each subprocess resolves its relative inputs/outputs (the `-f` filelist contents, `HierInstanceSeed.txt`, tool scratch) against its own `work_dir` while the harness process never `chdir`s. This is what makes `work_dir` (from `work-dir`) the genuine single artefact-location source: the leaf modules root *paths* on it and the runner roots the *child's CWD* on it. Record in [`divergences.md`](../../divergences.md) when implementation lands.
 
-**`rc = None` replaces the `4444` sentinel.** rtl_buddy returns the magic int `4444` on timeout (`tools/vlog_sim.py:260`), which an organic `exit(4444)` could forge. This plan returns `rc = None` instead: a reaped `proc.returncode` is always an `int`, so `rc is None` is an uncounterfeitable timeout signal and needs no companion flag. Record under "Notable divergences" in [07](../07-ambiguities-and-assumptions.md) when implementation lands.
+**`rc = None` replaces the `4444` sentinel.** rtl_buddy returns the magic int `4444` on timeout (`tools/vlog_sim.py:260`), which an organic `exit(4444)` could forge. This plan returns `rc = None` instead: a reaped `proc.returncode` is always an `int`, so `rc is None` is an uncounterfeitable timeout signal and needs no companion flag. Record in [`divergences.md`](../../divergences.md) when implementation lands.
 
 **asyncio child-watcher.** Python 3.8+ default `ThreadedChildWatcher` reaps children transparently; no explicit `os.waitpid` is required beyond `proc.wait()`. Confirming the default policy on the target Python is tracked under [07 item 23](../07-ambiguities-and-assumptions.md) (async subprocess hardening — empirical verification before the module is built).
 

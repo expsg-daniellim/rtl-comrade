@@ -24,7 +24,7 @@ outputs:  run  → suite_cfg
 
 ```python
 class RouteListModeMod:
-    def run(self, suite_cfg, list:bool = False):
+    def run(self, suite_cfg:SuiteConfig, list:bool = False):
         return ("list", suite_cfg) if list else ("run", suite_cfg)
 ```
 

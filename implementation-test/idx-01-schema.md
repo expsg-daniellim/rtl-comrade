@@ -24,7 +24,7 @@ own `model` edge rather than living on `TestConfig`, so `suite.py` never referen
 
 | Spec | File(s) | Owns |
 |---|---|---|
-| [01 core](specs/01-shared-schema.md) | `root.py`, `results.py`, `seed_mode.py`, `run_depth.py`, `__init__.py` | `RootRtlField`/`PlatformConfig` + the `RootConfig` runtime holder; the `TestResults` hierarchy + `make_fail_result`; the `SeedMode` and `RunDepth` enums; the package `__init__.py` re-export surface (sole owner). |
+| [01 core](specs/01-shared-schema.md) | `root.py`, `results.py`, `seed_mode.py`, `run_depth.py`, `__init__.py` | `RootRtlField`/`PlatformConfig` + the `RootConfig` runtime holder; the single `TestResult` value object (with `@classmethod` constructors `compile_fail`/`sim_timeout`/`early_stop`/`skip`/`prep`/`parse`) + the `ResultType` enum; the `SeedMode` and `RunDepth` enums; the package `__init__.py` re-export surface (sole owner). |
 | [01a builder](specs/01a-builder-schema.md) | `builder.py` | `RtlBuilderConfig`, `RtlBuilderConfigOpts`, `process_opts`. |
 | [01b suite](specs/01b-suite-schema.md) | `suite.py`, `uvm.py` | `SuiteConfig`/`TestbenchConfig`/`TestConfig`; `UVMConfig` (kept separate — `parse-uvm-log` is its only consumer). |
 | [01c model](specs/01c-model-schema.md) | `model.py` | `ModelConfig`. |
@@ -35,7 +35,7 @@ own `model` edge rather than living on `TestConfig`, so `suite.py` never referen
 
 Downstream consumers, by owning spec:
 
-- **01 core** → every setup/post module (`RootConfig` via 04, `TestResults` everywhere, `SeedMode` via 04i/08b).
+- **01 core** → every setup/post module (`RootConfig` via 04, `TestResult` everywhere, `SeedMode` via 04i/08b).
 - **01a** → 05 (`filter-reglvl`), 07/08 (`build-compile-cmd`/`build-sim-cmd`).
 - **01b** → 04/05/06/07/08/09 (`SuiteConfig`/`TestConfig` read from `test`; `UVMConfig` → 09c).
 - **01c** → 05 (`load-model`), 06 (`write-filelist`).

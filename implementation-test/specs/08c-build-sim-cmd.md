@@ -30,7 +30,7 @@ outputs:           test     → TestConfig (self-keyed)   (forwarded to post-sim
 
 ```python
 class BuildSimCmdMod:
-    def run(self, test, run_id, simv, seed, builder_cfg, builder_mode, logs_dir):
+    def run(self, test:TestConfig, run_id:KeyedValue[int | None], simv:KeyedValue[str], seed:KeyedValue[int], builder_cfg:RtlBuilderConfig, builder_mode:str, logs_dir:Path):
         simv_path = simv.value   # the compiled simv, joined by key
         argv = [simv_path, *builder_cfg.get_run_time_opts(builder_mode, seed=seed.value), *plusdefines, *plusargs]  # plusdefines/plusargs built per Algorithm step 2
         timeout, is_custom = test.get_timeout()

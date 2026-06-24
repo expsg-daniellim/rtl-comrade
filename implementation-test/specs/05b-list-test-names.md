@@ -25,7 +25,7 @@ outputs:  none  (terminal sink)
 
 ```python
 class ListTestNamesMod:
-    def run(self, suite_cfg):
+    def run(self, suite_cfg:SuiteConfig):
         print("  ".join(suite_cfg.get_test_names()))   # terminal: emits nothing
 ```
 

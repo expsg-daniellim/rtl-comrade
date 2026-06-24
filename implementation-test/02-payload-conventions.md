@@ -16,8 +16,10 @@ are decided **per type, not blanket**:
     ([01b](specs/01b-suite-schema.md)), set to `name` at construction and refined at the fan-outs,
     read by `keyed_join` attribute-first. Distinct from `name`, which collides across sweep
     variants and run-ids.
-  - **Multi-field messages self-key** (`Command`/`Proc`/`RandSeed`/`RandSeedDone`/`Result`) —
+  - **Multi-field messages self-key** (`Command`/`Proc`/`RandSeed`/`RandSeedDone`) —
     cohesive purpose-built messages, so the key is naturally one of their fields, no envelope.
+    **`TestResult`** likewise self-keys: its `key` is the producing test invocation's id, so
+    terminal ports emit the `TestResult` directly — there is no `Result(key, result)` wrapper.
   - **Everything else rides `KeyedValue`** because the key is *not the value's own identity*: a
     primitive (`int`/`Path`/`str`) has no identity at all, and **`model`** is the `ModelConfig`
     resolved *for a test* — keyed by the **test's** identity (so `write-filelist` can join it
@@ -109,10 +111,10 @@ randseed_done = RandSeedDone(k)                              # write-randseed  �
 
 ## Shape 3 — result payloads (terminal; port unwired, row logged)
 
-The single shape every terminal output port emits, regardless of which stage produced it:
+The single shape every terminal output port emits, regardless of which stage produced it — the self-keyed `TestResult` directly (no `Result` wrapper):
 
 ```python
-result = Result(k, <TestResults>)
+result = TestResult(key=k, type_=ResultType.…, result="PASS|FAIL|NA|SKIP", desc=…)
 ```
 
 Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`). Since the
@@ -126,7 +128,7 @@ rendered as the summary's first column for rtl_buddy parity; `key` is retained f
   (`parse-log`/`parse-uvm-log` on PASS/NA/FAIL, `filter.skip`, `early-stop-gate`) call
   `log.info("test_result", …)` (pass-like) or `log.error("test_result", …)` (non-`is_pass()`,
   which also drives the exit). The `early-stop-gate` pattern. **Exception:** `early-stop-gate`
-  always uses `log.info` even though its `EarlyStopResults` is NA — a user-requested stop is not
+  always uses `log.info` even though its early-stop result is NA — a user-requested stop is not
   a failure, so it does **not** drive the exit (deliberate exit-0 divergence from rtl_buddy; see
   [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
 - **A domain event the watch-list collects** — the failure terminals that already `log.error`
@@ -135,29 +137,24 @@ rendered as the summary's first column for rtl_buddy parity; `key` is retained f
   `test_name`/`result`/`desc` kwargs to their existing call; `SummaryProcessor`'s `Config`
   watch-list lists those event names, so no parallel `test_result` is emitted for them.
 
-The `<TestResults>` object is still built (for `is_pass()` classification and the logged
+The `<TestResult>` object is still built (for `is_pass()` classification and the logged
 `result`/`desc`). See [05](05-branching-and-results.md) and [spec 10c](specs/10c-summary-handler.md).
 
-## `TestResults` values used at the terminal ports
+## `TestResult` values used at the terminal ports
 
-Reuse `rtl_buddy.runner.test_results` (`rtl_buddy/src/rtl_buddy/runner/test_results.py`):
-base `TestResults` + `is_pass` at `:10-33`, `TestPassResults` `:35-42`, `CompileFailResults`
-`:44-51`, `EarlyStopResults` `:53-60`, `SimTimeoutResults` `:62-69`, `SkipResults` `:71-78`.
-The generic per-test FAIL (no dedicated subclass) is built via `make_fail_result(desc)` —
-a base `TestResults` with `{"result": "FAIL", "desc": desc}`, defined in `results.py`
-(spec [01](specs/01-shared-schema.md)) and used by `load-model`/`expand-sweep`/`run-preproc`/
-`write-filelist`/`resolve-seed`/`parse-log`/`parse-uvm-log`.
+`TestResult` is the single reimplemented value object in `results.py` (spec [01](specs/01-shared-schema.md)) — `key`, `type_: ResultType`, `result`, `desc`, with `is_pass()` true for `PASS`/`SKIP`. `type_` names the originator, `result` the verdict (a faithful port of rtl_buddy's `runner/test_results.py:10-78` *semantics*, not its class hierarchy — the subclasses are collapsed into one dataclass + `@classmethod` constructors). Each terminal builds its value via the matching constructor: `TestResult.compile_fail(key)`, `TestResult.sim_timeout(key)`, `TestResult.early_stop(key, desc)`, `TestResult.skip(key, desc)`, and `TestResult.parse(key, result, desc)` for the parse verdicts. The generic per-test FAIL (`load-model`/`expand-sweep`/`run-preproc`/`write-filelist`/`resolve-seed`) uses `TestResult.prep(key, desc)` (`type_=PREP`, verdict `"FAIL"`), which replaces the old `make_fail_result`.
 
-| terminal port (node) | result | is_pass? | exit contribution |
+| terminal port (node) | factory (`type_`, verdict) | is_pass? | exit contribution |
 |---|---|---|---|
-| `skip` (`filter`) | `SkipResults(desc)` | yes (SKIP) | none |
-| `stop` (`gate-*`) | `EarlyStopResults(desc)` | no (NA) | **exit 0** (deliberate divergence — see below) |
-| `fail` (`interpret-compile`) | `CompileFailResults` | no (FAIL) | exit 1 |
-| `timeout` (`interpret-sim`) | `SimTimeoutResults` | no (FAIL) | exit 1 |
-| `result` (`parse-log` / `parse-uvm-log`) | `TestPassResults` / FAIL / NA | PASS→yes | non-pass→exit 1 |
+| `skip` (`filter`) | `TestResult.skip(key, desc)` (`SKIP`, SKIP) | yes (SKIP) | none |
+| `stop` (`gate-*`) | `TestResult.early_stop(key, desc)` (`EARLY_STOP`, NA) | no (NA) | **exit 0** (deliberate divergence — see below) |
+| `fail` (`interpret-compile`) | `TestResult.compile_fail(key)` (`COMPILE_FAIL`, FAIL) | no (FAIL) | exit 1 |
+| `timeout` (`interpret-sim`) | `TestResult.sim_timeout(key)` (`SIM_TIMEOUT`, FAIL) | no (FAIL) | exit 1 |
+| `fail` (`load-model`/…/`resolve-seed`) | `TestResult.prep(key, desc)` (`PREP`, FAIL) | no (FAIL) | exit 1 |
+| `default` (`parse-log` / `parse-uvm-log`) | `TestResult.parse(key, result, desc)` (`PARSE`, PASS/FAIL/NA) | PASS→yes | non-pass→exit 1 |
 
-`TestResults.is_pass()` is the single source of truth for the exit code (SKIP counts as
-pass; NA/FAIL do not), exactly as in `rtl_buddy` — **except `early-stop`**: `EarlyStopResults`
+`TestResult.is_pass()` is the single source of truth for the exit code (SKIP counts as
+pass; NA/FAIL do not), exactly as in `rtl_buddy` — **except `early-stop`**: the early-stop result
 is NA (and `rtl_buddy` exits 1 on `--early-stop`), but this plan treats a user-requested stop as a
 non-failure and exits 0. This is the one deliberate exit-code divergence
 ([07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).

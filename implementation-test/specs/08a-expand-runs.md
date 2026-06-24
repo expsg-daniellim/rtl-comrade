@@ -27,7 +27,7 @@ outputs:           test   → TestConfig (self-keyed)   (×N, fresh replace-copy
 
 ```python
 class ExpandRunsMod:
-    def run(self, test, simv, run_ids:list = [None]):                  # test: bare TestConfig; simv: KeyedValue[str]
+    def run(self, test:TestConfig, simv:KeyedValue[str], run_ids:list = [None]):                  # test: bare TestConfig; simv: KeyedValue[str]
         for run_id in run_ids:
             nk = test.key if run_id is None else f"{test.key}#{run_id}"   # per-test key → per-run key
             yield ("test",   dataclasses.replace(test, key=nk))         # shallow copy, re-keyed per run (shares pa/pd/tb)

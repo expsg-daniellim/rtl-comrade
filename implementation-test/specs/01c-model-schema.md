@@ -38,7 +38,7 @@ Methods:
 
 Source: `rtl_buddy/src/rtl_buddy/config/model.py:9-51`.
 
-> **Bug-for-bug or fix?** rtl_buddy's `ModelConfig.get_model_name` at `model.py:30` returns `self.model_name` — an attribute that does not exist on the dataclass (`name` is the actual field). Any caller invoking this method on rtl_buddy would `AttributeError`; in practice no rtl_buddy caller does. This plan should fix the bug while reimplementing (return `self.name`) and flag it under "Notable divergences" in [07](../07-ambiguities-and-assumptions.md) if any consumer ever starts using the method. Until then, this is informational.
+> **Bug-for-bug or fix?** rtl_buddy's `ModelConfig.get_model_name` at `model.py:30` returns `self.model_name` — an attribute that does not exist on the dataclass (`name` is the actual field). Any caller invoking this method on rtl_buddy would `AttributeError`; in practice no rtl_buddy caller does. This plan should fix the bug while reimplementing (return `self.name`) and flag it in [`divergences.md`](../../divergences.md) if any consumer ever starts using the method. Until then, this is informational.
 
 ### `ModelConfigFileItem` / `ModelConfigFile` — defined in `load-model`
 

@@ -342,14 +342,14 @@ is carried for correlation only — `run-process` never reads or branches on it.
 Joins `test`, `simv` (born at `build-compile-cmd`), and the subprocess `proc` by key.
 `rc == 0` → forward `test` and `simv` unchanged (co-gated, so `simv` proceeds only on compile
 success and the downstream `expand-runs` join cannot dangle). `rc != 0` → emit `fail`
-(`CompileFailResults`; reads `proc.stderr_path`/`stdout_path` and logs at ERROR), dropping
+(`TestResult.compile_fail(key)`; reads `proc.stderr_path`/`stdout_path` and logs at ERROR), dropping
 `test`/`simv`. Takes only the three keyed ports — no config port, since `keyed_join`
 joins *every* port by key.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:63-65` — the `compile_returncode != 0 → CompileFailResults` branch in `TestRunner.run`. The rc check + error dump it interprets is `tools/vlog_sim.py:168-171`; the FAIL payload is `CompileFailResults` at `runner/test_results.py:44-51`.
 - **In:** `test`, `simv`, `proc`
 - **Out:** `("test", test)`, `("simv", simv)` | `("fail", result)`
-- **Log idiom:** port-routed `fail` `result` (`CompileFailResults`) when `rc != 0`; `log.error` at emission with the compile `rc` and stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Log idiom:** port-routed `fail` `result` (`TestResult.compile_fail`, `type_=COMPILE_FAIL`) when `rc != 0`; `log.error` at emission with the compile `rc` and stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -428,13 +428,13 @@ Terminal leaf of the side-effect branch — distinct functionality from randseed
 
 ### `interpret-sim`  · tags: sim · contract: `keyed_join` (`key_field: key`)
 Pure routing on `proc.rc is None`: on a clean run forward `test`+`proc` (co-gated for the
-classification chain); on timeout drop them and emit `SimTimeoutResults`. No side-effects —
+classification chain); on timeout drop them and emit a `TestResult.sim_timeout`. No side-effects —
 the artifacts were written upstream.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch in `TestRunner.run`. rtl_buddy's `4444` sentinel is set in `tools/vlog_sim.py:258-261`; the FAIL payload is `SimTimeoutResults` at `runner/test_results.py:62-69`. This plan keys on `proc.rc is None` rather than the magic `rc`.
 - **In:** `test`, `proc` (joined by key)
-- **Out:** `("test", test)` + `("proc", proc)` (clean run, co-gated) | `("timeout", Result(key, SimTimeoutResults()))`
-- **Log idiom:** port-routed `timeout` `result` (`SimTimeoutResults`) when `proc.rc is None`; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Out:** `("test", test)` + `("proc", proc)` (clean run, co-gated) | `("timeout", TestResult.sim_timeout(key))`
+- **Log idiom:** port-routed `timeout` `result` (`TestResult.sim_timeout`, `type_=SIM_TIMEOUT`) when `proc.rc is None`; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
 
@@ -452,7 +452,7 @@ return — not scheduling. This is the only place the uvm/plain decision lives.
 
 ### `parse-log`  · tags: post · contract: `keyed_join` (`key_field: key`)
 Reimplements `VlogPost` with corrections (see [07 settled 15](07-ambiguities-and-assumptions.md)):
-the `PASS/FAIL/ERR/FAT` regex scan on `proc.stdout_path` (the log `proc` echoes). Emits `Result(key, result)`.
+the `PASS/FAIL/ERR/FAT` regex scan on `proc.stdout_path` (the log `proc` echoes). Emits the self-keyed `TestResult.parse(key, verdict, desc)` (`type_=PARSE`).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results`: the per-line `^PASS` / `^FAIL` / `^(ERR|FAT):` searches and the `NA`/`FAIL`/`PASS` precedence. This plan **corrects** the quirks (PASS-after-FAIL override, partial-match `match_err` crash) — see [07 settled 15](07-ambiguities-and-assumptions.md).
 - **In:** `test`, `proc` (joined by key — plain branch of `route-post`)
@@ -463,7 +463,7 @@ the `PASS/FAIL/ERR/FAT` regex scan on `proc.stdout_path` (the log `proc` echoes)
 ### `parse-uvm-log`  · tags: post · contract: `keyed_join` (`key_field: key`)
 Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
 `proc.stdout_path` and compare against `test.uvm.max_warns`/`max_errors`
-(FATAL must be 0). Emits `Result(key, result)`.
+(FATAL must be 0). Emits the self-keyed `TestResult.parse(key, verdict, desc)` (`type_=PARSE`).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`: the `UVM Report Summary` regex, the severity-count `finditer`, the missing/invalid-summary FAILs, and the `WARNING <= max_warns and ERROR <= max_errors and FATAL <= 0` PASS rule. Thresholds come from `UVMConfig` (`config/uvm.py:3-19`).
 - **In:** `test`, `proc` (joined by key — uvm branch of `route-post`)
@@ -476,7 +476,7 @@ Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
 
 ### `early-stop-gate`  · tags: (cross-cutting) · contract: `default` (gate-pre) / `keyed_join` (gate-comp, gate-sim) (persistent: `early_stop`)
 Compare the global `early_stop` phase against this gate's configured `phase`. Stop here →
-emit `stop` (`EarlyStopResults`); else forward. One module serves three instances via
+emit `stop` (`TestResult.early_stop(key, desc)`); else forward. One module serves three instances via
 `**edges`: it **co-gates** by forwarding *every* input edge on its same-named port on "go",
 and drops them all on "stop". Wired `{test}` at `gate-pre`, `{test, simv}` at `gate-comp`,
 `{test, proc}` at `gate-sim`; identity comes from the always-present `test` edge.
@@ -484,7 +484,7 @@ and drops them all on "stop". Wired `{test}` at `gate-pre`, `{test, simv}` at `g
 - **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the three `if self.run_depth == RunDepth.{PRE,COMP,SIM}: return EarlyStopResults(...)` checkpoints in `TestRunner.run`. The `RunDepth` enum is `test_runner.py:14-18`; the `--early-stop` flag is `rtl_buddy.py:121`; the payload is `EarlyStopResults` at `runner/test_results.py:53-60`.
 - **In:** `**edges` (per instance: `{test}` / `{test, simv}` / `{test, proc}`), `early_stop:str = "post"` (persistent)
 - **Config:** `phase:str` (`pre`|`comp`|`sim`)
-- **Out:** each input edge forwarded on its same-named port (on "go") | `("stop", Result(key, EarlyStopResults))`
+- **Out:** each input edge forwarded on its same-named port (on "go") | `("stop", TestResult.early_stop(key, desc))`
 - **Log idiom:** `log.info("test_result", …, result="NA", desc="Stopped early at {phase}")` at the `stop` emission (a user-requested stop is NA but **not** a failure — deliberate exit-0 divergence; the `stop` port is unwired, `SummaryProcessor` collects the event). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### No terminal-aggregation node

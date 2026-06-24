@@ -29,7 +29,7 @@ outputs:           test    → TestConfig (self-keyed)   (forwarded)
 
 ```python
 class BuildCompileCmdMod:
-    def run(self, test, filelist, builder_cfg, logs_dir, work_dir, builder_mode:str = "debug"):
+    def run(self, test:TestConfig, filelist:KeyedValue[Path], builder_cfg:RtlBuilderConfig, logs_dir:Path, work_dir:Path, builder_mode:str = "debug"):
         test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
         exe = builder_cfg.get_exe()
         is_verilator = os.path.basename(exe).startswith("verilator")

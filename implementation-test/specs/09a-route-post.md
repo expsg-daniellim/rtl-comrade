@@ -25,7 +25,7 @@ outputs:         uvm_test,   uvm_proc     (UVM branch → parse-uvm-log)
 
 ```python
 class RoutePostMod:
-    def run(self, test, proc):   # test + proc co-routed to one parser branch
+    def run(self, test:TestConfig, proc:Proc):   # test + proc co-routed to one parser branch
         if test.uvm is not None:
             yield ("uvm_test", test)
             yield ("uvm_proc", proc)

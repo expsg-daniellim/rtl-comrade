@@ -25,7 +25,7 @@ outputs:  test → TestConfig (self-keyed; .key already = name from construction
 
 ```python
 class SelectTestsMod:
-    def run(self, suite_cfg, test_name:str = ""):
+    def run(self, suite_cfg:SuiteConfig, test_name:str = ""):
         for t in suite_cfg.get_tests(test_name or None):
             yield ("test", t)                    # bare, self-keyed TestConfig (key=name set at construction, 04h)
 ```

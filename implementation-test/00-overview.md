@@ -157,19 +157,19 @@ flowchart TD
   route_post m24@-->|"uvm: test + proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
   route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
 
-  filter t1@-."skip:SkipResults".-> TERM["unwired terminal ports<br/>each edge carries result:dict = {key:str, result:TestResults}<br/>pass-like: log.info(test_result); fail/timeout: log.error(domain event w/ result,desc) → exit 1<br/>SummaryProcessor watch-list collects them; renders the table in finalise()"]
-  load_model t2@-."fail:TestResults(FAIL)".-> TERM
-  sweep t3@-."fail:TestResults(FAIL)".-> TERM
-  preproc t4@-."fail:TestResults(FAIL)".-> TERM
-  gate_pre t5@-."stop:EarlyStopResults".-> TERM
-  filelist t6@-."fail:TestResults(FAIL)".-> TERM
-  cc_int t7@-."fail:CompileFailResults".-> TERM
-  gate_comp t8@-."stop:EarlyStopResults".-> TERM
-  seed t9@-."fail:TestResults(FAIL)".-> TERM
-  sim_int t10@-."timeout:SimTimeoutResults".-> TERM
-  gate_sim t11@-."stop:EarlyStopResults".-> TERM
-  parse_log t12@-."result:TestResults".-> TERM
-  parse_uvm t13@-."result:TestResults".-> TERM
+  filter t1@-."skip:TestResult(SKIP)".-> TERM["unwired terminal ports<br/>each edge carries a self-keyed TestResult {key, type_, result, desc}<br/>pass-like: log.info(test_result); fail/timeout: log.error(domain event w/ result,desc) → exit 1<br/>SummaryProcessor watch-list collects them; renders the table in finalise()"]
+  load_model t2@-."fail:TestResult(FAIL)".-> TERM
+  sweep t3@-."fail:TestResult(FAIL)".-> TERM
+  preproc t4@-."fail:TestResult(FAIL)".-> TERM
+  gate_pre t5@-."stop:TestResult(EARLY_STOP)".-> TERM
+  filelist t6@-."fail:TestResult(FAIL)".-> TERM
+  cc_int t7@-."fail:TestResult(COMPILE_FAIL)".-> TERM
+  gate_comp t8@-."stop:TestResult(EARLY_STOP)".-> TERM
+  seed t9@-."fail:TestResult(FAIL)".-> TERM
+  sim_int t10@-."timeout:TestResult(SIM_TIMEOUT)".-> TERM
+  gate_sim t11@-."stop:TestResult(EARLY_STOP)".-> TERM
+  parse_log t12@-."result:TestResult(PARSE)".-> TERM
+  parse_uvm t13@-."result:TestResult(PARSE)".-> TERM
 
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]

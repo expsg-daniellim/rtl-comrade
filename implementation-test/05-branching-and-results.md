@@ -15,12 +15,12 @@ and additionally logs a `test_result` row; the continue-path goes to the next st
 
 | stage | continue port → next stage | terminal port (unwired; logs `test_result`) |
 |---|---|---|
-| `filter` | `keep` | `skip` (`SkipResults`) |
-| `gate-pre` | `go` | `stop` (`EarlyStopResults`) |
-| `cc-int` | `ok` | `fail` (`CompileFailResults`) |
-| `gate-comp` | `go` | `stop` (`EarlyStopResults`) |
-| `sim-int` | `ok` | `timeout` (`SimTimeoutResults`) |
-| `gate-sim` | `go` | `stop` (`EarlyStopResults`) |
+| `filter` | `keep` | `skip` (`TestResult.skip`, `type_=SKIP`) |
+| `gate-pre` | `go` | `stop` (`TestResult.early_stop`, `type_=EARLY_STOP`) |
+| `cc-int` | `ok` | `fail` (`TestResult.compile_fail`, `type_=COMPILE_FAIL`) |
+| `gate-comp` | `go` | `stop` (`TestResult.early_stop`, `type_=EARLY_STOP`) |
+| `sim-int` | `ok` | `timeout` (`TestResult.sim_timeout`, `type_=SIM_TIMEOUT`) |
+| `gate-sim` | `go` | `stop` (`TestResult.early_stop`, `type_=EARLY_STOP`) |
 | `route-post` | `uvm` → `parse-uvm-log`, `plain` → `parse-log` | — (classifier only) |
 | `parse-log` | — | `result` (PASS/FAIL/NA) |
 | `parse-uvm-log` | — | `result` (PASS/FAIL/NA) |
@@ -75,7 +75,7 @@ No special casing anywhere else.
 The 13 terminal ports no longer converge anywhere. Each terminal node does two things at its
 emission site:
 
-1. **emits its `TestResults` on its named output port exactly as before** — but that port is
+1. **emits its `TestResult` on its named output port exactly as before** — but that port is
    left **unwired**, so the harness logs `no_destination` at INFO and the item simply leaves
    the graph. No module signature or `definite_emits` change: the module stays graph-agnostic
    and does not know whether anything listens.
@@ -273,7 +273,7 @@ self-contained mechanisms:
    (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:206`) exactly (SKIP/PASS log no `ERROR` and
    contribute nothing; FAIL and genuine NA — compile fail, timeout, parse FAIL/NA, unknown —
    each `log.error` once and force exit 1). **`early-stop` is the one exception**: its
-   `EarlyStopResults` is NA but it logs `log.info`, not `log.error`, so a user-requested stop
+   early-stop result is NA but it logs `log.info`, not `log.error`, so a user-requested stop
    exits 0 — a deliberate divergence from rtl_buddy's exit 1 (see
    [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
    This is now the **sole** exit-code driver; the old
@@ -334,13 +334,13 @@ separate `test_result` is emitted for these.
 
 | Site | Port → payload (unwired) | Emission log (watched event) |
 |---|---|---|
-| `interpret-compile.fail` | `fail` → `CompileFailResults` | `log.error("compile_failed", rc, stderr_path, result, desc)` |
-| `interpret-sim.timeout` | `timeout` → `SimTimeoutResults` | `log.error("sim_timeout", err, result, desc)` |
-| `load-model.fail` | `fail` → FAIL payload | `log.error("load_model_failed", model_path, result, desc)` |
-| `write-filelist.fail` | `fail` → FAIL payload | `log.error("filelist_failed", path, result, desc)` |
-| `expand-sweep.fail` | `fail` → FAIL payload | `log.error("sweep_failed", exc_info, result, desc)` |
-| `run-preproc.fail` | `fail` → FAIL payload | `log.error("preproc_failed", exc_info, result, desc)` |
-| `resolve-seed.fail` (REPLAY only) | `fail` → FAIL payload | `log.error("replay_seed_invalid", path, result, desc)` |
+| `interpret-compile.fail` | `fail` → `TestResult.compile_fail` (`type_=COMPILE_FAIL`) | `log.error("compile_failed", rc, stderr_path, result, desc)` |
+| `interpret-sim.timeout` | `timeout` → `TestResult.sim_timeout` (`type_=SIM_TIMEOUT`) | `log.error("sim_timeout", err, result, desc)` |
+| `load-model.fail` | `fail` → `TestResult.prep` (`type_=PREP`) | `log.error("load_model_failed", model_path, result, desc)` |
+| `write-filelist.fail` | `fail` → `TestResult.prep` (`type_=PREP`) | `log.error("filelist_failed", path, result, desc)` |
+| `expand-sweep.fail` | `fail` → `TestResult.prep` (`type_=PREP`) | `log.error("sweep_failed", exc_info, result, desc)` |
+| `run-preproc.fail` | `fail` → `TestResult.prep` (`type_=PREP`) | `log.error("preproc_failed", exc_info, result, desc)` |
+| `resolve-seed.fail` (REPLAY only) | `fail` → `TestResult.prep` (`type_=PREP`) | `log.error("replay_seed_invalid", path, result, desc)` |
 
 Parse FAIL/NA verdicts (`parse-log`/`parse-uvm-log`) are in the next table — they have no prior
 event name, so they emit `test_result` directly. Topology consequence: all 13 terminal ports stay
@@ -357,10 +357,10 @@ These have no prior log event, so they emit `test_result` themselves — `log.er
 
 | Site | Port → payload (unwired) | Emission log |
 |---|---|---|
-| `parse-log.result` | `result` → PASS/FAIL/NA | `log.error("test_result", …)` on FAIL/NA (exit driver); `log.info("test_result", …)` on PASS |
-| `parse-uvm-log.result` | `result` → PASS/FAIL/NA | `log.error("test_result", …)` on FAIL/NA; `log.info("test_result", …)` on PASS |
-| `filter-reglvl.skip` | `skip` → `SkipResults` | `log.info("test_result", …)` (SKIP is pass-like via `is_pass()`; no exit contribution) |
-| `early-stop-gate.stop` (×3) | `stop` → `EarlyStopResults` | `log.info("test_result", …)` *(NA, but `log.info` not `log.error` — a user-requested stop exits 0; deliberate divergence from rtl_buddy's exit 1, see [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy))* |
+| `parse-log.result` | `default` → `TestResult.parse` (PASS/FAIL/NA) | `log.error("test_result", …)` on FAIL/NA (exit driver); `log.info("test_result", …)` on PASS |
+| `parse-uvm-log.result` | `default` → `TestResult.parse` (PASS/FAIL/NA) | `log.error("test_result", …)` on FAIL/NA; `log.info("test_result", …)` on PASS |
+| `filter-reglvl.skip` | `skip` → `TestResult.skip` (`type_=SKIP`) | `log.info("test_result", …)` (SKIP is pass-like via `is_pass()`; no exit contribution) |
+| `early-stop-gate.stop` (×3) | `stop` → `TestResult.early_stop` (`type_=EARLY_STOP`) | `log.info("test_result", …)` *(NA, but `log.info` not `log.error` — a user-requested stop exits 0; deliberate divergence from rtl_buddy's exit 1, see [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy))* |
 
 ### Summary rendering — `SummaryProcessor.finalise()` (not an exit driver)
 

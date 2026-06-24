@@ -10,7 +10,7 @@ Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan.
 >
 > A `Compatibility source:` is a **read-only reference to reimplement from, and the oracle the parity tests compare against — never an import target.** rtl_buddy is **not** a runtime dependency of `modules/rtl_buddy/`: do not `import` rtl_buddy, subclass its classes, or call into it (e.g. `from rtl_buddy.tools.vlog_post import UvmVlogPost`). Reimplement the cited behaviour natively in the target file ([`../00` design philosophy 5](../00-overview.md#design-philosophy)). The fixture-by-fixture parity checks (e.g. 09b/09c) run rtl_buddy as an external oracle in the **test** only — wiring it into the module would make those checks vacuously green.
 >
-> **Skeletons are illustrative.** The `## Surface` Python skeleton in each ticket sketches the `run(...)` shape and dataflow; helper calls in it (e.g. `parse_uvm_summary(...)`, `uvm_verdict(...)`, `scan_pass_fail(...)`) are **stand-ins for the inline logic the `## Algorithm` / `## Deliverables` sections specify** — implement that logic, do not treat the names as symbols to import. The only pre-existing symbols a skeleton calls are those a `Depends on:` ticket delivers (e.g. `make_fail_result` from [01](01-shared-schema.md)); everything else is yours to write.
+> **Skeletons are illustrative.** The `## Surface` Python skeleton in each ticket sketches the `run(...)` shape and dataflow; helper calls in it (e.g. `parse_uvm_summary(...)`, `uvm_verdict(...)`, `scan_pass_fail(...)`) are **stand-ins for the inline logic the `## Algorithm` / `## Deliverables` sections specify** — implement that logic, do not treat the names as symbols to import. The only pre-existing symbols a skeleton calls are those a `Depends on:` ticket delivers (e.g. `TestResult.prep` from [01](01-shared-schema.md)); everything else is yours to write.
 
 ## Module package layout (pinned)
 
@@ -34,7 +34,7 @@ The full manifest (`modules/config.yaml`) with every `class_name` is in [`../06-
 
 | # | Spec | Depends on | Notes |
 |---|---|---|---|
-| 01 | [core-schema](01-shared-schema.md) | — | `RootConfig` + `TestResults` + `SeedMode` (the core of the schema package; builder/suite/model are 01a/01b/01c — family overview [idx-01](../idx-01-schema.md)). |
+| 01 | [core-schema](01-shared-schema.md) | — | `RootConfig` + `TestResult` + `SeedMode` (the core of the schema package; builder/suite/model are 01a/01b/01c — family overview [idx-01](../idx-01-schema.md)). |
 | 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (schema family; consumed by 05, 07, 08). |
 | 01b | [suite-schema](01b-suite-schema.md) | — | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (schema family; consumed by 04, 05, 06, 07, 08, 09). |
 | 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` (frozen value object; schema family; consumed by 05, 06; the raw `ModelConfigFile` is defined in load-model 05e, which also unrolls rtl_buddy's `ModelConfigLoader` read/lookup). |

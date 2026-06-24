@@ -54,12 +54,12 @@ contract: default
 inputs:   test
 outputs:  test  → TestConfig (self-keyed)   (forwarded unchanged — TestConfig is not mutated)
           model → {key, value}   (KeyedValue[ModelConfig], keyed by the test's key, joined at write-filelist)
-          fail  → {key, result}
+          fail  → TestResult (self-keyed)
 ```
 
 ```python
 class LoadModelMod:
-    def run(self, test):                          # test is the bare self-keyed TestConfig
+    def run(self, test:TestConfig):               # test is the bare self-keyed TestConfig
         resolved = test.suite_dir / test.model_path
         try:
             with open(resolved) as f:
@@ -71,10 +71,10 @@ class LoadModelMod:
             yield ("test", test)                                          # forward unchanged
             yield ("model", KeyedValue(test.key, model))       # resolved model on its own edge, keyed by the test's key
         except Exception as e:   # I/O / parse / schema / lookup-miss all route to the per-test fail port
-            result = make_fail_result(desc=str(e))
+            result = TestResult.prep(test.key, str(e))
             log.error("load_model_failed", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=str(e),
-                      result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
-            yield ("fail", Result(test.key, result))
+                      result=result.result, desc=result.desc)   # → SummaryProcessor row
+            yield ("fail", result)
 ```
 
 ## Algorithm
@@ -84,7 +84,7 @@ class LoadModelMod:
 3. **Look up.** Find the `ModelConfigFileItem` in `file.models` with `name == test.model`; a miss **raises** (`LookupError`).
 4. **Construct.** `model = ModelConfig(name=item.name, filelist=item.filelist, path=str(resolved))` — frozen value, `path` set at construction (no mutation, no `replace`).
 5. Emit two edges in lockstep on success: `("test", test)` (forwarded unchanged — **no mutation of `TestConfig`**) and `("model", KeyedValue(test.key, model))`. They share the test's key. `load-model` sits **after `filter` but before the `sweep`/`preproc` hooks** (graph [06](../06-graph-yaml.md)): the resolved `ModelConfig` must exist when those hooks run so each can expose it to its script as `test_cfg.model` (rtl_buddy resolves the model at suite-load, before the hooks). The `model` edge then rides alongside `test` — `keyed_join`ed at every node it passes (`sweep`, `preproc`, `gate-pre`), re-keyed `#i` across the sweep fan-out — to its final consumer `write-filelist` (spec [06b](06b-write-filelist.md)), which `keyed_join`s `test`+`model` 1:1.
-6. **Failure — read / parse / lookup miss.** Wrap steps 2–5 in `try/except Exception` (this plan *raises* rather than `log.fatal`-ing — see below): file I/O, parse, schema mismatch, or model-not-in-file → emit `("fail", Result(test.key, <FAIL with str(e) in desc>))` (and **neither** `test` nor `model`, so the pair drops together) and `log.error("load_model_failed", …)` at emission with the resolved `model_path` **plus `result`/`desc`** (so `SummaryProcessor`'s watch-list collects the row). This is the Notable divergence from rtl_buddy: a per-test FAIL keeps the run going where rtl_buddy aborts.
+6. **Failure — read / parse / lookup miss.** Wrap steps 2–5 in `try/except Exception` (this plan *raises* rather than `log.fatal`-ing — see below): file I/O, parse, schema mismatch, or model-not-in-file → emit `("fail", TestResult.prep(test.key, str(e)))` (and **neither** `test` nor `model`, so the pair drops together) and `log.error("load_model_failed", …)` at emission with the resolved `model_path` **plus `result`/`desc`** (so `SummaryProcessor`'s watch-list collects the row). This is the Notable divergence from rtl_buddy: a per-test FAIL keeps the run going where rtl_buddy aborts.
 
 ## Deliverables
 
@@ -96,7 +96,7 @@ In `modules/rtl_buddy/setup.py` (continuing from spec 04):
   - **Emit on success.** `("test", test)` (forwarded unchanged) **and** `("model", KeyedValue(test.key, the_model))` in lockstep via the generator. **Does not mutate `TestConfig`** — the resolved `ModelConfig` rides its own keyed edge, `keyed_join`ed at `write-filelist` (spec [06b](06b-write-filelist.md)).
   - **Failure handling.** Catch broad `Exception` around the read (`from_yaml` — I/O / parse / schema mismatch) and the name lookup (model not in file → the explicit `raise`); this plan **raises rather than `log.fatal`s** ([§ Raw schema](#raw-schema--conversion-owned-here)).
   - **Classes in play.** All caught by the broad `except Exception`, matching the harness's `loader_utils.load_config_file` ladder (`src/rtl_comrade/loader_utils.py:38-61`): `UnicodeDecodeError`, `FileNotFoundError`, `IsADirectoryError`, `PermissionError`, `OSError` (file I/O / decode); `SerdeError`, `MarkedYAMLError`, `ReaderError` (parse — pyserde wraps schema / discriminator / type mismatch in `SerdeError`); `LookupError` (lookup miss).
-  - **Fail emission.** Emit `("fail", Result(test.key, <FAIL payload with `str(e)` in `desc`>))` and call `log.error("load_model_failed", …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor` watch-list, [10c](10c-summary-handler.md), renders the row).
+  - **Fail emission.** Emit `("fail", TestResult.prep(test.key, str(e)))` and call `log.error("load_model_failed", …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor` watch-list, [10c](10c-summary-handler.md), renders the row).
   - **Notable divergence from rtl_buddy.** Per-test FAIL preserves run continuity; rtl_buddy aborts the whole run via `logger.critical` inside `ModelConfigLoader` (`rtl_buddy/src/rtl_buddy/config/model.py:78-81,100`; [07 settled 10](../07-ambiguities-and-assumptions.md)).
   - **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/model.py:53-100` — `ModelConfigFile`/`ModelConfigLoader`, with `path` moved off the read shape and the read/lookup/construct unrolled into `run`.
 
@@ -114,7 +114,7 @@ In `modules/tests/test_selection.py`. Fixtures: a committed `models.yaml` fixtur
 - **Read shape carries no `path` (raw/runtime split unrolled here).** `from_yaml(ModelConfigFile, ...)` over a real `models.yaml` yields `ModelConfigFileItem`s with `name`/`filelist` and **no** `path` attribute; the emitted runtime `ModelConfig` is freshly constructed (frozen) with `path == str(resolved)`. A `models.yaml` that happens to include a `path:` key is ignored by the read shape (not a field).
 Failure cases — each routes to the per-test `fail` port; assert `logging_handler.failure is True` and that **no** `log.fatal`/`typer.Exit` fires (the deliberate divergence from rtl_buddy's abort — run continues):
 
-- `test` whose `model` is absent from the file → the name lookup `raise`s `LookupError` → emits `("fail", Result(key, <FAIL with str(e) in desc>))` and **neither `test` nor `model`**, `logging_handler.failure is True`, no `typer.Exit` (run continues).
+- `test` whose `model` is absent from the file → the name lookup `raise`s `LookupError` → emits `("fail", TestResult.prep(key, str(e)))` and **neither `test` nor `model`**, `logging_handler.failure is True`, no `typer.Exit` (run continues).
 - `test` whose resolved `model_path` does not exist → `open(resolved)` raises `FileNotFoundError` → emits `("fail", …)`, `log.error`, no abort.
 - `test` pointing at a malformed `models.yaml` → parse error → emits `("fail", …)`, `log.error`, no abort (boundary: I/O vs parse vs lookup all route to the same port).
 - `test` against a `models: []` file → the lookup finds nothing → `("fail", …)`, no abort.
@@ -130,6 +130,6 @@ Failure cases — each routes to the per-test `fail` port; assert `logging_handl
 - The raw `ModelConfigFileItem` and `ModelConfigFile` are module-private (`setup.py`) and **not** added to the schema package's `__init__.py`. Preserve the `rtl-buddy-filetype` rename (keep the hyphen). There is **no** `ModelConfigLoader` — rtl_buddy's loader is unrolled into `run`. `ModelConfigFileItem` carries **no** `path` (it is not a YAML field; `path` is runtime provenance).
 - The read + name-lookup in `run` must **raise** on I/O / parse / schema error and on a missing model — **not** `log.fatal` (the deliberate divergence). The runtime `ModelConfig` must be **constructed** with `path=str(resolved)` (`ModelConfig` is frozen, spec [01c](01c-model-schema.md)) — **not** stamped onto a deserialized object (no `replace`, no in-place `model.path = …`).
 - On success emit `("test", test)` (forwarded unchanged) and `("model", KeyedValue(test.key, the_model))` in lockstep — **do not mutate `TestConfig`** (no `test.model = the_model`; `test.model` stays the name string, the resolved object rides the edge — rtl_buddy overwrites the field in place, this plan does not). The two edges share the test key so `write-filelist` `keyed_join`s them.
-- Catch broad `Exception` around the `from_yaml` read and the name lookup (both can raise in this plan — see [§ Raw schema](#raw-schema--conversion-owned-here)) → emit `("fail", {key, result: <FAIL with str(e)>})` on the **unwired** `fail` port (and neither `test` nor `model`, dropping the pair) and `log.error("load_model_failed", …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor` watch-list collects the row).
+- Catch broad `Exception` around the `from_yaml` read and the name lookup (both can raise in this plan — see [§ Raw schema](#raw-schema--conversion-owned-here)) → emit `("fail", TestResult.prep(test.key, str(e)))` on the **unwired** `fail` port (and neither `test` nor `model`, dropping the pair) and `log.error("load_model_failed", …)` at emission with the resolved `model_path` **and `result`/`desc`** (so the `SummaryProcessor` watch-list collects the row).
 - **Must not** `log.fatal` / abort the run — per-test FAIL preserves run continuity; this is the deliberate divergence from rtl_buddy.
 - Use string-literal port names (`test`/`model`/`fail`); read `TestConfig` fields directly on `test` (e.g. `test.suite_dir`, `test.model`, `test.key`). The `model` edge is a `KeyedValue` (`model.value` / `model.key`).

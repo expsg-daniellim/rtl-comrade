@@ -23,7 +23,7 @@ outputs:  default → builder_cfg
 
 ```python
 class ResolveBuilderMod:
-    def run(self, root_cfg, platform_cfg, builder:str = ""):
+    def run(self, root_cfg:RootConfig, platform_cfg:PlatformConfig, builder:str = ""):
         name = builder or platform_cfg.builder          # CLI override wins, else platform's declared builder name
         builder_cfg = root_cfg.rtl_builder_cfgs.get(name)
         if builder_cfg is None:

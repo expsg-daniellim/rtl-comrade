@@ -20,7 +20,7 @@ in `modules/rtl_buddy/build.py`; tests in `modules/tests/test_compile_cycle.py`.
 | Ticket | Module | What it does |
 |---|---|---|
 | [07a](specs/07a-build-compile-cmd.md) | `BuildCompileCmdMod` | Assemble compile argv; fold `simv` into `ctx`. |
-| [07b](specs/07b-interpret-compile.md) | `InterpretCompileMod` | Route on rc (`keyed_join`); emit `CompileFailResults`. |
+| [07b](specs/07b-interpret-compile.md) | `InterpretCompileMod` | Route on rc (`keyed_join`); emit `TestResult.compile_fail`. |
 
 **Manifest** — these modules append to the `rtl_buddy/build.py` block in `modules/config.yaml`
 opened by the prep chain ([`06a`](specs/06a-run-preproc.md)). `run-process` is registered by its own
@@ -36,7 +36,7 @@ spec [`03`](specs/03-run-process.md):
 
 - Each child ticket's tests pass.
 - Integration coverage lives in the child tickets' own acceptance criteria (bad source →
-  `CompileFailResults` on `fail`; clean source → `ok`); the `build-compile-cmd` →
+  `TestResult.compile_fail` on `fail`; clean source → `ok`); the `build-compile-cmd` →
   `run-process` (#1) → `interpret-compile` leg is wired and exercised end-to-end in
   [spec 11](specs/11-graph-and-manifests.md) and [spec 12](specs/12-end-to-end.md).
 - Each child's `modules/config.yaml` entry validates and resolves: `build-compile-cmd` →

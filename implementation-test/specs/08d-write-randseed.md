@@ -27,7 +27,7 @@ outputs:           randseed_done → {key}   (ordering signal for link-latest)
 
 ```python
 class WriteRandseedMod:
-    def run(self, randseed, proc, work_dir):   # proc joined as a completion gate (rc unread); work_dir persistent
+    def run(self, randseed:RandSeed, proc:Proc, work_dir:Path):   # proc joined as a completion gate (rc unread); work_dir persistent
         try:
             Path(randseed.randseed_path).write_text(f"{randseed.seed}\n")
             if "hier_inst_seed" in randseed.argv:   # rtl_buddy membership check against the sim argv

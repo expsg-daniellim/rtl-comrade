@@ -27,7 +27,7 @@ outputs:           none   (terminal side-effect — the side-effect branch's lea
 
 ```python
 class LinkLatestMod:
-    def run(self, randseed, proc, randseed_done, work_dir):   # randseed_done: ordering gate (after write-randseed); unread. work_dir persistent
+    def run(self, randseed:RandSeed, proc:Proc, randseed_done:RandSeedDone, work_dir:Path):   # randseed_done: ordering gate (after write-randseed); unread. work_dir persistent
         force_symlink(proc.stdout_path, Path(work_dir) / "test.log")             # log = proc's echoed stdout_path
         force_symlink(proc.stderr_path, Path(work_dir) / "test.err")             # err = proc's echoed stderr_path
         force_symlink(randseed.randseed_path, Path(work_dir) / "test.randseed")
