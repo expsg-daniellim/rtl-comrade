@@ -107,8 +107,12 @@ class Graph:
 					# An empty target list forwards to nothing, so it cannot inherit a default and stays first-run-required.
 					ports = OrderedDict({ cport: Port(cport, has_default=len(targets) > 0 and all(name in mod.ports and mod.ports[name].has_default for name in targets)) for cport, targets in node.contract_port_mappings.items() })
 				elif not mod.structure.definite_inputs:
+					# A positional port cannot be resolved against a non-definite surface that has no declared port order, so reject it before building the surface.
+					positional_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and not isinstance(edge.dst.port, str) ]
+					if len(positional_ports) > 0:
+						log.fatal('non_definite_positional_destination_port', context='harness.graph.node', index=i, id=node.id, ports=positional_ports)
 					# Assemble port mappings from incoming edges for non-definite-input modules.
-					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id })
+					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id and isinstance(edge.dst.port, str) })
 
 			if not has_error:
 				required_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and edge.dst.required ]
@@ -144,7 +148,7 @@ class Graph:
 		for node in graph.nodes.values():
 			dsts = []
 			for edge in config.edges:
-				if edge.src.node == node.id:
+				if edge.src.node == node.id: # ty: ignore[unresolved-attribute] — config.edges holds only GraphConfigSrcPort sources after from_file_config normalises CLI edges
 					# Validate src/dst ports
 					has_error = False
 					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
@@ -155,7 +159,7 @@ class Graph:
 						else:  # pragma: no cover
 							dst_name = edge.dst.port  # pragma: no cover
 
-					if edge.src.port not in node.structure.emits and node.structure.definite_emits:
+					if edge.src.port not in node.structure.emits and node.structure.definite_emits: # ty: ignore[unresolved-attribute] — config.edges holds only GraphConfigSrcPort sources after from_file_config normalises CLI edges
 						has_error = True
 						log.error('invalid_src_port', context='harness.graph.edge', edge=edge)
 
@@ -166,7 +170,7 @@ class Graph:
 					if not node.structure.definite_emits:
 						log.warn('non_definite_emits', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
 
-					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))  # ty: ignore[invalid-argument-type] — dst_name is narrowed to str by the preceding get_canonical_port check, but ty cannot follow that path
+					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))  # ty: ignore[invalid-argument-type, unresolved-attribute] — dst_name is narrowed to str by the preceding get_canonical_port check, and config.edges holds only GraphConfigSrcPort sources; ty cannot follow either path
 
 					# Source tracking
 					key = (edge.dst.node, dst_name)
@@ -216,7 +220,7 @@ class Graph:
 		log.fatal("dummy_run_called", context='harness.graph.cli')
 
 	@classmethod
-	def construct_run(cls, config:GraphConfig, setup_logging:Callable[[list[Any], list[Any], bool], None], run_cleanup:Callable[[Any], None]):
+	def construct_run(cls, config:GraphConfig, setup_logging:Callable[[list[Any], list[Any], bool], None], run_cleanup:Callable[[], None]):
 		"""Build a callable whose signature matches the graph's CLI parameters.
 
 		The returned callable injects the supplied kwargs into the graph's CLI nodes,
@@ -250,5 +254,5 @@ class Graph:
 
 			asyncio.run(async_run())
 
-		run.__signature__ = config.sig # Transform kwargs signature into one readable by Typer
+		run.__signature__ = config.sig # ty: ignore[unresolved-attribute] — Transform kwargs signature into one readable by Typer
 		return run

@@ -157,7 +157,7 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 
 		# Validate edges
 		all_node_ids = nodes | {port_name for port_name, _ in cli_srcs}
-		unused_edges = [ edge for edge in edges if edge.src.node not in all_node_ids ]
+		unused_edges = [ edge for edge in edges if edge.src.node not in all_node_ids ] # ty: ignore[unresolved-attribute] — edges is filtered to GraphConfigSrcPort sources at the top of this function
 		if unused_edges:
 			log.warn('unused_edges', context='harness.graph_config.validation', edges=unused_edges)
 

@@ -22,6 +22,7 @@ from .logging import initialise_logging, HarnessLogger
 
 DEFAULT_RTL_COMRADE_CONFIG_NAME = "rtl_comrade_config.yaml"
 LOGGING_LEVELS = { "NOTSET": logging.NOTSET, "DEBUG": logging.DEBUG, "INFO": logging.INFO, "WARNING": logging.WARNING, "ERROR": logging.ERROR, "CRITICAL": logging.CRITICAL, "FATAL": logging.CRITICAL }
+LogLevel = Literal[*list(LOGGING_LEVELS.keys())] # ty: ignore[invalid-type-form] — Literal built dynamically from LOGGING_LEVELS keys, which ty cannot accept as literal members
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -109,7 +110,7 @@ class App:
 			self.app.command(name, help=command.help, no_args_is_help=len(graph_config.sig.parameters) > 0)(Graph.construct_run(graph_config, self.setup_logging, self.cleanup))
 
 	# Dummy callback to reflect variables read by argparse into typer
-	def main(self, ctx:typer.Context, config_file:Annotated[str, typer.Option(help="File name of config file defining command/graphs.")]=DEFAULT_RTL_COMRADE_CONFIG_NAME, level:Annotated[Literal[*list(LOGGING_LEVELS.keys())], typer.Option(case_sensitive=False, help="Logging level.")]="info"):
+	def main(self, ctx:typer.Context, config_file:Annotated[str, typer.Option(help="File name of config file defining command/graphs.")]=DEFAULT_RTL_COMRADE_CONFIG_NAME, level:Annotated[LogLevel, typer.Option(case_sensitive=False, help="Logging level.")]="info"):
 		# Also prints help when there is an argument but no command, which typer fails to catch
 		if ctx.invoked_subcommand is None:
 			click.echo(ctx.get_help())

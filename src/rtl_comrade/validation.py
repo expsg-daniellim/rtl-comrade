@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from .config import GraphConfigSrcPort
+
 from typing import TYPE_CHECKING  # pylint: disable=wrong-import-order
 if TYPE_CHECKING:
 	from .graph import Graph
@@ -28,7 +30,7 @@ def validate_acyclic(nodes:list[GraphConfigNode], edges:list[GraphConfigEdge]) -
 	adjacency:dict[str, list[str]] = { node.id: [] for node in nodes }
 
 	for edge in edges:
-		if edge.src.node in adjacency and edge.dst.node in adjacency:
+		if isinstance(edge.src, GraphConfigSrcPort) and edge.src.node in adjacency and edge.dst.node in adjacency:
 			adjacency[edge.src.node].append(edge.dst.node)
 
 	WHITE, GREY, BLACK = 0, 1, 2

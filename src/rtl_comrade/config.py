@@ -60,8 +60,7 @@ class GraphConfigSrcCLI:
 		"""
 
 		t = PRIMITIVE_TYPES[self.type] if self.type in PRIMITIVE_TYPES else str
-		typer_kwargs = { 'help': self.help } # Prevent code duplication
-		annotation = Annotated[t, typer.Option(**typer_kwargs) if self.option else typer.Argument(**typer_kwargs)]
+		annotation = Annotated[t, typer.Option(help=self.help) if self.option else typer.Argument(help=self.help)]
 		try:
 			return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
 		except ValueError as e:

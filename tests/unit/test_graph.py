@@ -390,6 +390,24 @@ def test_non_definite_inputs_allows_undeclared_dst_port(logging_handler):
 	assert graph.nodes["src"].dsts[0].other_port == "any_port"
 
 
+def test_non_definite_inputs_rejects_positional_dst_port(logging_handler):
+	module_map = {**_MODULE_MAP, "kwargs_mod": _KwargsModule}
+	call_count = [0]
+
+	def side_effect(paths, namespace):
+		call_count[0] += 1
+		return module_map if call_count[0] == 1 else {}
+
+	# A positional (int) port has no canonical order to resolve against on a non-definite surface — fatal.
+	config = _make_config(
+		[_node("src", "source_mod"), _node("agg", "kwargs_mod")],
+		[_edge("src", "default", "agg", 1)],
+	)
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
+		with pytest.raises(typer.Exit):
+			Graph.from_config(config)
+
+
 # --- Plugin validation ---
 
 
