@@ -259,7 +259,7 @@ class AsyncStatefulMod:
         await flush_to_database(self._results)
 ```
 
-`finalise()` does not receive arguments. If it raises, the harness treats it as fatal (same as an unhandled exception in `run(...)`). It supports the same output forms as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator. Return `None` to emit nothing.
+`finalise()` does not receive arguments. If it raises, the harness treats it as fatal (same as an unhandled exception in `run(...)`) — but that is the fallback backstop, not a license to skip handling: `finalise()` owns its exceptions just as `run(...)` does (see [Exception Handling Is The Module's Responsibility](#exception-handling-is-the-modules-responsibility)). It supports the same output forms as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator. Return `None` to emit nothing.
 
 If the module does not define `finalise`, or if `finalise` is a non-callable attribute, the harness silently skips the step.
 
@@ -301,6 +301,28 @@ The sample modules show both styles:
 
 - [modules/funcs.py](../../modules/funcs.py): `ALUMod` logs `ERROR` on invalid opcodes
 - [modules/io.py](../../modules/io.py): `FileReadMod` uses fatal logging for file-access failures
+
+## Exception Handling Is The Module's Responsibility
+
+A module must catch **every** exception its own code can raise and translate it into the harness failure model. It must **not** let any exception bubble up to the harness.
+
+This is exhaustive, not best-effort. Every call a module makes has a knowable, enumerable set of exceptions it can raise — file I/O (`FileNotFoundError`, `PermissionError`, `OSError`), subprocess launch (`FileNotFoundError` for a missing binary), parsing (`yaml.YAMLError`, `serde.SerdeError`), schema mismatches (`TypeError`, `KeyError`), arithmetic, indexing, and so on. Walk each line of `run(...)` and `finalise()`, list what it can raise, and handle all of it. There is no "unlikely enough to skip" and no "surprising at this layer": if a line can raise it, the module catches it. You can read the code, so nothing it can raise is unknown to you — every exception is the module's to handle.
+
+Translate each caught exception into one of the sanctioned outcomes:
+
+- `log.fatal(...)` / `CRITICAL` — an unrecoverable setup/config error that must abort the whole run immediately (see [modules/io.py](../../modules/io.py): `FileReadMod` catches every file-access error its `open` can raise and converts each to a `log.fatal`).
+- `log.error(...)` / `ERROR` — a per-item failure where the graph should still complete the remaining work, then exit non-zero.
+- a named output port — when the failure is ordinary business logic that routes the item off the main line (e.g. a "fail" branch carrying a result payload), rather than a logged severity.
+
+In every case the exception is caught inside `run(...)` (or `finalise()`) and does not escape. Converting it to a structured log event keeps the operator-facing output domain-specific (a named event with fields) instead of a raw traceback, and preserves the deliberate severity choice that drives the exit code — see [the failure model](../harness/logging.md) and [docs/invariants.md](../invariants.md).
+
+### The harness backstop is for defects, not for cases you skipped
+
+The harness does catch an unhandled exception escaping `run(...)` or `finalise()` and treat it as fatal, but this is a last-resort safety net for genuine programming defects — a bug the author did not account for — **not** a runtime path to design against. An exception your code can raise is never "unforeseen"; it is unhandled, which is a gap to close. Reaching the backstop in normal operation means the module failed to handle something it plainly could have. Relying on it produces an unstructured traceback in place of a meaningful failure event and collapses the deferred-vs-immediate severity distinction (everything becomes an immediate abort).
+
+### The one exception that should propagate
+
+`asyncio.CancelledError` is a harness control signal, not a module error. In an async module, perform any necessary cleanup (closing files, reaping subprocesses) and then **re-raise** it so the harness can cancel the node cleanly. Do not swallow it and do not convert it to a log event.
 
 ## Config-Bearing Module Example
 
