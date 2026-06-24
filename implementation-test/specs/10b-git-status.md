@@ -16,7 +16,7 @@ Record git state once as a structured log event for reproducibility — a loggin
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry — the catalog is the design view, this is the build view; update both when behaviour changes.
 
 ```
-contract: unit
+contract: default
 inputs:   —  (zero-input; runs once)
 outputs:  default → bool   (always True; unwired — node exists for its log.info side-effect)
 ```
@@ -45,7 +45,7 @@ class GitStatusMod:
 
 In `modules/rtl_buddy/setup.py` — `GitStatusMod`:
 
-Zero-input `unit` node. `run(self)` shells out to git (`git rev-parse --abbrev-ref HEAD`, `git rev-parse HEAD`, `git status --porcelain`) and calls `log.info("git_state", branch=..., sha=..., dirty=bool(...))` once. The `git_state` event is not collected by any plugin — it falls through the `SummaryProcessor` (which accumulates results only) to the console and prints at run start. If not in a git repo or `git` is unavailable, `log.warning("git_state_unavailable", reason=...)` — **never** `log.error`/`log.fatal`. Returns `("default", True)`; the port is unwired (the node exists only for the side-effect log).
+Zero-input `default` node — zero input ports is what bounds it to one invocation, so `default` suffices and `unit` would be an empty guarantee. `run(self)` shells out to git (`git rev-parse --abbrev-ref HEAD`, `git rev-parse HEAD`, `git status --porcelain`) and calls `log.info("git_state", branch=..., sha=..., dirty=bool(...))` once. The `git_state` event is not collected by any plugin — it falls through the `SummaryProcessor` (which accumulates results only) to the console and prints at run start. If not in a git repo or `git` is unavailable, `log.warning("git_state_unavailable", reason=...)` — **never** `log.error`/`log.fatal`. Returns `("default", True)`; the port is unwired (the node exists only for the side-effect log).
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev` (here emitted as one structured `git_state` event rather than printed).
 
@@ -72,7 +72,7 @@ Zero-input `unit` node. `run(self)` shells out to git (`git rev-parse --abbrev-r
 
 ## Constraints
 
-- `unit` contract, zero-input — runs once for its `log.info("git_state", …)` side-effect.
+- `default` contract, zero-input — runs once (zero input ports bound it, not the contract) for its `log.info("git_state", …)` side-effect.
 - Catch `(subprocess.CalledProcessError, FileNotFoundError)` (not a repo / `git` absent) → `log.warning("git_state_unavailable", …)`. **Never** `log.error`/`log.fatal` — missing git state must not fail or abort the run.
 - `git_state` is **not** collected by `SummaryProcessor` (results-only); it falls through to the console at run start.
 - Emit `("default", True)` — the port is unwired; the node exists only for the log side-effect.

@@ -3,9 +3,9 @@
 > Navigation only — not a build ticket. The buildable units are the child specs under [`specs/`](specs/).
 
 **Depends on:** spec 01 (schema), spec [01b](specs/01b-suite-schema.md) (`RunPreprocMod`
-reads `ctx["test"].get_preproc_path()`; `WriteFilelistMod` reads
-`ctx["test"].get_testbench().get_filelist()`), spec [01c](specs/01c-model-schema.md)
-(`WriteFilelistMod` reads `ctx["test"].get_model().get_filelist()` and `.path`).
+reads `test.get_preproc_path()`; `WriteFilelistMod` reads
+`test.get_testbench().get_filelist()`), spec [01c](specs/01c-model-schema.md)
+(`WriteFilelistMod` reads the joined `model.value.get_filelist()` and `.path`).
 **References:** [03 — Per-test preparation section](03-module-catalog.md).
 
 ## Goal
@@ -19,7 +19,7 @@ in `modules/rtl_buddy/build.py` (continuing from spec 03); tests in
 
 | Ticket | Module | What it does |
 |---|---|---|
-| [06a](specs/06a-run-preproc.md) | `RunPreprocMod` | Optional preprocessing hook (mutates `ctx["test"]`). |
+| [06a](specs/06a-run-preproc.md) | `RunPreprocMod` | Optional preprocessing hook (mutates `test`). |
 | [06b](specs/06b-write-filelist.md) | `WriteFilelistMod` | Generate the per-tag `run.{test_tag}.f`. |
 
 **Manifest** — these two modules open the `rtl_buddy/build.py` block in `modules/config.yaml`; the

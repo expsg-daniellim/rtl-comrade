@@ -1,12 +1,12 @@
 # Spec 01c: Model schema (`models.yaml`)
 
-**Depends on:** none. Can run in parallel with specs 01, 01a, 01b.
-**References:** [idx-01](../idx-01-schema.md) (umbrella), [01b](01b-suite-schema.md) (`TestConfig.model: ModelConfig | None`), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
-**Source:** `rtl_buddy/src/rtl_buddy/config/model.py:1-100` (`ModelConfig`, `ModelConfigFile`, `ModelConfigLoader`).
+**Depends on:** none. Can run in parallel with specs 01, 01a, 01b. Adds **no** entries to the package `__init__.py` — spec 01 owns the sole re-export surface — so it never edits a file another spec touches.
+**References:** [idx-01](../idx-01-schema.md) (umbrella), [01b](01b-suite-schema.md) (`TestConfig` carries `model`/`model_path`/`suite_dir`; the resolved `ModelConfig` rides a separate edge), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
+**Source:** `rtl_buddy/src/rtl_buddy/config/model.py:9-51` (`ModelConfig`; the raw `ModelConfigFileItem`/`ModelConfigFile` read shape and the read/lookup at `:53-100` are owned by spec [05e](05e-load-model.md)).
 
 ## Before you start
 
-These are `@serde`-decorated dataclasses that the harness never loads directly — a faithful port of rtl_buddy's config types, so the authoritative reference is the rtl_buddy `config/*.py` source this spec cites (anchored to `v1.4.0`, commit `a69d962`). The in-repo `@serde` idiom — nested types and `field(rename=...)` for verbatim YAML field names — is shown by the config-bearing example in `docs/modules/implementation.md`; [`02 — payload conventions`](../02-payload-conventions.md) holds the canonical type and `is_pass()` table the port must match. All four schema specs (`01`, `01a`, `01b`, `01c`) build into the shared `modules/rtl_buddy/schema/` package — coordinate the module layout with the others.
+`ModelConfig` here is a **constructed runtime value object** — a plain `frozen=True` `@dataclass`, not a `@serde` deserialization target (the same raw→runtime split as `TestConfigFile`→`TestConfig`, spec [01b](01b-suite-schema.md)). The YAML is read into the raw `@serde` `ModelConfigFileItem` (owned by `load-model`, spec [05e](05e-load-model.md)); `load-model` then **constructs** this `ModelConfig` from the matched item. It is a faithful port of rtl_buddy's `ModelConfig` *fields/methods*, so the authoritative reference is the rtl_buddy `config/*.py` source this spec cites (anchored to `v1.4.0`, commit `a69d962`); [`02 — payload conventions`](../02-payload-conventions.md) holds the frozen-payload convention it follows. All four schema specs (`01`, `01a`, `01b`, `01c`) build into the shared `modules/rtl_buddy/schema/` package — coordinate the module layout with the others.
 
 ## Goal
 
@@ -14,17 +14,19 @@ Reimplement the `models.yaml` schema natively so `load-model` (spec [idx-05](../
 
 ## Deliverables
 
-A single file, `modules/rtl_buddy/schema/model.py`, exporting `ModelConfig`, `ModelConfigFile`, and `ModelConfigLoader`.
+A single file, `modules/rtl_buddy/schema/model.py`, exporting **`ModelConfig`** — the frozen runtime model object that rides the `model` graph edge (constructed by `load-model`, consumed by `write-filelist`; **not** stored on `TestConfig`).
+
+The raw `@serde` read types **`ModelConfigFileItem`** (the per-entry YAML shape) and **`ModelConfigFile`** (the file wrapper) are **not** here. They are read once by `from_yaml` and never ride a graph edge, so they are defined privately with their sole consumer, `load-model` (spec [05e](05e-load-model.md)), which reads, looks up by name, and **constructs** this `ModelConfig` from the matched item (rtl_buddy folded read + lookup + `path`-stamp into a `ModelConfigLoader` helper; this plan does not port that class). This spec specifies the runtime `ModelConfig` `load-model` builds (below).
 
 ### `ModelConfig`
 
-One entry per element in `models.yaml`'s `models:` list. Attached to `TestConfig.model` by `load-model` (spec [idx-05](../idx-05-selection-expansion.md)) after lookup by name; consumed by `write-filelist` (spec [idx-06](../idx-06-prep.md)) to construct the compile filelist.
+The runtime model for one selected test. Built by `load-model` (spec [05e](05e-load-model.md)) from the matched `ModelConfigFileItem` and emitted on the `model` edge; consumed by `write-filelist` (spec [06b](06b-write-filelist.md)) to construct the compile filelist.
 
-| field      | type           | YAML rename | default    | notes                                                                                                              |
-|------------|----------------|-------------|------------|--------------------------------------------------------------------------------------------------------------------|
-| `name`     | `str`          | (none)      | required   | Unique model identifier inside the file. Matched by `ModelConfigLoader.get_model(model_name)`.                     |
-| `filelist` | `list[str]`    | (none)      | required   | Paths (relative to the `models.yaml` directory) constituting the model's HDL filelist. Consumed by `write-filelist`. |
-| `path`     | `str \| None`  | (none)      | `None`     | Path to the `models.yaml` the model was loaded from. **Set by `ModelConfigLoader.get_model`** after lookup, not by the YAML. Consumers downstream use it to resolve `filelist` entries relative to the file's directory. |
+| field      | type           | default    | notes                                                                                                              |
+|------------|----------------|------------|--------------------------------------------------------------------------------------------------------------------|
+| `name`     | `str`          | required   | Unique model identifier. Copied from the matched `ModelConfigFileItem.name`.                                        |
+| `filelist` | `list[str]`    | required   | Paths (relative to the `models.yaml` directory) constituting the model's HDL filelist. Copied from `ModelConfigFileItem.filelist`; consumed by `write-filelist`. |
+| `path`     | `str \| None`  | `None`     | Path to the `models.yaml` the model was loaded from. **Set at construction by `load-model`** (spec [05e](05e-load-model.md)) to `str(resolved)` — runtime provenance, never a YAML field (the raw `ModelConfigFileItem` has no `path`). Consumers downstream use it to resolve `filelist` entries relative to the file's directory. Defaults to `None` so a bare `ModelConfig(name, filelist)` is constructible in tests. |
 
 Methods:
 
@@ -38,81 +40,49 @@ Source: `rtl_buddy/src/rtl_buddy/config/model.py:9-51`.
 
 > **Bug-for-bug or fix?** rtl_buddy's `ModelConfig.get_model_name` at `model.py:30` returns `self.model_name` — an attribute that does not exist on the dataclass (`name` is the actual field). Any caller invoking this method on rtl_buddy would `AttributeError`; in practice no rtl_buddy caller does. This plan should fix the bug while reimplementing (return `self.name`) and flag it under "Notable divergences" in [07](../07-ambiguities-and-assumptions.md) if any consumer ever starts using the method. Until then, this is informational.
 
-### `ModelConfigFile`
+### `ModelConfigFileItem` / `ModelConfigFile` — defined in `load-model`
 
-The serde-decorated top-level type read straight from `models.yaml`.
-
-| field                | type                          | YAML rename          | default                  | notes                                                                                  |
-|----------------------|-------------------------------|----------------------|--------------------------|----------------------------------------------------------------------------------------|
-| `rtl_buddy_filetype` | `Literal['model_config']`     | `rtl-buddy-filetype` | required                 | Discriminator; serde raises on mismatch (caught by `ModelConfigLoader` → `log.fatal`). |
-| `models`             | `list[ModelConfig]`           | (none)               | `field(default_factory=list)` | Empty `models:` is legal and produces a no-op file (no models retrievable).            |
-
-Source: `rtl_buddy/src/rtl_buddy/config/model.py:53-63`.
-
-### `ModelConfigLoader`
-
-Helper that reads `models.yaml` once and answers `get_model(name)` lookups. Owned by `load-model` (spec [idx-05](../idx-05-selection-expansion.md)); not a graph node itself.
-
-Construction (`__init__(path: str)`):
-
-1. `self.path = path`.
-2. Open + `from_yaml(ModelConfigFile, ...)`. Any exception → `log.fatal(f'Failed to load "{path}" {e}')`. Mirrors `model.py:76-81`. Specific classes in play: `FileNotFoundError`, `PermissionError`, `IsADirectoryError` (file I/O); `serde.SerdeError` / `yaml.YAMLError` (parse); `TypeError` / `KeyError` (schema mismatch).
-3. `self.models = data.models` (the list).
-
-Method:
-
-| signature                                       | returns                          | log idiom                                                                                                                                            |
-|-------------------------------------------------|----------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `get_model(model_name: str) -> ModelConfig`     | The matching `ModelConfig`, with its `path` field mutated in place to `self.path` (so downstream consumers know which `models.yaml` it came from). | `log.fatal(f"model '{model_name}' not found")` if no `ModelConfig` in `self.models` has `name == model_name`. Mirrors `model.py:83-100`.          |
-
-Note the **`path` mutation side effect** at `model.py:97`: `get_model` writes `model.path = self.path` before returning. Preserve this — `write-filelist` (spec [idx-06](../idx-06-prep.md)) relies on `model.path` being set to resolve `filelist` entries relative to the `models.yaml`'s directory.
-
-Source: `rtl_buddy/src/rtl_buddy/config/model.py:66-100`.
+The raw read shape — `ModelConfigFileItem` (`name` + `filelist`, the per-entry YAML shape, **no** `path`) and `ModelConfigFile` (`rtl-buddy-filetype` discriminator + `models: list[ModelConfigFileItem]`) — is **owned by `load-model`** (spec [05e](05e-load-model.md#raw-schema-owned-here)), read-once and never on an edge. Their field tables, the read + name-lookup, the construction of `ModelConfig` from the matched item, and the raise-not-`log.fatal` divergence live there. The runtime `ModelConfig` `load-model` builds is defined above.
 
 ## Integration
 
-`load-model` (spec [idx-05](../idx-05-selection-expansion.md)) is the only direct consumer of `ModelConfigLoader`. The flow:
+`load-model` (spec [05e](05e-load-model.md)) is the only consumer; it **defines** the raw read types and constructs this `ModelConfig`. The flow:
 
-1. `load-model` receives `ctx` (with `ctx["test"]` carrying `model_name`, `model_path`, `suite_dir` from spec [01b](01b-suite-schema.md)).
-2. Resolves `resolved = ctx["test"].suite_dir / ctx["test"].model_path`.
-3. Constructs `ModelConfigLoader(str(resolved))` — `__init__`'s broad-exception catch converts I/O / parse / schema errors to `log.fatal`, but in this plan these are **port-routed `fail` `result`** (spec [idx-05](../idx-05-selection-expansion.md) `LoadModelMod` failure-handling block + [07 settled 10](../07-ambiguities-and-assumptions.md)). The reimplementation should therefore **let exceptions propagate from `ModelConfigLoader`** rather than calling `log.fatal` inside the loader itself; the `LoadModelMod` wrapper catches and routes. This is a deliberate divergence from rtl_buddy at the *loader* layer, motivated by this plan's per-test FAIL routing.
-4. Calls `loader.get_model(ctx["test"].model_name)`. A missing-model lookup similarly propagates rather than crit-logging; `LoadModelMod` catches and routes.
-5. Assigns `ctx["test"].model = the_model` and emits `("default", ctx)`.
+1. `load-model` receives the `test` edge (the bare `TestConfig` carrying `model`, `model_path`, `suite_dir` from spec [01b](01b-suite-schema.md)).
+2. Resolves `resolved = test.suite_dir / test.model_path`.
+3. Reads `ModelConfigFile` from `resolved` and looks up `test.model` among the `ModelConfigFileItem`s in `file.models` — read + lookup unrolled into `LoadModelMod.run` (spec [05e](05e-load-model.md)), which **raises** (rather than `log.fatal`-ing) on I/O / parse / schema errors and missing-model lookups so `LoadModelMod` can route a per-test `fail` `result` ([07 settled 10](../07-ambiguities-and-assumptions.md)).
+4. **Constructs** `ModelConfig(name=item.name, filelist=item.filelist, path=str(resolved))` and emits it on its own `model` edge — `("model", KeyedValue(test.key, the_model))` — alongside the forwarded `test` edge. **`TestConfig` is not mutated.**
 
-`write-filelist` (spec [idx-06](../idx-06-prep.md)) consumes `ctx["test"].get_model()` — at that point in the graph, `load-model` has fired and `ctx["test"].model` is a populated `ModelConfig`. It reads `.filelist` and `.path` to resolve the model's source list (path is the directory `os.path.dirname(model.path)` since `model.path` is the file).
+`write-filelist` (spec [06b](06b-write-filelist.md)) `keyed_join`s the `model` edge to `test` by key and reads `model.value.filelist` / `.path` to resolve the model's source list (path is the directory `os.path.dirname(model.path)` since `model.path` is the file). The `keyed_join` guarantees the model is present, so there is no "not yet loaded" case to guard.
 
 ## Notable divergences from rtl_buddy
 
-1. **Failure routing.** rtl_buddy's `ModelConfigLoader.__init__` and `get_model` call `logger.critical(...)` directly — aborting the whole run on any per-test `models.yaml` issue. This plan's reimplementation **raises** instead, so `LoadModelMod` can catch and emit a per-test `fail` `result` (see [07 settled 10](../07-ambiguities-and-assumptions.md)). This is the loader-layer half of the broader "per-test config-domain failures route as per-test FAIL" divergence already recorded in [07 — Notable divergences](../07-ambiguities-and-assumptions.md).
-2. **`get_model_name` bug fix.** rtl_buddy returns `self.model_name` (a non-existent attribute); this plan returns `self.name`. Informational only — no current consumer calls this method.
+1. **`get_model_name` bug fix.** rtl_buddy returns `self.model_name` (a non-existent attribute); this plan returns `self.name`. Informational only — no current consumer calls this method.
+2. **Raw/runtime split; frozen value object.** rtl_buddy makes `ModelConfig` the list-element serde type and mutates `path` onto it in `ModelConfigLoader.get_model`. This plan reads the YAML into the raw `ModelConfigFileItem` (no `path`) and **constructs** a `frozen=True` `ModelConfig` from it with `path` set (spec [05e](05e-load-model.md)) — `path` is runtime provenance set once at construction, never a read field nor an in-place mutation.
+
+(The **failure-routing** divergence — `load-model` raises rather than `log.fatal`-ing so it can route a per-test FAIL — lives with the read + lookup it unrolls in spec [05e](05e-load-model.md#raw-schema-owned-here); see also [07 settled 10](../07-ambiguities-and-assumptions.md).)
 
 ## Tests (`modules/tests/test_model_schema.py`)
 
-- **Round-trip.** Load an unmodified rtl_buddy `models.yaml` (e.g. from `rtl-buddy-proj-template/design/sandbox`); for each `models:` entry, every field round-trips equal to rtl_buddy's `ModelConfig` constructed over the same YAML.
-- **`get_model` happy path.** A fixture file with two models; `get_model("modelA")` returns the `ModelConfig` with `name == "modelA"` and `path == <the loader's path>` (assert the mutation happened).
-- **`get_model` missing name.** `get_model("nonexistent")` raises rather than calling `log.fatal` (divergence in this plan). Implementation choice: raise `KeyError` or a custom `ModelNotFoundError` — either is fine as long as `LoadModelMod` catches broadly.
-- **`ModelConfigLoader` ctor — bad path.** `ModelConfigLoader("/no/such/file.yaml")` raises (FileNotFoundError) rather than calling `log.fatal`.
-- **`ModelConfigLoader` ctor — malformed YAML.** A fixture with bad YAML similarly propagates.
-- **Empty `models:` list.** A `models.yaml` with `models: []` loads successfully; any `get_model(...)` call raises.
-- **`get_model_name` returns `self.name`** (bug fix in this plan verified by direct assertion).
+These exercise the **runtime `ModelConfig`** owned by this spec. The read + lookup tests (name lookup happy/missing, bad-path/malformed file, empty `models:` list, and the raw `ModelConfigFileItem` carrying no `path`) belong to `load-model`, which owns the raw read types and constructs `ModelConfig` — they live in `test_selection.py` (spec [05e](05e-load-model.md#tests)).
+
+- **Field parity.** A `ModelConfig` constructed from a `models:` entry's `name`/`filelist` (e.g. from `rtl-buddy-proj-template/design/sandbox`) has `name`/`filelist` equal to rtl_buddy's `ModelConfig` over the same YAML entry.
+- **Frozen.** `ModelConfig` is `frozen=True`: a direct `model.path = ...` (or any field) assignment raises `FrozenInstanceError`. `load-model` sets `path` at construction (spec [05e](05e-load-model.md)), never by attribute write.
+- **`get_model_name` returns `self.name`** (bug fix in this plan verified by direct assertion on a constructed `ModelConfig`).
+- **`get_filelist` / `get_model_path`** return `self.filelist` / `self.path` on a constructed `ModelConfig`.
 
 ## Acceptance criteria
 
 - Tests pass.
-- Loading an unmodified rtl_buddy `models.yaml` produces `ModelConfig` instances whose `get_filelist()` / `get_model_path()` return values equal to rtl_buddy's on the same input.
-- `load-model` (spec [idx-05](../idx-05-selection-expansion.md)) and `write-filelist` (spec [idx-06](../idx-06-prep.md)) can be written against this spec without opening `rtl_buddy/src/rtl_buddy/config/model.py`.
+- Constructed `ModelConfig` instances expose `get_filelist()` / `get_model_path()` / `get_model_name()` per the table. (The drop-in load of an unmodified `models.yaml` is exercised by `load-model`, spec [05e](05e-load-model.md), which owns `ModelConfigFileItem`/`ModelConfigFile`.)
+- `load-model` (spec [05e](05e-load-model.md)) and `write-filelist` (spec [06b](06b-write-filelist.md)) can be written against this spec without opening `rtl_buddy/src/rtl_buddy/config/model.py`.
 
 ## Constraints
 
-- Preserve the `rtl-buddy-filetype` rename (keep the hyphen); do **not** Pythonify it.
-- `ModelConfigLoader.__init__` and `get_model` must **raise** on I/O / parse / schema error and on a missing model — **not** `log.fatal`. This is the deliberate loader-layer divergence from rtl_buddy that lets `LoadModelMod` (spec [05e](05e-load-model.md)) catch and route a per-test FAIL. Do not collapse it back to `log.fatal`.
-- `get_model` must mutate `model.path = self.path` in place before returning — preserve this side effect; `write-filelist` (spec [06b](06b-write-filelist.md)) reads `model.path` to resolve `filelist` entries.
+- `ModelConfig` is a pure, **`frozen=True`** plain `@dataclass` value object (not `@serde`): no `run()`, no ports, no graph awareness. The `@serde` read shape is `ModelConfigFileItem` (spec [05e](05e-load-model.md)).
 - `get_model_name()` must return `self.name` (the rtl_buddy `self.model_name` bug is fixed).
-- An empty `models:` list is legal (loads fine); any `get_model(...)` against it raises.
-- Pure value/loader objects: no `run()`, no ports, no graph awareness.
+- `path` is **not** a YAML field — `ModelConfig` declares `path: str | None = None`, and `load-model` (spec [05e](05e-load-model.md)) sets it at construction to `str(resolved)`; `write-filelist` (spec [06b](06b-write-filelist.md)) reads `model.path` to resolve `filelist` entries.
 
 ## Notes
 
-YAML `field(rename=...)` targets are the **public surface** for downstream rtl_buddy users — do **not** Pythonify them. `rtl-buddy-filetype` keeps the hyphen.
-
-The `ModelConfig.path` field is `None` on the YAML side and **mutated** by `ModelConfigLoader.get_model` before return. This is unusual for a value type; preserve the behaviour rather than introducing a new wrapper, because `write-filelist` reads it as `model.path` directly.
+`ModelConfig.path` is runtime provenance, set once at construction by `load-model` (spec [05e](05e-load-model.md)) to the resolved `models.yaml` path — it is not read from YAML (the raw `ModelConfigFileItem` has no `path`). rtl_buddy mutated `path` in place inside `ModelConfigLoader.get_model`; here the node is the unit of functionality, so the read/lookup/construct is unrolled into `LoadModelMod.run` and the value object stays a frozen, immutable record. `write-filelist` reads `model.path` directly.

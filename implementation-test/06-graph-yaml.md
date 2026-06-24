@@ -8,10 +8,13 @@ This doc is the **wiring authority**: the `graphs/test.yaml` below carries the s
 (per-field keyed edges, no `ctx`/`test_run`/`sim_cmd` bags). Spec
 [11](specs/11-graph-and-manifests.md) assembles exactly this graph.
 
-**Edge payload shapes (the split model).** Single-value edges carry `{key, value}` (`test`,
-`simv`, `run_id`, `seed`, `timeout`, `filelist`); read `test["value"]`, and the key is
-`<port>["key"]` (all joined ports share it). Cohesive multi-field messages keep named fields:
-`command{key,argv,stdout_path,stderr_path}`, `proc{key,rc,timed_out,stdout_path,stderr_path}`,
+**Edge payload shapes (the split model).** The `test` edge carries a **bare self-keyed
+`TestConfig`** (read fields directly — `test.get_name()`, `test.key`). The other single-value
+edges carry the `KeyedValue` envelope `{key, value}` (`model`, `simv`, `run_id`, `seed`,
+`timeout`, `filelist`); read `<port>.value`. The key is `<port>.key` on each (all joined ports
+share it; `keyed_join` reads it attribute-first, so a field on `TestConfig` or on the envelope
+are both fine). Cohesive multi-field messages keep named fields:
+`command{key,argv,stdout_path,stderr_path}`, `proc{key,rc,stdout_path,stderr_path}` (`rc is None` ⟺ timed out),
 `randseed{key,seed,randseed_path,argv}`. The unwired result-diversion ports (`skip`/`fail`/`timeout`)
 carry `{key, result}`. There is **no** `ctx` / `test_run` / `sim_cmd` bag — bags assembled across the
 graph were split into these keyed edges, while bags produced whole by one node (`proc`, `command`,
@@ -39,18 +42,18 @@ nodes:
 # --- setup: root config (run once, reimplemented) ---
 - id: discover-root
   module: discover-config-file
-  contract: unit
+  contract: default
   config: { filename: root_config.yaml }
-- { id: prepend-path,    module: prepend-cwd-path,  contract: unit }
+- { id: prepend-path,    module: prepend-cwd-path,  contract: default }
 - { id: parse-root,      module: parse-root-config, contract: unit }
 - { id: select-platform, module: select-platform,   contract: unit }
 - { id: resolve-builder, module: resolve-builder,   contract: unit }
 # --- setup: suite + seed mode ---
-- { id: check-cwd,    module: check-suite-cwd,    contract: unit }
+- { id: work-dir,     module: work-dir,           contract: default }   # zero-input artefact-base provider (= Path.cwd().resolve()); default (not unit) — zero-input convention; regression swaps in per-suite suite_dir
 - { id: ensure-logs,  module: ensure-logs-dir,    contract: unit }
 - { id: parse-suite,  module: parse-suite-config, contract: unit }
 - { id: seed-mode,    module: derive-seed-mode,   contract: unit }
-- { id: git-status,   module: git-status,         contract: unit }
+- { id: git-status,   module: git-status,         contract: default }
 
 # --- list mode vs run ---
 - { id: route-list, module: route-list-mode, contract: unit }
@@ -63,26 +66,26 @@ nodes:
   module: filter-reglvl
   contract: default
   contract_config: { persistent_inputs: [ builder_cfg, reg_level, start_level ] }
-- { id: load-model, module: load-model, contract: default }
+- { id: load-model, module: load-model, contract: default }   # resolves the model BEFORE the sweep/preproc hooks (mirrors rtl_buddy's suite-load resolution) so both can expose the resolved ModelConfig to their scripts; sits after `filter` so skipped tests don't load; emits a 1:1 `model` edge that rides through to write-filelist
 - id: sweep
   module: expand-sweep
-  contract: default
-  contract_config: { persistent_inputs: [ root_cfg ] }
+  contract: keyed_join                                       # keyed_join(test, model); root_cfg persistent
+  contract_config: { key_field: key, persistent_inputs: [ root_cfg ] }
 
 # --- per-test prep ---
 - id: preproc
   module: run-preproc
-  contract: default
-  contract_config: { persistent_inputs: [ root_cfg ] }
+  contract: keyed_join                                       # keyed_join(test, model); root_cfg persistent
+  contract_config: { key_field: key, persistent_inputs: [ root_cfg ] }
 - id: gate-pre
   module: early-stop-gate
-  contract: default
+  contract: keyed_join                                       # wired {test, model} — co-gates both so write-filelist's join can't dangle
   config: { phase: pre }
-  contract_config: { persistent_inputs: [ early_stop ] }
+  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
 - id: filelist
   module: write-filelist
-  contract: default
-  contract_config: { persistent_inputs: [ work_dir ] }   # writes <work_dir>/run.<tag>.f (per-tag)
+  contract: keyed_join                                       # keyed_join(test, model); work_dir persistent
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }   # writes <work_dir>/run.<tag>.f (per-tag)
 
 # --- compile (run-process #1) ---
 - id: cc-build
@@ -92,7 +95,8 @@ nodes:
 - id: cc-run
   module: run-process
   contract: default                                          # default(command); timeout unwired on the compile leg
-  contract_config: { persistent_inputs: [ env_ready ] }   # caches prepend-path's token; edge is required: true (see env-setup block)
+  contract_config: { persistent_inputs: [ env_ready, work_dir ] }   # env_ready caches prepend-path's token (edge required: true); work_dir is the subprocess cwd
+  # no `config: { grace_s }` — the compile leg never times out, so the escalation grace is inert (module default applies)
 - id: cc-int
   module: interpret-compile
   contract: keyed_join                                       # keyed_join(test, simv, proc)
@@ -118,16 +122,17 @@ nodes:
   contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ] }
 - id: sim-run
   module: run-process
+  config: { grace_s: 5.0 }                                   # SIGQUIT→SIGKILL escalation grace; optional, defaults to 5.0s (only the sim leg times out)
   contract: keyed_join                                       # keyed_join(command, timeout) — sim leg pairs the per-test timeout
-  contract_config: { key_field: key, persistent_inputs: [ env_ready ] }   # caches prepend-path's token; edge is required: true (see env-setup block)
+  contract_config: { key_field: key, persistent_inputs: [ env_ready, work_dir ] }   # env_ready caches prepend-path's token (edge required: true); work_dir is the subprocess cwd
 - id: randseed
   module: write-randseed
-  contract: keyed_join                                       # keyed_join(randseed, proc-gate); side-effect leaf
-  contract_config: { key_field: key }
+  contract: keyed_join                                       # keyed_join(randseed, proc-gate); side-effect leaf; work_dir persistent (reads HierInstanceSeed.txt from it)
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
 - id: link-latest
   module: link-latest
-  contract: keyed_join                                       # keyed_join(randseed, proc, randseed_done); terminal side-effect
-  contract_config: { key_field: key }
+  contract: keyed_join                                       # keyed_join(randseed, proc, randseed_done); terminal side-effect; work_dir persistent (test.* symlinks placed under it)
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
 - id: sim-int
   module: interpret-sim
   contract: keyed_join                                       # keyed_join(test, proc)
@@ -157,11 +162,16 @@ nodes:
 logging:
   include_default: true
   handlers:
-  - { path: log/summary.py, name: SummaryProcessor }      # processor: collect test_result rows + DropEvent them; render table in finalise(). git_state falls through.
+  - path: log/summary.py                                   # processor: collect watch-listed rows + DropEvent the suppress subset; render table in finalise(). git_state falls through.
+    name: SummaryProcessor
+    config:
+      # graph-level watch-list: the universal `test_result` plus *this graph's* failure terminals. The plugin defaults `events` to just ["test_result"]; the failure-terminal names are graph policy and live here, not baked into the module.
+      events: [test_result, compile_failed, sim_timeout, load_model_failed, sweep_failed, preproc_failed, filelist_failed, replay_seed_invalid]
+      # `suppress` is left at the plugin default ["test_result"] (summary-only); the failure events are watch-listed but unsuppressed, so they still print as errors.
 
 edges:
 # ---- CLI edges (subcommand options) ----
-- { src: { cli: test_config, type: str,  default: "tests.yaml" }, dst: { node: check-cwd,       port: test_config } }
+- { src: { cli: test_config, type: str,  default: "tests.yaml" }, dst: { node: parse-suite,         port: test_config } }   # parse-suite resolves it against CWD (no separate resolve node)
 # --logs-dir is the subdir NAME, consumed only by ensure-logs; the resolved Path fans out below.
 - { src: { cli: logs_dir,    type: str,  default: "logs" },        dst: { node: ensure-logs,    port: logs_dir } }
 - { src: { cli: builder,      type: str,  default: "" },          dst: { node: resolve-builder, port: builder } }
@@ -180,7 +190,7 @@ edges:
 - { src: { node: parse-root },        dst: { node: select-platform, port: root_cfg } }
 - { src: { node: parse-root },        dst: { node: resolve-builder, port: root_cfg } }
 - { src: { node: select-platform },   dst: { node: resolve-builder, port: platform_cfg } }
-- { src: { node: check-cwd },         dst: { node: parse-suite,     port: test_config_path } }
+# parse-suite's test_config comes straight from the CLI edge above — it resolves the path itself.
 
 # ---- env setup: PATH prepend (token, direct) + logs/ bootstrap (data) — two independent edges ----
 # PATH-readiness has no data carrier, so prepend-path emits an env_ready token wired DIRECTLY to
@@ -192,16 +202,25 @@ edges:
 # default for isolation testing. The logs/ mkdir is ordered separately by the logs_dir DATA edge below.
 - { src: { node: prepend-path }, dst: { node: cc-run,  port: env_ready, required: true } }
 - { src: { node: prepend-path }, dst: { node: sim-run, port: env_ready, required: true } }
-- { src: { node: check-cwd,   port: work_dir }, dst: { node: ensure-logs, port: work_dir } }
-# check-cwd's work_dir also roots the CWD-relative artefacts the logs/ tree doesn't cover:
-# write-filelist's run.<tag>.f and build-compile-cmd's obj_dir_<tag>/ (load-bearing persistent
-# inputs — same provider model as logs_dir, so a relocation stays a check-cwd-only change).
-- { src: { node: check-cwd,   port: work_dir }, dst: { node: filelist,    port: work_dir } }
-- { src: { node: check-cwd,   port: work_dir }, dst: { node: cc-build,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: ensure-logs, port: work_dir } }
+# work-dir (= Path.cwd().resolve()) is the single artefact base. It roots every leaf path AND the
+# subprocess cwd, so test/randtest work in (and output to) CWD — run here, output here (a relocation
+# stays a work-dir-only change; regression feeds these same ports its per-suite suite_dir). Consumers:
+#   filelist  — run.<tag>.f filename + its contents (relpath base)
+#   cc-build  — obj_dir_<tag>/ and the verilator simv
+#   cc-run/sim-run — the subprocess cwd (compiler/sim resolve relative inputs/outputs here)
+#   randseed  — reads HierInstanceSeed.txt from work_dir
+#   link-latest — places the test.* "latest" symlinks under work_dir
+- { src: { node: work-dir },   dst: { node: filelist,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: cc-build,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: cc-run,      port: work_dir } }
+- { src: { node: work-dir },   dst: { node: sim-run,     port: work_dir } }
+- { src: { node: work-dir },   dst: { node: randseed,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: link-latest, port: work_dir } }
 # Resolved artefact dir (a Path) fans out to the path composers as a first-run-required persistent
 # input (no Python default): cc-build/sim-build/seed block until ensure-logs — after its mkdir —
 # emits logs_dir. That data dependency is what orders the mkdir before any subprocess redirect, so
-# no env_ready token is needed for it. The CWD-relative assumption lives only in check-cwd/ensure-logs.
+# no env_ready token is needed for it. The artefact base is provided once by work-dir (= CWD).
 - { src: { node: ensure-logs, port: logs_dir }, dst: { node: cc-build,    port: logs_dir } }
 - { src: { node: ensure-logs, port: logs_dir }, dst: { node: sim-build,   port: logs_dir } }
 - { src: { node: ensure-logs, port: logs_dir }, dst: { node: seed,        port: logs_dir } }
@@ -221,13 +240,17 @@ edges:
 - { src: { node: route-list, port: run },  dst: { node: select,     port: suite_cfg } }
 
 # ---- main line: split per-test / per-run keyed edges (no ctx / test_run / sim_cmd bags) ----
-# Pre-sim per-test chain (single keyed `test` edge; routers co-gate every edge a downstream join needs).
+# Pre-sim per-test chain. load-model adds the 1:1 `model` edge right after `filter`; it then rides alongside `test` through sweep → preproc → gate-pre (each keyed_joins it to `test` by key and co-gates it) to write-filelist, where it is consumed. Routers co-gate every edge a downstream join needs.
 - { src: { node: select,     port: test }, dst: { node: filter,     port: test } }
 - { src: { node: filter,     port: test }, dst: { node: load-model, port: test } }   # filter.skip → ∅
-- { src: { node: load-model, port: test }, dst: { node: sweep,      port: test } }   # load-model.fail → ∅
-- { src: { node: sweep,      port: test }, dst: { node: preproc,    port: test } }   # sweep.fail → ∅
-- { src: { node: preproc,    port: test }, dst: { node: gate-pre,   port: test } }   # preproc.fail → ∅
-- { src: { node: gate-pre,   port: test }, dst: { node: filelist,   port: test } }   # gate-pre.stop → ∅
+- { src: { node: load-model, port: test },  dst: { node: sweep, port: test } }       # load-model.fail → ∅ (drops test+model together)
+- { src: { node: load-model, port: model }, dst: { node: sweep, port: model } }      # 1:1 model edge; rides through to write-filelist
+- { src: { node: sweep,      port: test },  dst: { node: preproc, port: test } }     # sweep.fail → ∅ (drops test+model together)
+- { src: { node: sweep,      port: model }, dst: { node: preproc, port: model } }    # re-keyed #i per sweep variant (one model edge per variant)
+- { src: { node: preproc,    port: test },  dst: { node: gate-pre, port: test } }    # preproc.fail → ∅ (drops test+model together)
+- { src: { node: preproc,    port: model }, dst: { node: gate-pre, port: model } }
+- { src: { node: gate-pre,   port: test },  dst: { node: filelist, port: test } }    # gate-pre.stop → ∅ (drops test+model together)
+- { src: { node: gate-pre,   port: model }, dst: { node: filelist, port: model } }   # joined by key at write-filelist (model consumed here)
 - { src: { node: filelist,   port: test },     dst: { node: cc-build, port: test } }     # filelist.fail → ∅
 - { src: { node: filelist,   port: filelist }, dst: { node: cc-build, port: filelist } }
 # Compile: cc-build emits test+simv+command; cc-int joins test+simv+proc, co-gates test+simv on success.
@@ -304,7 +327,9 @@ Notes:
   and `expand-runs` to `sim-build`.
 - `gate-comp` is wired `{test, simv}` (so it is `keyed_join`, not `default`) — `expand-runs`
   needs `simv`, and co-gating requires `simv` to travel through the gate rather than bypass it,
-  so a stop drops `test`+`simv` together. (`gate-pre` is `{test}`/`default`; `gate-sim` is
+  so a stop drops `test`+`simv` together. (`gate-pre` is now `{test, model}`/`keyed_join` — it
+  co-gates the `model` edge load-model put in flight upstream, so a pre-phase stop drops
+  `test`+`model` together and write-filelist's join can't dangle; `gate-sim` is
   `{test, proc}`/`keyed_join`.)
 - `randseed` (`write-randseed`) `keyed_join`s `randseed` + a `proc` completion gate and is a
   side-effect leaf — it writes the `.randseed` file and emits a `randseed_done` ordering signal;
@@ -313,21 +338,31 @@ Notes:
   `parse-*`), each `keyed_join`ing `test`/`proc` by key.
 - `run-process` writes the `.log`/`.err` files itself (redirect, paths supplied in
   `command`) — there is no separate "write logs" node. `link-latest` only forces symlinks.
-- **Artefact location is decided once and flows as data.** `--logs-dir` (the subdir *name*) is
-  a CLI edge to `ensure-logs` only. `ensure-logs` roots it on `check-cwd`'s `work_dir` and emits
-  the **resolved directory `Path`** on its `logs_dir` port, which fans out as a persistent input
-  to the three composers `cc-build` / `sim-build` / `seed`. They join filenames onto that
-  directory and never read the ambient CWD. The non-`logs/` CWD-relative artefacts follow the
-  same model off `check-cwd`'s `work_dir` directly: `filelist` roots `run.<tag>.f` and `cc-build`
-  roots `obj_dir_<tag>/` on `work_dir` (load-bearing persistent inputs), so the rtl_buddy
-  "everything is CWD-relative" assumption lives only in `check-cwd` and its `ensure-logs`
-  sub-rooting (relocating artefacts is a change there alone). `write-randseed` does **not** take
-  `logs_dir` — `sim-build` pre-composes `randseed_path` onto the `randseed` edge (and `log`/`err`
-  become `command`'s redirect paths, echoed back on `proc`), which `randseed`/`link-latest` read by key.
-  The default `"logs"` matches rtl_buddy's hard-coded literal; override is a small Notable
-  divergence (see [07 settled 26](07-ambiguities-and-assumptions.md)).
-- `load-model` sits after `filter` so models for skipped tests aren't loaded — a deliberate
-  lazy-vs-eager change from rtl_buddy (07, item on model loading).
+- **Artefact location is decided once and flows as data.** The artefact base is provided by the
+  zero-input `work-dir` node (`work_dir = Path.cwd().resolve()` — test/randtest work in, and output
+  to, CWD). `--logs-dir` (the subdir *name*) is a CLI edge to `ensure-logs` only. `ensure-logs`
+  roots it on `work-dir`'s `work_dir` and emits the **resolved directory `Path`** on its `logs_dir`
+  port, which fans out as a persistent input to the three composers `cc-build` / `sim-build` /
+  `seed`. They join filenames onto that directory and never read the ambient CWD. Every other
+  artefact follows the same model off `work-dir`'s `work_dir` directly: `filelist` roots
+  `run.<tag>.f` (filename **and** contents), `cc-build` roots `obj_dir_<tag>/`, `randseed` reads
+  `HierInstanceSeed.txt` from `work_dir`, `link-latest` places the `test.*` symlinks under it, and
+  `cc-run`/`sim-run` launch the subprocess with `cwd=work_dir` — so the rtl_buddy "everything is
+  CWD-relative" assumption is hoisted into the single `work-dir` provider (relocating artefacts is a
+  `work-dir`-only change; regression feeds these ports its per-suite `suite_dir` instead).
+  `write-randseed` does **not** take `logs_dir` —
+  `sim-build` pre-composes `randseed_path` onto the `randseed` edge (and `log`/`err` become
+  `command`'s redirect paths, echoed back on `proc`), which `randseed`/`link-latest` read by key;
+  `randseed` takes `work_dir` only for the `HierInstanceSeed.txt` read. The default `"logs"`
+  matches rtl_buddy's hard-coded literal; override is a small Notable divergence (see
+  [07 settled 26](07-ambiguities-and-assumptions.md)).
+- `load-model` sits after `filter` (so models for skipped tests aren't loaded) but **before**
+  `sweep`/`preproc` — the resolved `ModelConfig` must exist when those hooks run so each can
+  expose it to its script as `test_cfg.model`, matching rtl_buddy, which resolves the model at
+  suite-load (`config/suite.py:46` → `test.py:320-323`) before sweep/preproc run. The `model`
+  edge then rides alongside `test` (re-keyed `#i` across the sweep fan-out, co-gated by
+  `gate-pre`) to `write-filelist`, its consumer. Still lazier than rtl_buddy's eager-for-all-tests
+  load (07, item on model loading).
 
 ## Manifest additions — `modules/config.yaml`
 
@@ -339,7 +374,7 @@ Notes:
   - { name: parse-root-config,    class_name: ParseRootConfigMod }
   - { name: select-platform,      class_name: SelectPlatformMod }
   - { name: resolve-builder,      class_name: ResolveBuilderMod }
-  - { name: check-suite-cwd,      class_name: CheckSuiteCwdMod }
+  - { name: work-dir,             class_name: WorkDirMod }
   - { name: ensure-logs-dir,      class_name: EnsureLogsDirMod }
   - { name: parse-suite-config,   class_name: ParseSuiteConfigMod }
   - { name: derive-seed-mode,     class_name: DeriveSeedModeMod }

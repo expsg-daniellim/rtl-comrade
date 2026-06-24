@@ -9,7 +9,7 @@ Read `docs/modules/implementation.md` — how the harness infers input ports fro
 
 ## Goal
 
-Route the sim result on the timeout flag — forward `test`+`proc` on success, emit `SimTimeoutResults` on timeout.
+Route the sim result on the timeout indicator (`proc.rc is None`) — forward `test`+`proc` on success, emit `SimTimeoutResults` on timeout.
 
 ## Surface
 
@@ -19,36 +19,36 @@ I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md
 contract:        keyed_join
 contract_config: key_field: key
 inputs:          test, proc   (joined by key)
-outputs:         test    → {key, value}   (forwarded on a clean run, co-gated with proc)
-                 proc    → {key, rc, timed_out, stdout_path, stderr_path}   (forwarded on a clean run)
+outputs:         test    → TestConfig (self-keyed)   (forwarded on a clean run, co-gated with proc)
+                 proc    → {key, rc, stdout_path, stderr_path}   (forwarded on a clean run)
                  timeout → {key, result}
 ```
 
 ```python
 class InterpretSimMod:
     def run(self, test, proc):
-        if proc["timed_out"]:
+        if proc.rc is None:   # the run-process timeout indicator
             result = SimTimeoutResults()   # desc is the fixed 'Sim hit timeout' (rtl_buddy parity); stderr_path goes on the log, not in desc
-            log.error("sim_timeout", key=test["key"], test_name=test["value"].get_name(), err=proc["stderr_path"],
+            log.error("sim_timeout", key=test.key, test_name=test.get_name(), err=proc.stderr_path,
                       result=result.results["result"], desc=result.results["desc"])   # → SummaryProcessor row
-            yield ("timeout", { "key": test["key"], "result": result })
-            return
-        yield ("test", test)    # forward test + proc on a clean run (co-gated for route-post/parse)
-        yield ("proc", proc)
+            yield ("timeout", Result(test.key, result))
+        else:
+            yield ("test", test)    # forward test + proc on a clean run (co-gated for route-post/parse)
+            yield ("proc", proc)
 ```
 
 ## Algorithm
 
-1. Branch on the timeout flag: if not `proc["timed_out"]`, forward both `("test", test)` and `("proc", proc)` (co-gated — the classification chain downstream needs `test` for identity and `proc` for the log path).
-2. **Timeout path.** Otherwise build `result = SimTimeoutResults()` — its `desc` is the fixed `'Sim hit timeout'` (rtl_buddy `runner/test_results.py:62-69`), not derived from stderr — and `log.error("sim_timeout", key=test["key"], err=proc["stderr_path"], result=..., desc=...)`; the `result`/`desc` kwargs let `SummaryProcessor`'s watch-list collect the row. Emit `("timeout", {"key": test["key"], "result": result})` (dropping `test`/`proc`). Routing on a flag — no Python exception is caught.
+1. Branch on the timeout indicator: if `proc.rc is not None`, forward both `("test", test)` and `("proc", proc)` (co-gated — the classification chain downstream needs `test` for identity and `proc` for the log path).
+2. **Timeout path.** Otherwise (`proc.rc is None`) build `result = SimTimeoutResults()` — its `desc` is the fixed `'Sim hit timeout'` (rtl_buddy `runner/test_results.py:62-69`), not derived from stderr — and `log.error("sim_timeout", key=test.key, err=proc.stderr_path, result=..., desc=...)`; the `result`/`desc` kwargs let `SummaryProcessor`'s watch-list collect the row. Emit `("timeout", Result(test.key, result))` (dropping `test`/`proc`). Routing on the `rc is None` test — no Python exception is caught.
 
 ## Deliverables
 
 In `modules/rtl_buddy/sim.py`:
 
-- `InterpretSimMod` — `(test, proc)`, `keyed_join` → pure routing on `proc["timed_out"]`: true → `("timeout", {"key", "result": SimTimeoutResults()})`; false → forward `("test", test)` then `("proc", proc)` (co-gated for the classification chain).
-  **Failure handling**: routing on `proc["timed_out"]`; no Python exception is caught. The ERROR `sim_timeout` log at emission of `("timeout", ...)` carries `test["key"]`, `proc["stderr_path"]`, **and `result`/`desc`** from `SimTimeoutResults` so the `SummaryProcessor` watch-list ([10c](10c-summary-handler.md)) renders the row (mirrors rtl_buddy's `vlog_sim.py` timeout reporting).
-  **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch; sentinel set at `tools/vlog_sim.py:258-261`; `SimTimeoutResults` at `runner/test_results.py:62-69`.
+- `InterpretSimMod` — `(test, proc)`, `keyed_join` → pure routing on `proc.rc is None`: true → `("timeout", Result(key, SimTimeoutResults()))`; false → forward `("test", test)` then `("proc", proc)` (co-gated for the classification chain).
+  **Failure handling**: routing on `proc.rc is None`; no Python exception is caught. The ERROR `sim_timeout` log at emission of `("timeout", ...)` carries `test.key`, `proc.stderr_path`, **and `result`/`desc`** from `SimTimeoutResults` so the `SummaryProcessor` watch-list ([10c](10c-summary-handler.md)) renders the row (mirrors rtl_buddy's `vlog_sim.py` timeout reporting).
+  **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch; rtl_buddy's `4444` sentinel is set at `tools/vlog_sim.py:258-261` (this plan reads `proc.rc is None` instead); `SimTimeoutResults` at `runner/test_results.py:62-69`.
 
 **Manifest** — append to the `- file: rtl_buddy/sim.py` block in `modules/config.yaml` (opened by [`08a`](08a-expand-runs.md); append, don't re-create):
 
@@ -58,21 +58,20 @@ In `modules/rtl_buddy/sim.py`:
 
 ## Tests
 
-In `modules/tests/test_sim_cycle.py`. Fixtures: `test` (`{key, value}`) and `proc` (`{key, rc, timed_out, stdout_path, stderr_path}`) dict fixtures; `logging_handler` for the timeout path. Drive `run(test, proc)` directly.
+In `modules/tests/test_sim_cycle.py`. Fixtures: `test` (`{key, value}`) and `proc` (`{key, rc, stdout_path, stderr_path}`) dict fixtures; `logging_handler` for the timeout path. Drive `run(test, proc)` directly.
 
-- `proc["timed_out"] == False` → emits `("test", test)` then `("proc", proc)`; no log.
-- `proc["timed_out"] == True` → emits `("timeout", {"key", "result": SimTimeoutResults})` (no `test`/`proc`), `logging_handler.failure is True`, and the ERROR `sim_timeout` log carries `key`/`err`/`result="FAIL"`/`desc` (so `SummaryProcessor` collects it).
-- `proc["timed_out"] == True` with `rc == 0` → still routes `("timeout", …)` (boundary: routes on the flag, independent of `rc` — see spec 03's `timed_out`-not-derived-from-`rc`).
-- `proc["timed_out"] == False` with a non-zero `rc` → still forwards `test`+`proc` (boundary: rc classification is `parse-log`'s job, not this node's).
+- `proc.rc == 0` → emits `("test", test)` then `("proc", proc)`; no log.
+- `proc.rc is None` → emits `("timeout", Result(key, SimTimeoutResults))` (no `test`/`proc`), `logging_handler.failure is True`, and the ERROR `sim_timeout` log carries `key`/`err`/`result="FAIL"`/`desc` (so `SummaryProcessor` collects it).
+- `proc.rc` non-zero (and not `None`) → still forwards `test`+`proc` (boundary: any `int` rc is ordinary data — classification is `parse-log`'s job, not this node's).
 
 ## Acceptance criteria
 
 - Tests pass.
-- All output ports (`test`, `proc`, `timeout`) are exercised: on a clean run `test`+`proc` are forwarded together; the `timeout` path emits `SimTimeoutResults` (the `rc=4444`/`timed_out` case) and logs at ERROR (dropping `test`/`proc`).
+- All output ports (`test`, `proc`, `timeout`) are exercised: on a clean run `test`+`proc` are forwarded together; the `timeout` path emits `SimTimeoutResults` (the `rc is None` case) and logs at ERROR (dropping `test`/`proc`).
 - The `modules/config.yaml` manifest entry `{ name: interpret-sim, class_name: InterpretSimMod }` validates and the harness resolves `interpret-sim` → `InterpretSimMod`.
 
 ## Constraints
 
-- `keyed_join` over `test`+`proc` (key_field `key`). Route on `proc["timed_out"]`: false → forward `("test", test)` then `("proc", proc)` (co-gate both for the classification chain); true → `("timeout", {key, result: SimTimeoutResults()})` on the **unwired** `timeout` port (dropping `test`/`proc`) and `log.error("sim_timeout", …)` at emission (`key`, `proc["stderr_path"]`, **and `result`/`desc`** so the `SummaryProcessor` watch-list collects the row). `SimTimeoutResults`'s `desc` is the fixed `'Sim hit timeout'` — never splice `stderr_path` into `desc`; it belongs on the `log.error` only.
-- This is routing on a flag, **not** a caught Python exception.
+- `keyed_join` over `test`+`proc` (key_field `key`). Route on `proc.rc is None`: not-None → forward `("test", test)` then `("proc", proc)` (co-gate both for the classification chain); None → `("timeout", {key, result: SimTimeoutResults()})` on the **unwired** `timeout` port (dropping `test`/`proc`) and `log.error("sim_timeout", …)` at emission (`key`, `proc.stderr_path`, **and `result`/`desc`** so the `SummaryProcessor` watch-list collects the row). `SimTimeoutResults`'s `desc` is the fixed `'Sim hit timeout'` — never splice `stderr_path` into `desc`; it belongs on the `log.error` only.
+- This is routing on `proc.rc is None`, **not** a caught Python exception.
 - Use string-literal port names (`test`/`proc`/`timeout`); stay graph-agnostic.

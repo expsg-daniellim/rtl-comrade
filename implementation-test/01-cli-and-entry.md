@@ -27,7 +27,7 @@ in either `do_cmd_test` (`:166-173`) or the global `root_options` (`:114-123`).
 
 | rtl_buddy arg | flag | type | default | CLI edge `cli` name | feeds node | rtl_buddy src |
 |---|---|---|---|---|---|---|
-| `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `check-suite-cwd` → `parse-suite-config` | `rtl_buddy.py:167` |
+| `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `parse-suite-config` (resolves it against CWD) | `rtl_buddy.py:167` |
 | *(none)* | `-L/--logs-dir` | str | `logs` | `logs_dir` | `ensure-logs-dir`, `build-compile-cmd`, `build-sim-cmd`, `resolve-seed` | *(new — Notable divergence; `"logs"` literal at `tools/vlog_sim.py:55`)* |
 | `test_name` | positional (optional) | str | `""` (= all) | `test_name` | `select-tests` | `rtl_buddy.py:168` |
 | `list_tests` | `--list` | bool | `false` | `list` | `route-list-mode` | `rtl_buddy.py:169` |
@@ -71,19 +71,21 @@ from the suite directory** (the directory that contains `tests.yaml`). `rtl_budd
 `rtl_buddy/AGENTS.md` makes this concrete: `cd .../verif && python -m rtl_buddy test
 basic`.
 
-The plain `test` and `randtest` graphs inherit this user-driven posture because `run.f`,
-`obj_dir_<tag>/`, `logs/` (or whatever `--logs-dir` resolves to), and the `test.*` symlinks
-land in CWD. To prevent the silent "wrong CWD → artefacts in wrong place" failure mode (the
-monorepo case with `-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`, or
-`-c subdir/tests.yaml`), a [`check-suite-cwd`](03-module-catalog.md) setup node fails fast
-with `log.fatal` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
-or if the resolved file doesn't exist. The `regression` graph does not wire this node — it
-`chdir`s per-suite internally. See [07 settled 24](07-ambiguities-and-assumptions.md) for
-the full rationale.
+In the plain `test` and `randtest` graphs, `run.f`, `obj_dir_<tag>/`, `logs/` (or whatever
+`--logs-dir` resolves to), the `test.*` symlinks, and `HierInstanceSeed.txt` all land in the
+artefact base `work_dir`, which a zero-input [`work-dir`](03-module-catalog.md) setup node sets to
+the **invocation CWD** (`Path.cwd().resolve()`) — faithful to rtl_buddy's `do_cmd_test`, which never
+`chdir`s (run here, output here). `-c <dir>/tests.yaml` only *locates* the config; artefacts still
+land in CWD and relative paths in the config are CWD-relative — the conventional shell semantics, no
+auto-relocation. A missing config file surfaces in `parse-suite-config` (which opens it) as a
+`log.fatal`; there is no separate resolve node and no CWD-mismatch abort. The `regression` graph does
+**not** wire `work-dir` — it sources a per-suite `work_dir` from each suite's directory (mirroring
+`do_rtl_regression`'s per-suite `chdir`). See [07 settled 24](07-ambiguities-and-assumptions.md)
+for the full rationale.
 
 The artefact directory itself is materialised by an [`ensure-logs-dir`](03-module-catalog.md)
 setup node fed by the CLI `logs_dir` edge (default `"logs"` — parity with rtl_buddy). It
-runs once at startup, after `check-suite-cwd` has validated the CWD, and emits the resolved
+runs once at startup, rooting `logs/` on `work-dir`'s `work_dir`, and emits the resolved
 `logs_dir` `Path`; the subprocess composers block on that (first-run-required) value before
 building a command, so the `mkdir` is ordered ahead of every redirect by the data edge itself.
 The `$PATH` fix is sequenced separately by `prepend-cwd-path → run-process.env_ready`

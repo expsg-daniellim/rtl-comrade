@@ -13,7 +13,7 @@ Assemble the test graph YAML, finalise plugin manifests, and register the `test`
 
 ## Deliverables
 
-- **`graphs/test.yaml`** — per the wiring authority [`06 — graphs/test.yaml`](../06-graph-yaml.md) (the split-edge nodes/contracts + edge list): all nodes (including the `git-status` setup node), CLI edges (including `test_name` as positional with `option: false, default: ""`), the setup chain, persistent-config fan-out (config singletons feed `keyed_join`/`default` nodes via `persistent_inputs`), list-mode routing, and the **split per-test/per-run edges** (`test`/`simv`/`run_id`/`seed`/`filelist`/`command`/`timeout`/`proc`/`randseed`/`randseed_done`) wired through the `keyed_join` command-builders and the two parallel post-sim branches (side-effects ∥ classification); the **unwired** terminal result ports (no edges); and the `logging` block that wires the `SummaryProcessor` plugin. **`ctx` and `test_run` no longer exist** — the per-test bag is split into keyed edges.
+- **`graphs/test.yaml`** — per the wiring authority [`06 — graphs/test.yaml`](../06-graph-yaml.md) (the split-edge nodes/contracts + edge list): all nodes (including the `git-status` setup node), CLI edges (including `test_name` as positional with `option: false, default: ""`), the setup chain, persistent-config fan-out (config singletons feed `keyed_join`/`default` nodes via `persistent_inputs`), list-mode routing, and the **split per-test/per-run edges** (`test`/`model`/`simv`/`run_id`/`seed`/`filelist`/`command`/`timeout`/`proc`/`randseed`/`randseed_done`) wired through the `keyed_join` command-builders and the two parallel post-sim branches (side-effects ∥ classification); the **unwired** terminal result ports (no edges); and the `logging` block that wires the `SummaryProcessor` plugin.
 - **`graphs/log/summary.py`** — the `SummaryProcessor` logging plugin (a single structlog processor; spec 10), referenced by `path`/`name` from the `logging` block.
 - **`modules/config.yaml`** — full manifest covering every module from specs 03–10 (`run-process`, the setup chain incl. `git-status`, selection/expansion, prep, compile cycle, sim cycle, post, control). The four file blocks each child spec contributes to (verbatim from [06](../06-graph-yaml.md)):
   ```yaml
@@ -24,7 +24,7 @@ Assemble the test graph YAML, finalise plugin manifests, and register the `test`
     - { name: parse-root-config,    class_name: ParseRootConfigMod }
     - { name: select-platform,      class_name: SelectPlatformMod }
     - { name: resolve-builder,      class_name: ResolveBuilderMod }
-    - { name: check-suite-cwd,      class_name: CheckSuiteCwdMod }
+    - { name: work-dir,             class_name: WorkDirMod }
     - { name: ensure-logs-dir,      class_name: EnsureLogsDirMod }
     - { name: parse-suite-config,   class_name: ParseSuiteConfigMod }
     - { name: derive-seed-mode,     class_name: DeriveSeedModeMod }

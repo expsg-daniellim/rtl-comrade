@@ -12,8 +12,8 @@ The entire main pipeline carries over with the same contracts and wiring:
 - setup chain — `discover-config-file`, `prepend-cwd-path` *(wired directly to both `run-process`
   instances via `env_ready`, edge `required: true` + `env_ready` persistent, in every graph — see
   [07 settled 25](07-ambiguities-and-assumptions.md))*, `parse-root-config`, `select-platform`,
-  `resolve-builder`, `check-suite-cwd` *(test/randtest only — regression chdir's per-suite,
-  see structural note #1)*, `parse-suite-config` *(contract switches for regression — see
+  `resolve-builder`, `work-dir` *(test/randtest only — regression sources `work_dir`
+  per-suite from `parse-suite-config`'s `suite_dir`, see structural note #1)*, `parse-suite-config` *(contract switches for regression — see
   below)*, `load-model`
 - selection / expansion — `route-list-mode`, `list-test-names`, `select-tests`,
   `filter-reglvl` *(finally exercised by regression)*, `expand-sweep`, `run-preproc`
@@ -70,8 +70,8 @@ this file.
 - `derive-randtest-runs.seed_mode` → `resolve-seed.seed_mode` (persistent).
 - CLI edges: `rnd_new`/`rnd_last` removed; `rnd_cnt`, `rnd_rpt` added; `test_name` becomes
   a true required positional (no `default`); `--list` removed (randtest has no list mode).
-- `check-suite-cwd` wired identically to the test graph (same user-driven CWD posture —
-  see [01](01-cli-and-entry.md) and [07 settled 24](07-ambiguities-and-assumptions.md)).
+- `work-dir` wired identically to the test graph (same artefact-base posture —
+  `work_dir` = CWD; see [01](01-cli-and-entry.md) and [07 settled 24](07-ambiguities-and-assumptions.md)).
 - Everything else identical.
 
 ---
@@ -120,9 +120,13 @@ default-resolution lives in one obvious place.
 
 - Suite stream: `resolve-reg-config-path` → `parse-reg-config` → `parse-suite-config` →
   `select` directly (regression has no list mode — drop `route-list`/`list-names` from
-  this graph). `check-suite-cwd` is **not** wired: regression `chdir`s per-suite (see
-  structural note #1), so each `parse-suite-config` invocation already sees the correct
-  CWD without an upstream check.
+  this graph). The `work-dir` node is **not** wired (regression has no single CWD artefact base).
+  `work_dir` is instead sourced **per suite**: `parse-suite-config` already stamps
+  `suite_dir = path.parent` onto each test (spec [04h](specs/04h-parse-suite-config.md)),
+  which is the per-suite artefact base. That `suite_dir` feeds the same load-bearing `work_dir`
+  inputs the test graph drives from the `work-dir` node — `filelist`, `cc-build`, `cc-run`,
+  `sim-run`, `randseed`, `link-latest`, `ensure-logs` — so each suite's artefacts (and each
+  subprocess's `cwd=work_dir`) root on that suite's directory. See structural note #1.
 - Filter wiring: `reg_level`/`start_level` CLI edges connect to the existing
   `filter-reglvl` persistent inputs (which sit unwired in the test graph).
 - Suite stamping: `parse-suite-config` stamps the suite name into each test's identity
@@ -138,14 +142,18 @@ default-resolution lives in one obvious place.
 
 ## Structural notes
 
-1. **CWD chdir — resolved by the upstream rtl_buddy change.** Once each compile/sim runs
-   in its own subdirectory ([07](07-ambiguities-and-assumptions.md) item 17), regression no
-   longer needs to chdir per suite at all: subprocesses set up their own working dirs, and
-   suite-relative paths (model paths, filelists) are resolved to absolute paths during
-   parse. **`chdir-suite` is therefore dropped from the design below**, on the assumption
-   that the upstream change lands before this is implemented. If for any reason the
-   regression graph must be built before that upstream change, reinstate `chdir-suite` and
-   add a serialising contract to enforce sequential suite processing.
+1. **No process-wide `chdir` — `cwd=work_dir` per subprocess (Option B).** Regression never
+   `chdir`s the harness process. Each compile/sim subprocess runs with `cwd=work_dir` (spec
+   [03](specs/03-run-process.md)), where `work_dir` is the per-suite `suite_dir` (= the suite
+   config's directory, stamped by `parse-suite-config`). This is the concurrency-safe per-`exec`
+   equivalent of `do_rtl_regression`'s process-wide `os.chdir(suite_cfg_dir)` (`rtl_buddy.py:404`):
+   concurrent suites/tests can run in different `work_dir`s without racing a shared process CWD.
+   Every leaf path roots on the same per-suite `work_dir`, so suite-relative artefacts land in
+   the suite's directory without a `chdir`. **`chdir-suite` is therefore dropped** — and, unlike
+   the earlier plan, this no longer waits on the item-17 upstream change: `cwd=work_dir` is in the
+   design now. (Item 17's per-invocation *subdir* is still the eventual fix for the residual
+   *concurrency collisions* — the fixed non-verilator `simv` name and the shared `test.*` pointers —
+   but that is a collision concern, not a CWD-location one.)
 
 2. **Summary aggregation matches rtl_buddy exactly with no extra work.** rtl_buddy's
    `do_rtl_regression` (`rtl_buddy.py:371-438`) collects every (suite, test) result across
@@ -172,12 +180,13 @@ default-resolution lives in one obvious place.
    between modules and contracts is exactly what makes this possible — `unit` and `default`
    both deliver one dict-of-inputs per invocation in the same shape the module expects, so
    the module is contract-agnostic. The wiring on the input side is what changes: in test,
-   the `test_config_path` port is fed by `check-suite-cwd`'s resolved path; in regression, it's
-   fed by `parse-reg-config`'s default output. The module doesn't care which.
+   the `test_config` port is fed by the CLI `test_config` edge (parse-suite resolves it against
+   CWD itself); in regression, it's fed by `parse-reg-config`'s default output (one suite path per
+   suite). The module doesn't care which.
 
-   Build-time verification points: confirm the harness handles the `test_config_path` port
-   receiving a resolved `Path` from a `unit` upstream (`check-suite-cwd`) in test and from a
-   `default` upstream (`parse-reg-config`, one per suite) in regression — the same `Path`
+   Build-time verification points: confirm the harness handles the `test_config` port
+   receiving the raw locator from a CLI edge in test and from a
+   `default` upstream (`parse-reg-config`, one per suite) in regression — the same `str`/`Path`
    payload the module parses either way; and confirm that the
    `EndSentinel` propagation from a `default`-contract `parse-suite-config` correctly drains
    the downstream pipeline at end-of-stream (it will, because `default` returns

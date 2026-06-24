@@ -15,6 +15,14 @@ logs-directory bootstrap, and the trivial seed-mode derivation.
 This spec is split into one ticket per module — build them as independent units. All live
 in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
 
+`parse-root-config` ([04c](specs/04c-parse-root-config.md)) and `parse-suite-config`
+([04h](specs/04h-parse-suite-config.md)) each **define the raw `@serde` container they read** —
+`RootConfigFile`, and `SuiteConfigFile`/`TestConfigFile` respectively (pure serde shapes, no
+methods). These are read-once and never ride a graph edge, so they live with their consuming node
+rather than in the schema package ([idx-01](idx-01-schema.md)); the raw→runtime conversion happens
+inline in each node's `run`, and the runtime types
+it produces (`RootConfig`, `SuiteConfig`/`TestConfig`/`TestbenchConfig`) are owned by the schema specs.
+
 | Ticket | Module | What it does |
 |---|---|---|
 | [04a](specs/04a-discover-config-file.md) | `DiscoverConfigFileMod` | Walk up from CWD for a named config file. |
@@ -22,7 +30,7 @@ in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
 | [04c](specs/04c-parse-root-config.md) | `ParseRootConfigMod` | Deserialise `root_config.yaml` → `root_cfg`. |
 | [04d](specs/04d-select-platform.md) | `SelectPlatformMod` | Match `uname` → `platform_cfg`. |
 | [04e](specs/04e-resolve-builder.md) | `ResolveBuilderMod` | Pick active `RtlBuilderConfig` → `builder_cfg`. |
-| [04f](specs/04f-check-suite-cwd.md) | `CheckSuiteCwdMod` | Enforce the suite-directory CWD convention; emit `work_dir` (artefact-location provider). |
+| [04f](specs/04f-work-dir.md) | `WorkDirMod` | Zero-input artefact-base provider; emit `work_dir = Path.cwd().resolve()` (regression swaps in per-suite `suite_dir`). |
 | [04g](specs/04g-ensure-logs-dir.md) | `EnsureLogsDirMod` | Bootstrap the artefact dir under `work_dir` once; emit its resolved `Path`. |
 | [04h](specs/04h-parse-suite-config.md) | `ParseSuiteConfigMod` | Deserialise `tests.yaml` → `suite_cfg`. |
 | [04i](specs/04i-derive-seed-mode.md) | `DeriveSeedModeMod` | Map the two CLI booleans → `SeedMode`. |
@@ -39,7 +47,7 @@ in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
   - { name: parse-root-config,    class_name: ParseRootConfigMod }
   - { name: select-platform,      class_name: SelectPlatformMod }
   - { name: resolve-builder,      class_name: ResolveBuilderMod }
-  - { name: check-suite-cwd,      class_name: CheckSuiteCwdMod }
+  - { name: work-dir,             class_name: WorkDirMod }
   - { name: ensure-logs-dir,      class_name: EnsureLogsDirMod }
   - { name: parse-suite-config,   class_name: ParseSuiteConfigMod }
   - { name: derive-seed-mode,     class_name: DeriveSeedModeMod }
@@ -56,5 +64,5 @@ in `modules/rtl_buddy/setup.py`; tests in `modules/tests/test_setup.py`.
   [spec 11](specs/11-graph-and-manifests.md) and [spec 12](specs/12-end-to-end.md).
 - Every child's `modules/config.yaml` entry validates and resolves: `discover-config-file`,
   `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`,
-  `check-suite-cwd`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode` each map to
+  `work-dir`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode` each map to
   their `*Mod` class (see [11](specs/11-graph-and-manifests.md#acceptance-criteria)).

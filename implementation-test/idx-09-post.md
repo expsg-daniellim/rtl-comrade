@@ -3,7 +3,7 @@
 > Navigation only — not a build ticket. The buildable units are the child specs under [`specs/`](specs/).
 
 **Depends on:** spec 01 (schema), spec [01b](specs/01b-suite-schema.md) (`RoutePostMod`
-reads `ctx["test"].uvm`; `ParseUvmLogMod` reads `ctx["test"].uvm.max_warns` /
+reads `test.uvm`; `ParseUvmLogMod` reads `test.uvm.max_warns` /
 `.max_errors` — `UVMConfig` lives in 01b).
 **References:** [03 — Post-processing section](03-module-catalog.md), [07 settled 14, 15](07-ambiguities-and-assumptions.md).
 

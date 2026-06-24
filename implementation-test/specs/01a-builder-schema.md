@@ -1,6 +1,6 @@
 # Spec 01a: Builder schema (`RtlBuilderConfig`)
 
-**Depends on:** none. Can run in parallel with spec 01.
+**Depends on:** none. Can run in parallel with spec 01. Adds **no** entries to the package `__init__.py` — spec 01 owns the sole re-export surface — so it never edits a file another spec touches.
 **References:** [idx-01](../idx-01-schema.md) (umbrella), [07 settled 1](../07-ambiguities-and-assumptions.md).
 **Source:** `rtl_buddy/src/rtl_buddy/config/rtl.py:8-126` (`process_opts` + `RtlBuilderConfigOpts` + `RtlBuilderConfig`).
 

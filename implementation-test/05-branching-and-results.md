@@ -27,7 +27,7 @@ and additionally logs a `test_result` row; the continue-path goes to the next st
 
 Because a terminal item leaves the main line, **no downstream stage ever sees it** — which
 is why no module needs an "am I already done?" guard. Choosing the port is ordinary
-business logic (`rc == 0`, `level out of range`, `timed_out`), expressed as a named-port
+business logic (`rc == 0`, `level out of range`, `rc is None`), expressed as a named-port
 return — the framework's sanctioned mechanism, and statically analysable (all port names
 are string literals, so `definite_emits` holds).
 
@@ -214,7 +214,7 @@ A's sim has not yet read its artefacts. The collision is on any **shared-name** 
 ### What the graph names per-tag (collision removed)
 
 `build-compile-cmd` already computes `test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_",
-ctx["test"].get_name())` and derives per-tag paths, so most artefacts are already isolated:
+test.get_name())` and derives per-tag paths, so most artefacts are already isolated:
 
 | artefact | producer | naming | status |
 |---|---|---|---|
@@ -225,9 +225,9 @@ ctx["test"].get_name())` and derives per-tag paths, so most artefacts are alread
 | **`run.f`** | **`write-filelist`** | **was literal `run.f` → now `Path(work_dir) / f"run.{test_tag}.f"`** | **fixed by (B) + `work_dir`-rooted (R14)** |
 
 Change (B) is the filelist naming: `write-filelist` writes `run.{test_tag}.f` and emits that
-`Path` on its `filelist` port; `build-compile-cmd` already passes `filelist["filelist"]` to `-f`,
+`Path` on its `filelist` port; `build-compile-cmd` already passes `filelist.value` to `-f`,
 so no edge or downstream change is needed. `write-filelist` reverts to the plain `default`
-contract. On top of (B), R14 roots `run.f` and `obj_dir_<tag>/` on `check-suite-cwd`'s `work_dir`
+contract. On top of (B), R14 roots `run.f` and `obj_dir_<tag>/` on `work-dir`'s `work_dir`
 (both writers take it as a load-bearing persistent input), bringing them under the same
 artefact-location provider model as `logs/` so a relocation is a one-node change.
 
@@ -322,8 +322,7 @@ own watched event with `result`/`desc` kwargs added (the failure terminals that 
 | `parse-root-config` | malformed YAML / schema mismatch |
 | `select-platform` | no platform's `unames` matches |
 | `resolve-builder` | named builder missing on platform |
-| `check-suite-cwd` | `test_config` resolves outside CWD (parent ≠ CWD) — catches `-c /abs/elsewhere/tests.yaml`, `-c ../sibling/tests.yaml`, `-c subdir/tests.yaml`; also fires if the resolved path is not a file. Not wired in regression (chdir's per-suite) |
-| `parse-suite-config` | `tests.yaml` missing/malformed; testbench bind failure |
+| `parse-suite-config` | resolved `test_config` is missing/malformed (it resolves the locator against CWD and opens it — `-c <dir>/tests.yaml` is supported, just CWD-relative); testbench bind failure |
 | `select-tests` | named test not in suite |
 | `run-process` | subprocess launch failure (binary not on PATH, permission denied) — distinct from non-zero `rc`, which is per-test |
 
@@ -348,6 +347,8 @@ event name, so they emit `test_result` directly. Topology consequence: all 13 te
 **unwired** — there is no `fan-in`/`aggregate-results` to receive them (TODO #15 redesign). Adding
 a new failure terminal adds no edge; the module enriches its existing `log.error` and the
 watch-list name is added to `SummaryProcessor`'s `Config`.
+
+**Side-effect-leaf deferred failure (no verdict row).** `write-randseed` (spec [08d](specs/08d-write-randseed.md)) is **not** a terminal and carries no result verdict — the test's PASS/FAIL comes from `parse-log`. But it can fail at its own I/O (an `OSError`/`FileNotFoundError` writing `.randseed`, or a missing `HierInstanceSeed.txt` when the argv asks for it), which it **catches** and logs as `log.error("randseed_write_failed", key, path, exc_info)` — a deferred-exit driver (it flips `handler.failure`) but **not** a `SummaryProcessor` watch-list event, so it forces a non-zero exit without adding a summary row. The module still emits `randseed_done` regardless so `link-latest`'s join cannot dangle. This is the module catching its own error rather than leaning on the harness backstop (which is a fallback, not a contract).
 
 ### Per-test terminals that log `test_result` directly (the otherwise-silent paths)
 

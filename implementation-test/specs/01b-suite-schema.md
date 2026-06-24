@@ -1,10 +1,10 @@
 # Spec 01b: Suite / Test / UVM schema
 
-**Depends on:** spec [01c](01c-model-schema.md) (`TestConfig.model: ModelConfig | None` references the model type). Can run mostly in parallel — only the type annotation needs 01c's name.
+**Depends on:** none — runs fully in parallel with 01/01a/01c. Adds **no** entries to the package `__init__.py` — spec 01 owns the sole re-export surface — so it never edits a file another spec touches.
 **References:** [idx-01](../idx-01-schema.md) (umbrella), [07 settled 1, 8](../07-ambiguities-and-assumptions.md).
-**Source:**
-- `rtl_buddy/src/rtl_buddy/config/suite.py:1-88` (`SuiteConfigFile`, `SuiteConfig`).
-- `rtl_buddy/src/rtl_buddy/config/test.py:1-323` (`TestbenchConfig`, `TestConfig`, `TestConfigFile`).
+**Source** (this spec owns the runtime/value types only; the raw `SuiteConfigFile`/`TestConfigFile` are ported in [04h](04h-parse-suite-config.md)):
+- `rtl_buddy/src/rtl_buddy/config/suite.py:17-86` (`SuiteConfig` runtime).
+- `rtl_buddy/src/rtl_buddy/config/test.py:10-302` (`TestbenchConfig`, `TestConfig`).
 - `rtl_buddy/src/rtl_buddy/config/uvm.py:1-19` (`UVMConfig`).
 
 ## Before you start
@@ -20,7 +20,9 @@ Reimplement the `tests.yaml` schema natively so consumers (`select-tests`, `filt
 Two files in the schema package:
 
 - `modules/rtl_buddy/schema/uvm.py` — `UVMConfig` alone. Kept separate because `parse-uvm-log` (spec [09c](09c-parse-uvm-log.md)) is effectively its only consumer; the rest of the graph touches `TestConfig.uvm` only as an opaque presence/absence flag.
-- `modules/rtl_buddy/schema/suite.py` — `TestbenchConfig`, `TestConfigFile`, `TestConfig`, `SuiteConfigFile`, `SuiteConfig`. Imports `UVMConfig` from `uvm.py` for the `TestConfig.uvm: UVMConfig | None` annotation.
+- `modules/rtl_buddy/schema/suite.py` — `TestbenchConfig`, `TestConfig`, `SuiteConfig` (the runtime/value types that ride graph edges). Imports `UVMConfig` from `uvm.py` for the `TestConfig.uvm: UVMConfig | None` annotation. **No** `ModelConfig` import — the resolved model is not a `TestConfig` field (it rides the `model` edge), so `suite.py` does not depend on `model.py`.
+
+The raw `@serde` read-once containers — **`SuiteConfigFile`** and **`TestConfigFile`** (pure serde shapes) — are **not** in the schema package. They are read by `from_yaml` and immediately converted into the runtime types, so they never ride a graph edge; they are defined privately with their sole consumer, `parse-suite-config` (spec [04h](04h-parse-suite-config.md)), along with the raw→runtime conversion (done inline in its `run`, not a method on the raw type). This spec still specifies the **runtime shape** they produce (`TestConfig`/`SuiteConfig` below) so 04h has a target to build against; the raw field tables and the conversion sequence live in 04h.
 
 ### `UVMConfig` (`uvm.py`)
 
@@ -31,7 +33,7 @@ Per-test UVM report parsing configuration. Lives on `TestConfig.uvm`; if `None`,
 | `max_warns`   | `int`| (none)      | `0`     | Maximum `UVM_WARNING` count before the test fails.                 |
 | `max_errors`  | `int`| (none)      | `0`     | Maximum `UVM_ERROR` count before the test fails. (Fatal must be 0.)|
 
-Validation: `__post_init__` raises `ValueError` if either field is negative. Note this is `ValueError`, not `log.fatal` — UVMConfig is constructed during YAML deserialisation, where rtl_buddy's serde wraps the `ValueError` into its own error path. In this plan, the broad-`Exception` catch in `parse-suite-config` (spec [idx-04](../idx-04-setup.md)) converts the validation failure into `log.fatal`.
+Validation: `__post_init__` raises `ValueError` if either field is negative. Note this is `ValueError`, not `log.fatal` — UVMConfig is constructed during YAML deserialisation. Under pyserde the `ValueError` propagates **raw** through `from_yaml` (it is not wrapped into a `SerdeError`), so `parse-suite-config` (spec [04h](04h-parse-suite-config.md)) catches it in a dedicated `except ValueError` clause and converts the validation failure into `log.fatal("invalid_uvm_config")`.
 
 Source: `rtl_buddy/src/rtl_buddy/config/uvm.py:1-19`.
 
@@ -53,47 +55,21 @@ Methods:
 
 Source: `rtl_buddy/src/rtl_buddy/config/test.py:10-41`.
 
-### `TestConfigFile` (raw)
+### `TestConfigFile` (raw) — defined in `parse-suite-config`
 
-The serde-decorated type read straight from `tests.yaml`'s `tests:` list. Fields use `field(rename=...)` to bridge YAML names to Pythonic attribute names. Converted into a runtime `TestConfig` via `initialise(suite_dir)` (this plan drops rtl_buddy's eager `ModelConfigLoader.get_model(...)` call — see Notable divergence below).
-
-| field           | type                 | YAML rename | default  | notes                                                                                                          |
-|-----------------|----------------------|-------------|----------|----------------------------------------------------------------------------------------------------------------|
-| `name`          | `str`                | (none)      | required | Unique test identifier within the suite.                                                                       |
-| `desc`          | `str`                | (none)      | required | Human-readable description.                                                                                    |
-| `model`         | `str`                | (none)      | required | Model name to look up in `models.yaml`. Carried into runtime `TestConfig.model_name`.                          |
-| `model_path`    | `str`                | (none)      | required | Path to `models.yaml` (relative to suite dir). Resolved by `load-model` (spec [idx-05](../idx-05-selection-expansion.md)). |
-| `_reglvl`       | `int \| dict \| None`| `reglvl`    | (none)   | Regression level — uniform int, builder-keyed dict (with optional `default`), or omitted (→ `0`).              |
-| `pa`            | `dict \| None`       | `plusargs`  | `None`   | Plusargs dict (`{key: value}`); value may be `None` for bare-flag plusargs.                                    |
-| `pd`            | `dict \| None`       | `plusdefines`| `None`  | Plusdefines dict; same `None`-value semantics.                                                                 |
-| `uvm`           | `UVMConfig \| None`  | (none)      | `None`   | UVM config (see above); presence triggers `parse-uvm-log` post path.                                           |
-| `preproc_path`  | `str \| None`        | `preproc`   | `None`   | Path to preproc script. Deserialiser: `lambda data: data.get('path') if data is not None else None`.           |
-| `postproc_path` | `str \| None`        | `postproc`  | `None`   | Path to postproc script. Same deserialiser. **Not executed by this plan** ([07 settled 14](../07-ambiguities-and-assumptions.md)). |
-| `sweep_path`    | `str \| None`        | `sweep`     | `None`   | Path to sweep script. Same deserialiser.                                                                       |
-| `tb`            | `str`                | `testbench` | required | Testbench name; resolved to `TestbenchConfig` in `initialise()`.                                               |
-| `timeout`       | `int \| None`        | `sim_timeout`| `None`  | Per-test override of the default sim timeout (seconds).                                                        |
-
-`preproc_path`/`postproc_path`/`sweep_path` use a custom serde deserialiser that extracts `.path` from a YAML mapping (the YAML shape is `preproc: { path: foo.py }`, not `preproc: foo.py`). A YAML omission leaves the field `None`.
-
-`initialise(suite_dir, tbs) -> TestConfig`:
-
-1. `tb = tbs[self.tb]` — raise `KeyError` if testbench unknown (caught by `SuiteConfig.__init__` → `log.fatal`).
-2. Construct a `TestConfig` with all fields plus `suite_dir=suite_dir`, `model_name=self.model`, `model_path=self.model_path`, `model=None` (lazy — `load-model` fills it in later).
-
-Source: `rtl_buddy/src/rtl_buddy/config/test.py:304-323`.
+The serde-decorated type read straight from `tests.yaml`'s `tests:` list (a pure data shape) is **owned by `parse-suite-config`** (spec [04h](04h-parse-suite-config.md#raw-schema--conversion-owned-here)) — read-once, never on a graph edge. Its raw field table (the `field(rename=...)` YAML surface: `reglvl`, `plusargs`, `plusdefines`, `preproc`/`postproc`/`sweep`, `testbench`, `sim_timeout`) and the raw→runtime conversion (done inline in the node's `run` — rtl_buddy's `TestConfigFile.initialise`, ported as node-owned logic rather than a method) live there. This spec defines only the **runtime `TestConfig`** that conversion produces (below); the raw→runtime field mapping is documented alongside the raw table in 04h.
 
 ### `TestConfig` (runtime)
 
-The mutable per-test object that flows through `ctx["test"]` for the whole graph. Differs from rtl_buddy's `TestConfig` in three ways (see Notable divergences below).
+The mutable per-test object carried on the `test` edge for the whole graph. Differs from rtl_buddy's `TestConfig` in two ways (see Notable divergences below).
 
 | field            | type                | default                 | notes                                                                                                |
 |------------------|---------------------|-------------------------|------------------------------------------------------------------------------------------------------|
 | `name`           | `str`               | required                | From raw.                                                                                            |
 | `desc`           | `str`               | required                | From raw.                                                                                            |
-| `model_name`     | `str`               | required                | From raw (`model: str`). Renamed to avoid clash with the loaded `model` field below.                 |
+| `model`          | `str`               | required                | From raw (`model: str`, name unchanged). The YAML model **name** (a `str`); the resolved `ModelConfig` is **not** stored on `TestConfig` **on any edge** — it rides the separate `model` *edge* (`load-model` → `write-filelist`, spec [05e](05e-load-model.md)/[06b](06b-write-filelist.md)). The field and the edge share the name `model`: the field holds the name string, the edge carries the resolved object (rtl_buddy overwrote the field in place — this plan never does, see divergence 1). The one transient exception: the `sweep`/`preproc` hooks set this field to the resolved `ModelConfig` for the duration of their script `exec` (rtl_buddy parity — see specs [05f](05f-expand-sweep.md)/[06a](06a-run-preproc.md)) and restore the name string **before** emitting the edge, so every `test` edge still carries a `str`. |
 | `model_path`     | `str`               | required                | From raw. Path to `models.yaml`, relative to `suite_dir`.                                            |
-| `suite_dir`      | `Path`              | required                | Stamped by `parse-suite-config` (spec [idx-04](../idx-04-setup.md)). Resolves `model_path` for `load-model`. |
-| `model`          | `ModelConfig \| None`| `None`                 | Filled in by `load-model` (spec [idx-05](../idx-05-selection-expansion.md)). `None` until then.         |
+| `suite_dir`      | `Path`              | required                | Stamped by `parse-suite-config` (spec [04h](04h-parse-suite-config.md)). Resolves `model_path` for `load-model`. |
 | `_reglvl`        | `int \| dict \| None`| from raw               | Underlying storage; access via `get_reglvl(builder)`.                                                |
 | `pa`             | `dict \| None`      | from raw                | Mutable. `set_plusarg`/`set_plusargs` lazily initialise.                                             |
 | `pd`             | `dict \| None`      | from raw                | Mutable. `set_plusdefine`/`set_plusdefines` lazily initialise.                                       |
@@ -101,16 +77,18 @@ The mutable per-test object that flows through `ctx["test"]` for the whole graph
 | `preproc_path`   | `str \| None`       | from raw                |                                                                                                      |
 | `postproc_path`  | `str \| None`       | from raw                |                                                                                                      |
 | `sweep_path`     | `str \| None`       | from raw                |                                                                                                      |
-| `tb`             | `TestbenchConfig`   | required                | Bound from `tbs[raw.tb]` during `initialise()`.                                                      |
+| `tb`             | `TestbenchConfig`   | required                | Bound from `tbs[raw.tb]` during conversion (inline in `run`, spec [04h](04h-parse-suite-config.md)). |
 | `timeout`        | `int \| None`       | from raw                | Per-test override.                                                                                   |
 | `default_timeout`| `int`               | `60`                    | A field on `TestConfig` (default `60`), used by `get_timeout()` when `timeout is None`. Matches rtl_buddy's `default_timeout` field (`config/test.py:81`).            |
+| `key`            | `str`               | `""`                    | **Runtime-only** (not from YAML — never deserialized; the raw `TestConfigFile` has no `key`). The scheduled-test instance's own correlation identity, the field `keyed_join` reads (`keyed_field="key"`). **Populated to the test's `name` by `__post_init__`** when left unset, so every `TestConfig` is **born self-keyed** regardless of construction site (the 04h conversion, a sweep script building a fresh one, a unit test) — `select-tests` forwards it untouched. Refined downstream: re-suffixed per variant by `expand-sweep` (spec [05f](05f-expand-sweep.md), `= f"{parent.key}#{i}"`) and per run by `expand-runs` (spec [08a](08a-expand-runs.md), `#run` via `dataclasses.replace`). Distinct from `name`, which collides across sweep variants and run-ids. **Declared last** (with `default_timeout`) so its `= ""` default is legal after the required fields; the `""` is an "unset" sentinel `__post_init__` resolves — never observable post-construction. The `test` edge carries the bare `TestConfig` (no `KeyedValue` envelope) — see [02 — payload conventions](../02-payload-conventions.md). |
+
+`__post_init__`: `if not self.key: self.key = self.name` — populates the correlation key from the test name so every `TestConfig` is born self-keyed. The guard is **load-bearing**: `expand-runs` re-keys per run via `dataclasses.replace(test, key=nk)`, which re-runs `__init__`/`__post_init__` with a truthy `key`; an *unconditional* assignment would clobber `nk` back to `name` and break per-run keying. (This is the only `__post_init__` logic on `TestConfig`; `UVMConfig` has its own, for validation.)
 
 Methods:
 
 | signature                                | returns                                              | notes / log idiom                                                                                                                                         |
 |------------------------------------------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|
 | `get_name() -> str`                      | `self.name`                                          | trivial getter.                                                                                                                                           |
-| `get_model() -> ModelConfig \| None`     | `self.model`                                         | Returns `None` until `load-model` has run; callers in compile/sim paths can rely on it being set (filter happens upstream of those).                      |
 | `get_testbench() -> TestbenchConfig`     | `self.tb`                                            | trivial getter.                                                                                                                                           |
 | `get_plusarg(key) -> Any`                | `self.pa.get(key)`                                   | Raises `AttributeError` if `pa is None` — caller must check `get_plusargs() is not None` first (matches rtl_buddy's `vlog_sim.py:97-104` pattern).        |
 | `get_plusargs() -> dict \| None`         | `self.pa`                                            | trivial getter.                                                                                                                                           |
@@ -126,32 +104,18 @@ Methods:
 
 Source: `rtl_buddy/src/rtl_buddy/config/test.py:43-302`.
 
-### `SuiteConfigFile` (raw)
+### `SuiteConfigFile` (raw) — defined in `parse-suite-config`
 
-The serde-decorated type read straight from `tests.yaml`.
-
-| field         | type                       | YAML rename          | default  | notes                                                                                  |
-|---------------|----------------------------|----------------------|----------|----------------------------------------------------------------------------------------|
-| `filetype`    | `Literal['test_config']`   | `rtl-buddy-filetype` | required | Discriminator; serde raises on mismatch (caught by `parse-suite-config`'s broad catch).|
-| `testbenches` | `list[TestbenchConfig]`    | (none)               | required |                                                                                        |
-| `tests`       | `list[TestConfigFile]`     | (none)               | required |                                                                                        |
-
-Source: `rtl_buddy/src/rtl_buddy/config/suite.py:11-15`.
+The serde-decorated top-level type read straight from `tests.yaml` (`rtl-buddy-filetype` discriminator, `testbenches: list[TestbenchConfig]`, `tests: list[TestConfigFile]`) is **owned by `parse-suite-config`** (spec [04h](04h-parse-suite-config.md#raw-schema--conversion-owned-here)) — read-once, never on an edge. Its field table and the open→`from_yaml`→bind→convert sequence (inline in `run`) live there.
 
 ### `SuiteConfig` (runtime)
 
-Constructed by `parse-suite-config` (spec [idx-04](../idx-04-setup.md)) from a resolved `Path`. Holds the test dict keyed by name.
+Produced by `parse-suite-config` (spec [04h](04h-parse-suite-config.md)) and carried on the `suite_cfg` edge. A plain `@dataclass` holder of the test dict keyed by name plus its source path — **no parsing logic of its own** (the open→bind→convert sequence is `parse-suite-config`'s; that node constructs this holder).
 
 | field   | type                       | notes                                                                                            |
 |---------|----------------------------|--------------------------------------------------------------------------------------------------|
-| `path`  | `Path`                     | Resolved suite-config path (the one `check-suite-cwd` passed in).                                |
-| `tests` | `dict[str, TestConfig]`    | Built as `{test.name: test.initialise(suite_dir, tbs) for test in raw.tests}` where `suite_dir = path.parent`. |
-
-Constructor behaviour (`__init__(path)` in rtl_buddy, `parse-suite-config.run(path)` in this plan):
-
-1. Open + `from_yaml(SuiteConfigFile, ...)`. Any exception → `log.fatal(f'failed to load {path}: {e}')`. Mirrors `suite.py:28-32`.
-2. Build `tbs = {tb.get_name(): tb for tb in raw.testbenches}`. Any exception → `log.fatal(f'{path}: Testbench section malformed: {e}')`. Mirrors `suite.py:39-42`.
-3. Build `self.tests = {t.name: t.initialise(config_dir, tbs) for t in raw.tests}`. `KeyError` (unknown testbench in `t.tb`) → `log.fatal(f'{path}: Requested testbench missing')`. Any other exception → `log.fatal(f'{path}: Tests section malformed: {e}')`. Mirrors `suite.py:44-50`.
+| `path`  | `Path`                     | Resolved suite-config path (resolved by `parse-suite-config` from the `test_config` locator).         |
+| `tests` | `dict[str, TestConfig]`    | The per-test runtime objects keyed by `name`; built and populated by `parse-suite-config`.       |
 
 Methods:
 
@@ -165,33 +129,30 @@ Source: `rtl_buddy/src/rtl_buddy/config/suite.py:17-86`.
 
 ## Notable divergences from rtl_buddy
 
-1. **Lazy model loading** ([07 settled 8](../07-ambiguities-and-assumptions.md)). rtl_buddy `TestConfigFile.initialise` eagerly calls `ModelConfigLoader(model_path).get_model(self.model)` (`test.py:322`). This plan defers this to `load-model` (spec [idx-05](../idx-05-selection-expansion.md)), so `TestConfig.model` is `None` until that node fires. Consequence: the runtime `TestConfig` carries `model_name: str`, `model_path: str`, and `suite_dir: Path` so `load-model` can later resolve `suite_dir / model_path` and call `ModelConfigLoader(...).get_model(model_name)`.
-2. **Field rename `model` → `model_name`** on runtime `TestConfig` (raw stays `model` for YAML compat). **The rename is forced by lazy loading (divergence 1), not cosmetic.** rtl_buddy reuses the single attribute `TestConfig.model` for two non-coexisting lifecycle phases: the YAML string before `initialise`, overwritten in place by the loaded `ModelConfig` during eager `initialise`. This plan defers loading to `load-model` (spec [05e](05e-load-model.md)), so the name-string and the loaded object must **coexist** on the runtime object — `model_name: str` held from parse time, `model: ModelConfig | None` staying `None` until `load-model` fires. Two coexisting values need two names; keeping eager loading would remove the need for the rename.
-3. **`suite_dir` stamped on each test.** Recorded by `parse-suite-config` (spec [idx-04](../idx-04-setup.md) — see the existing "binding testbenches within-file, recording the suite directory" prose). Replaces rtl_buddy's `config_dir` argument to `initialise`, propagating the resolution context downstream rather than computing it at parse time.
+1. **Lazy model loading, off-object** ([07 settled 8](../07-ambiguities-and-assumptions.md)). rtl_buddy `TestConfigFile.initialise` eagerly calls `ModelConfigLoader(model_path).get_model(self.model)` (`test.py:322`), overwriting `TestConfig.model` in place with the loaded `ModelConfig`. This plan defers loading to `load-model` (spec [05e](05e-load-model.md)) **and keeps the resolved `ModelConfig` off `TestConfig` entirely** — it rides its own `model` keyed edge, `keyed_join`ed at `write-filelist`. So `TestConfig.model` keeps the same name as rtl_buddy's field but holds **only** the YAML name string on every edge — it is never overwritten with the resolved `ModelConfig`, and `TestConfig` is never in a "model not yet loaded" state (no `model: ModelConfig | None` field). It carries `model: str`, `model_path: str`, and `suite_dir: Path` so `load-model` can resolve `suite_dir / model_path` and look up `model`. (The `sweep`/`preproc` hooks set the field to the resolved `ModelConfig` *transiently*, only for the span of their script `exec` — so a drop-in hook script sees rtl_buddy's `test_cfg.model` view — and restore the name string before the edge is emitted; specs [05f](05f-expand-sweep.md)/[06a](06a-run-preproc.md). `load-model` is positioned ahead of the hooks precisely so the resolved model exists for that.)
+2. **`suite_dir` stamped on each test.** Recorded by `parse-suite-config` (spec [04h](04h-parse-suite-config.md)). Replaces rtl_buddy's `config_dir` argument to `initialise`, propagating the resolution context downstream rather than computing it at parse time.
 
 ## Tests (`modules/tests/test_suite_schema.py`)
 
-- **Round-trip.** Load an unmodified rtl_buddy `tests.yaml` (e.g. from `rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`); every test's name, desc, testbench, plusargs, plusdefines, reglvl, uvm, preproc/postproc/sweep paths, and timeout round-trip equal to rtl_buddy's `SuiteConfig(path).tests[name]`.
-- **YAML renames.** Each rename in the `TestConfigFile` table above produces a runtime field with the documented Pythonic name (a hand-written YAML hitting each rename produces the expected attribute).
-- **`preproc`/`postproc`/`sweep` path deserialiser.** YAML `preproc: { path: foo.py }` → `preproc_path == "foo.py"`; omitting `preproc:` → `preproc_path is None`; YAML `preproc: null` → `preproc_path is None`.
-- **`get_reglvl` resolution order.** Four cases: int `_reglvl` → that int regardless of builder; dict with builder key → that entry; dict with `default` only → default; `None` → `0`; dict missing both builder and `default` → `log.fatal` (caplog + bubbling-`typer.Exit`).
+These exercise the **runtime/value-type behaviour** owned by this spec — each constructs the schema types directly (no YAML parse). The parse-level tests (round-trip load of a real `tests.yaml`, `field(rename=...)` surface, the `preproc`/`postproc`/`sweep` deserialiser, testbench binding, and freshly-parsed lazy-model state) belong to `parse-suite-config`, which owns the raw types and the conversion — they live in `test_setup.py` (spec [04h](04h-parse-suite-config.md#tests)).
+
+- **`get_reglvl` resolution order.** Four cases on a directly-constructed `TestConfig`: int `_reglvl` → that int regardless of builder; dict with builder key → that entry; dict with `default` only → default; `None` → `0`; dict missing both builder and `default` → `log.fatal` (caplog + bubbling-`typer.Exit`).
 - **`get_timeout`.** `timeout=None` → `(60, False)`; `timeout=300` → `(300, True)`.
 - **Plusarg/plusdefine mutation.** `set_plusarg("FOO", 1)` on a test with `pa is None` produces `pa == {"FOO": 1}`; `set_plusargs({"A": 1, "B": 2})` merges; `get_plusarg` reads back.
-- **`UVMConfig` defaults and validation.** YAML `uvm: {}` → `max_warns == 0 == max_errors`; `max_warns: 5, max_errors: 2` round-trips; `max_warns: -1` → `ValueError` at construction (which `parse-suite-config`'s broad-exception catch converts to `log.fatal`).
-- **Testbench binding.** A `tests.yaml` with a test referencing a known testbench produces `test.tb` as that `TestbenchConfig` instance; referencing an unknown testbench → `parse-suite-config` calls `log.fatal`.
-- **Lazy model.** A freshly-`initialise`d `TestConfig` has `model is None`, `model_name` and `model_path` populated, `suite_dir` set to the parent of the loaded YAML path.
+- **`key` `__post_init__` and `replace` re-key.** A directly-constructed `TestConfig(name="alu", …)` (no `key` passed) has `key == "alu"` (populated by `__post_init__`); passing `key="x"` explicitly keeps it `"x"` (the guard does not clobber). `dataclasses.replace(test, key="alu#0#1")` returns a fresh object with `key == "alu#0#1"` (the `__post_init__` guard preserves the passed key — **not** reset to `name`) while sharing `pa`/`pd`/`tb` by reference (assert `replaced.tb is test.tb`) and leaving the original's `key` untouched.
+- **`UVMConfig` defaults and validation.** YAML `uvm: {}` → `max_warns == 0 == max_errors`; `max_warns: 5, max_errors: 2` round-trips; `max_warns: -1` → `ValueError` at construction (which `parse-suite-config`'s dedicated `except ValueError` clause converts to `log.fatal("invalid_uvm_config")`).
+- **`SuiteConfig`/`TestbenchConfig` getters.** A directly-constructed `SuiteConfig` (with a hand-built `tests` dict) answers `get_tests()`/`get_tests(name)`/`get_test_names()`/`get_path()` per the table (incl. the `log.fatal` on an unknown `test_name`); `TestbenchConfig.get_name()`/`get_filelist()` return their fields.
 
 ## Acceptance criteria
 
 - Tests pass.
-- Loading an unmodified rtl_buddy `tests.yaml` (e.g. from `rtl-buddy-proj-template/design/sandbox/verif`) produces `TestConfig` instances whose `get_*` methods return values equal to rtl_buddy's on the same input (modulo `get_model()` returning `None` instead of a `ModelConfig` — this plan is lazy).
-- Every downstream consumer spec (`select-tests`, `filter-reglvl`, `load-model`, `expand-sweep`, `run-preproc`, `write-filelist`, `build-compile-cmd`, `build-sim-cmd`, `route-post`, `parse-uvm-log`) references fields/methods by name (e.g. `ctx["test"].get_preproc_path()`, `ctx["test"].uvm.max_warns`, `ctx["test"].get_timeout()`) without forcing the implementer to open `rtl_buddy/src/rtl_buddy/config/{suite,test,uvm}.py`.
+- The runtime types (`TestConfig`, `SuiteConfig`, `TestbenchConfig`, `UVMConfig`) and their `get_*` methods behave per the tables above when constructed directly. (The drop-in load of an unmodified `tests.yaml` into these runtime types — via the raw `SuiteConfigFile`/`TestConfigFile` and the inline conversion — is exercised by `parse-suite-config`, spec [04h](04h-parse-suite-config.md), which owns the raw types and the `from_yaml` call.)
+- Every downstream consumer spec (`select-tests`, `filter-reglvl`, `load-model`, `expand-sweep`, `run-preproc`, `write-filelist`, `build-compile-cmd`, `build-sim-cmd`, `route-post`, `parse-uvm-log`) references fields/methods by name (e.g. `test.get_preproc_path()`, `test.uvm.max_warns`, `test.get_timeout()`) without forcing the implementer to open `rtl_buddy/src/rtl_buddy/config/{suite,test,uvm}.py`.
 
 ## Constraints
 
-- Preserve the YAML renames exactly (`reglvl`, `plusargs`→`pa`, `plusdefines`→`pd`, `preproc`/`postproc`/`sweep`→`*_path`, `testbench`→`tb`, `sim_timeout`→`timeout`, `rtl-buddy-filetype`). Do **not** Pythonify the on-disk names.
-- Rename `model` → `model_name` on the **runtime** `TestConfig` only; the raw `TestConfigFile` keeps `model: str` for YAML compatibility.
-- Load the model lazily: `TestConfig.model` is `None` until `load-model` (spec [05e](05e-load-model.md)) fires — do **not** eagerly construct a `ModelConfigLoader` here (the rtl_buddy `initialise`-time `get_model` call is deliberately dropped).
+- `model` is the runtime `TestConfig` field holding the YAML model-name string (name unchanged from raw `TestConfigFile.model: str` and from rtl_buddy's field). It holds **only** the name string — the resolved `ModelConfig` never lives on the object; it rides the separate `model` keyed edge (`load-model` → `write-filelist`). The field and the edge share the name `model`; what differs from rtl_buddy is that this plan never overwrites the field with the resolved object (divergence 1).
+- The model is resolved off-object: `TestConfig` is never in a "model not yet loaded" state, so it carries no nullable resolved-model field. It carries `model` (the name), `model_path`, and `suite_dir` so `load-model` (spec [05e](05e-load-model.md)) can resolve `suite_dir / model_path` later and emit the `ModelConfig` on its own `model` edge (the conversion that stamps these is `parse-suite-config`'s inline raw→runtime conversion, spec 04h — do **not** eagerly load a model anywhere).
 - `get_reglvl(builder)` resolution order is fixed: builder-keyed dict entry → `default` dict entry → uniform int → `0`. A malformed dict (no builder key and no `default`) must `log.fatal`.
 - `get_timeout()` returns `(self.timeout, True)` on a per-test override else `(self.default_timeout, False)`; `default_timeout` is a `TestConfig` field defaulting to `60` (rtl_buddy `config/test.py:81`).
 - `get_plusarg`/`get_plusdefine` raise `AttributeError` when `pa`/`pd` is `None` — preserve this; callers must guard with `get_plusargs() is not None` first.
@@ -204,3 +165,5 @@ YAML `field(rename=...)` targets are the **public surface** for downstream rtl_b
 `SuiteConfig.get_tests()` returns `dict_values` when `test_name` is omitted (rtl_buddy `suite.py:67`). This plan's `select-tests` (spec [idx-05](../idx-05-selection-expansion.md)) iterates and yields per-test — the type doesn't matter for that use, but if other callers index or `len()` the result, materialise to `list` first.
 
 `TestConfig.get_plusarg(key)` raises `AttributeError` if `pa is None`. Callers should guard with `get_plusargs() is not None` first (matches rtl_buddy `vlog_sim.py:97`). The two getter shapes are kept distinct to match rtl_buddy's public surface.
+
+`TestConfig` is a mutable dataclass, so `expand-runs` (spec [08a](08a-expand-runs.md)) can re-key a test per run with `dataclasses.replace(test, key=nk)` — a shallow copy that overrides `key` only and shares `pa`/`pd`/`tb`/`tb.filelist` by reference (cheap, and safe because the sole in-place mutator, `run-preproc` spec [06a](06a-run-preproc.md), runs strictly upstream). `replace` reconstructs via `__init__`; the underscore field `_reglvl` is a normal init field, so it round-trips. `key` is runtime-only — set to `name` at construction and refined by the fan-outs, never read from or written to YAML (the raw `TestConfigFile`, owned by [04h](04h-parse-suite-config.md), has no `key`).

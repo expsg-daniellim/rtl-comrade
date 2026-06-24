@@ -5,7 +5,7 @@
 **Depends on:** spec 03 (run-process), spec 06 (write-filelist), spec
 [01a](specs/01a-builder-schema.md) (`BuildCompileCmdMod` consumes `RtlBuilderConfig` methods),
 spec [01b](specs/01b-suite-schema.md) (`BuildCompileCmdMod` reads
-`ctx["test"].get_name()`/`get_plusdefines()`).
+`test.get_name()`/`get_plusdefines()`).
 **References:** [03 — Reusable subprocess core section](03-module-catalog.md), [04 — keyed_join paragraph](04-pipeline-and-contracts.md).
 
 ## Goal

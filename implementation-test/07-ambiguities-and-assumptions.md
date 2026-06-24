@@ -23,7 +23,7 @@ informational.
    are added after that point. `seed`/`log`/`err`/`randseed_path` travel as
    `sim_cmd = {key, seed, log, err, randseed_path}` emitted by `sim-build`.
    `write-randseed` is a 3-port `keyed_join` (`ctx`, `proc`, `sim_cmd`) that assembles
-   `test_run = {key, test, run_id, rc, timed_out, log, err, randseed_path}` once; all
+   `test_run = {key, test, run_id, rc, log, err, randseed_path}` once; all
    post-sim nodes receive `test_run`. The only `keyed_join`s are `cc-int` (2 ports) and
    `randseed` (3 ports). Everywhere else is single-source lockstep on `default`.
 
@@ -42,18 +42,21 @@ informational.
 
 5. **Post-sim trio (atomic split).** `write-randseed` writes `.randseed` and holds the
    sim-side `keyed_join`; `link-latest` forces the `test.*` symlinks (distinct functionality
-   per directive); `interpret-sim` is pure routing on `timed_out`. The `.log`/`.err` files
+   per directive); `interpret-sim` is pure routing on `proc.rc is None`. The `.log`/`.err` files
    are written by `run-process` itself — there is no separate "logs writer" module.
 
-6. **Post-parse split.** `route-post` (classifies on `ctx["test"].uvm`) + `parse-log`
+6. **Post-parse split.** `route-post` (classifies on `test.uvm`) + `parse-log`
    (`VlogPost`) + `parse-uvm-log` (`UvmVlogPost`). The two parsers are atomic and
    independently reusable; the uvm/plain decision lives in one router.
 
 7. **List-mode split.** `route-list-mode` + `list-test-names` + a pure `select-tests`.
    `--list` is routing off the main line, not an `if list:` inside `select-tests`.
 
-8. **`load-model` is lazy** (per-test, after `filter`). Accepted as a behavioural upgrade —
-   skipped tests no longer pay for (or fail on) their `models.yaml`.
+8. **`load-model` is lazy** (per-test, after `filter`, but before the `sweep`/`preproc` hooks).
+   Accepted as a behavioural upgrade — skipped tests no longer pay for (or fail on) their
+   `models.yaml`. It sits ahead of the hooks (not just before `write-filelist`) so each hook can
+   expose the resolved `ModelConfig` to its script as `test_cfg.model`, matching rtl_buddy's
+   suite-load resolution order (`config/suite.py:46` → `test.py:320-323`, before sweep/preproc).
 
 9. **No scheduling in modules.** Branches are named output ports; correlation lives in
    `keyed_join`; persistent config lives in the `default` contract. Terminal re-convergence
@@ -156,21 +159,32 @@ informational.
     shape needed. (Number kept at 22 to preserve cross-references — sits in Settled
     despite being numerically out of order.)
 
-24. **CWD posture for `test`/`randtest`: user-driven + startup check** (settled
-    2026-06-02). Parity with `rtl_buddy`: `do_cmd_test` never `chdir`s (only
-    `do_rtl_regression` does, per-suite at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:404`).
-    The user is expected to `cd` into the suite directory before invoking
-    `rtl-comrade test` / `randtest`, matching the `rtl_buddy/AGENTS.md` validation
-    example (`cd .../verif && python -m rtl_buddy test basic`). A new setup node
-    [`check-suite-cwd`](03-module-catalog.md) (spec
-    [04](idx-04-setup.md)) enforces the convention by failing fast with
-    `log.fatal` if `(Path.cwd() / test_config).resolve().parent != Path.cwd().resolve()`
-    or if the resolved file doesn't exist. This catches `-c /abs/elsewhere/tests.yaml`,
-    `-c ../sibling/tests.yaml`, and `-c subdir/tests.yaml` — three monorepo-mistarget
-    cases that the existing `parse-suite-config` log.fatal (file-missing only) does
-    not catch. Wired in test and randtest graphs; **not** wired in regression (regression
-    `chdir`s per-suite via `parse-reg-config` → `parse-suite-config`). The "CWD
-    assumptions preserved" implementation note below is now explicit, not silent.
+24. **Artefact base for `test`/`randtest`: the CWD, via a dedicated `work-dir` node** (settled
+    2026-06-02; revised through Option B to the final split 2026-06-22). rtl_buddy splits this policy:
+    `do_cmd_test` never `chdir`s and works in — writes to — the ambient CWD, while `do_rtl_regression`
+    `os.chdir`s into each suite's directory (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:404`). **Design
+    history (two rejected drafts):** (a) a `check-suite-cwd` node first *enforced* a user-driven
+    convention with a CWD-mismatch `log.fatal` — rejected, it forbids the conventional
+    `-c <dir>/tests.yaml`; (b) "Option B" then had a `resolve-suite-config` node emit
+    `work_dir = resolved.parent` (the config's directory), giving `test` the *regression* policy —
+    rejected because it contradicts "run here, output here" (it relocates output to the config's dir)
+    and conflated two unrelated concerns (resolving a config path vs. providing the artefact base).
+    **Final:** the artefact base is the **CWD**, provided by a zero-input
+    [`work-dir`](specs/04f-work-dir.md) node (`work_dir = Path.cwd().resolve()`) — faithful to
+    `do_cmd_test`. `-c <dir>/tests.yaml` only *locates* the config; artefacts stay in CWD and relative
+    config paths are CWD-relative (conventional, the user's responsibility) — no auto-relocation, no
+    CWD-mismatch abort. The path resolution **and** the missing-file failure fold into
+    [`parse-suite-config`](specs/04h-parse-suite-config.md) (it opens the file and derives
+    `suite_dir = path.parent` anyway), so there is no separate resolve node. The leaf modules root on the
+    provided `work_dir` rather than reading the ambient CWD: `run-process` launches with `cwd=work_dir`
+    (concurrency-safe per-`exec` equivalent of regression's process-wide `chdir`; spec
+    [03](specs/03-run-process.md)), `write-filelist` roots the `.f` contents on it
+    ([06b](specs/06b-write-filelist.md)), `write-randseed` reads `HierInstanceSeed.txt` from it
+    ([08d](specs/08d-write-randseed.md)), and `link-latest` places the `test.*` symlinks under it
+    ([08e](specs/08e-link-latest.md)). For `test`/`randtest` `work_dir == CWD`, so those four are
+    identity vs rtl_buddy; they are load-bearing for **regression**, which wires **no** `work-dir` node
+    and instead feeds the same `work_dir` ports a per-suite `suite_dir` (`parse-suite-config`'s
+    `path.parent`) — the per-`exec` form of `do_rtl_regression`'s per-suite `chdir`.
 
 25. **`.`-prepend to `$PATH`: dedicated `prepend-cwd-path` setup node** (settled
     2026-06-02). `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` mutates
@@ -203,17 +217,19 @@ informational.
 26. **Artefact-location provenance, `logs/` ownership, lifecycle, and `--logs-dir`**
     (settled 2026-06-02; **provenance centralised 2026-06-16**). Artefact location is
     decided in **one** place and flows as data — the leaf writers do not re-derive it from the
-    ambient CWD. [`check-suite-cwd`](03-module-catalog.md) emits the validated base directory
-    `work_dir`; [`ensure-logs-dir`](03-module-catalog.md) (spec [04](idx-04-setup.md),
+    ambient CWD. The zero-input [`work-dir`](03-module-catalog.md) node emits the artefact base
+    `work_dir = Path.cwd().resolve()`; [`ensure-logs-dir`](03-module-catalog.md) (spec [04](idx-04-setup.md),
     a `unit` node) roots the artefact directory on it — `(Path(work_dir) /
     logs_dir).mkdir(parents=True, exist_ok=True)` once at startup; no other module calls `mkdir`
     — and **emits the resolved directory `Path`** on its `logs_dir` port. That `Path` fans out
     as a persistent input to the composers `build-compile-cmd` / `build-sim-cmd` / `resolve-seed`,
     which **join filenames onto it** and never touch the process CWD. So the rtl_buddy
-    "everything is CWD-relative" assumption lives **only** in the `check-suite-cwd → ensure-logs-dir`
-    provider pair; relocating artefacts (a future `--work-dir`, or regression's per-suite root) is
-    a change there alone. **Default location** is `<work_dir>/logs` — `work_dir` is today the
-    suite dir (= CWD, asserted by `check-suite-cwd`), giving parity with
+    "everything is CWD-relative" assumption is fully replaced by the `work_dir` provider: every leaf
+    *path* roots on `work_dir`, and `run-process` roots the subprocess *`cwd`* on it (spec
+    [03](specs/03-run-process.md)), so relocating artefacts (a future `--work-dir`, or regression's
+    per-suite root) is a change to the `work-dir` provider alone — the leaf modules never read the
+    ambient CWD (see Settled item 24). **Default location** is `<work_dir>/logs` — `work_dir` is the
+    CWD for `test`/`randtest` (and the per-suite `suite_dir` for regression), giving parity with
     `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:55-59` (where `VlogSim.__init__` lazily
     `makedirs`'s a hard-coded `"logs"` literal per test). This plan lifts that into one setup node so
     (a) no downstream writer needs `mkdir`, (b) the directory is materialised once per invocation
@@ -231,7 +247,7 @@ informational.
     `logs_dir` as a first-run-required input (no Python default), so they block on it before building
     a command and the directory provably exists before any subprocess redirects into it. No relay
     token is needed for the `mkdir`, which restores `ensure-logs-dir`'s atomicity (it depends only on
-    `work_dir`, which it reads). `ensure-logs` takes `work_dir` from `check-cwd` as **load-bearing**
+    `work_dir`, which it reads). `ensure-logs` takes `work_dir` from the `work-dir` node as **load-bearing**
     data (read to root the directory, so a missing edge fails edge-validation — superseding the
     former ordering-only `_cwd` token, whose defaulted-port exemption per item 21 could silently
     skip the guard).
@@ -245,7 +261,7 @@ informational.
 
 27. **`git-status` recorded + summary rendered by a logging plugin** (settled 2026-06-10;
     resolves TODO #15). Decision: **include** git state, as a logging concern, not a
-    graph-routed payload. A new [`git-status`](03-module-catalog.md) `unit` setup node calls
+    graph-routed payload. A new [`git-status`](03-module-catalog.md) zero-input setup node calls
     `log.info("git_state", branch=..., sha=..., dirty=...)` once. The results summary is no
     longer produced by a graph sink: `fan-in-results` and `aggregate-results` are **removed**,
     the 13 terminal ports are left **unwired**, each terminal node calls
@@ -319,8 +335,8 @@ informational.
 
 23. **Async subprocess hardening.** Design finalised in
     [`specs/03-run-process.md`](specs/03-run-process.md) (2026-05-31): SIGQUIT-to-group
-    with `_TIMEOUT_GRACE_S` SIGKILL escalation, `rc=4444` sentinel with `timed_out` set
-    independently, and explicit cancellation cleanup under `asyncio.shield`. **What
+    with `_TIMEOUT_GRACE_S` SIGKILL escalation, `rc = None` as the timeout indicator
+    (replacing rtl_buddy's `4444` sentinel), and explicit cancellation cleanup under `asyncio.shield`. **What
     remains to verify empirically** before the module is built: that the default
     `ThreadedChildWatcher` (Python 3.8+) reaps without explicit `waitpid`; that
     `os.killpg` race-with-already-exited (`ProcessLookupError`) actually surfaces under
@@ -354,7 +370,7 @@ informational.
   files still load drop-in); and (b) keeps the builders dict (`rtl_builder_cfgs`) on a thin
   runtime `RootConfig` and resolves the builder in a dedicated node — `resolve-builder` reads
   `root_cfg.rtl_builder_cfgs` keyed by `platform_cfg.builder` (CLI `--builder` override wins),
-  not `platform.initialise`. The runtime `PlatformConfig` is therefore never built. See
+  not `platform.initialise`. rtl_buddy's resolved runtime platform object (its `PlatformConfig`, returned by `platform.initialise`) is therefore never built — the raw `PlatformConfig` rides the edge directly. See
   [spec 01 — `root.py` schema](specs/01-shared-schema.md#rootpy-schema-detailed) and
   [04e](specs/04e-resolve-builder.md).
 - **`select-platform` is first-match, not last-match.** rtl_buddy iterates every platform with
@@ -363,10 +379,16 @@ informational.
   *first* match. Overlapping `unames` are a misconfiguration, so the choice is deliberate;
   recorded here so the parity claim is explicit. Single-platform-per-`uname` configs (the norm)
   are unaffected.
-- **`load-model` is lazy** (settled 8) — broken `models.yaml` in a skipped test no longer
-  errors early. Departs from rtl_buddy's eager load inside `TestConfigFile.initialise`
+- **`load-model` is lazy and off-object** (settled 8) — broken `models.yaml` in a skipped test no
+  longer errors early. Departs from rtl_buddy's eager load inside `TestConfigFile.initialise`
   (`rtl_buddy/src/rtl_buddy/config/test.py:320-323`, which calls `ModelConfigLoader.get_model`
-  while building every `TestConfig`).
+  while building every `TestConfig`). The resolved `ModelConfig` is **not** stored on `TestConfig`
+  (the `model` field holds only the name string — spec [01b](specs/01b-suite-schema.md)): `load-model`
+  emits the resolved object on its own `model` keyed edge, which rides through `sweep`/`preproc`/`gate-pre`
+  (each `keyed_join`s it; the hooks also read its value to expose as `test_cfg.model` to their scripts)
+  to `write-filelist`, where it is consumed (specs [05e](specs/05e-load-model.md)/[05f](specs/05f-expand-sweep.md)/[06a](specs/06a-run-preproc.md)/[06b](specs/06b-write-filelist.md)).
+  This keeps `TestConfig` from ever being in a "resolved model not yet loaded" state, consistent with how
+  `filelist`/`simv`/`seed`/`timeout` already flow as their own edges rather than as test fields.
 - **Compile output is persisted to files** (settled 12) as a side effect of the redirect.
   Departs from rtl_buddy's in-memory capture `subprocess.run(run_cmd, capture_output=True)`
   (`rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:163`); this plan redirects stdout/stderr to the
@@ -398,7 +420,7 @@ informational.
   (settled 26; centralised 2026-06-16). `rtl_buddy` hard-codes `"logs"`
   (`tools/vlog_sim.py:55`) and every tool composes paths relative to the ambient CWD; this plan
   keeps the same default but (a) accepts a user-supplied subdir **name**, and (b) decides the
-  artefact *location* once — `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots `logs/`
+  artefact *location* once — the zero-input `work-dir` node emits `work_dir` (= CWD), `ensure-logs-dir` roots `logs/`
   on it and emits the resolved directory `Path`. The composition sites (`build-compile-cmd`,
   `build-sim-cmd`, `resolve-seed` REPLAY) take that resolved `Path` as a persistent input and
   join filenames onto it — they no longer carry the CWD-relative assumption. This deliberately
@@ -424,25 +446,23 @@ informational.
   first-class tags would need a manifest + loader extension.
 - **Config objects cross edges as live Python objects** (`RootConfig`, `TestConfig`, …). Fine
   for asyncio; would need to be picklable only if the harness ever went multiprocess.
-- **CWD assumptions — `logs/` centralised, others still leaf-relative.** `root_config.yaml`
-  discovery walks up from CWD; `run.f` (`write-filelist`) and `obj_dir_<tag>/`
-  (`build-compile-cmd`) remain CWD-relative — same as rtl_buddy, and tracked for the broader
-  per-invocation-subdir work under [item 17](07-ambiguities-and-assumptions.md). The user must
-  `cd` into the suite directory before invoking `rtl-comrade test`/`randtest`; the
-  `check-suite-cwd` node enforces this (see Settled item 24). The **artefact (`logs/`) directory
-  is no longer leaf-CWD-relative**: `check-suite-cwd` emits `work_dir`, `ensure-logs-dir` roots
-  `logs/` on it once at startup and emits the resolved `Path`, and the composers join onto that
-  (Settled 26) — so artefact location is one data source, not a per-writer convention. Extending
-  the same provider model to `run.f`/`obj_dir` is the natural next step (item 17).
-  `regression`'s per-suite `chdir` feeds a different `work_dir` to `ensure-logs-dir`.
+- **CWD assumptions — artefact location fully centralised on `work_dir`.** `root_config.yaml`
+  discovery still walks up from CWD. Everything else now roots on the `work_dir` provider
+  (the zero-input `work-dir` node, = CWD for test/randtest): `ensure-logs-dir` roots `logs/`, `write-filelist`
+  roots both the `run.<tag>.f` filename **and its contents**, `build-compile-cmd` roots `obj_dir_<tag>/`,
+  `write-randseed` reads `HierInstanceSeed.txt` from it, `link-latest` places the `test.*` symlinks under
+  it, and `run-process` launches every subprocess with `cwd=work_dir` so tool-internal scratch lands there
+  too (Settled 24/26). So the user is **not required** to `cd` into the suite dir — `-c <dir>/tests.yaml`
+  works from anywhere; the conventional `cd <suite> && rtl-comrade test` simply makes `work_dir == CWD`.
+  The residual tracked under [item 17](07-ambiguities-and-assumptions.md) is **concurrency collision**
+  (the fixed non-verilator `simv` name, the shared `test.*` pointer names), not CWD-relativity.
+  `regression`'s per-suite `chdir` feeds a different `work_dir` to the same providers.
 - **`exec`'d preproc/sweep scripts reproduced as-is.** `run-preproc`/`expand-sweep` emit the
   mutated/expanded `TestConfig` in `ctx`, not via hidden global mutation.
 - **`keyed_join` cannot hold a persistent config port** (it joins every port by key). That's
   why `sim_cmd = {key, seed, log, err, randseed_path}` is a dedicated keyed payload from
   `sim-build` to the `randseed` join rather than a persistent config port. `simv` needs no
   port at all — it is set by `build-compile-cmd` and carried in `ctx`.
-- **`discover-config-file` is reusable for the harness's own config.** The harness already
-  locates `rtl_comrade_config.yaml` by walking up the tree — worth sharing one implementation.
 
 ## Process note
 

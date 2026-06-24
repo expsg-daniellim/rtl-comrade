@@ -5,8 +5,11 @@
 **Depends on:** spec 01 (schema), spec [01a](specs/01a-builder-schema.md) (builder schema —
 `FilterRegLvlMod` consumes `RtlBuilderConfig`), spec [01b](specs/01b-suite-schema.md)
 (`SuiteConfig` / `TestConfig` / `UVMConfig` — every module here reads from
-`ctx["test"]`), spec [01c](specs/01c-model-schema.md) (`LoadModelMod` constructs
-`ModelConfigLoader`).
+`test`), spec [01c](specs/01c-model-schema.md) (the runtime `ModelConfig` —
+`LoadModelMod` **defines** the raw `ModelConfigFileItem`/`ModelConfigFile` it reads and
+unrolls the read/name-lookup (rtl_buddy's `ModelConfigLoader`) into its `run`, constructing
+the frozen `ModelConfig` from the matched item, since neither rides a graph edge; see
+[idx-01](idx-01-schema.md)).
 **References:** [03 — Selection/expansion section](03-module-catalog.md).
 
 ## Goal
@@ -24,7 +27,7 @@ in `modules/rtl_buddy/setup.py` (continuing from spec 04); tests in
 | [05b](specs/05b-list-test-names.md) | `ListTestNamesMod` | Print test names (list-mode sink). |
 | [05c](specs/05c-select-tests.md) | `SelectTestsMod` | Enter the per-test stream. |
 | [05d](specs/05d-filter-reglvl.md) | `FilterRegLvlMod` | Keep/skip by regression level. |
-| [05e](specs/05e-load-model.md) | `LoadModelMod` | Lazily attach the `ModelConfig`. |
+| [05e](specs/05e-load-model.md) | `LoadModelMod` | Lazily resolve the `ModelConfig` onto its own `model` edge. |
 | [05f](specs/05f-expand-sweep.md) | `ExpandSweepMod` | Expand into N sweep variants. |
 
 **Manifest** — these six modules append to the `rtl_buddy/setup.py` block in `modules/config.yaml`

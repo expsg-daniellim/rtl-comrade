@@ -5,14 +5,14 @@
 **Depends on:** spec 03 (run-process), spec 07 (compile cycle), spec
 [01a](specs/01a-builder-schema.md) (`ResolveSeedMod` and `BuildSimCmdMod` consume
 `RtlBuilderConfig` methods), spec [01b](specs/01b-suite-schema.md) (`BuildSimCmdMod` reads
-`ctx["test"].get_timeout()`, `get_plusargs()`, `get_plusdefines()`).
+`test.get_timeout()`, `get_plusargs()`, `get_plusdefines()`).
 **References:** [03 — Run expansion + Simulation sections](03-module-catalog.md), [04 — keyed_join paragraph](04-pipeline-and-contracts.md).
 
 ## Goal
 
 Build the per-run simulate leg: fan out per run-id, resolve the seed, assemble the sim
-argv (with log paths in `command` and `seed`/`log`/`randseed_path` carried in `sim_cmd`), run the subprocess,
-then write `.randseed` (the second keyed_join), force the `test.*` symlinks, and route
+argv (with log paths in `command` and `seed`/`randseed_path`/`argv` carried in the cohesive `randseed` message), run the subprocess,
+then write `.randseed` (a `keyed_join` side-effect leaf), force the `test.*` symlinks, and route
 on timeout.
 
 This spec is split into one ticket per module — build them as independent units. All live
@@ -23,7 +23,7 @@ in `modules/rtl_buddy/sim.py`; tests in `modules/tests/test_sim_cycle.py`.
 | [08a](specs/08a-expand-runs.md) | `ExpandRunsMod` | Fan out per run-id. |
 | [08b](specs/08b-resolve-seed.md) | `ResolveSeedMod` | Resolve the seed (NEW/DEFAULT/REPLAY). |
 | [08c](specs/08c-build-sim-cmd.md) | `BuildSimCmdMod` | Assemble sim argv + timeout. |
-| [08d](specs/08d-write-randseed.md) | `WriteRandseedMod` | Write `.randseed`; assemble `test_run` (`keyed_join`). |
+| [08d](specs/08d-write-randseed.md) | `WriteRandseedMod` | Write `.randseed`; emit `randseed_done` (`keyed_join` side-effect leaf). |
 | [08e](specs/08e-link-latest.md) | `LinkLatestMod` | Force the `test.*` symlinks. |
 | [08f](specs/08f-interpret-sim.md) | `InterpretSimMod` | Route on timeout. |
 
@@ -46,7 +46,7 @@ post chain (`09a`–`09c`) appends to the same block:
 
 - Each child ticket's tests pass.
 - Integration coverage lives in the child tickets' own acceptance criteria (`.log`/`.err`/
-  `.randseed` + `test.*` symlinks on a passing run; `rc=4444` → `timeout` port on a
+  `.randseed` + `test.*` symlinks on a passing run; `rc is None` → `timeout` port on a
   sleep-and-timeout run); the sim leg is wired and exercised end-to-end in
   [spec 11](specs/11-graph-and-manifests.md) and [spec 12](specs/12-end-to-end.md).
 - Every child's `modules/config.yaml` entry validates and resolves: `expand-runs`,

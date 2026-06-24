@@ -9,7 +9,7 @@ Read `docs/modules/implementation.md` — how the harness infers input ports fro
 
 ## Goal
 
-Run `uname`, match it against each configured platform, and emit the active `platform_cfg` — the **raw `PlatformConfigFile`** (no `initialise` call), which carries the declared `builder` name that [`resolve-builder`](04e-resolve-builder.md) resolves against `root_cfg.rtl_builder_cfgs`.
+Run `uname`, match it against each configured platform, and emit the active `platform_cfg` — the **raw `PlatformConfig`** (no `initialise` call), which carries the declared `builder` name that [`resolve-builder`](04e-resolve-builder.md) resolves against `root_cfg.rtl_builder_cfgs`.
 
 ## Surface
 
@@ -24,7 +24,11 @@ outputs:  default → platform_cfg
 ```python
 class SelectPlatformMod:
     def run(self, root_cfg):
-        uname = subprocess.run(["uname"], capture_output=True, text=True).stdout.strip()
+        try:
+            uname = subprocess.run(["uname"], capture_output=True, text=True).stdout.strip()
+        except FileNotFoundError as e:
+            log.fatal("uname_unavailable", exc_info=e)
+
         for platform_cfg in root_cfg.platforms:
             if uname in platform_cfg.unames:
                 return ("default", platform_cfg)
@@ -36,14 +40,14 @@ class SelectPlatformMod:
 1. Run `uname`: `uname = subprocess.run(["uname"], capture_output=True, text=True).stdout.strip()`.
 2. Iterate `root_cfg.platforms` in declaration order; the **first** platform whose `unames` list contains `uname` is the match — emit `("default", platform_cfg)` and return.
    **Divergence:** rtl_buddy iterates all platforms with no `break` (`config/root.py:111-115`), so on overlapping `unames` the *last* match wins; this plan returns on the first. Deliberate (overlapping `unames` are a misconfiguration); recorded in [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy).
-3. **Failure — no platform matches.** Falling out of the loop means none matched: `log.fatal(f"cannot find cfg-platform for uname {uname}")` (harness exits 1). A `FileNotFoundError` from the `uname` subprocess is surprising at this layer and is left to propagate uncaught.
+3. **Failure — no platform matches.** Falling out of the loop means none matched: `log.fatal(f"cannot find cfg-platform for uname {uname}")` (harness exits 1). A `FileNotFoundError` from the `uname` subprocess (no `uname` binary) is **caught** and converted to its own `log.fatal("uname_unavailable", …)` — the module catches its own errors rather than relying on the harness backstop.
 
 ## Deliverables
 
 In `modules/rtl_buddy/setup.py`:
 
 - `SelectPlatformMod` — runs `uname` (subprocess), matches against each platform's `unames`, picks one; critical-logs if no match; emits `platform_cfg`.
-  **Failure handling**: post-loop check — no platform matched → `log.fatal(f"cannot find cfg-platform for uname {uname}")` (mirrors `rtl_buddy/src/rtl_buddy/config/root.py:117-118`). `uname` subprocess failure is surprising at this layer; let `FileNotFoundError` propagate.
+  **Failure handling**: post-loop check — no platform matched → `log.fatal(f"cannot find cfg-platform for uname {uname}")` (mirrors `rtl_buddy/src/rtl_buddy/config/root.py:117-118`). A `FileNotFoundError` from the `uname` subprocess is **caught** → `log.fatal("uname_unavailable", …)`; the module handles its own errors, the harness backstop is a fallback, not relied on.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/config/root.py:107-118` — `uname` subprocess + platform-match loop in `RootConfig.__init__`.
 
 **Manifest** — append to the `- file: rtl_buddy/setup.py` block in `modules/config.yaml` (opened by [`04a`](04a-discover-config-file.md); append, don't re-create):
@@ -60,7 +64,7 @@ In `modules/tests/test_setup.py`. Fixtures: `monkeypatch` on `subprocess.run` to
 - `uname` matches only a later platform → emits `("default", <that platform_cfg>)` (iterates in declaration order).
 - `uname` is present in two platforms' `unames` → emits the **first** in declaration order (boundary: first-match wins).
 - `uname` matches no platform → no-match `log.fatal` → `pytest.raises(typer.Exit)`.
-- `subprocess.run(["uname"])` raises `FileNotFoundError` (no `uname` binary) → propagates uncaught → `pytest.raises(FileNotFoundError)` (boundary: surprising tool-missing error).
+- `subprocess.run(["uname"])` raises `FileNotFoundError` (no `uname` binary) → caught → `log.fatal("uname_unavailable", …)` → `pytest.raises(typer.Exit)` (assert via `caplog`).
 
 ## Acceptance criteria
 
@@ -73,4 +77,4 @@ In `modules/tests/test_setup.py`. Fixtures: `monkeypatch` on `subprocess.run` to
 
 - `unit` contract; emit on the string-literal `default` port.
 - Match in declaration order — the **first** platform whose `unames` list contains the `uname` output wins. This is a deliberate divergence from rtl_buddy (which iterates all platforms with no `break`, so the *last* match wins on overlapping `unames`); see [07 — Notable divergences](../07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy).
-- No platform matches → `log.fatal` (harness exit 1), never a port-routed result. A `FileNotFoundError` from the `uname` subprocess is surprising at this layer — let it propagate uncaught.
+- No platform matches → `log.fatal` (harness exit 1), never a port-routed result. A `FileNotFoundError` from the `uname` subprocess is caught and converted to `log.fatal("uname_unavailable", …)` — the module catches its own errors rather than relying on the harness backstop.

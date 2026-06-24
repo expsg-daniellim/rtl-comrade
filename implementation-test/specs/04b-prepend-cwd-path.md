@@ -16,7 +16,7 @@ Prepend `.` to `os.environ["PATH"]` so a CWD-local simulator is discoverable by 
 I/O surface and skeleton, mirrored from the [03 catalog](../03-module-catalog.md) entry — the catalog is the design view, this is the build view; update both when behaviour changes.
 
 ```
-contract: unit
+contract: default
 inputs:   —  (zero-input; runs once)
 outputs:  default → bool   (always True; receiver uses it only for sequencing)
 ```
@@ -38,13 +38,13 @@ class PrependCwdPathMod:
    (idempotent).
 3. Emit `("default", True)` — a sequencing token only; receivers branch on ordering, not on the boolean.
 
-No failure path: dict mutation cannot meaningfully fail, and `unit` guarantees the single invocation that makes the process-wide `os.environ` mutation safe.
+No failure path: dict mutation cannot meaningfully fail, and the zero-input surface guarantees the single invocation that makes the process-wide `os.environ` mutation safe — the harness breaks a node's run loop after one invocation when the module has no input ports to wait for (`len(inputs) == 0`), independent of the contract.
 
 ## Deliverables
 
 In `modules/rtl_buddy/setup.py`:
 
-- `PrependCwdPathMod` — prepends `.` to `os.environ["PATH"]` so a CWD-local simulator (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, which does the same once at CLI bootstrap; here it is an explicit graph node so the responsibility is visible. Zero input ports; runs once via `unit`. Emits `True` on `default`; the graph wires it to each `run-process`'s `env_ready` port, with the edge marked **`required: true`** and `env_ready` in the consumer's `persistent_inputs` — so the first subprocess blocks until the PATH mutation is done (hard ordering) and the once-emitted token is replayed on later invocations (see [07 settled 25](../07-ambiguities-and-assumptions.md)). See [Algorithm](#algorithm) for the numbered steps.
+- `PrependCwdPathMod` — prepends `.` to `os.environ["PATH"]` so a CWD-local simulator (`simv`, `verilator`) is discoverable by subsequent subprocess invocations. Mirrors `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102`, which does the same once at CLI bootstrap; here it is an explicit graph node so the responsibility is visible. Zero input ports — that is what makes it run once (the harness stops a node after a single invocation when it has no inputs to wait for). Uses the `default` contract: with no input ports `default` and `unit` run identically, so `unit` would assert a one-shot guarantee it does not actually provide here — `default` is the minimal honest choice. Emits `True` on `default`; the graph wires it to each `run-process`'s `env_ready` port, with the edge marked **`required: true`** and `env_ready` in the consumer's `persistent_inputs` — so the first subprocess blocks until the PATH mutation is done (hard ordering) and the once-emitted token is replayed on later invocations (see [07 settled 25](../07-ambiguities-and-assumptions.md)). See [Algorithm](#algorithm) for the numbered steps.
   **Failure handling**: none. Dict mutation cannot meaningfully fail; no failure port, no log call.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:100-102` — the `PATH` prepend in `RtlBuddy.__init__`.
 
@@ -73,7 +73,7 @@ In `modules/tests/test_setup.py`. Fixtures: `monkeypatch.setenv("PATH", …)` to
 
 ## Constraints
 
-- `unit` contract, zero-input — runs exactly once; the single invocation is what makes the process-wide `os.environ["PATH"]` mutation safe. Do **not** wire it for repeated execution.
+- `default` contract, zero-input — runs exactly once because it has no input ports, not because of the contract (the harness stops a node after one invocation when there is nothing to wait for; with zero ports `default` and `unit` behave identically, so `default` is chosen as the minimal contract — `unit` would claim a guarantee it does not supply here); the single invocation is what makes the process-wide `os.environ["PATH"]` mutation safe. Do **not** wire it for repeated execution.
 - Idempotent: prepend `.` only if it is **not already present anywhere** in the split `PATH`; otherwise leave `PATH` untouched.
 - No failure path — dict mutation cannot meaningfully fail; no failure port, no log call.
 - Emit `("default", True)` as a sequencing token only; the boolean is never branched on — the consuming `run-process` uses it purely for edge ordering.

@@ -33,7 +33,7 @@ class ResolveBuilderMod:
 
 ## Algorithm
 
-1. Pick the name: `name = builder or platform_cfg.builder` — the CLI override wins; an empty string falls back to the platform's declared builder name (`PlatformConfigFile.builder`, a `str | None`).
+1. Pick the name: `name = builder or platform_cfg.builder` — the CLI override wins; an empty string falls back to the platform's declared builder name (`PlatformConfig.builder`, a `str | None`).
 2. Look it up in the **root** builders dict: `builder_cfg = root_cfg.rtl_builder_cfgs.get(name)`. The dict (keyed by builder name) lives on `RootConfig`, not on the platform — mirroring rtl_buddy, where `platform.initialise(builders, …)` resolves `builders[self.builder]` / `builders[builder_override]` against `RootConfig.rtl_builder_cfgs` (`root.py:94,115`, `platform.py:63-84`).
 3. If found, emit `("default", builder_cfg)`.
 4. **Failure — unknown / none configured.** If `builder_cfg is None` (the name is missing — an unknown override, a `None` platform builder with no override, or no builders configured at all): `log.fatal(f"named builder {name} not in configured builders {sorted(root_cfg.rtl_builder_cfgs)}")` (harness exits 1). rtl_buddy raises `typer.BadParameter`; this plan uses `log.fatal` for uniform exit semantics.

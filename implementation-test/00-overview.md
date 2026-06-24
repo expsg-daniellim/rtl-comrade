@@ -52,12 +52,16 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
    the TODO #15 redesign — see [05](05-branching-and-results.md).
 
 4. **`compile` and `sim` are one reusable module.** `run-process` — `run(self, command,
-   timeout=None) -> {rc, timed_out, stdout_path, stderr_path}` — is the single subprocess
+   timeout=None) -> {rc, stdout_path, stderr_path}` (`rc is None` ⟺ timed out) — is the single subprocess
    primitive, wired twice. It **redirects** stdout/stderr to caller-supplied files (paths in
    `command`), so partial output survives a timeout and memory stays bounded.
 
 5. **Reimplement rtl_buddy, preserve only the config surface.** Modules reimplement
-   `rtl_buddy`'s behaviour natively rather than wrapping its classes; only the config-file
+   `rtl_buddy`'s behaviour natively rather than wrapping its classes; **rtl_buddy is not a
+   runtime dependency** — do not `import` it, subclass it, or call into it from
+   `modules/rtl_buddy/`. The `Compatibility source:` file:line citations are read-only
+   references to reimplement from (and the oracle the parity tests compare against), never
+   import targets; see the [specs README preamble](specs/README.md). Only the config-file
    schema (`root_config.yaml`, `tests.yaml`, `models.yaml` field names/structure) is kept
    identical, so existing config files run drop-in. This is what frees the monolithic
    `RootConfig`/`SuiteConfig` loaders to be split into atomic nodes (`discover-config-file`,
@@ -75,8 +79,9 @@ concurrency. The chosen strategy (see [02](02-payload-conventions.md)):
   **die at `build-sim-cmd`**. There is **no `ctx` and no `test_run`** — the post-sim region
   consumes `test` + `proc` + `randseed` directly. Cohesive multi-field messages (`command`,
   `proc`, `randseed`) keep named fields (Shape 2). No `result` field ever enters a main-line edge.
-- A stable **correlation key** is stamped at each fan-out (`select`→`name`,
-  `sweep`→`name#i`, `runs`→`name#i#run`) and carried on **every** edge.
+- A stable **correlation key** defaults to `name` (`TestConfig.__post_init__`, so the test is
+  born self-keyed) and is refined at each fan-out (`sweep`→`name#i`, `runs`→`name#i#run`),
+  carried on **every** edge.
 - **Joins are by key, pervasively.** Every node consuming ≥2 keyed edges is a `keyed_join`
   correlating them by key — the command-builders, the interpret/route/parse nodes, and the
   multi-edge gates; config singletons reach them as `persistent_inputs`.
@@ -95,7 +100,7 @@ The whole graph in one Mermaid flowchart, rebuilt from the authoritative edge li
 reviewer can trace any one type without another crossing it:
 
 Edges are labelled with the payload(s) they carry (multi-edge lockstep edges as `a + b`); the
-work-spine payloads (`test`, `simv`, `run_id`, `seed`, `timeout`, `command`, `proc`, `filelist`,
+work-spine payloads (`test`, `model`, `simv`, `run_id`, `seed`, `timeout`, `command`, `proc`, `filelist`,
 `randseed`, `randseed_done`, `result`) are plain dicts whose shapes are pinned in [02](02-payload-conventions.md), while
 config/setup edges carry concrete classes (`RootConfig`, `RtlBuilderConfig`, `SuiteConfig`, …)
 or scalars (`Path`, `bool`, `str`). Colours:
@@ -108,7 +113,7 @@ or scalars (`Path`, `bool`, `str`). Colours:
   by `prepend-path`'s `env_ready` token wired **directly** to each `run-process` (edge
   `required: true` + `env_ready` persistent — `required` blocks the first subprocess until PATH is
   set, `persistent` replays the once-emitted token); the `logs/` `mkdir` is ordered by the
-  `logs_dir` **data** edge — `check-cwd` emits `work_dir`, which `ensure-logs` roots `logs/` on
+  `logs_dir` **data** edge — the zero-input `work-dir` node emits `work_dir` (= CWD), which `ensure-logs` roots `logs/` on
   (emitting the resolved directory `Path` to the path composers) and which `filelist` / `cc-build`
   root `run.<tag>.f` / `obj_dir_<tag>/` on directly;
 - **green** — CLI subcommand options (rounded nodes).
@@ -122,19 +127,23 @@ flowchart TD
   route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select<br/>(fan-out)"]
   select m2@-->|"test"| filter["filter"]
   filter m3@-->|"test"| load_model["load-model"]
-  load_model m4@-->|"test"| sweep["sweep<br/>(fan-out)"]
-  sweep m5@-->|"test"| preproc["preproc"]
-  preproc m6@-->|"test"| gate_pre["gate-pre"]
-  gate_pre m7@-->|"test"| filelist["filelist"]
+  load_model m4@-->|"test"| sweep["sweep<br/>(keyed_join · fan-out)"]
+  load_model m4b@-->|"model"| sweep
+  sweep m5@-->|"test"| preproc["preproc<br/>(keyed_join)"]
+  sweep m5b@-->|"model"| preproc
+  preproc m6@-->|"test"| gate_pre["gate-pre<br/>(keyed_join)"]
+  preproc m6b@-->|"model"| gate_pre
+  gate_pre m7@-->|"test"| filelist["filelist<br/>(keyed_join)"]
+  gate_pre m7b@-->|"model"| filelist
   filelist m8@-->|"test + filelist"| cc_build["cc-build<br/>(keyed_join)"]
   cc_build m9@-->|"command"| cc_run["cc-run<br/>(run-process)"]
   cc_build m10@-->|"test + simv"| cc_int["cc-int<br/>(keyed_join)"]
   cc_run m11@-->|"proc"| cc_int
   cc_int m12@-->|"test + simv"| gate_comp["gate-comp<br/>(keyed_join)"]
-  gate_comp m13@-->|"test + simv"| runs["runs<br/>(fan-out)"]
+  gate_comp m13@-->|"test + simv"| runs["runs<br/>(keyed_join · fan-out)"]
   runs m14@-->|"test + run_id + simv"| seed["seed<br/>(keyed_join)"]
   seed m15@-->|"test + run_id + simv + seed"| sim_build["sim-build<br/>(keyed_join)"]
-  sim_build m16@-->|"command + timeout"| sim_run["sim-run<br/>(run-process)"]
+  sim_build m16@-->|"command + timeout"| sim_run["sim-run<br/>(keyed_join · run-process)"]
   sim_build m17@-->|"randseed"| randseed["write-randseed<br/>(keyed_join · leaf)"]
   sim_build m17b@-->|"randseed"| link_latest["link-latest<br/>(keyed_join · terminal)"]
   sim_build m17c@-->|"test"| sim_int["sim-int<br/>(keyed_join)"]
@@ -164,8 +173,8 @@ flowchart TD
 
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
-  select_platform c3@-->|"platform_cfg:PlatformConfigFile"| resolve_builder["resolve-builder"]
-  check_cwd["check-cwd"] c4@-->|"test_config_path:Path"| parse_suite["parse-suite"]
+  select_platform c3@-->|"platform_cfg:PlatformConfig"| resolve_builder["resolve-builder"]
+  work_dir_node["work-dir"] e12@-->|"work_dir:Path"| ensure_logs["ensure-logs"]
   parse_root c5@-. "root_cfg:RootConfig" .-> sweep
   parse_root c6@-. "root_cfg:RootConfig" .-> preproc
   resolve_builder c7@-. "builder_cfg:RtlBuilderConfig" .-> filter
@@ -173,18 +182,21 @@ flowchart TD
   resolve_builder c9@-. "builder_cfg:RtlBuilderConfig" .-> seed
   resolve_builder c10@-. "builder_cfg:RtlBuilderConfig" .-> sim_build
   seed_mode["seed-mode"] c11@-. "seed_mode:SeedMode" .-> seed
-  parse_suite c12@-. "suite_cfg:SuiteConfig" .-> route_list
+  parse_suite["parse-suite"] c12@-. "suite_cfg:SuiteConfig" .-> route_list
 
   prepend_path["prepend-path"] e1@-->|"env_ready:bool"| cc_run
   prepend_path e2@-->|"env_ready:bool"| sim_run
-  check_cwd e3@-->|"work_dir:Path"| ensure_logs["ensure-logs"]
-  check_cwd e4@-->|"work_dir:Path"| filelist
-  check_cwd e5@-->|"work_dir:Path"| cc_build
+  work_dir_node e3@-->|"work_dir:Path"| filelist
+  work_dir_node e4@-->|"work_dir:Path"| cc_build
+  work_dir_node e5@-->|"work_dir:Path"| cc_run
+  work_dir_node e9@-->|"work_dir:Path"| sim_run
+  work_dir_node e10@-->|"work_dir:Path"| randseed
+  work_dir_node e11@-->|"work_dir:Path"| link_latest
   ensure_logs e6@-->|"logs_dir:Path"| cc_build
   ensure_logs e7@-->|"logs_dir:Path"| sim_build
   ensure_logs e8@-->|"logs_dir:Path"| seed
 
-  c_test_config(["test_config"]) g1@-->|"test_config:str"| check_cwd
+  c_test_config(["test_config"]) g1@-->|"test_config:str"| parse_suite
   c_logs_dir(["logs_dir (name)"]) g2@-->|"logs_dir:str"| ensure_logs
   c_builder(["builder"]) g3@-->|"builder:str"| resolve_builder
   c_test_name(["test_name"]) g4@-->|"test_name:str"| select
@@ -204,7 +216,7 @@ flowchart TD
   classDef term fill:#f5f5f5,stroke:#888888,stroke-dasharray:4 3;
   classDef cli fill:#eef7ee,stroke:#2da44e;
   class select,sweep,runs fanout;
-  class cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
+  class filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class TERM term;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
@@ -216,18 +228,19 @@ flowchart TD
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
-  class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
+  class m1,m2,m3,m4,m4b,m5,m5b,m6,m6b,m7,m7b,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
   class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 termEdge;
-  class c1,c2,c3,c4,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
-  class e1,e2,e3,e4,e5,e6,e7,e8 envEdge;
+  class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
+  class e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12 envEdge;
   class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;
   class gs1 gitEdge;
 ```
 
 There is **no fan-in node** — the 13 terminal ports are unwired and the summary is a logging
 concern (TODO #15). Under the split, most main-line nodes are `keyed_join` (they correlate ≥2
-keyed edges by key); only the single-keyed-input nodes (`filter`, `load-model`, `sweep`,
-`preproc`, `gate-pre`) stay `default`, with `select`/`sweep`/`runs` the fan-out generators.
+keyed edges by key); only the single-keyed-input nodes (`filter`, `load-model`) stay `default`
+(`sweep`/`preproc`/`gate-pre` became `keyed_join` once the `model` edge began riding alongside
+`test` through them), with `select`/`sweep`/`runs` the fan-out generators.
 
 ## Why this maps cleanly
 

@@ -7,6 +7,10 @@ Each module ticket's **Tests** section uses the shared test-harness fixtures —
 Sibling graphs (`randtest`, `regression`) are **not deliverables** of this plan. [`../08-sibling-graphs.md`](../08-sibling-graphs.md) is a modularity analysis showing the extension cost: 1 new module for `randtest`, 2 new modules + 1 contract switch for `regression`, with the rest of the catalogue reused unchanged.
 
 > **Compatibility sources.** Each module ticket carries a `Compatibility source:` bullet naming the rtl_buddy file:line it mirrors — copied from the inline `Source:` line in [`../03-module-catalog.md`](../03-module-catalog.md). All ranges are anchored to rtl_buddy **`v1.4.0`** (commit `a69d962`; see [`../00`](../00-overview.md)). If rtl_buddy is updated, re-verify every cited range in the catalog and propagate the change here.
+>
+> A `Compatibility source:` is a **read-only reference to reimplement from, and the oracle the parity tests compare against — never an import target.** rtl_buddy is **not** a runtime dependency of `modules/rtl_buddy/`: do not `import` rtl_buddy, subclass its classes, or call into it (e.g. `from rtl_buddy.tools.vlog_post import UvmVlogPost`). Reimplement the cited behaviour natively in the target file ([`../00` design philosophy 5](../00-overview.md#design-philosophy)). The fixture-by-fixture parity checks (e.g. 09b/09c) run rtl_buddy as an external oracle in the **test** only — wiring it into the module would make those checks vacuously green.
+>
+> **Skeletons are illustrative.** The `## Surface` Python skeleton in each ticket sketches the `run(...)` shape and dataflow; helper calls in it (e.g. `parse_uvm_summary(...)`, `uvm_verdict(...)`, `scan_pass_fail(...)`) are **stand-ins for the inline logic the `## Algorithm` / `## Deliverables` sections specify** — implement that logic, do not treat the names as symbols to import. The only pre-existing symbols a skeleton calls are those a `Depends on:` ticket delivers (e.g. `make_fail_result` from [01](01-shared-schema.md)); everything else is yours to write.
 
 ## Module package layout (pinned)
 
@@ -14,8 +18,8 @@ The package name and file grouping below are **pinned**, not a suggestion — ev
 
 | File | Modules (plugin name → class) |
 |---|---|
-| `modules/rtl_buddy/schema/` (package) | config dataclasses only: `builder.py` (01a), `suite.py` (01b), `uvm.py` (01b), `model.py` (01c), `root.py` (01), `results.py` (01), `seed_mode.py` (01), `run_depth.py` (01). No plugins. |
-| `modules/rtl_buddy/setup.py` | `discover-config-file`, `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`, `check-suite-cwd`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode`, `git-status`, `route-list-mode`, `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep` |
+| `modules/rtl_buddy/schema/` (package) | edge-borne runtime/value dataclasses only: `builder.py` (01a), `suite.py` (01b), `uvm.py` (01b), `model.py` (01c), `root.py` (01), `results.py` (01), `seed_mode.py` (01), `run_depth.py` (01). No plugins. The raw read-once serde types (`RootConfigFile`; `SuiteConfigFile`/`TestConfigFile`; `ModelConfigFileItem`/`ModelConfigFile`) are **not** here — they live in `setup.py` with their consuming node (04c/04h/05e). |
+| `modules/rtl_buddy/setup.py` | `discover-config-file`, `prepend-cwd-path`, `parse-root-config`, `select-platform`, `resolve-builder`, `work-dir`, `ensure-logs-dir`, `parse-suite-config`, `derive-seed-mode`, `git-status`, `route-list-mode`, `list-test-names`, `select-tests`, `filter-reglvl`, `load-model`, `expand-sweep`. Also defines the module-private raw serde types their parse nodes read: `RootConfigFile` (parse-root-config, 04c), `SuiteConfigFile`/`TestConfigFile` (parse-suite-config, 04h), `ModelConfigFileItem`/`ModelConfigFile` (load-model, 05e; which reads the items and constructs `ModelConfig`, unrolling rtl_buddy's `ModelConfigLoader`). |
 | `modules/rtl_buddy/build.py` | `run-preproc`, `write-filelist`, `build-compile-cmd`, `run-process`, `interpret-compile` |
 | `modules/rtl_buddy/sim.py` | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`, `route-post`, `parse-log`, `parse-uvm-log` |
 | `modules/rtl_buddy/control.py` | `early-stop-gate` |
@@ -32,8 +36,8 @@ The full manifest (`modules/config.yaml`) with every `class_name` is in [`../06-
 |---|---|---|---|
 | 01 | [core-schema](01-shared-schema.md) | — | `RootConfig` + `TestResults` + `SeedMode` (the core of the schema package; builder/suite/model are 01a/01b/01c — family overview [idx-01](../idx-01-schema.md)). |
 | 01a | [builder-schema](01a-builder-schema.md) | — | `RtlBuilderConfig` + `RtlBuilderConfigOpts` (schema family; consumed by 05, 07, 08). |
-| 01b | [suite-schema](01b-suite-schema.md) | 01c (for `TestConfig.model` annotation) | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (schema family; consumed by 04, 05, 06, 07, 08, 09). |
-| 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` + `ModelConfigLoader` (schema family; consumed by 05, 06). |
+| 01b | [suite-schema](01b-suite-schema.md) | — | `SuiteConfig` + `TestConfig` + `TestbenchConfig` + `UVMConfig` (schema family; consumed by 04, 05, 06, 07, 08, 09). |
+| 01c | [model-schema](01c-model-schema.md) | — | `ModelConfig` (frozen value object; schema family; consumed by 05, 06; the raw `ModelConfigFile` is defined in load-model 05e, which also unrolls rtl_buddy's `ModelConfigLoader` read/lookup). |
 | 02 | [any-contract-and-fan-in](02-any-contract-and-fan-in.md) | — | `AnyContract` only (plain, reusable; **unwired** in `test`). Build only if another graph needs it. |
 | 03 | [run-process](03-run-process.md) | 06a (creates `build.py`) | The reusable subprocess star. Appends to the shared `build.py` 06a creates (file-creation ordering only; no logic dependency). |
 | 04 | group index [idx-04](../idx-04-setup.md) | 01 | Setup chain + suite parse + seed-mode derivation. Children 04a–04i. |
@@ -52,7 +56,7 @@ Specs 04–10 group several modules each; each is split into one buildable ticke
 
 | Group | Children |
 |---|---|
-| 04 (setup) | [04a discover-config-file](04a-discover-config-file.md) · [04b prepend-cwd-path](04b-prepend-cwd-path.md) · [04c parse-root-config](04c-parse-root-config.md) · [04d select-platform](04d-select-platform.md) · [04e resolve-builder](04e-resolve-builder.md) · [04f check-suite-cwd](04f-check-suite-cwd.md) · [04g ensure-logs-dir](04g-ensure-logs-dir.md) · [04h parse-suite-config](04h-parse-suite-config.md) · [04i derive-seed-mode](04i-derive-seed-mode.md) |
+| 04 (setup) | [04a discover-config-file](04a-discover-config-file.md) · [04b prepend-cwd-path](04b-prepend-cwd-path.md) · [04c parse-root-config](04c-parse-root-config.md) · [04d select-platform](04d-select-platform.md) · [04e resolve-builder](04e-resolve-builder.md) · [04f work-dir](04f-work-dir.md) · [04g ensure-logs-dir](04g-ensure-logs-dir.md) · [04h parse-suite-config](04h-parse-suite-config.md) · [04i derive-seed-mode](04i-derive-seed-mode.md) |
 | 05 (selection/expansion) | [05a route-list-mode](05a-route-list-mode.md) · [05b list-test-names](05b-list-test-names.md) · [05c select-tests](05c-select-tests.md) · [05d filter-reglvl](05d-filter-reglvl.md) · [05e load-model](05e-load-model.md) · [05f expand-sweep](05f-expand-sweep.md) |
 | 06 (prep) | [06a run-preproc](06a-run-preproc.md) · [06b write-filelist](06b-write-filelist.md) |
 | 07 (compile cycle) | [07a build-compile-cmd](07a-build-compile-cmd.md) · [07b interpret-compile](07b-interpret-compile.md) |
@@ -60,7 +64,7 @@ Specs 04–10 group several modules each; each is split into one buildable ticke
 | 09 (post) | [09a route-post](09a-route-post.md) · [09b parse-log](09b-parse-log.md) · [09c parse-uvm-log](09c-parse-uvm-log.md) |
 | 10 (control/summary) | [10a early-stop-gate](10a-early-stop-gate.md) · [10b git-status](10b-git-status.md) · [10c summary-handler](10c-summary-handler.md) |
 
-Within a group the children are independent except for shared-file ordering and the explicit `Depends on:` lines each child carries: 06b feeds 07a; 07a sets `ctx["simv"]` for 07b and 08c; 08c feeds 08d, which feeds 08e/08f; 10a/10b emit the events 10c collects.
+Within a group the children are independent except for shared-file ordering and the explicit `Depends on:` lines each child carries: 06b feeds 07a; 07a emits the `simv` edge for 07b and 08c; 08b defines the `run_suffix` helper that 08c also calls; 08c feeds 08d, which feeds 08e/08f; 10a/10b emit the events 10c collects.
 
 ### Shared files
 
@@ -75,6 +79,6 @@ Several specs write into the same Python file. The **first** spec listed *create
 
 `modules/rtl_buddy/control.py` (10a), `graphs/log/summary.py` (10c), and `contracts/any.py` (02) each have a single writer. The schema specs (01/01a/01b/01c) share the `modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`, `uvm.py`, `model.py`, `root.py`, `results.py`, `seed_mode.py`), so coordinate the package layout, not a single file. Test files are per spec group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`, `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that group.
 
-Specs 01, 01a, 01b, 01c, and 02 can all run in parallel from the start (01b has a type-annotation dependency on 01c but no logic dependency; 02 has no external blocker). Spec 03 (run-process) appends to the shared `build.py` that 06a creates, so it depends on 06a for that file (file-creation ordering only — no logic dependency). Specs 04, 05, 06, 09, 10 (and their children) can run in parallel after their listed deps. Specs 07 and 08 share `run-process` (spec 03) and reuse modules from 04/05/06. Schema fan-in: 01a → 05/07/08; 01b → 04/05/06/07/08/09; 01c → 05/06.
+Specs 01, 01a, 01b, 01c, and 02 can all run in parallel from the start (01b and 01c are now fully independent — the split-edge model removed 01b's `TestConfig.model` annotation; 02 has no external blocker). Spec 03 (run-process) appends to the shared `build.py` that 06a creates, so it depends on 06a for that file (file-creation ordering only — no logic dependency). Specs 04, 05, 06, 09, 10 (and their children) can run in parallel after their listed deps. Specs 07 and 08 share `run-process` (spec 03) and reuse modules from 04/05/06. Schema fan-in: 01a → 05/07/08; 01b → 04/05/06/07/08/09; 01c → 05/06.
 
-(Spec 00 — framework verification — was retired on 2026-06-02. Its three probes (`**kwargs` port inference, persistent-without-edge, `keyed_join` payload unwrap) were all settled by reading the harness docs/source. See [07](../07-ambiguities-and-assumptions.md) Settled items 19, 21, 22.)
+(Spec 00 — framework verification — was retired on 2026-06-02; its three probes (`**kwargs` port inference, persistent-without-edge, `keyed_join` payload unwrap) were resolved against the harness docs and source.)

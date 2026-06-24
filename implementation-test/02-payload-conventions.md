@@ -2,14 +2,46 @@
 
 Modules receive raw values (the harness unwraps `Payload` before calling `run`). There is
 **no single payload type** threaded through the graph. Instead there are three small,
-purpose-specific payload shapes, plus one correlation key.
+purpose-specific payload shapes, plus one correlation key. The shapes are dataclasses in
+`modules/rtl_buddy/schema/payloads.py` (spec [01](specs/01-shared-schema.md)). Two properties
+are decided **per type, not blanket**:
+
+- **the correlation key** is the field `keyed_join` matches on, named by the contract's
+  `keyed_field` (default `"key"`; `contracts/keyed_join.py::_key_of` reads it attribute-first,
+  falling back to a dict entry). A payload carries its **own** `key` field exactly when the key
+  *is its own identity*; otherwise the key rides the `KeyedValue` envelope. Three cases:
+  - **`TestConfig` self-keys.** The `test` edge carries one scheduled-test instance, and `key`
+    (`name#sweep#run`) *is* that instance's identity — so it lives on the object, which rides
+    the `test` edge **bare** (no envelope). `key` is a runtime-only field on `TestConfig`
+    ([01b](specs/01b-suite-schema.md)), set to `name` at construction and refined at the fan-outs,
+    read by `keyed_join` attribute-first. Distinct from `name`, which collides across sweep
+    variants and run-ids.
+  - **Multi-field messages self-key** (`Command`/`Proc`/`RandSeed`/`RandSeedDone`/`Result`) —
+    cohesive purpose-built messages, so the key is naturally one of their fields, no envelope.
+  - **Everything else rides `KeyedValue`** because the key is *not the value's own identity*: a
+    primitive (`int`/`Path`/`str`) has no identity at all, and **`model`** is the `ModelConfig`
+    resolved *for a test* — keyed by the **test's** identity (so `write-filelist` can join it
+    back), which is foreign to the model. Stamping the test's key onto the model value object
+    would misrepresent a correlation id as the model's own; the envelope keeps it honest.
+
+  The key is *not* universal: non-keyed payloads (broadcast config singletons, pure ordering
+  signals below) carry none and are never correlated.
+- **`frozen=True`** on the envelope and message payloads (`KeyedValue`, `Command`, `Proc`, …).
+  Freezing blocks rebinding a dataclass's own fields (`kv.value = …`), which no node does —
+  edges are built once at the fan-outs. It does **not** block mutating the object a field points
+  at, so `run-preproc` mutating a wrapped value would still work; but the `test` edge is **not**
+  wrapped — `run-preproc` mutates the bare `TestConfig` directly (`set_plusarg`, …), which is
+  fine because `TestConfig` is itself unfrozen ([01b](specs/01b-suite-schema.md)). The
+  still-enveloped `model` edge is a frozen `KeyedValue` around a frozen `ModelConfig`.
 
 ## The correlation key
 
-A stable string identifying one test invocation, suffixed at each fan-out **that actually
-produces variants**:
+A stable string identifying one test invocation. Its **base value is the test's name**, defaulted
+by `TestConfig.__post_init__` ([spec 01b](specs/01b-suite-schema.md)) — so every `TestConfig` is
+born self-keyed regardless of construction site, and `select` forwards it unchanged. It is then
+suffixed at each fan-out **that actually produces variants**:
 
-- `select` → `key = "<test_name>"`
+- *construction* → `key = "<test_name>"` (the base; `select`/`filter` carry it through untouched)
 - `sweep`  → `key = "<test_name>#<sweep_idx>"` **per produced variant**; a test with no sweep
   script passes through with its key **unchanged** (see [spec 05f](specs/05f-expand-sweep.md))
 - `runs`   → `key = "<test_name>[#<sweep_idx>]#<run_id>"` when `run_id is not None`; for the
@@ -20,27 +52,33 @@ The suffix is only added when the fan-out emits more than the single passthrough
 invariant the joins rely on is uniqueness, not a fixed `#i#run` shape.
 
 The key exists so the `keyed_join` nodes can correlate a node's inputs back to the test
-they came from. Under the split it appears on **every** main-line edge (all are `{key, …}`
-dicts) — each `keyed_join` reads `payload["key"]` to match its ports. Modules copy it
-forward; they never parse or branch on it.
+they came from. Under the split it appears on **every keyed main-line edge** — on the
+`TestConfig` itself for the `test` edge, on the `KeyedValue` wrapper for the rest — and each
+`keyed_join` reads `payload.key` (attribute-first) to match its ports, indifferent to whether
+that's a field on the object or on the envelope. (Config singletons reach those same nodes as
+non-keyed `persistent_inputs`; they carry no key and are broadcast to all keys rather than
+correlated.) Modules copy the key forward; they never parse or branch on it.
 
-## Shape 1 — the split per-test/per-run edges (`{key, value}`)
+## Shape 1 — the split per-test/per-run edges
 
-There is **no `ctx` bag**. Per-test data rides the main line as **separate keyed edges**, each a `{key, value}` dict — the port/edge name says what `value` is:
+There is **no `ctx` bag**. Per-test data rides the main line as **separate keyed edges**. The `test` edge carries a **bare, self-keyed `TestConfig`** (the key is its own identity); every other single-value edge rides the generic frozen `KeyedValue[T]` envelope (`key: str`, `value: T`) because its key is *not* its own identity. The edge name says what rides it:
 
 ```python
-test    = { "key": "alu_smoke#0#0", "value": <TestConfig> }  # select → … → parse-*  (the long-lived edge)
-simv    = { "key": k, "value": <str> }                       # build-compile-cmd → … → build-sim-cmd, then dies
-run_id  = { "key": k, "value": int | None }                  # expand-runs → … → build-sim-cmd, then dies
-seed    = { "key": k, "value": int }                         # resolve-seed → build-sim-cmd, then dies
-timeout = { "key": k, "value": float | None }                # build-sim-cmd → sim-run
-filelist= { "key": k, "value": <Path> }                      # write-filelist → build-compile-cmd
+test     = <TestConfig key="alu_smoke#0#0">            # bare TestConfig (self-keyed)   select → … → post-sim (long-lived); mutated in place by run-preproc, re-keyed via replace at expand-runs
+model    = KeyedValue(k, <ModelConfig>)                # KeyedValue[ModelConfig]  load-model → write-filelist (k = the test's key — foreign to the model)
+simv     = KeyedValue(k, <str>)                        # KeyedValue[str]          build-compile-cmd → … → build-sim-cmd, then dies
+run_id   = KeyedValue(k, int | None)                   # KeyedValue[int|None]     expand-runs → … → build-sim-cmd, then dies
+seed     = KeyedValue(k, int)                          # KeyedValue[int]          resolve-seed → build-sim-cmd, then dies
+timeout  = KeyedValue(k, float | None)                 # KeyedValue[float|None]   build-sim-cmd → sim-run
+filelist = KeyedValue(k, <Path>)                       # KeyedValue[Path]         write-filelist → build-compile-cmd
 ```
 
-- **`key`** is the synthesized correlation string, stamped/re-suffixed at the fan-outs (`select`→`name`, `sweep`→`name#i`, `expand-runs`→`name#i#run`). Every edge carries it so `keyed_join` nodes correlate ports by it. Nothing intrinsic to `test`/`simv` is unique post-fan-out (names collide across sweep variants and run-ids; `simv` is a shared/fixed string), so the explicit synthesized key is required.
-- **`value`** is the generic single-value slot: the edge name conveys the type, so the field is just `value` (`test["value"]` is the `TestConfig`, `simv["value"]` the simv path, …). *Multi-field* cohesive messages (`proc`, `command`, `randseed`) keep named fields instead (Shape 2).
-- **Edge lifetimes are bounded and visible:** `test` threads the whole pipeline; `simv` lives `[build-compile-cmd, build-sim-cmd]`; `run_id` `[expand-runs, build-sim-cmd]`; `seed` `[resolve-seed, build-sim-cmd]` — `simv`/`run_id`/`seed` all die at `build-sim-cmd`.
-- **`test["value"]` is the live `TestConfig`**, mutated in-place by `run-preproc`/`expand-sweep`; `.model` attached by `load-model`. These reimplement rtl_buddy `TestConfig` (`config/test.py:43-302`) and `ModelConfig` (`config/model.py:9-51`); renames pinned in specs [01b](specs/01b-suite-schema.md)/[01c](specs/01c-model-schema.md). The `seed_mode` payload is the `SeedMode` enum (`seed_mode.py:4-7`).
+The envelope wraps every Shape-1 edge **except `test`**, because the key on those edges is not the value's own identity: a primitive has no fields *and* no identity, and `model` is keyed by the **test's** identity (so `write-filelist` can join it back), foreign to the `ModelConfig`. `TestConfig` is the one value whose riding key *is* its own — the scheduled-test instance — so it holds `key` directly and rides the `test` edge bare. (Multi-field messages also self-key, Shape 2.)
+
+- **`key` on `TestConfig`** is the synthesized correlation string, a runtime-only field ([01b](specs/01b-suite-schema.md)) set to `name` at construction and re-suffixed at the fan-outs (`sweep`→`name#i`, `expand-runs`→`name#i#run`). `keyed_join` reads it via `keyed_field` (default `"key"`) attribute-first → `test.key`. Nothing *intrinsic* (i.e. `name`) is unique post-fan-out, so the synthesized field is required.
+- **`KeyedValue.value`** is the generic single-value slot for the enveloped edges: the edge name conveys the type, so one `KeyedValue[T]` serves `model`/`simv`/`seed`/… rather than a named class per edge (`seed.value` the int, `model.value` the `ModelConfig`, …). *Multi-field* cohesive messages (`proc`, `command`, `randseed`) get their own named dataclasses instead (Shape 2).
+- **Edge lifetimes are bounded and visible:** `test` threads the whole pipeline; `model` lives `[load-model, write-filelist]`; `simv` lives `[build-compile-cmd, build-sim-cmd]`; `run_id` `[expand-runs, build-sim-cmd]`; `seed` `[resolve-seed, build-sim-cmd]` — `simv`/`run_id`/`seed` all die at `build-sim-cmd`.
+- **`test` is the live `TestConfig`** (not `test.value` — there is no envelope), mutated in-place by `run-preproc` (it is unfrozen, [01b](specs/01b-suite-schema.md)). `expand-runs` re-keys it per run via `dataclasses.replace(test, key=nk)` — a shallow copy that overrides `key` only, sharing `pa`/`pd`/`tb` by reference; safe because `run-preproc` is the sole mutator and runs strictly upstream. The resolved `ModelConfig` is **not** on it — it rides the separate `model` edge (`KeyedValue[ModelConfig]`, produced by `load-model`, `keyed_join`ed at `write-filelist`). These reimplement rtl_buddy `TestConfig` (`config/test.py:43-302`) and `ModelConfig` (`config/model.py:9-51`); renames pinned in specs [01b](specs/01b-suite-schema.md)/[01c](specs/01c-model-schema.md). The `seed_mode` payload is the `SeedMode` enum (`seed_mode.py:4-7`).
 - **No `result` field, ever.** Terminal outcomes leave as Shape-3 result edges.
 - **Why split, not bagged:** the per-field edges expose true data dependencies (each node's inputs = exactly what it reads) and let `keyed_join` correlate by key rather than relying on lockstep arrival order. Config singletons (`builder_cfg`, `logs_dir`, …) reach the command-builders as `persistent_inputs` on those same `keyed_join` nodes. Full rationale + the node/contract/edge table + edge-wiring list: [`06-graph-yaml.md`](06-graph-yaml.md).
 
@@ -55,26 +93,26 @@ There is **no post-sim bag**. The split runs all the way through. After `run-pro
 
 ## Shape 2 — multi-field cohesive messages
 
-Payloads produced whole by one node for specific consumers, carrying the key so a `keyed_join` can match. These keep **named fields** (not the `{key, value}` slot) because each is one cohesive message with several parts produced in one shot:
+Payloads produced whole by one node for specific consumers, carrying the key so a `keyed_join` can match. These get **their own named dataclass** (not the generic `KeyedValue[T]` envelope) because each is one cohesive message with several parts produced in one shot:
 
 ```python
-command  = { "key": k, "argv": [ ... ],                      # build-*-cmd     → run-process
-             "stdout_path": Path, "stderr_path": Path }
-proc     = { "key": k, "rc": int, "timed_out": bool,         # run-process     → interpret-* (and, sim leg,
-             "stdout_path": Path, "stderr_path": Path }       #                   → write-randseed gate + link-latest)
-randseed = { "key": k, "seed": int, "randseed_path": Path,   # build-sim-cmd   → write-randseed + link-latest
-             "argv": [ ... ] }                                #                   (argv: the hier_inst_seed check)
-randseed_done = { "key": k }                                 # write-randseed  → link-latest (ordering signal only)
+command       = Command(k, argv=[ ... ],                     # build-*-cmd     → run-process
+                        stdout_path=Path, stderr_path=Path)
+proc          = Proc(k, rc=int | None,                       # run-process     → interpret-* (rc is None ⟺ timed out;
+                     stdout_path=Path, stderr_path=Path)      #                   sim leg → write-randseed gate + link-latest)
+randseed      = RandSeed(k, seed=int, randseed_path=Path,    # build-sim-cmd   → write-randseed + link-latest
+                        argv=[ ... ])                         #                   (argv: the hier_inst_seed check)
+randseed_done = RandSeedDone(k)                              # write-randseed  → link-latest (ordering signal only)
 ```
 
-`proc` echoes the redirect paths (`stdout_path`/`stderr_path` = the sim log/err), so the post-sim parsers read the log from `proc` — there is no separate `sim_cmd` bag (its parts became `command` + `randseed`). Single-value edges (`filelist`, `seed`, `timeout`) use the `{key, value}` form (Shape 1). These never accumulate; each is consumed by exactly the next stage(s).
+`proc` echoes the redirect paths (`stdout_path`/`stderr_path` = the sim log/err), so the post-sim parsers read the log from `proc` — there is no separate `sim_cmd` bag (its parts became `command` + `randseed`). Single-value edges (`filelist`, `seed`, `timeout`) use the `KeyedValue[T]` envelope (Shape 1). These never accumulate; each is consumed by exactly the next stage(s).
 
 ## Shape 3 — result payloads (terminal; port unwired, row logged)
 
 The single shape every terminal output port emits, regardless of which stage produced it:
 
 ```python
-result = { "key": k, "result": <TestResults> }
+result = Result(k, <TestResults>)
 ```
 
 Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`). Since the
