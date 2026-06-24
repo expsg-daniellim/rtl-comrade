@@ -4,7 +4,7 @@ from __future__ import annotations # Obsolete after 3.14
 import asyncio
 from asyncio import Queue
 from dataclasses import dataclass, field
-from typing import Generic, TypeVar
+from typing import Generic, Self, TypeVar
 
 from .api import Payload, EndSentinel
 from .structure import ModuleStructureArg
@@ -40,8 +40,8 @@ class Port(Generic[T]):
 	has_default: bool = False
 	ended: bool = False
 
-	@staticmethod
-	def from_structure(arg:ModuleStructureArg) -> Port:
+	@classmethod
+	def from_structure(cls, arg:ModuleStructureArg) -> Self:
 		"""Construct a Port from one inferred module input argument.
 
 		Args:
@@ -51,7 +51,7 @@ class Port(Generic[T]):
 			A Port initialized from that argument description.
 		"""
 
-		return Port(name=arg.name, has_default=arg.has_default)
+		return cls(name=arg.name, has_default=arg.has_default)
 
 	async def get(self) -> Payload[T]|EndSentinel:
 		"""Wait for and return the next runtime message for this port.

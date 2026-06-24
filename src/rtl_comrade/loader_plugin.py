@@ -6,7 +6,7 @@ import inspect
 import os
 from pathlib import Path
 import re
-from typing import cast, Any
+from typing import cast, Any, Self
 
 from serde import serde
 import structlog
@@ -33,8 +33,8 @@ class PluginModuleConfig:
 	class_name: str
 	name: str | None
 
-	@staticmethod
-	def from_class_name(class_name:str) -> PluginModuleConfig:
+	@classmethod
+	def from_class_name(cls, class_name:str) -> Self:
 		"""Create a default exported plugin mapping from a class name.
 
 		Args:
@@ -45,7 +45,7 @@ class PluginModuleConfig:
 		"""
 
 		name = CAMEL_CASE_RE.sub('_', class_name).lower()
-		return PluginModuleConfig(class_name, name)
+		return cls(class_name, name)
 
 @serde
 @dataclass(slots=True)

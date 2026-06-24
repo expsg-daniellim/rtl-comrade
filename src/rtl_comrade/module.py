@@ -4,7 +4,7 @@ from __future__ import annotations
 from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
-from typing import cast, Any
+from typing import cast, Any, Self
 
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
@@ -26,8 +26,8 @@ class GraphModule:
 	has_config: bool
 	defines_config: bool
 
-	@staticmethod
-	def from_module(Module:type[Any]) -> GraphModule:
+	@classmethod
+	def from_module(cls, Module:type[Any]) -> Self:
 		"""Build a validated GraphModule descriptor from a raw module class.
 
 		Inspects ``Module.__init__`` to determine which harness-controlled parameters
@@ -69,4 +69,4 @@ class GraphModule:
 		finally:
 			unbind_contextvars('module')
 
-		return GraphModule(name=Module.__name__, Module=Module, structure=structure, ports=ports, has_id=has_id, has_config=has_config, defines_config=defines_config)
+		return cls(name=Module.__name__, Module=Module, structure=structure, ports=ports, has_id=has_id, has_config=has_config, defines_config=defines_config)

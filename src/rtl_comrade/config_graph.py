@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from inspect import Signature
 from pathlib import Path
-from typing import cast
+from typing import cast, Self
 
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
@@ -46,8 +46,8 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 	relative_path: Path = field(default_factory=Path)
 	logging: LoggingConfig = field(default_factory=LoggingConfig)
 
-	@staticmethod
-	def from_file(path:Path) -> GraphConfig:
+	@classmethod
+	def from_file(cls, path:Path) -> Self:
 		"""Load a graph YAML file and construct a GraphConfig.
 
 		Args:
@@ -62,13 +62,13 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 		unbind_contextvars('context', 'file')
 
 		try:
-			return GraphConfig.from_file_config(config, path.parent)
+			return cls.from_file_config(config, path.parent)
 		except InvalidCLIParameterError as e:
 			log.fatal('cli_invalid_parameter_name', context='harness.graph.validation_config', name=e.name)
 			return None  # pragma: no cover
 
-	@staticmethod
-	def from_file_config(config:GraphFileConfig, relative_path:Path=Path()) -> GraphConfig:
+	@classmethod
+	def from_file_config(cls, config:GraphFileConfig, relative_path:Path=Path()) -> Self:
 		"""Expand CLI edges into SrcPort replacements and collect cli_sources.
 
 		Returns:
@@ -171,7 +171,7 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 		if cyclic_nodes:
 			log.fatal('not_acyclic', context='harness.graph_config.validation', cyclic_nodes=cyclic_nodes)
 
-		return GraphConfig(
+		return cls(
 			nodes = config.nodes,
 			edges = edges,
 			cli_srcs = cli_srcs,

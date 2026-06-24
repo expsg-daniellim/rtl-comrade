@@ -6,7 +6,7 @@ import asyncio
 from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
-from typing import cast, Any, Callable
+from typing import cast, Any, Callable, Self
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
@@ -44,8 +44,8 @@ class Graph:
 		self.nodes = {}
 		self.cli_nodes = []
 
-	@staticmethod
-	def from_config(config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Graph:
+	@classmethod
+	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:
 		"""Construct a runnable graph from an already-parsed GraphConfig.
 
 		Args:
@@ -55,7 +55,7 @@ class Graph:
 			The constructed Graph instance.
 		"""
 
-		graph = Graph()
+		graph = cls()
 		if cli_kwargs is None:
 			cli_kwargs = {}
 
@@ -215,8 +215,8 @@ class Graph:
 
 		log.fatal("dummy_run_called", context='harness.graph.cli')
 
-	@staticmethod
-	def construct_run(config:GraphConfig, setup_logging:Callable[[list[Any], list[Any], bool], None], run_cleanup:Callable[[Any], None]):
+	@classmethod
+	def construct_run(cls, config:GraphConfig, setup_logging:Callable[[list[Any], list[Any], bool], None], run_cleanup:Callable[[Any], None]):
 		"""Build a callable whose signature matches the graph's CLI parameters.
 
 		The returned callable injects the supplied kwargs into the graph's CLI nodes,
@@ -233,7 +233,7 @@ class Graph:
 
 		def run(**kwargs):
 			# Only construct actual graph when run
-			graph = Graph.from_config(config, kwargs)
+			graph = cls.from_config(config, kwargs)
 			# Custom logging applies to the run only; resolve lazily after construction, before node execution.
 			processors, handlers = config.logging.load(config.relative_path)
 			setup_logging(processors, handlers, config.logging.include_default)
