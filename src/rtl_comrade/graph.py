@@ -45,7 +45,7 @@ class Graph:
 		self.cli_nodes = []
 
 	@classmethod
-	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:
+	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:  # pylint: disable=too-many-locals
 		"""Construct a runnable graph from an already-parsed GraphConfig.
 
 		Args:
