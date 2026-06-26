@@ -94,7 +94,13 @@ The fan-in is owned by the **`any` contract** ([spec 02](specs/02-any-contract-a
 node + 13 edges + `contract_port_mappings` are specified in [10d](specs/10d-summarise-results.md)
 and wired in [06](06-graph-yaml.md). The node's `finalise()` renders the consolidated PASS/FAIL/NA
 table once at run end (after the gather, before the failure check), so it renders whether the run
-passed or failed-deferred.
+passed or failed-deferred, and **emits the plain table on a single `table` output port**. That port
+fans out to two sink nodes — `print-summary` (console, colourises verdict tokens on a TTY,
+[10e](specs/10e-print-summary.md)) and `write-summary-log` (`rtl_buddy.log`, plain,
+[10f](specs/10f-write-summary-log.md)) — the in-graph form of rtl_buddy's `logger.result`, whose one
+emit fans to a colourised console handler and a plain log-file handler. The summary node renders
+**once** and stays atomic (accumulate + render + emit); the two sinks each carry one rendering
+responsibility.
 
 ### The `SummaryProcessor` logging plugin
 
@@ -289,10 +295,12 @@ The exit code and the summary are produced by two cooperating mechanisms:
    [10d](specs/10d-summarise-results.md)) from the 13 terminal `TestResult`s fanned into it by the
    `any` contract — see
    [Re-convergence](#re-convergence-the-summary-returns-as-a-graph-node) — reproducing
-   `do_cmd_test`'s "Test Results Summary" loop (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`); the
-   same `finalise()` then emits the consolidated FAIL error (layer 2 above). The node renders
-   **outcomes only**; the `show_git_rev` git state (`rtl_buddy.py:500-522`) is logged separately by
-   `git-status` and falls through to the console at run start, not into this table.
+   `do_cmd_test`'s "Test Results Summary" loop (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:203-207`), and
+   **emitted on `table`** to the console sink ([10e](specs/10e-print-summary.md)) and the
+   `rtl_buddy.log` sink ([10f](specs/10f-write-summary-log.md)); the same `finalise()` then emits the
+   consolidated FAIL error (layer 2 above). The node renders **outcomes only**; the `show_git_rev` git
+   state (`rtl_buddy.py:500-522`) is logged separately by `git-status` and falls through to the console
+   at run start, not into this table.
 
 `CRITICAL` stays reserved for harness-fatal conditions (missing/malformed `root_config.yaml`,
 missing builder/testbench), matching `rtl_buddy`'s `logger.critical` → `typer.Abort`
@@ -381,7 +389,7 @@ rides the `TestResult` fanned into `results-summary`.
 
 | Site | Trigger | Action |
 |---|---|---|
-| `results-summary.finalise()` | run end (node teardown), if any `TestResult` fanned in | render the consolidated **results** table from the fanned-in payloads, then `log.error("test_failures", count=…)` if any FAIL row (the consolidated exit signal — layered over the per-case origin errors) |
+| `results-summary.finalise()` | run end (node teardown), if any `TestResult` fanned in | render the consolidated **results** table (plain) from the fanned-in payloads and **emit it on `table`** to the two sinks ([10e](specs/10e-print-summary.md) console, [10f](specs/10f-write-summary-log.md) `rtl_buddy.log`), then `log.error("test_failures", count=…)` if any FAIL row (the consolidated exit signal — layered over the per-case origin errors) |
 | `git-status` (setup) | run start | `log.info("git_state", branch=..., sha=..., dirty=...)` once; falls through to the console (not a terminal, so not fanned into `results-summary`) |
 
 ### Deferred

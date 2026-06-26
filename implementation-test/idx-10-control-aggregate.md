@@ -12,8 +12,11 @@
 
 Implement the cross-cutting early-stop gate (reused at three boundaries), the `git-status`
 setup node, and the in-graph **`results-summary` node** that renders the summary table from the
-13 terminal `TestResult` ports fanned in by the `any` contract. (The earlier out-of-graph
-`SummaryProcessor` logging plugin is retained but dormant — see [10c](specs/10c-summary-handler.md).)
+13 terminal `TestResult` ports fanned in by the `any` contract and **emits it on `table`** to two
+sink nodes — `print-summary` (console, [10e](specs/10e-print-summary.md)) and `write-summary-log`
+(`rtl_buddy.log`, [10f](specs/10f-write-summary-log.md)), the in-graph form of rtl_buddy's
+one-emit/two-handler `logger.result`. (The earlier out-of-graph `SummaryProcessor` logging plugin
+is retained but dormant — see [10c](specs/10c-summary-handler.md).)
 
 This spec is split into one ticket per deliverable — build them as independent units.
 
@@ -22,12 +25,16 @@ This spec is split into one ticket per deliverable — build them as independent
 | [10a](specs/10a-early-stop-gate.md) | `EarlyStopGateMod` | `modules/rtl_buddy/control.py` | Cross-cutting early-stop gate (3 instances). |
 | [10b](specs/10b-git-status.md) | `GitStatusMod` | `modules/rtl_buddy/setup.py` | Record git state as a structured log event. |
 | [10c](specs/10c-summary-handler.md) | `SummaryProcessor` | `graphs/log/summary.py` | **Dormant** (superseded by 10d): out-of-graph summary-collection plugin, kept but unwired. |
-| [10d](specs/10d-summarise-results.md) | `SummariseResultsMod` | `modules/rtl_buddy/summarise_results.py` | In-graph summary node: the 13 terminal `TestResult` ports fan in via the `any` contract; renders the table from `finalise()`. |
+| [10d](specs/10d-summarise-results.md) | `SummariseResultsMod` | `modules/rtl_buddy/summarise_results.py` | In-graph summary node: the 13 terminal `TestResult` ports fan in via the `any` contract; renders the plain table from `finalise()` and emits it on `table`. |
+| [10e](specs/10e-print-summary.md) | `PrintSummaryMod` | `modules/rtl_buddy/summarise_results.py` | Console sink: prints the `table`, colourising verdict tokens on a TTY (the `PassFailFormatter` parity). |
+| [10f](specs/10f-write-summary-log.md) | `WriteSummaryLogMod` | `modules/rtl_buddy/summarise_results.py` | `rtl_buddy.log` sink: writes the `table` plain, truncate per run. |
 
 **Manifest** — each child ticket carries its exact `modules/config.yaml` line: `EarlyStopGateMod`
 opens the `rtl_buddy/control.py` block ([`10a`](specs/10a-early-stop-gate.md)); `GitStatusMod` appends to
 the `rtl_buddy/setup.py` block ([`10b`](specs/10b-git-status.md)); `SummariseResultsMod` opens the
-`rtl_buddy/summarise_results.py` block ([`10d`](specs/10d-summarise-results.md)). `graphs/log/summary.py`
+`rtl_buddy/summarise_results.py` block ([`10d`](specs/10d-summarise-results.md)) and `PrintSummaryMod`
+([`10e`](specs/10e-print-summary.md)) / `WriteSummaryLogMod` ([`10f`](specs/10f-write-summary-log.md))
+append to it. `graphs/log/summary.py`
 (the dormant `SummaryProcessor`, [`10c`](specs/10c-summary-handler.md)) would be referenced by
 `path`/`name` in a `logging` block, **not** a manifest — but it is unwired in `test`.
 
@@ -38,9 +45,11 @@ the `rtl_buddy/setup.py` block ([`10b`](specs/10b-git-status.md)); `SummariseRes
   the `--early-stop` exit-0 divergence) live in [05 — Result aggregation and exit code](05-branching-and-results.md#result-aggregation-and-exit-code); the outcomes-only summary-table render lives in [10d](specs/10d-summarise-results.md)'s acceptance criteria; the cross-cutting behaviour is
   exercised end-to-end in [spec 11](specs/11-graph-and-manifests.md) and
   [spec 12](specs/12-end-to-end.md).
-- The `results-summary` node renders the table from the 13 terminal `TestResult`s fanned in by the
-  `any` contract, on a normal and a deferred-`ERROR` run (no-op on a list-mode / CRITICAL run with
-  no results); it drives no exit code.
+- The `results-summary` node renders the plain table from the 13 terminal `TestResult`s fanned in by the
+  `any` contract and emits it on `table`, on a normal and a deferred-`ERROR` run (no-op emitting nothing
+  on a list-mode / CRITICAL run with no results); the two sinks ([10e](specs/10e-print-summary.md) console,
+  [10f](specs/10f-write-summary-log.md) `rtl_buddy.log`) each render that one delivery; the table render
+  drives no exit code (the consolidated FAIL `log.error` does).
 - `early-stop-gate` exercises both `go`/`stop` ports and `git-status` emits its
   `git_state`/`git_state_unavailable` events; both resolve from `modules/config.yaml` to
   `EarlyStopGateMod` / `GitStatusMod`, and `summarise-results` resolves to `SummariseResultsMod`

@@ -110,6 +110,7 @@ or scalars (`Path`, `bool`, `str`). Colours:
 - **blue, bold** — main-line continue ports (the work spine), each labelled with its payload;
 - **teal, solid** — the 13 result ports routing an item *off the main line* into the
   `results-summary` sink (fanned in by the `any` contract);
+- **teal, dashed** — `results-summary`'s `table` fan-out into its two render sinks (`print-summary` console, `write-summary-log` → `rtl_buddy.log`);
 - **grey, dashed** — `git-status`'s lone stateline edge, which falls through to the console (not a result port);
 - **orange** — setup chain + persistent config broadcasts (`root_cfg`, `builder_cfg`, …);
 - **purple** — env-setup ordering plus artefact-dir provenance: the `$PATH` prepend is sequenced
@@ -174,6 +175,9 @@ flowchart TD
   parse_log t12@-->|"result:TestResult(PARSE)"| TERM
   parse_uvm t13@-->|"result:TestResult(PARSE)"| TERM
 
+  TERM s1@-->|"table:str"| print_summary["print-summary"]
+  TERM s2@-->|"table:str"| write_summary_log["write-summary-log"]
+
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
   select_platform c3@-->|"platform_cfg:PlatformConfig"| resolve_builder["resolve-builder"]
@@ -220,19 +224,21 @@ flowchart TD
   classDef cli fill:#eef7ee,stroke:#2da44e;
   class select,sweep,runs fanout;
   class filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
-  class TERM sink;
+  class TERM,print_summary,write_summary_log sink;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
   %% edge styling by class — each styled edge has a unique ID; per-type class lists below.
   %% Inserting/removing an edge: add/remove its ID in one list; no positional renumbering.
   classDef mainEdge stroke:#1f6feb,stroke-width:2px;
   classDef resultEdge stroke:#3a7d7d,stroke-width:2px;
+  classDef summaryEdge stroke:#3a7d7d,stroke-width:2px,stroke-dasharray:4 2;
   classDef cfgEdge stroke:#bf8700,stroke-width:1.5px;
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
   class m1,m2,m3,m4,m4b,m5,m5b,m6,m6b,m7,m7b,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
   class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 resultEdge;
+  class s1,s2 summaryEdge;
   class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
   class e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12 envEdge;
   class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;

@@ -176,7 +176,10 @@ nodes:
     stop_pre:     [result]
     stop_comp:    [result]
     stop_sim:     [result]
-# (no separate fan-in / aggregate node — the `any` contract IS the fan-in; the SummaryProcessor logging plugin is retired/dormant, see 10c/10d)
+# --- summary sinks: results-summary emits the rendered table on `table`, fanned to two sinks ---
+- { id: print-summary,     module: print-summary,     contract: default }   # console sink: prints the table, colourises verdict tokens on a TTY (10e)
+- { id: write-summary-log, module: write-summary-log, contract: default }   # rtl_buddy.log sink: writes the table plain, truncate per run (10f)
+# (no separate fan-in / aggregate node — the `any` contract IS the fan-in; the in-graph table fan-out is the two sink edges below; the SummaryProcessor logging plugin is retired/dormant, see 10c/10d)
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -323,13 +326,21 @@ edges:
 - { src: { node: gate-pre,      port: stop },    dst: { node: results-summary, port: stop_pre } }
 - { src: { node: gate-comp,     port: stop },    dst: { node: results-summary, port: stop_comp } }
 - { src: { node: gate-sim,      port: stop },    dst: { node: results-summary, port: stop_sim } }
+# ---- results-summary.table → the two summary sinks (the in-graph fan-out, mirroring logger.result's two handlers) ----
+# results-summary renders the plain table in finalise() and emits it once on `table`; the console sink
+# (10e) colourises on a TTY and prints, the log sink (10f) writes it plain to rtl_buddy.log.
+- { src: { node: results-summary, port: table }, dst: { node: print-summary,     port: table } }
+- { src: { node: results-summary, port: table }, dst: { node: write-summary-log, port: table } }
 ```
 
 Notes:
 
-- **One fan-in node, no relay.** The 13 result ports are wired to the `results-summary` node;
+- **One fan-in node, no relay; two sink fan-out.** The 13 result ports are wired to the `results-summary` node;
   the `any` contract *is* the fan-in (no separate `fan-in-results` relay), and the node renders the
-  summary **results** table from the fanned-in `TestResult`s in its `finalise()` hook. The exit code
+  summary **results** table from the fanned-in `TestResult`s in its `finalise()` hook and **emits it on
+  `table`**, fanned out to the two summary sinks — `print-summary` (console, colourises on a TTY, [10e](specs/10e-print-summary.md))
+  and `write-summary-log` (`rtl_buddy.log`, plain, [10f](specs/10f-write-summary-log.md)) — the in-graph
+  form of rtl_buddy's one-emit/two-handler `logger.result` (console + log file). The exit code
   is driven by `log.error` at two layers — each failure terminal's per-case event at origin, plus the
   consolidated `test_failures` error `finalise()` emits on any FAIL row. `git_state` is not a
   terminal — it falls through to the console, not into the table. See
@@ -432,7 +443,9 @@ Notes:
   - { name: early-stop-gate,   class_name: EarlyStopGateMod }
 - file: rtl_buddy/summarise_results.py
   plugins:
-  - { name: summarise-results, class_name: SummariseResultsMod }   # the in-graph results-summary sink (10d); no fan-in-results / aggregate-results relay
+  - { name: summarise-results, class_name: SummariseResultsMod }   # the in-graph summary node (10d): renders the table in finalise() and emits it on `table`
+  - { name: print-summary,     class_name: PrintSummaryMod }       # console sink (10e): colourises on a TTY, prints
+  - { name: write-summary-log, class_name: WriteSummaryLogMod }    # rtl_buddy.log sink (10f): writes plain, truncate per run
 ```
 
 ## Logging plugin — `graphs/log/summary.py` (dormant, not wired)

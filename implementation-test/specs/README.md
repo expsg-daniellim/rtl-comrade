@@ -23,7 +23,7 @@ The package name and file grouping below are **pinned**, not a suggestion — ev
 | `modules/rtl_buddy/build.py` | `run-preproc`, `write-filelist`, `build-compile-cmd`, `run-process`, `interpret-compile` |
 | `modules/rtl_buddy/sim.py` | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`, `route-post`, `parse-log`, `parse-uvm-log` |
 | `modules/rtl_buddy/control.py` | `early-stop-gate` |
-| `modules/rtl_buddy/summarise_results.py` | `summarise-results` → `SummariseResultsMod` (in-graph results-summary sink, 10d) |
+| `modules/rtl_buddy/summarise_results.py` | `summarise-results` → `SummariseResultsMod` (in-graph summary node, 10d); `print-summary` → `PrintSummaryMod` (console sink, 10e); `write-summary-log` → `WriteSummaryLogMod` (`rtl_buddy.log` sink, 10f) |
 | `graphs/log/summary.py` | `SummaryProcessor` logging plugin (per-graph, not a manifest module; **dormant** — superseded by 10d) |
 | `contracts/any.py` | `any` → `AnyContract` (fans the 13 terminals into `results-summary`) |
 
@@ -47,7 +47,7 @@ The full manifest (`modules/config.yaml`) with every `class_name` is in [`../06-
 | 07 | group index [idx-07](../idx-07-compile-cycle.md) | 03 | `build-compile-cmd`, `interpret-compile`. Children 07a–07b. |
 | 08 | group index [idx-08](../idx-08-sim-cycle.md) | 03 | `expand-runs`, `resolve-seed`, `build-sim-cmd`, `write-randseed`, `link-latest`, `interpret-sim`. Children 08a–08f. |
 | 09 | group index [idx-09](../idx-09-post.md) | 01 | `route-post`, `parse-log`, `parse-uvm-log`. Children 09a–09c. |
-| 10 | group index [idx-10](../idx-10-control-aggregate.md) | 01, 02 | `early-stop-gate`, `git-status`, and the in-graph `results-summary` node (10d, fanned by the `any` contract; the `SummaryProcessor` plugin 10c is dormant). Children 10a–10d. |
+| 10 | group index [idx-10](../idx-10-control-aggregate.md) | 01, 02 | `early-stop-gate`, `git-status`, the in-graph `results-summary` node (10d, fanned by the `any` contract; the `SummaryProcessor` plugin 10c is dormant), and its two summary sinks `print-summary` (10e) / `write-summary-log` (10f). Children 10a–10f. |
 | 11 | [graph-and-manifests](11-graph-and-manifests.md) | 02-10 | `graphs/test.yaml`, plugin manifests, `rtl_comrade_config.yaml` entry. |
 | 12 | [end-to-end](12-end-to-end.md) | 11 | Smoke test against a real rtl_buddy suite. |
 
@@ -63,7 +63,7 @@ Specs 04–10 group several modules each; each is split into one buildable ticke
 | 07 (compile cycle) | [07a build-compile-cmd](07a-build-compile-cmd.md) · [07b interpret-compile](07b-interpret-compile.md) |
 | 08 (sim cycle) | [08a expand-runs](08a-expand-runs.md) · [08b resolve-seed](08b-resolve-seed.md) · [08c build-sim-cmd](08c-build-sim-cmd.md) · [08d write-randseed](08d-write-randseed.md) · [08e link-latest](08e-link-latest.md) · [08f interpret-sim](08f-interpret-sim.md) |
 | 09 (post) | [09a route-post](09a-route-post.md) · [09b parse-log](09b-parse-log.md) · [09c parse-uvm-log](09c-parse-uvm-log.md) |
-| 10 (control/summary) | [10a early-stop-gate](10a-early-stop-gate.md) · [10b git-status](10b-git-status.md) · [10c summary-handler](10c-summary-handler.md) (dormant) · [10d summarise-results](10d-summarise-results.md) |
+| 10 (control/summary) | [10a early-stop-gate](10a-early-stop-gate.md) · [10b git-status](10b-git-status.md) · [10c summary-handler](10c-summary-handler.md) (dormant) · [10d summarise-results](10d-summarise-results.md) · [10e print-summary](10e-print-summary.md) · [10f write-summary-log](10f-write-summary-log.md) |
 
 Within a group the children are independent except for shared-file ordering and the explicit `Depends on:` lines each child carries: 06b feeds 07a; 07a emits the `simv` edge for 07b and 08c; 08b defines the `run_suffix` helper that 08c also calls; 08c feeds 08d, which feeds 08e/08f; the 13 result ports across the catalogue fan into 10d's `results-summary` via the `any` contract (02), and 10a/10b emit log events (10c, dormant, would collect them).
 
@@ -78,7 +78,7 @@ Several specs write into the same Python file. The **first** spec listed *create
 | `modules/rtl_buddy/sim.py` | [08a](08a-expand-runs.md) | 08b–08f, 09a–09c |
 | `modules/config.yaml` (manifest) | first spec of each block above | the same specs that append the `.py` |
 
-`modules/rtl_buddy/control.py` (10a), `modules/rtl_buddy/summarise_results.py` (10d), `graphs/log/summary.py` (10c, dormant), and `contracts/any.py` (02) each have a single writer. The schema specs (01/01a/01b/01c) share the `modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`, `uvm.py`, `model.py`, `root.py`, `results.py`, `seed_mode.py`), so coordinate the package layout, not a single file. Test files are per spec group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`, `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that group.
+`modules/rtl_buddy/control.py` (10a), `graphs/log/summary.py` (10c, dormant), and `contracts/any.py` (02) each have a single writer. `modules/rtl_buddy/summarise_results.py` is **created by 10d** (which opens its `modules/config.yaml` block) and **appended by 10e/10f** (the two summary sinks), the same create/append discipline as the other shared files. The schema specs (01/01a/01b/01c) share the `modules/rtl_buddy/schema/` **package** but write separate files (`builder.py`, `suite.py`, `uvm.py`, `model.py`, `root.py`, `results.py`, `seed_mode.py`), so coordinate the package layout, not a single file. Test files are per spec group (`test_setup.py`, `test_selection.py`, `test_prep.py`, `test_compile_cycle.py`, `test_sim_cycle.py`, `test_post.py`, `test_control.py`), each appended by the children of that group.
 
 Specs 01, 01a, 01b, 01c, and 02 can all run in parallel from the start (01b and 01c are now fully independent — the split-edge model removed 01b's `TestConfig.model` annotation; 02 has no external blocker). Spec 03 (run-process) appends to the shared `build.py` that 06a creates, so it depends on 06a for that file (file-creation ordering only — no logic dependency). Specs 04, 05, 06, 09, 10 (and their children) can run in parallel after their listed deps. Specs 07 and 08 share `run-process` (spec 03) and reuse modules from 04/05/06. Schema fan-in: 01a → 05/07/08; 01b → 04/05/06/07/08/09; 01c → 05/06.
 
