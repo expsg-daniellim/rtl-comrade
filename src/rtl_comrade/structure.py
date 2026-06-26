@@ -100,7 +100,7 @@ class ModuleStructure:
 		"""Analyze one module class and infer its runtime structure.
 
 		Args:
-			Module: Module plugin class whose ``run(...)`` method should be inspected.
+			Module: Module plugin class whose ``run(...)`` signature and ``run(...)``/``finalise()`` emits should be inspected.
 
 		Returns:
 			None.
@@ -122,9 +122,37 @@ class ModuleStructure:
 			has_default=param.default != Parameter.empty,
 		) for (name, param) in non_self if param.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD) ]
 
+		# Emits come from run and, when it resolves to a callable (as node.py guards at runtime), finalise.
+		(self.emits, self.definite_emits, default) = self.collect_emits(Module.__name__, Module.run)
+
+		if hasattr(Module, 'finalise') and callable(Module.finalise):
+			(finalise_emits, finalise_definite, finalise_default) = self.collect_emits(Module.__name__, Module.finalise)
+			self.emits.extend(port for port in finalise_emits if port not in self.emits)
+			self.definite_emits = self.definite_emits and finalise_definite
+			default = default or finalise_default
+
+		if default:
+			self.emits.insert(0, 'default')
+
+	@staticmethod
+	def collect_emits(name, method) -> tuple[list[str], bool, bool]:
+		"""Walk one method's top-level AST for its statically known emit ports.
+
+		Args:
+			name: Module class name, used only for error reporting.
+			method: The ``run`` or ``finalise`` function whose source is analysed.
+
+		Returns:
+			A ``(named ports in declaration order, whether the set is definite, whether a default-port emit was found)`` triple.
+		"""
+
+		# Make sure method is callable first
+		if not callable(method):
+			log.fatal(f'uncallable_{method.__name__}')
+
 		# Parse AST in steps to catch individual Exceptions from each step
 		try:
-			src = textwrap.dedent(inspect.getsource(Module.run))
+			src = textwrap.dedent(inspect.getsource(method))
 		except OSError as e:
 			log.fatal('file_unavailable', err=e.strerror, errno=e.errno, exc_info=e)
 		except TypeError as e:
@@ -145,31 +173,31 @@ class ModuleStructure:
 		except RecursionError as e:
 			log.fatal('recursion_err', message=str(e), exc_info=e)
 
-		# Populate emits by walking through source code and inferring likely behaviour from yields/returns
-		self.emits = []
+		emits:list[str] = []
+		definite = True
 		default = False
-		self.definite_emits = True
+
 		for node in filter(lambda node: isinstance(node, (ast.Return, ast.Yield, ast.YieldFrom)), walk_ast(ast_tree)):
 			if isinstance(node, ast.YieldFrom): # sub-generator yields are dynamic
-				self.definite_emits = False
+				definite = False
 				continue
+
 			# Specific outputs are specified by returning the tuple (<port name:str>, <value:Any>). All other formats of tuple are invalid.
 			if isinstance(node.value, ast.Tuple):
 				if len(node.value.elts) != 2:
-					raise StructureInvalidTupleError(Module.__name__, node.lineno, tuple(str(elt) for elt in node.value.elts))
+					raise StructureInvalidTupleError(name, node.lineno, tuple(str(elt) for elt in node.value.elts))
 
 				if isinstance(node.value.elts[0], ast.Constant):
 					# No number/name translation for output ports
 					if isinstance(node.value.elts[0].value, str):
 						port_name = node.value.elts[0].value
-						if port_name not in self.emits:
-							self.emits.append(port_name)
+						if port_name not in emits:
+							emits.append(port_name)
 					else:
-						raise StructureNonStrPortNameError(Module.__name__, node.lineno, node.value.elts[0].value)
+						raise StructureNonStrPortNameError(name, node.lineno, node.value.elts[0].value)
 				else: # Dynamic output port names present
-					self.definite_emits = False
+					definite = False
 			elif not (isinstance(node.value, ast.Constant) and node.value.value is None):
 				default = True
 
-		if default:
-			self.emits.insert(0, 'default')
+		return emits, definite, default

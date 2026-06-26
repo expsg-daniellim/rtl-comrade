@@ -4,10 +4,10 @@ Source: [src/rtl_comrade/structure.py](../../src/rtl_comrade/structure.py)
 
 ## Role
 
-This file performs static analysis of module `run(...)` methods so the harness can infer:
+This file performs static analysis of module methods so the harness can infer:
 
-- input ports from the function signature
-- statically known output ports from the function AST
+- input ports from the `run(...)` signature
+- statically known output ports from the `run(...)` and `finalise()` ASTs
 
 ## See Also
 
@@ -20,9 +20,9 @@ This file performs static analysis of module `run(...)` methods so the harness c
 
 - inspect `Module.run` signatures
 - record parameter names, annotations, and whether each parameter has a default
-- parse the source of `run(...)`
-- walk the AST while avoiding nested function bodies
-- collect statically known emitted port names
+- parse the source of `run(...)` and, when present and callable, `finalise()`
+- walk each AST while avoiding nested function bodies
+- collect statically known emitted port names from both methods
 - detect whether the output-port set is definite or only partial
 
 ## Place In The System
@@ -39,6 +39,7 @@ This is the harness reflection layer for modules. `node.py` depends on it to con
 ## Caveats
 
 - the analysis is intentionally conservative
+- `finalise()` emits are folded into the same `emits`/`definite_emits` as `run(...)`; it is analysed only when present and callable, mirroring the runtime detection in `node.py`
 - only top-level `return` and `yield` forms are inspected; nested helper functions are excluded
 - dynamic port names reduce what the graph validator can prove
 - non-`rtl_comrade` failures during signature inspection, source retrieval, or AST parsing are logged with `exc_info=e` so tracebacks remain available

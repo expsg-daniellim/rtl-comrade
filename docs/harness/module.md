@@ -18,7 +18,7 @@ This file defines `GraphModule`, a frozen descriptor that wraps a raw module plu
 ## Main Responsibilities
 
 - inspect the module class constructor to determine which harness-injected parameters (`config`, `id`) it accepts
-- construct a `ModuleStructure` from the module's `run(...)` method
+- construct a `ModuleStructure` from the module's `run(...)` method (and `finalise()` for output ports)
 - build the canonical input port template for modules with definite inputs
 - expose all derived metadata as a single frozen, reusable object
 

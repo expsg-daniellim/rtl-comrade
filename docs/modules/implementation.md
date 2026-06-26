@@ -202,7 +202,7 @@ If a tuple has the wrong length or a non-string port name at runtime, the harnes
 
 ## Static Output-Port Inference
 
-`ModuleStructure` statically inspects the `run(...)` AST to infer known output ports.
+`ModuleStructure` statically inspects the `run(...)` AST — and the `finalise()` AST when one is defined — to infer known output ports. Emits from both methods are merged into the same port set.
 
 This affects graph validation, so module authors need to know the rules.
 
@@ -259,7 +259,7 @@ class AsyncStatefulMod:
         await flush_to_database(self._results)
 ```
 
-`finalise()` does not receive arguments. If it raises, the harness treats it as fatal (same as an unhandled exception in `run(...)`) — but that is the fallback backstop, not a license to skip handling: `finalise()` owns its exceptions just as `run(...)` does (see [Exception Handling Is The Module's Responsibility](#exception-handling-is-the-modules-responsibility)). It supports the same output forms as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator. Return `None` to emit nothing.
+`finalise()` does not receive arguments. If it raises, the harness treats it as fatal (same as an unhandled exception in `run(...)`) — but that is the fallback backstop, not a license to skip handling: `finalise()` owns its exceptions just as `run(...)` does (see [Exception Handling Is The Module's Responsibility](#exception-handling-is-the-modules-responsibility)). It supports the same output forms as `run(...)`: plain return, named-port tuple, sync generator, async return, and async generator. Return `None` to emit nothing. Ports emitted from `finalise()` are statically inferred alongside `run(...)`'s — see [Static Output-Port Inference](#static-output-port-inference).
 
 If the module does not define `finalise`, or if `finalise` is a non-callable attribute, the harness silently skips the step.
 

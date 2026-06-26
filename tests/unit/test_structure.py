@@ -235,6 +235,121 @@ def test_emit_nested_def_ignored():
 	assert s.definite_emits is True
 
 
+# --- ModuleStructure finalise emit inference ---
+
+
+class _FinaliseNamedPort:
+	def run(self):
+		return None
+
+	def finalise(self):
+		return ("flushed", 1)
+
+
+class _FinaliseDefault:
+	def run(self):
+		return None
+
+	def finalise(self):
+		return 42
+
+
+class _FinaliseYield:
+	def run(self):
+		return None
+
+	def finalise(self):
+		yield ("summary", 1)
+
+
+class _FinaliseDynamic:
+	def run(self):
+		return None
+
+	def finalise(self):
+		port = "x"
+		return (port, 1)
+
+
+class _RunAndFinaliseDistinctPorts:
+	def run(self):
+		return ("from_run", 1)
+
+	def finalise(self):
+		return ("from_finalise", 2)
+
+
+class _RunAndFinaliseBothDefault:
+	def run(self):
+		return 1
+
+	def finalise(self):
+		return 2
+
+
+class _NonCallableFinalise:
+	finalise = 5
+
+	def run(self):
+		return None
+
+
+class _FinaliseInvalidTuple:
+	def run(self):
+		return None
+
+	def finalise(self):
+		return (1, 2, 3)
+
+
+def test_emit_finalise_named_port():
+	s = ModuleStructure(_FinaliseNamedPort)
+	assert s.emits == ["flushed"]
+	assert s.definite_emits is True
+
+
+def test_emit_finalise_default():
+	s = ModuleStructure(_FinaliseDefault)
+	assert "default" in s.emits
+	assert s.definite_emits is True
+
+
+def test_emit_finalise_yield():
+	s = ModuleStructure(_FinaliseYield)
+	assert s.emits == ["summary"]
+	assert s.definite_emits is True
+
+
+def test_emit_finalise_dynamic():
+	s = ModuleStructure(_FinaliseDynamic)
+	assert s.emits == []  # pylint: disable=use-implicit-booleaness-not-comparison
+	assert s.definite_emits is False
+
+
+def test_emit_run_and_finalise_distinct_ports():
+	s = ModuleStructure(_RunAndFinaliseDistinctPorts)
+	assert s.emits == ["from_run", "from_finalise"]
+	assert s.definite_emits is True
+
+
+def test_emit_run_and_finalise_both_default_dedup():
+	s = ModuleStructure(_RunAndFinaliseBothDefault)
+	assert s.emits == ["default"]
+	assert s.definite_emits is True
+
+
+def test_emit_non_callable_finalise_ignored():
+	s = ModuleStructure(_NonCallableFinalise)
+	assert s.emits == []  # pylint: disable=use-implicit-booleaness-not-comparison
+	assert s.definite_emits is True
+
+
+def test_finalise_invalid_tuple_raises():
+	with pytest.raises(StructureInvalidTupleError) as exc_info:
+		ModuleStructure(_FinaliseInvalidTuple)
+	assert len(exc_info.value.tuple_) == 3
+
+
 # --- Error cases ---
 
 
