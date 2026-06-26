@@ -6,7 +6,7 @@ the functionality of `rtl_buddy`'s `test` command (see `rtl_buddy/`) as an
 
 Read in order:
 
-- [00-overview.md](00-overview.md) — goal, design philosophy, the end-to-end dataflow at a glance
+- [00-overview.md](00-overview.md) — goal, design philosophy, the end-to-end dataflow at a glance. Its Mermaid flowchart renders to `dataflow-diagram.svg`; re-run [`regen-dataflow-diagram.sh`](regen-dataflow-diagram.sh) (uses `mmdc`, falling back to `npx @mermaid-js/mermaid-cli`) after editing the diagram.
 - [01-cli-and-entry.md](01-cli-and-entry.md) — how the `test` CLI surface maps onto CLI edges + the config-file command entry
 - [02-payload-conventions.md](02-payload-conventions.md) — the minimal `ctx` correlation record, branch payloads, and the correlation key
 - [03-module-catalog.md](03-module-catalog.md) — every atomic module: signature, config, output ports, paired contract, tags, reuse notes

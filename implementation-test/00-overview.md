@@ -129,36 +129,32 @@ route/parse nodes, and the multi-edge gates. The same node names appear in the [
 ```mermaid
 flowchart TD
   route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select"]
-  select m2@-->|"test"| filter["filter"]
-  filter m3@-->|"test"| load_model["load-model"]
-  load_model m4@-->|"test"| sweep["sweep<br/>(keyed_join)"]
-  load_model m4b@-->|"model"| sweep
-  sweep m5@-->|"test"| preproc["preproc<br/>(keyed_join)"]
-  sweep m5b@-->|"model"| preproc
-  preproc m6@-->|"test"| gate_pre["gate-pre<br/>(keyed_join)"]
-  preproc m6b@-->|"model"| gate_pre
-  gate_pre m7@-->|"test"| filelist["filelist<br/>(keyed_join)"]
-  gate_pre m7b@-->|"model"| filelist
-  filelist m8@-->|"test + filelist"| cc_build["cc-build<br/>(keyed_join)"]
-  cc_build m9@-->|"command"| cc_run["cc-run<br/>(run-process)"]
-  cc_build m10@-->|"test + simv"| cc_int["cc-int<br/>(keyed_join)"]
-  cc_run m11@-->|"proc"| cc_int
-  cc_int m12@-->|"test + simv"| gate_comp["gate-comp<br/>(keyed_join)"]
-  gate_comp m13@-->|"test + simv"| runs["runs<br/>(keyed_join)"]
-  runs m14@-->|"test + run_id + simv"| seed["seed<br/>(keyed_join)"]
-  seed m15@-->|"test + run_id + simv + seed"| sim_build["sim-build<br/>(keyed_join)"]
-  sim_build m16@-->|"command + timeout"| sim_run["sim-run<br/>(keyed_join)"]
-  sim_build m17@-->|"randseed"| randseed["write-randseed<br/>(keyed_join)"]
-  sim_build m17b@-->|"randseed"| link_latest["link-latest<br/>(keyed_join)"]
-  sim_build m17c@-->|"test"| sim_int["sim-int<br/>(keyed_join)"]
-  sim_run m18@-->|"proc (gate)"| randseed
-  sim_run m18b@-->|"proc"| link_latest
-  sim_run m18c@-->|"proc"| sim_int
-  randseed m19@-->|"randseed_done"| link_latest
-  sim_int m21@-->|"test + proc"| gate_sim["gate-sim<br/>(keyed_join)"]
-  gate_sim m22@-->|"test + proc"| route_post["route-post<br/>(keyed_join)"]
-  route_post m23@-->|"plain: test + proc"| parse_log["parse-log<br/>(keyed_join)"]
-  route_post m24@-->|"uvm: test + proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
+  select m2@-->|"test:TestConfig"| filter["filter"]
+  filter m3@-->|"test:TestConfig"| load_model["load-model"]
+  load_model m4@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| sweep["sweep<br/>(keyed_join)"]
+  sweep m5@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| preproc["preproc<br/>(keyed_join)"]
+  preproc m6@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| gate_pre["gate-pre<br/>(keyed_join)"]
+  gate_pre m7@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| filelist["filelist<br/>(keyed_join)"]
+  filelist m8@-->|"test:TestConfig + filelist:KeyedValue[Path]"| cc_build["cc-build<br/>(keyed_join)"]
+  cc_build m9@-->|"command:Command"| cc_run["cc-run<br/>(run-process)"]
+  cc_build m10@-->|"test:TestConfig + simv:KeyedValue[str]"| cc_int["cc-int<br/>(keyed_join)"]
+  cc_run m11@-->|"proc:Proc"| cc_int
+  cc_int m12@-->|"test:TestConfig + simv:KeyedValue[str]"| gate_comp["gate-comp<br/>(keyed_join)"]
+  gate_comp m13@-->|"test:TestConfig + simv:KeyedValue[str]"| runs["runs<br/>(keyed_join)"]
+  runs m14@-->|"test:TestConfig + run_id:KeyedValue[int#124;None] + simv:KeyedValue[str]"| seed["seed<br/>(keyed_join)"]
+  seed m15@-->|"test:TestConfig + run_id:KeyedValue[int#124;None] + simv:KeyedValue[str] + seed:KeyedValue[int]"| sim_build["sim-build<br/>(keyed_join)"]
+  sim_build m16@-->|"command:Command + timeout:KeyedValue[float#124;None]"| sim_run["sim-run<br/>(keyed_join)"]
+  sim_build m17@-->|"randseed:RandSeed"| randseed["write-randseed<br/>(keyed_join)"]
+  sim_build m17b@-->|"randseed:RandSeed"| link_latest["link-latest<br/>(keyed_join)"]
+  sim_build m17c@-->|"test:TestConfig"| sim_int["sim-int<br/>(keyed_join)"]
+  sim_run m18@-->|"proc:Proc (gate)"| randseed
+  sim_run m18b@-->|"proc:Proc"| link_latest
+  sim_run m18c@-->|"proc:Proc"| sim_int
+  randseed m19@-->|"randseed_done:RandSeedDone"| link_latest
+  sim_int m21@-->|"test:TestConfig + proc:Proc"| gate_sim["gate-sim<br/>(keyed_join)"]
+  gate_sim m22@-->|"test:TestConfig + proc:Proc"| route_post["route-post<br/>(keyed_join)"]
+  route_post m23@-->|"plain: test:TestConfig + proc:Proc"| parse_log["parse-log<br/>(keyed_join)"]
+  route_post m24@-->|"uvm: test:TestConfig + proc:Proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
   route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
 
   filter t1@-->|"skip:TestResult(SKIP)"| TERM["results-summary<br/>(any)"]
@@ -236,7 +232,7 @@ flowchart TD
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
-  class m1,m2,m3,m4,m4b,m5,m5b,m6,m6b,m7,m7b,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
+  class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
   class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 resultEdge;
   class s1,s2 summaryEdge;
   class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
