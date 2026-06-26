@@ -102,6 +102,4 @@ In `modules/tests/test_compile_cycle.py`. Fixtures: `builder_cfg` doubles (one v
 
 ## Notes
 
-`simv` is emitted by `build-compile-cmd` as its own `{key, value}` edge — `build-sim-cmd` joins it by key. `build_dir` is not emitted (not needed downstream).
-
 **Concurrency note (item 17).** `build_dir = str(Path(work_dir) / f"obj_dir_{test_tag}")` and the verilator `simv = f"{build_dir}/simv"` are per-tag **and** rooted on the `work_dir` provider, so they don't collide across concurrent tests and relocate as a one-node change — the same artefact-location model `logs/` uses. The `-f` filelist is likewise per-tag and `work_dir`-rooted because `write-filelist` writes `Path(work_dir) / f"run.{test_tag}.f"` (spec [06b](06b-write-filelist.md)) and this module reads `filelist.value` straight into `-f`. **Residual:** for non-verilator builders `simv = builder_cfg.get_simv()` is a *fixed configured* name with no per-tag prefix that the graph can't freely redirect; its isolation waits on the upstream per-invocation-subdir change ([07 item 17](../07-ambiguities-and-assumptions.md)). Do not add a lock for it; see [05 — Interim CWD-collision posture](../05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).

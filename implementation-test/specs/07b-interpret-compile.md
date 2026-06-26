@@ -31,23 +31,22 @@ class InterpretCompileMod:
             yield ("test", test)   # forward test + simv together on success (co-gating)
             yield ("simv", simv)
             return
-        result = TestResult.compile_fail(test.key)   # desc is the fixed 'Compile failed' (rtl_buddy parity); rc/stderr go on the log, not in desc
-        log.error("compile_failed", key=test.key, test_name=test.get_name(), rc=proc.rc, stderr_path=proc.stderr_path,
-                  result=result.result, desc=result.desc)   # → SummaryProcessor row
+        result = TestResult.compile_fail(test.key, test.get_name())   # desc is the fixed 'Compile failed' (rtl_buddy parity); rc/stderr go on the log
+        log.error("compile_failed", key=test.key, test_name=test.get_name(), rc=proc.rc, stderr_path=str(proc.stderr_path))   # rich domain context, no result/desc; drives the exit. TestResult → results-summary
         yield ("fail", result)
 ```
 
 ## Algorithm
 
 1. Branch on the subprocess result (`test`, `simv`, `proc` joined by key via `keyed_join`): if `proc.rc == 0`, forward both `("test", test)` and `("simv", simv)` unchanged. The `simv` edge is **co-gated** here: it passes through interpret-compile only on success, so on a compile failure neither `test` nor `simv` proceeds and the downstream `expand-runs` join cannot dangle (design-doc co-gating rule).
-2. **Failure — non-zero rc.** Otherwise build `result = TestResult.compile_fail(test.key)` — a self-keyed `TestResult` (`type_=COMPILE_FAIL`) whose `desc` is the fixed `'Compile failed'` (rtl_buddy `runner/test_results.py:44-51`), **not** spliced from stderr — then `log.error("compile_failed", …)` at emission with `rc`/`stderr_path` (optionally a stderr tail as a **log** field for debugging) **plus `result`/`desc`** (so `SummaryProcessor`'s watch-list collects the row), and emit `("fail", result)` — `test`/`simv` are dropped. This is result routing on `rc`, not a caught Python exception. If the optional stderr tail is read for the log, that read is **guarded** — an `OSError`/`FileNotFoundError` (e.g. the stderr file is missing) is caught and the tail simply omitted; the failure still routes to `fail` and logs `compile_failed`. The tail is debug enrichment, so a read failure never escapes `run()`.
+2. **Failure — non-zero rc.** Otherwise build `result = TestResult.compile_fail(test.key, test.get_name())` — a self-keyed `TestResult` (`type_=COMPILE_FAIL`) whose `desc` is the fixed `'Compile failed'` (rtl_buddy `runner/test_results.py:44-51`), **not** spliced from stderr — then `log.error("compile_failed", …)` at emission with `rc`/`stderr_path` (optionally a stderr tail as a **log** field for debugging) **plus `result`/`desc`** (the `log.error` drives the exit; the emitted `TestResult` → `results-summary`, spec [10d](10d-summarise-results.md)), and emit `("fail", result)` — `test`/`simv` are dropped. This is result routing on `rc`, not a caught Python exception. If the optional stderr tail is read for the log, that read is **guarded** — an `OSError`/`FileNotFoundError` (e.g. the stderr file is missing) is caught and the tail simply omitted; the failure still routes to `fail` and logs `compile_failed`. The tail is debug enrichment, so a read failure never escapes `run()`.
 
 ## Deliverables
 
 In `modules/rtl_buddy/build.py`:
 
-- `InterpretCompileMod` — `(test, simv, proc)`, `keyed_join` joining the three by key; rc == 0 → forward `("test", test)` then `("simv", simv)` (co-gated); rc != 0 → reads `proc.stderr_path`/`stdout_path` and logs at ERROR, then `("fail", TestResult.compile_fail(test.key))` (`test`/`simv` dropped).
-  **Failure handling**: routing on `proc.rc`. `TestResult.compile_fail`'s `desc` is the fixed `'Compile failed'` (rtl_buddy `runner/test_results.py:44-51`) — it is **not** derived from stderr. The ERROR `compile_failed` log at emission carries `rc`, `stderr_path`, optionally a stderr tail as a log field (rtl_buddy logs the full stderr/stdout dump at `tools/vlog_sim.py:170-172`; a bounded tail is acceptable here), **and `result`/`desc`** from the `TestResult` so the `SummaryProcessor` watch-list ([10c](10c-summary-handler.md)) renders the row. If the tail is read, **guard** the read: an `OSError`/`FileNotFoundError` is caught and the tail omitted (the result still routes to `fail`) — the debug tail must never escape `run()`.
+- `InterpretCompileMod` — `(test, simv, proc)`, `keyed_join` joining the three by key; rc == 0 → forward `("test", test)` then `("simv", simv)` (co-gated); rc != 0 → reads `proc.stderr_path`/`stdout_path` and logs at ERROR, then `("fail", TestResult.compile_fail(test.key, test.get_name()))` (`test`/`simv` dropped).
+  **Failure handling**: routing on `proc.rc`. `TestResult.compile_fail`'s `desc` is the fixed `'Compile failed'` (rtl_buddy `runner/test_results.py:44-51`) — it is **not** derived from stderr. The ERROR `compile_failed` log at emission carries `rc`, `stderr_path`, optionally a stderr tail as a log field (rtl_buddy logs the full stderr/stdout dump at `tools/vlog_sim.py:170-172`; a bounded tail is acceptable here) — **no** `result`/`desc` (the fixed verdict/desc are implied by the event); the emitted `TestResult` → `results-summary` (spec [10d](10d-summarise-results.md)). If the tail is read, **guard** the read: an `OSError`/`FileNotFoundError` is caught and the tail omitted (the result still routes to `fail`) — the debug tail must never escape `run()`.
   **Compatibility source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:63-65` — the `compile_returncode != 0 → CompileFailResults` branch; rc check at `tools/vlog_sim.py:168-171`; `CompileFailResults` at `runner/test_results.py:44-51`.
 
 **Manifest** — append to the `- file: rtl_buddy/build.py` block in `modules/config.yaml` (opened by [`06a`](06a-run-preproc.md); append, don't re-create):
@@ -61,7 +60,7 @@ In `modules/rtl_buddy/build.py`:
 In `modules/tests/test_compile_cycle.py`. Fixtures: `test` (`{key, value}`), `simv` (`{key, value}`), and `proc` (`{key, rc, stdout_path, stderr_path}`) edge dicts; a `tmp_path` stderr file with known content; `logging_handler` for the fail path. Drive `run(test, simv, proc)` directly — the `keyed_join` is the contract's concern.
 
 - `proc.rc == 0` → emits `("test", test)` then `("simv", simv)` unchanged; no log.
-- `proc.rc == 2` with a stderr file → emits `("fail", TestResult.compile_fail(key))` (no `test`/`simv`), `logging_handler.failure is True`, and the ERROR `compile_failed` log carries `rc`/`stderr_path`/the stderr tail **and `result="FAIL"`/`desc`** (so `SummaryProcessor` collects it).
+- `proc.rc == 2` with a stderr file → emits `("fail", TestResult.compile_fail(key, test_name))` (no `test`/`simv`), `logging_handler.failure is True`, and the ERROR `compile_failed` log carries `rc`/`stderr_path`/the stderr tail (no `result`/`desc`); the emitted `TestResult` → `results-summary`.
 - `proc.rc == -11` (signal-style non-zero) → still routes `("fail", …)` (boundary: any non-zero rc is a compile failure, not just positive codes).
 - `proc.rc != 0` with `stderr_path` pointing at a missing file → the guarded tail read catches the `FileNotFoundError` and omits the tail; the result still routes `("fail", …)` and logs `compile_failed` (with `result`/`desc`, no tail) — **no** exception escapes `run()`.
 
@@ -75,9 +74,5 @@ In `modules/tests/test_compile_cycle.py`. Fixtures: `test` (`{key, value}`), `si
 ## Constraints
 
 - `keyed_join` contract with `key_field: key` — join `test` + `simv` + `proc` by key; this is a join node, not single-source `default`.
-- Route on `proc.rc`: `rc == 0` → forward `("test", test)` then `("simv", simv)` (co-gate `simv` through success so the `expand-runs` join can't dangle); `rc != 0` → `("fail", TestResult.compile_fail(test.key))` on the **unwired** `fail` port (dropping `test`/`simv`) and `log.error("compile_failed", …)` at emission (`rc`, `stderr_path`, optional stderr tail, **and `result`/`desc`** so the `SummaryProcessor` watch-list collects the row). The result's `desc` is the fixed `'Compile failed'` — never splice stderr/`rc` into `desc`; they belong on the `log.error` only.
+- Route on `proc.rc`: `rc == 0` → forward `("test", test)` then `("simv", simv)` (co-gate `simv` through success so the `expand-runs` join can't dangle); `rc != 0` → `("fail", TestResult.compile_fail(test.key, test.get_name()))` on the `fail` port (→ `results-summary`) (dropping `test`/`simv`) and `log.error("compile_failed", …)` at emission (`rc`, `stderr_path`, optional stderr tail; **no** `result`/`desc`); the emitted `TestResult` → `results-summary`. The result's `desc` is the fixed `'Compile failed'` — never splice stderr/`rc` into `desc`; they belong on the `log.error` only.
 - This is result routing on `rc`. If you read the stderr tail for the log, **guard** it — an `OSError`/`FileNotFoundError` is caught and the tail omitted (the result still routes to `fail`); never let it escape `run()`.
-
-## Notes
-
-`interpret-compile` joins `test` + `simv` + `proc`. The `simv` edge is born at `build-compile-cmd` and **co-gated** through here on compile success — `build-sim-cmd` joins it (along with `test`/`run_id`/`seed`) downstream of `expand-runs`. See [04 — keyed_join paragraph](../04-pipeline-and-contracts.md).

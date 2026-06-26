@@ -82,7 +82,3 @@ These exercise the **runtime `ModelConfig`** owned by this spec. The read + look
 - `ModelConfig` is a pure, **`frozen=True`** plain `@dataclass` value object (not `@serde`): no `run()`, no ports, no graph awareness. The `@serde` read shape is `ModelConfigFileItem` (spec [05e](05e-load-model.md)).
 - `get_model_name()` must return `self.name` (the rtl_buddy `self.model_name` bug is fixed).
 - `path` is **not** a YAML field — `ModelConfig` declares `path: str | None = None`, and `load-model` (spec [05e](05e-load-model.md)) sets it at construction to `str(resolved)`; `write-filelist` (spec [06b](06b-write-filelist.md)) reads `model.path` to resolve `filelist` entries.
-
-## Notes
-
-`ModelConfig.path` is runtime provenance, set once at construction by `load-model` (spec [05e](05e-load-model.md)) to the resolved `models.yaml` path — it is not read from YAML (the raw `ModelConfigFileItem` has no `path`). rtl_buddy mutated `path` in place inside `ModelConfigLoader.get_model`; here the node is the unit of functionality, so the read/lookup/construct is unrolled into `LoadModelMod.run` and the value object stays a frozen, immutable record. `write-filelist` reads `model.path` directly.

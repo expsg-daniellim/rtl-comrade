@@ -19,7 +19,7 @@ are decided **per type, not blanket**:
   - **Multi-field messages self-key** (`Command`/`Proc`/`RandSeed`/`RandSeedDone`) —
     cohesive purpose-built messages, so the key is naturally one of their fields, no envelope.
     **`TestResult`** likewise self-keys: its `key` is the producing test invocation's id, so
-    terminal ports emit the `TestResult` directly — there is no `Result(key, result)` wrapper.
+    result ports emit the `TestResult` directly — there is no `Result(key, result)` wrapper.
   - **Everything else rides `KeyedValue`** because the key is *not the value's own identity*: a
     primitive (`int`/`Path`/`str`) has no identity at all, and **`model`** is the `ModelConfig`
     resolved *for a test* — keyed by the **test's** identity (so `write-filelist` can join it
@@ -109,49 +109,49 @@ randseed_done = RandSeedDone(k)                              # write-randseed  �
 
 `proc` echoes the redirect paths (`stdout_path`/`stderr_path` = the sim log/err), so the post-sim parsers read the log from `proc` — there is no separate `sim_cmd` bag (its parts became `command` + `randseed`). Single-value edges (`filelist`, `seed`, `timeout`) use the `KeyedValue[T]` envelope (Shape 1). These never accumulate; each is consumed by exactly the next stage(s).
 
-## Shape 3 — result payloads (terminal; port unwired, row logged)
+## Shape 3 — result payloads (terminal; fanned into `results-summary`)
 
-The single shape every terminal output port emits, regardless of which stage produced it — the self-keyed `TestResult` directly (no `Result` wrapper):
+The single shape every terminal output port emits, regardless of which stage produced it — the self-keyed `TestResult` directly (no `Result` wrapper). It carries `test_name` (the test's `get_name()`, the summary table's first column):
 
 ```python
-result = TestResult(key=k, type_=ResultType.…, result="PASS|FAIL|NA|SKIP", desc=…)
+result = TestResult(key=k, test_name=name, type_=ResultType.…, result="PASS|FAIL|NA|SKIP", desc=…)
 ```
 
-Emitted on a stage's terminal port (`skip`, `stop`, `fail`, `timeout`, `result`). Since the
-TODO #15 redesign these ports are **unwired** — there is no `aggregate-results` collector.
-Each terminal additionally **logs its outcome**, and the per-graph `SummaryProcessor` plugin
-collects those log events (via a configured watch-list) and renders the table. Two emission
-styles, both carrying `test_name`/`key`/`result`/`desc` (`test_name` = the test's `get_name()`,
-rendered as the summary's first column for rtl_buddy parity; `key` is retained for correlation):
+Emitted on a stage's result port (`skip`, `stop`, `fail`, `timeout`, `result`). Since the
+in-graph summary returned (spec [10d](specs/10d-summarise-results.md)) these 13 result ports
+are **wired** — each fans into the `results-summary` node via the `any` contract, which renders
+the consolidated table from its `finalise()`. The table reads the `TestResult` fields directly, so
+`test_name` rides the payload (enrich-over-`key`); there is no `aggregate-results` collector and no
+relay — the contract fans straight into the accumulating sink.
 
-- **`test_result` directly** — the result-producing terminals that would otherwise log nothing
-  (`parse-log`/`parse-uvm-log` on PASS/NA/FAIL, `filter.skip`, `early-stop-gate`) call
-  `log.info("test_result", …)` (pass-like) or `log.error("test_result", …)` (non-`is_pass()`,
-  which also drives the exit). The `early-stop-gate` pattern. **Exception:** `early-stop-gate`
-  always uses `log.info` even though its early-stop result is NA — a user-requested stop is not
-  a failure, so it does **not** drive the exit (deliberate exit-0 divergence from rtl_buddy; see
-  [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
-- **A domain event the watch-list collects** — the failure terminals that already `log.error`
-  (`interpret-compile`→`compile_failed`, `interpret-sim`→`sim_timeout`, and
-  `load-model`/`expand-sweep`/`run-preproc`/`write-filelist`/`resolve-seed`→`*_failed`) just add
-  `test_name`/`result`/`desc` kwargs to their existing call; `SummaryProcessor`'s `Config`
-  watch-list lists those event names, so no parallel `test_result` is emitted for them.
+A `TestResult`-producing terminal **logs only the errors it encounters** — never a PASS, SKIP, or
+early-stop (those outcomes are recorded by the `TestResult` they emit, the summary row). The
+**failure** terminals (`interpret-compile`→`compile_failed`, `interpret-sim`→`sim_timeout`,
+`load-model`/`expand-sweep`/`run-preproc`/`write-filelist`/`resolve-seed`→ per-exception events
+(`model_*`/`sweep_*`/`preproc_*`/`filelist_*`/`replay_seed_*`), and `parse-log`/`parse-uvm-log` on
+FAIL/NA → `parse_log_*`/`parse_uvm_*`) `log.error` once under their per-case event name — an exit
+driver (`handler.failure`), alongside the consolidated `results-summary.finalise()` FAIL check
+(spec [10d](specs/10d-summarise-results.md)). **`early-stop-gate`** is the one NA that drives no
+exit: a user-requested stop is not a failure, so it emits no `log.error` and its NA is not a FAIL
+row → exit 0 (deliberate divergence from rtl_buddy; see
+[07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy)).
 
-The `<TestResult>` object is still built (for `is_pass()` classification and the logged
-`result`/`desc`). See [05](05-branching-and-results.md) and [spec 10c](specs/10c-summary-handler.md).
+The `<TestResult>` object is the single source for both the table (via `results-summary`) and the
+`is_pass()` classification behind the per-case `log.error`. See
+[05](05-branching-and-results.md) and [spec 10d](specs/10d-summarise-results.md).
 
-## `TestResult` values used at the terminal ports
+## `TestResult` values used at the result ports
 
-`TestResult` is the single reimplemented value object in `results.py` (spec [01](specs/01-shared-schema.md)) — `key`, `type_: ResultType`, `result`, `desc`, with `is_pass()` true for `PASS`/`SKIP`. `type_` names the originator, `result` the verdict (a faithful port of rtl_buddy's `runner/test_results.py:10-78` *semantics*, not its class hierarchy — the subclasses are collapsed into one dataclass + `@classmethod` constructors). Each terminal builds its value via the matching constructor: `TestResult.compile_fail(key)`, `TestResult.sim_timeout(key)`, `TestResult.early_stop(key, desc)`, `TestResult.skip(key, desc)`, and `TestResult.parse(key, result, desc)` for the parse verdicts. The generic per-test FAIL (`load-model`/`expand-sweep`/`run-preproc`/`write-filelist`/`resolve-seed`) uses `TestResult.prep(key, desc)` (`type_=PREP`, verdict `"FAIL"`), which replaces the old `make_fail_result`.
+`TestResult` is the single reimplemented value object in `results.py` (spec [01](specs/01-shared-schema.md)) — `key`, `type_: ResultType`, `result`, `desc`, with `is_pass()` true for `PASS`/`SKIP`. `type_` names the originator, `result` the verdict (a faithful port of rtl_buddy's `runner/test_results.py:10-78` *semantics*, not its class hierarchy — the subclasses are collapsed into one dataclass + `@classmethod` constructors). Each terminal builds its value via the matching constructor, passing `test_name` (the test's `get_name()`) as the second positional: `TestResult.compile_fail(key, test_name)`, `TestResult.sim_timeout(key, test_name)`, `TestResult.early_stop(key, test_name, desc)`, `TestResult.skip(key, test_name, desc)`, and `TestResult.parse(key, test_name, result, desc)` for the parse verdicts. The generic per-test FAIL (`load-model`/`expand-sweep`/`run-preproc`/`write-filelist`/`resolve-seed`) uses `TestResult.prep(key, test_name, desc)` (`type_=PREP`, verdict `"FAIL"`), which replaces the old `make_fail_result`.
 
-| terminal port (node) | factory (`type_`, verdict) | is_pass? | exit contribution |
+| result port (node) | factory (`type_`, verdict) | is_pass? | exit contribution |
 |---|---|---|---|
-| `skip` (`filter`) | `TestResult.skip(key, desc)` (`SKIP`, SKIP) | yes (SKIP) | none |
-| `stop` (`gate-*`) | `TestResult.early_stop(key, desc)` (`EARLY_STOP`, NA) | no (NA) | **exit 0** (deliberate divergence — see below) |
-| `fail` (`interpret-compile`) | `TestResult.compile_fail(key)` (`COMPILE_FAIL`, FAIL) | no (FAIL) | exit 1 |
-| `timeout` (`interpret-sim`) | `TestResult.sim_timeout(key)` (`SIM_TIMEOUT`, FAIL) | no (FAIL) | exit 1 |
-| `fail` (`load-model`/…/`resolve-seed`) | `TestResult.prep(key, desc)` (`PREP`, FAIL) | no (FAIL) | exit 1 |
-| `default` (`parse-log` / `parse-uvm-log`) | `TestResult.parse(key, result, desc)` (`PARSE`, PASS/FAIL/NA) | PASS→yes | non-pass→exit 1 |
+| `skip` (`filter`) | `TestResult.skip(key, test_name, desc)` (`SKIP`, SKIP) | yes (SKIP) | none |
+| `stop` (`gate-*`) | `TestResult.early_stop(key, test_name, desc)` (`EARLY_STOP`, NA) | no (NA) | **exit 0** (deliberate divergence — see below) |
+| `fail` (`interpret-compile`) | `TestResult.compile_fail(key, test_name)` (`COMPILE_FAIL`, FAIL) | no (FAIL) | exit 1 |
+| `timeout` (`interpret-sim`) | `TestResult.sim_timeout(key, test_name)` (`SIM_TIMEOUT`, FAIL) | no (FAIL) | exit 1 |
+| `fail` (`load-model`/…/`resolve-seed`) | `TestResult.prep(key, test_name, desc)` (`PREP`, FAIL) | no (FAIL) | exit 1 |
+| `default` (`parse-log` / `parse-uvm-log`) | `TestResult.parse(key, test_name, result, desc)` (`PARSE`, PASS/FAIL/NA) | PASS→yes | non-pass→exit 1 |
 
 `TestResult.is_pass()` is the single source of truth for the exit code (SKIP counts as
 pass; NA/FAIL do not), exactly as in `rtl_buddy` — **except `early-stop`**: the early-stop result
@@ -163,6 +163,8 @@ A genuine NA verdict from `parse-log`/`parse-uvm-log` still drives exit 1.
 ## Sentinels
 
 `EndSentinel` (handled entirely by contracts) is the only sentinel. No `GroupEnd` or
-`BranchSkip` is used: branches are mutually exclusive, and since the TODO #15 redesign the
-terminal ports are unwired (no re-convergence). The test graph's contracts are `unit` /
-`default` / `keyed_join` (plus an unwired `any`); there is no `merge` contract.
+`BranchSkip` is used: branches are mutually exclusive, and the 13 result ports re-converge
+only at the `results-summary` sink (spec [10d](specs/10d-summarise-results.md)) via the `any`
+contract's fan-in — not through a keyed join. The test graph's contracts are `unit` /
+`default` / `keyed_join` / `any` (the last fanning the terminals into `results-summary`); there
+is no `merge` contract.

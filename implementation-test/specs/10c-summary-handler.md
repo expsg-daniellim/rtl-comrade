@@ -1,7 +1,9 @@
 # Spec 10c: summary logging plugin (`SummaryProcessor`)
 
+> **Dormant (superseded by spec [10d](10d-summarise-results.md)).** The summary returned to the graph as the in-graph `results-summary` node ([10d](10d-summarise-results.md)), which renders the table from the fanned-in `TestResult` payloads. `SummaryProcessor` is **retained in place as reference/standby infra but dropped from `test.yaml`'s `logging` block** — it is **unwired**. The table-render parity it carries (header `"\nTest Results Summary"`, column widths `{test_name:<30} {result:<8} {desc:<30}`, verdict colourisation gated on a TTY, `'NA'` defaulting) is **shared** with [10d](10d-summarise-results.md); the difference is only the data path (this plugin scrapes the logging chain; the node reads the payload off a visible edge fan-in). The text below documents the dormant plugin as built; it is not wired into the `test` graph. Build it only if a graph deliberately opts into out-of-graph summary collection.
+
 **Depends on:** spec 01 (schema), spec [10a](10a-early-stop-gate.md) / [10b](10b-git-status.md) (emit the `test_result` events this processor accumulates). Uses the **per-run processor-finalisation hook**: `App.cleanup` finalises the run's processors (then handlers), duck-typed, before the failure check and not on a `CRITICAL` exit (`docs/logger/implementation.md:95-99`, timing at `:165-167`).
-**References:** [03 — Control section](../03-module-catalog.md), [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node), [07 item 27](../07-ambiguities-and-assumptions.md), `docs/logger/implementation.md`, `docs/harness/logging.md`. Parent index: [idx-10 — Control module, git-status, and the summary logging plugin](../idx-10-control-aggregate.md).
+**References:** [03 — Control section](../03-module-catalog.md), [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node), [07 item 27](../07-ambiguities-and-assumptions.md), `docs/logger/implementation.md`, `docs/harness/logging.md`. Parent index: [idx-10 — Control module, git-status, and the summary logging plugin](../idx-10-control-aggregate.md).
 
 ## Goal
 
@@ -140,7 +142,7 @@ Sketches in [05 — The `SummaryProcessor` logging plugin](../05-branching-and-r
 - Exit-code semantics: a run with any FAIL/NA emits ≥1 `log.error` → harness exit 1; an all-PASS/SKIP run emits none → exit 0. This reproduces rtl_buddy's `exit_code |= 0 if is_pass() else 1` via the per-emission `log.error`, not an aggregator.
 - The summary table renders `test_name` as the first column (rtl_buddy parity) followed by `result`/`desc`, with a missing field shown as `'NA'`.
 - Verdict colourisation (rtl_buddy parity): on a TTY the `PASS`/`FAIL`/`NA` tokens are ANSI-wrapped (`SKIP` plain); when stdout is not a TTY the table prints with no escape codes.
-- The `logging` block resolves `graphs/log/summary.py` to the single `SummaryProcessor`, which renders on a normal and a deferred-`ERROR` run (not on CRITICAL).
+- The plugin's own tests (hand-built `event_dict`s + `finalise()`) pass; it renders on a normal and a deferred-`ERROR` run, not on CRITICAL. It is **dropped from `test.yaml`'s `logging` block** (the in-graph `results-summary` node renders the table — spec [10d](10d-summarise-results.md)), so no live wiring is asserted; a graph that opts in resolves `graphs/log/summary.py` to the single `SummaryProcessor`.
 
 ## Constraints
 

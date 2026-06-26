@@ -41,13 +41,14 @@ Main-line nodes top to bottom; setup nodes feed config in as **persistent** inpu
 | 21a | `parse-log` | `parse-log` | `keyed_join` (`key_field: key`) | `test`,`proc` |
 | 21b | `parse-uvm-log` | `parse-uvm-log` | `keyed_join` (`key_field: key`) | `test`,`proc` |
 
-> **No `fan-in`/`agg` rows (TODO #15).** The former rows 22a (`fan-in`) and 22 (`agg`) are
-> removed. The 13 terminal ports are left **unwired** (each terminal instead logs its outcome —
-> `test_result` from the otherwise-silent paths, the terminal's own `*_failed`/`compile_failed`/
-> `sim_timeout` event from the failure sites), and the summary **results** table is rendered by
-> the per-graph `SummaryProcessor` logging plugin (watch-list-driven) in its `finalise()` hook
-> (git state falls through to the console separately). See
-> [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
+> **One `results-summary` row, no relay/agg pair (TODO #15, revised by spec [10d](specs/10d-summarise-results.md)).**
+> The former rows 22a (`fan-in`) and 22 (`agg`) are gone. The 13 result ports are **wired** to a
+> single `results-summary` node (`contract: any`, `contract_port_mappings`), which renders the summary
+> **results** table from the fanned-in `TestResult`s in its `finalise()` hook — the `any` contract is
+> the fan-in, so no `fan-in-results` relay is reintroduced. Each terminal also logs a **per-case**
+> event (the failure terminals' `compile_failed`/`sim_timeout`/`model_*`/`sweep_*`/`preproc_*`/`filelist_*`/`replay_seed_*`/`parse_*`; the pass-like
+> ones at INFO — no generic `test_result`); git state falls through to the console separately. See
+> [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node).
 
 The same nodes are drawn in the overview's
 [combined dataflow diagram](00-overview.md#end-to-end-dataflow-at-a-glance), where edges are
@@ -162,20 +163,22 @@ the reference fix for the residual it cannot name (non-verilator `simv`, `test.*
 tool-internal CWD files). Detail in
 [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming).
 
-### Re-convergence — removed; the summary is a logging concern
-There is no longer a re-convergence node. The 13 mutually-exclusive terminal-result branches
-are left unwired; each terminal logs its outcome (a `test_result` event, or the failure
-terminal's own watched event) that the per-graph `SummaryProcessor` collects via its watch-list
-and renders in `finalise()`. The `any` contract
-that previously fed `fan-in` is retained (reusable) but unwired in `test`. Details in
-[05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
+### Re-convergence — the `results-summary` node
+The 13 mutually-exclusive terminal-result branches re-converge at one `results-summary` node
+(spec [10d](specs/10d-summarise-results.md)), fanned in by the `any` contract: each emits its
+`TestResult` (the summary row) and logs a per-case event at origin (failure terminals at
+`log.error`; the pass-like outcomes are recorded by their `TestResult` alone). `results-summary.finalise()`
+renders the table and emits the consolidated `test_failures` error on any FAIL row. The `any`
+contract is the fan-in itself — the old `fan-in-results` relay + `aggregate-results` sink is **not**
+reintroduced. Details in
+[05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node)
 and [specs/10](idx-10-control-aggregate.md).
 
 ## Fan-out points
 
 `select` (suite → N tests), `sweep` (1 test → M variants), `runs` (1 compiled test → R
-runs) are generator modules. Total terminal results = `N×M×R` `test_result` rows collected
-by `SummaryProcessor`, matching the row count `rtl_buddy` would print. A test that fails compile
+runs) are generator modules. Total terminal results = `N×M×R` `TestResult` rows fanned into
+`results-summary`, matching the row count `rtl_buddy` would print. A test that fails compile
 is sealed at `cc-int.fail` *before* `runs`, so it yields exactly one result, not R — no
 special-casing needed, because the failed item simply never enters the run fan-out.
 
@@ -205,10 +208,11 @@ constrains *input* ports only). Config broadcasts:
 ## Liveness / termination
 
 Every node propagates `EndSentinel` (handled by the chosen contracts: `unit` after its run;
-`default`/`keyed_join` when a required port ends). The graph is a DAG with **many terminal
-nodes** (the 13 sites whose result ports are unwired, plus `git-status`), not a single sink.
+`default`/`keyed_join` when a required port ends; `any` when all 13 fanned-in ports end). The
+13 terminal result ports converge on the `results-summary` sink, so the graph is a DAG that
+fans **in** to one sink (plus `git-status`, whose log-only `default` port stays unwired).
 `graph.py` gathers every node coroutine via `asyncio.gather`, so when `select` ends the
-sentinel cascades through every branch and all coroutines complete; the summary then renders
-in `SummaryProcessor.finalise()`, the per-run teardown the harness invokes after the gather
-(before the failure check). No cycles, so `validation.py`'s acyclicity/deadlock checks pass; unwired
-output ports are reported as `no_destination` at INFO, not errors.
+sentinel cascades through every branch; the `any` contract returns `EndSentinel` once all 13
+result ports end, and `results-summary.finalise()` then renders the table and emits the
+consolidated `test_failures` error — the per-run teardown the harness invokes after the gather
+(before the failure check). No cycles, so `validation.py`'s acyclicity/deadlock checks pass.

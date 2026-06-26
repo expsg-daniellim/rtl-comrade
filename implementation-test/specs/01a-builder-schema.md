@@ -107,6 +107,4 @@ Mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:73-80`. The detection is on `
 
 ## Notes
 
-YAML `field(rename=...)` targets are the **public surface** for downstream rtl_buddy users — do **not** Pythonify them. Preserve hyphens and casing exactly as listed.
-
 `get_modes()` in rtl_buddy returns `self.opts.keys()` (a `dict_keys` view typed as `list[str]`). The reimplementation should return a true `list[str]` so the signature is honest; no consumer iterates while mutating, so the change is safe.

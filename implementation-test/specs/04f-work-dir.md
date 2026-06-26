@@ -70,4 +70,4 @@ In `modules/tests/test_setup.py`. Fixtures: `tmp_path` + `monkeypatch.chdir` to 
 
 ## Notes
 
-`work-dir` is the artefact-location provider. The artefact base (the CWD) is a **separate concern** from resolving the suite-config path (which lives in `parse-suite`, spec [04h](04h-parse-suite-config.md), where the file is actually opened) — the two share nothing but `Path.cwd()`, so the artefact base lives in one tiny provider whose value the whole pipeline roots on. The `test` vs `regression` difference reduces to a **provider swap**: `test`/`randtest` feed the leaf `work_dir` inputs from this CWD node; `regression` feeds them its per-suite `suite_dir`. In both, `run-process` runs each subprocess with `cwd=work_dir` (spec [03](03-run-process.md)), so the harness process never `chdir`s.
+`work-dir` is kept a **separate node** from `parse-suite` (spec [04h](04h-parse-suite-config.md), which resolves and opens the suite-config file): the artefact base and the suite-config path share nothing but `Path.cwd()`, so the base lives in its own tiny provider rather than folded into the parser.

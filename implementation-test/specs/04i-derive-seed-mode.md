@@ -74,7 +74,3 @@ In `modules/tests/test_setup.py`. Pure function — no fixtures needed.
 - Precedence is fixed: `rnd_new` → `NEW` (wins); else `rnd_last` → `REPLAY`; else `DEFAULT`.
 - No failure path — both inputs are booleans with `False` defaults.
 - Keep it small and stateless (KIV item 18 may later absorb it into `resolve-seed`).
-
-## Notes
-
-`DeriveSeedModeMod` is on the KIV path (item 18) — keep it small and stateless; future absorbing into `resolve-seed` should be straightforward.

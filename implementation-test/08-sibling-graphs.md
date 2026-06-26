@@ -23,9 +23,9 @@ The entire main pipeline carries over with the same contracts and wiring:
   `write-randseed`, `link-latest`, `interpret-sim`, `gate-sim`
 - post — `route-post`, `parse-log`, `parse-uvm-log`
 - control — `early-stop-gate`
-- summary — the `SummaryProcessor` logging plugin (per TODO #15 item 27; replaces the former
-  `fan-in-results` + `aggregate-results` + `any` fan-in). Sibling graphs reuse it by carrying
-  the same `logging` block.
+- summary — the in-graph `results-summary` node (spec 10d; the `any` contract fans the 13
+  result ports into it — no `fan-in-results` + `aggregate-results` pair). Sibling graphs reuse
+  it by wiring the same node + 13 terminal edges.
 
 ---
 
@@ -130,9 +130,9 @@ default-resolution lives in one obvious place.
 - Filter wiring: `reg_level`/`start_level` CLI edges connect to the existing
   `filter-reglvl` persistent inputs (which sit unwired in the test graph).
 - Suite stamping: `parse-suite-config` stamps the suite name into each test's identity
-  early, so the correlation key becomes `<suite>/<test>#<sweep>#<run>`. The `SummaryProcessor`
-  plugin (TODO #15 item 27) then needs no code change to produce per-suite-grouped output —
-  every `test_result` row already carries the suite-prefixed key.
+  early, so the correlation key becomes `<suite>/<test>#<sweep>#<run>`. The `results-summary`
+  node (spec 10d) then needs no code change to produce per-suite-grouped output —
+  every `TestResult` row already carries the suite-prefixed key.
 - `derive-seed-mode` removed; `resolve-seed` receives `seed_mode = DEFAULT` from a small
   constant emitter, *or* takes `seed_mode` as node config rather than a port. (Minor
   decision; either works.)
@@ -159,7 +159,7 @@ default-resolution lives in one obvious place.
    `do_rtl_regression` (`rtl_buddy.py:371-438`) collects every (suite, test) result across
    all suites and at lines 423-435 prints a **single end-of-run table** with `suite_name`
    as the first column (one row per `(suite, test)` pair), via `logger.result(...)`.
-   `SummaryProcessor.finalise()` already does exactly this — one-shot summarisation at
+   `results-summary.finalise()` (spec 10d) already does exactly this — one-shot summarisation at
    run end — and with the suite name stamped into the correlation key at
    `parse-suite-config` (`<suite>/<test>#<sweep>#<run>`), every row carries its suite, the
    summary table groups naturally on that prefix, and the OR-accumulated exit code falls
@@ -210,7 +210,7 @@ default-resolution lives in one obvious place.
    value as one.
 
    This plan places `gate-pre`/`gate-comp` (and `filter-reglvl`) **before** the `runs` fan-out, so
-   a pre/comp early-stop or a skip emits **one** `test_result` row, not R. This is a deliberate
+   a pre/comp early-stop or a skip emits **one** summary row, not R. This is a deliberate
    de-duplication: identical exit code, no work difference (the dropped rows are
    indistinguishable in the printed table), and arguably cleaner output. **Genuine** per-run
    divergence — actual sim verdicts under `--early-stop sim|post` — is *not* affected: `gate-sim`
@@ -228,7 +228,7 @@ default-resolution lives in one obvious place.
   contract switch (`parse-suite-config`: unit → default) + CLI rewiring. (`chdir-suite`
   was originally listed but is dropped — see structural note #1.)
 - **No new contract types** beyond those already in the test graph (`unit` / `default` /
-  `keyed_join`, plus an unwired `any`).
+  `keyed_join` / `any` — the last fanning the terminals into `results-summary`).
 - **Most of the module catalogue** ([03](03-module-catalog.md)) is reused untouched.
 
 ---

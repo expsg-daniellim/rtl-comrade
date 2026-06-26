@@ -75,6 +75,4 @@ In `modules/tests/test_post.py`. Fixtures: `test` (`{key, value}`, value with `.
 
 ## Notes
 
-`route-post` + two-parsers is the example to keep returning to for "atomic-by-function, not by signature" — make sure the implementation preserves that split rather than collapsing them back into one node.
-
 **Co-routing exception.** This is the one node where two edges (`test`+`proc`) are *co-routed* — both always travel to the *same* parser. The split therefore uses four ports (two edges × two branches: `uvm_test`/`uvm_proc`, `plain_test`/`plain_proc`) rather than splitting the routing decision per edge. Routing the two edges independently would buy nothing (the choice is identical for both) and would dangle the unchosen parser's `keyed_join` if only one edge arrived. Co-routing is correct here precisely because the two edges share one routing decision — unlike edges whose fields have independent lifecycles, which is why those are split.

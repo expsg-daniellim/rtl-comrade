@@ -1,8 +1,9 @@
 # Concrete graph YAML and manifests
 
-A proposed `graphs/test.yaml` plus the manifest entries for the new modules and the per-graph
-`SummaryProcessor` logging plugin. Node ids match [04](04-pipeline-and-contracts.md); payload
-shapes and ports match [02](02-payload-conventions.md)/[03](03-module-catalog.md).
+A proposed `graphs/test.yaml` plus the manifest entries for the new modules and the in-graph
+`results-summary` node (the 13 terminal `TestResult` ports fanned in by the `any` contract). Node
+ids match [04](04-pipeline-and-contracts.md); payload shapes and ports match
+[02](02-payload-conventions.md)/[03](03-module-catalog.md).
 
 This doc is the **wiring authority**: the `graphs/test.yaml` below carries the split-edge model
 (per-field keyed edges, no `ctx`/`test_run`/`sim_cmd` bags). Spec
@@ -15,8 +16,8 @@ edges carry the `KeyedValue` envelope `{key, value}` (`model`, `simv`, `run_id`,
 share it; `keyed_join` reads it attribute-first, so a field on `TestConfig` or on the envelope
 are both fine). Cohesive multi-field messages keep named fields:
 `command{key,argv,stdout_path,stderr_path}`, `proc{key,rc,stdout_path,stderr_path}` (`rc is None` ⟺ timed out),
-`randseed{key,seed,randseed_path,argv}`. The unwired result-diversion ports (`skip`/`fail`/`timeout`)
-carry `{key, result}`. There is **no** `ctx` / `test_run` / `sim_cmd` bag — bags assembled across the
+`randseed{key,seed,randseed_path,argv}`. The result-diversion ports (`skip`/`fail`/`timeout`/`stop`/`default`)
+carry a self-keyed `TestResult` (`{key, test_name, type_, result, desc}`) → `results-summary`. There is **no** `ctx` / `test_run` / `sim_cmd` bag — bags assembled across the
 graph were split into these keyed edges, while bags produced whole by one node (`proc`, `command`,
 `filelist`, `randseed`, `seed`) stay whole. Every router co-gates every edge a downstream `keyed_join`
 needs on its success branch, so a fail/stop never dangles a join.
@@ -143,7 +144,7 @@ nodes:
   config: { phase: sim }
   contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
 
-# --- post (terminal nodes; result ports left unwired, summary via logging plugin) ---
+# --- post (terminal nodes; result ports fan into results-summary, see below) ---
 - id: route-post
   module: route-post
   contract: keyed_join                                       # keyed_join(test, proc); co-routes both to one parser branch
@@ -156,18 +157,26 @@ nodes:
   module: parse-uvm-log
   contract: keyed_join                                       # keyed_join(test, proc)
   contract_config: { key_field: key }
-# (no fan-in / agg nodes; summary is a logging concern, see below)
-
-# --- per-graph logging: accumulate result rows, render the summary table ---
-logging:
-  include_default: true
-  handlers:
-  - path: log/summary.py                                   # processor: collect watch-listed rows + DropEvent the suppress subset; render table in finalise(). git_state falls through.
-    name: SummaryProcessor
-    config:
-      # graph-level watch-list: the universal `test_result` plus *this graph's* failure terminals. The plugin defaults `events` to just ["test_result"]; the failure-terminal names are graph policy and live here, not baked into the module.
-      events: [test_result, compile_failed, sim_timeout, load_model_failed, sweep_failed, preproc_failed, filelist_failed, replay_seed_invalid]
-      # `suppress` is left at the plugin default ["test_result"] (summary-only); the failure events are watch-listed but unsuppressed, so they still print as errors.
+# --- results summary (in-graph): the 13 terminal TestResult ports fan in via the any contract ---
+- id: results-summary
+  module: summarise-results
+  contract: any
+  contract_config: { mapping: result }                    # n→1: every input port funnels onto the `result` output port → run(result=<TestResult>)
+  contract_port_mappings:                                  # the node's 13-port surface; each contract port forwards to module param `result`
+    compile_fail: [result]
+    sim_timeout:  [result]
+    load_model:   [result]
+    filelist:     [result]
+    sweep:        [result]
+    preproc:      [result]
+    seed:         [result]
+    parse_plain:  [result]
+    parse_uvm:    [result]
+    skip:         [result]
+    stop_pre:     [result]
+    stop_comp:    [result]
+    stop_sim:     [result]
+# (no separate fan-in / aggregate node — the `any` contract IS the fan-in; the SummaryProcessor logging plugin is retired/dormant, see 10c/10d)
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -242,31 +251,31 @@ edges:
 # ---- main line: split per-test / per-run keyed edges (no ctx / test_run / sim_cmd bags) ----
 # Pre-sim per-test chain. load-model adds the 1:1 `model` edge right after `filter`; it then rides alongside `test` through sweep → preproc → gate-pre (each keyed_joins it to `test` by key and co-gates it) to write-filelist, where it is consumed. Routers co-gate every edge a downstream join needs.
 - { src: { node: select,     port: test }, dst: { node: filter,     port: test } }
-- { src: { node: filter,     port: test }, dst: { node: load-model, port: test } }   # filter.skip → ∅
-- { src: { node: load-model, port: test },  dst: { node: sweep, port: test } }       # load-model.fail → ∅ (drops test+model together)
+- { src: { node: filter,     port: test }, dst: { node: load-model, port: test } }   # filter.skip → results-summary
+- { src: { node: load-model, port: test },  dst: { node: sweep, port: test } }       # load-model.fail → results-summary (drops test+model together)
 - { src: { node: load-model, port: model }, dst: { node: sweep, port: model } }      # 1:1 model edge; rides through to write-filelist
-- { src: { node: sweep,      port: test },  dst: { node: preproc, port: test } }     # sweep.fail → ∅ (drops test+model together)
+- { src: { node: sweep,      port: test },  dst: { node: preproc, port: test } }     # sweep.fail → results-summary (drops test+model together)
 - { src: { node: sweep,      port: model }, dst: { node: preproc, port: model } }    # re-keyed #i per sweep variant (one model edge per variant)
-- { src: { node: preproc,    port: test },  dst: { node: gate-pre, port: test } }    # preproc.fail → ∅ (drops test+model together)
+- { src: { node: preproc,    port: test },  dst: { node: gate-pre, port: test } }    # preproc.fail → results-summary (drops test+model together)
 - { src: { node: preproc,    port: model }, dst: { node: gate-pre, port: model } }
-- { src: { node: gate-pre,   port: test },  dst: { node: filelist, port: test } }    # gate-pre.stop → ∅ (drops test+model together)
+- { src: { node: gate-pre,   port: test },  dst: { node: filelist, port: test } }    # gate-pre.stop → results-summary (drops test+model together)
 - { src: { node: gate-pre,   port: model }, dst: { node: filelist, port: model } }   # joined by key at write-filelist (model consumed here)
-- { src: { node: filelist,   port: test },     dst: { node: cc-build, port: test } }     # filelist.fail → ∅
+- { src: { node: filelist,   port: test },     dst: { node: cc-build, port: test } }     # filelist.fail → results-summary
 - { src: { node: filelist,   port: filelist }, dst: { node: cc-build, port: filelist } }
 # Compile: cc-build emits test+simv+command; cc-int joins test+simv+proc, co-gates test+simv on success.
 - { src: { node: cc-build, port: command }, dst: { node: cc-run, port: command } }
 - { src: { node: cc-build, port: test },    dst: { node: cc-int, port: test } }
 - { src: { node: cc-build, port: simv },    dst: { node: cc-int, port: simv } }
 - { src: { node: cc-run },                  dst: { node: cc-int, port: proc } }      # cc-run emits proc on default
-- { src: { node: cc-int,   port: test }, dst: { node: gate-comp, port: test } }      # cc-int.fail → ∅
+- { src: { node: cc-int,   port: test }, dst: { node: gate-comp, port: test } }      # cc-int.fail → results-summary
 - { src: { node: cc-int,   port: simv }, dst: { node: gate-comp, port: simv } }
-- { src: { node: gate-comp, port: test }, dst: { node: runs, port: test } }          # gate-comp.stop → ∅ (drops test+simv together)
+- { src: { node: gate-comp, port: test }, dst: { node: runs, port: test } }          # gate-comp.stop → results-summary (drops test+simv together)
 - { src: { node: gate-comp, port: simv }, dst: { node: runs, port: simv } }
 # Run fan-out: expand-runs joins test+simv at the test key, re-keys test/run_id/simv per run_id.
 - { src: { node: runs, port: test },   dst: { node: seed, port: test } }
 - { src: { node: runs, port: run_id }, dst: { node: seed, port: run_id } }
 - { src: { node: runs, port: simv },   dst: { node: seed, port: simv } }
-- { src: { node: seed, port: test },   dst: { node: sim-build, port: test } }        # seed.fail → ∅ (REPLAY only)
+- { src: { node: seed, port: test },   dst: { node: sim-build, port: test } }        # seed.fail → results-summary (REPLAY only)
 - { src: { node: seed, port: run_id }, dst: { node: sim-build, port: run_id } }
 - { src: { node: seed, port: simv },   dst: { node: sim-build, port: simv } }
 - { src: { node: seed, port: seed },   dst: { node: sim-build, port: seed } }
@@ -283,41 +292,56 @@ edges:
 - { src: { node: randseed, port: randseed_done }, dst: { node: link-latest, port: randseed_done } }
 # link-latest is terminal (no output).
 # Post-sim — classification branch (interpret-sim → gate-sim → route-post → parse-*).
-- { src: { node: sim-int,  port: test }, dst: { node: gate-sim, port: test } }       # sim-int.timeout → ∅
+- { src: { node: sim-int,  port: test }, dst: { node: gate-sim, port: test } }       # sim-int.timeout → results-summary
 - { src: { node: sim-int,  port: proc }, dst: { node: gate-sim, port: proc } }
-- { src: { node: gate-sim, port: test }, dst: { node: route-post, port: test } }     # gate-sim.stop → ∅ (drops test+proc together)
+- { src: { node: gate-sim, port: test }, dst: { node: route-post, port: test } }     # gate-sim.stop → results-summary (drops test+proc together)
 - { src: { node: gate-sim, port: proc }, dst: { node: route-post, port: proc } }
 - { src: { node: route-post, port: uvm_test },   dst: { node: parse-uvm-log, port: test } }
 - { src: { node: route-post, port: uvm_proc },   dst: { node: parse-uvm-log, port: proc } }
 - { src: { node: route-post, port: plain_test }, dst: { node: parse-log, port: test } }
 - { src: { node: route-post, port: plain_proc }, dst: { node: parse-log, port: proc } }
-# parse-log.default / parse-uvm-log.default → ∅
+# parse-log.default / parse-uvm-log.default → results-summary
 
-# ---- terminal result ports are UNWIRED ----
-# The 13 terminal outcomes below have NO edge: filter.skip, gate-pre.stop, cc-int.fail,
-# gate-comp.stop, sim-int.timeout, gate-sim.stop, parse-log.default, parse-uvm-log.default,
-# load-model.fail, sweep.fail, preproc.fail, filelist.fail, seed.fail. The silent paths
-# (parse-*, filter.skip, gate-*.stop) log `test_result`; the failure terminals (the *.fail
-# ports and sim-int.timeout) log.error their own domain event (compile_failed/sim_timeout/…)
-# carrying result/desc. The harness reports `no_destination` at INFO for each unwired port and
-# the item leaves the graph. The SummaryProcessor logging plugin (see the `logging` block
-# above) accumulates the watch-list rows and renders the results table in finalise(); the
-# per-emission log.error drives the exit. git-status likewise logs `git_state` with no edge —
-# it falls through to the console.
+# ---- terminal result ports → results-summary (the `any` contract fans them in) ----
+# Each of the 13 terminal outcomes is wired to its own results-summary contract port. The edges are
+# required: false (the default) — the `any` contract fires on whichever is ready and requires none.
+# Only the failure terminals log (a node logs only the errors it encounters): log.error
+# (compile_failed/sim_timeout/model_*/sweep_*/preproc_*/filelist_*/replay_seed_*/parse_log_*/parse_uvm_*)
+# — an exit driver, alongside results-summary.finalise()'s consolidated log.error("test_failures")
+# on any FAIL row. The pass-like outcomes (parse-* PASS, filter.skip, gate-*.stop) are recorded by
+# their TestResult only. git-status logs `git_state` with no edge (not a terminal) — console only.
+- { src: { node: cc-int,        port: fail },    dst: { node: results-summary, port: compile_fail } }
+- { src: { node: sim-int,       port: timeout }, dst: { node: results-summary, port: sim_timeout } }
+- { src: { node: load-model,    port: fail },    dst: { node: results-summary, port: load_model } }
+- { src: { node: filelist,      port: fail },    dst: { node: results-summary, port: filelist } }
+- { src: { node: sweep,         port: fail },    dst: { node: results-summary, port: sweep } }
+- { src: { node: preproc,       port: fail },    dst: { node: results-summary, port: preproc } }
+- { src: { node: seed,          port: fail },    dst: { node: results-summary, port: seed } }
+- { src: { node: parse-log,     port: default }, dst: { node: results-summary, port: parse_plain } }
+- { src: { node: parse-uvm-log, port: default }, dst: { node: results-summary, port: parse_uvm } }
+- { src: { node: filter,        port: skip },    dst: { node: results-summary, port: skip } }
+- { src: { node: gate-pre,      port: stop },    dst: { node: results-summary, port: stop_pre } }
+- { src: { node: gate-comp,     port: stop },    dst: { node: results-summary, port: stop_comp } }
+- { src: { node: gate-sim,      port: stop },    dst: { node: results-summary, port: stop_sim } }
 ```
 
 Notes:
 
-- **No fan-in / aggregate node.** The 13 terminal ports are unwired; the summary **results**
-  table is rendered by the `SummaryProcessor` logging plugin (`logging` block above) in its
-  `finalise()` hook, and the exit code is driven by the per-emission `log.error` at
-  each failure site. `git_state` is not part of the table — it falls through to the console. See [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)
-  and [07 settled 27](07-ambiguities-and-assumptions.md). Adding a new terminal source means
-  one new `log.info("test_result", ...)` call — no edge, no module signature change.
+- **One fan-in node, no relay.** The 13 result ports are wired to the `results-summary` node;
+  the `any` contract *is* the fan-in (no separate `fan-in-results` relay), and the node renders the
+  summary **results** table from the fanned-in `TestResult`s in its `finalise()` hook. The exit code
+  is driven by `log.error` at two layers — each failure terminal's per-case event at origin, plus the
+  consolidated `test_failures` error `finalise()` emits on any FAIL row. `git_state` is not a
+  terminal — it falls through to the console, not into the table. See
+  [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node),
+  [spec 10d](specs/10d-summarise-results.md), and [07 settled 27](07-ambiguities-and-assumptions.md).
+  Adding a new terminal source means one new edge to a new `results-summary` contract port (declared
+  in its `contract_port_mappings`) plus a `log.error` for the exit.
 - The five `*_fail` ports (`load-model.fail`, `sweep.fail`, `preproc.fail`, `filelist.fail`,
   `seed.fail`) carry per-test config-domain failures via the `fail` output on each of those
-  source modules; each `log.error`s once (the sole exit driver) and `log.info`s its
-  `test_result` row. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+  source modules → `results-summary`; each `log.error`s once under its own event name (an exit
+  driver, alongside `results-summary.finalise()`'s consolidated `test_failures` check). See
+  [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 - `run_ids` (→ `runs`) is unwired for plain `test`; the module defaults it to `[None]`
   (single run). `randtest` wires it from a `rnd_cnt`-derived CLI edge.
 - `filter`'s `reg_level`/`start_level` are persistent but unwired for `test`; the module's
@@ -406,18 +430,20 @@ Notes:
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate,   class_name: EarlyStopGateMod }
-  # no fan-in-results / aggregate-results node — summary is a logging plugin
+- file: rtl_buddy/summarise_results.py
+  plugins:
+  - { name: summarise-results, class_name: SummariseResultsMod }   # the in-graph results-summary sink (10d); no fan-in-results / aggregate-results relay
 ```
 
-## Logging plugin — `graphs/log/summary.py`
+## Logging plugin — `graphs/log/summary.py` (dormant, not wired)
 
-Referenced by the `logging` block in `graphs/test.yaml`. Contains the single `SummaryProcessor`
-(a stateful structlog processor — **not** a `logging.Handler`; it accumulates `test_result`
-rows, `DropEvent`s them, and renders the results table in `finalise()`; sketch in
+`graphs/test.yaml` has **no `logging` block** — the in-graph `results-summary` node renders the
+table. The `SummaryProcessor` plugin (a stateful structlog processor — **not** a `logging.Handler`)
+is retained as reference/standby infra but **dormant**: it would be referenced by `path`/`name` in a
+`logging` block (per-graph logging entries resolve files relative to the graph file's directory,
+`docs/harness_configs/graph.md`), but `test` does not opt in. Sketch in
 [05](05-branching-and-results.md#the-summaryprocessor-logging-plugin); spec in
-[specs/10](idx-10-control-aggregate.md)). It is selected by `path`/`name`, not via a
-plugin manifest — per-graph logging entries resolve files relative to the graph file's
-directory (`docs/harness_configs/graph.md`).
+[10c](specs/10c-summary-handler.md) (superseded by [10d](specs/10d-summarise-results.md)).
 
 ## Manifest addition — `contracts/config.yaml`
 
@@ -428,8 +454,10 @@ directory (`docs/harness_configs/graph.md`).
 ```
 
 `any.py` contains `AnyContract` (sketch in [spec 02](specs/02-any-contract-and-fan-in.md)),
-a plain general-purpose contract. **It is registered for reuse but is not wired in the
-`test` graph.** There is **no** `serial.py` / `serial_acquire` contract; parallel safety comes
+a plain general-purpose contract. **It backs the `results-summary` fan-in** (spec
+[10d](specs/10d-summarise-results.md)) — its 13 input ports are the terminal `TestResult` edges,
+funnelled onto `result` by `contract_config: { mapping: result }` — and stays reusable by any other
+graph. There is **no** `serial.py` / `serial_acquire` contract; parallel safety comes
 from per-tag artefact naming (`write-filelist` writes `run.<tag>.f`; see
 [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
 Do not re-introduce a lock for the residual CWD collisions — those are the job of the upstream

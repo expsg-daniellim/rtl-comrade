@@ -38,7 +38,7 @@ class PrependCwdPathMod:
    (idempotent).
 3. Emit `("default", True)` — a sequencing token only; receivers branch on ordering, not on the boolean.
 
-No failure path: dict mutation cannot meaningfully fail, and the zero-input surface guarantees the single invocation that makes the process-wide `os.environ` mutation safe — the harness breaks a node's run loop after one invocation when the module has no input ports to wait for (`len(inputs) == 0`), independent of the contract.
+No failure path: dict mutation cannot meaningfully fail; the single invocation guaranteed by the zero-input surface makes the process-wide `os.environ` mutation safe.
 
 ## Deliverables
 
@@ -73,7 +73,7 @@ In `modules/tests/test_setup.py`. Fixtures: `monkeypatch.setenv("PATH", …)` to
 
 ## Constraints
 
-- `default` contract, zero-input — runs exactly once because it has no input ports, not because of the contract (the harness stops a node after one invocation when there is nothing to wait for; with zero ports `default` and `unit` behave identically, so `default` is chosen as the minimal contract — `unit` would claim a guarantee it does not supply here); the single invocation is what makes the process-wide `os.environ["PATH"]` mutation safe. Do **not** wire it for repeated execution.
+- `default` contract, zero-input — runs exactly once (the harness stops a node with no input ports after one invocation, independent of the contract); that single invocation is what makes the process-wide `os.environ["PATH"]` mutation safe. Do **not** wire it for repeated execution.
 - Idempotent: prepend `.` only if it is **not already present anywhere** in the split `PATH`; otherwise leave `PATH` untouched.
 - No failure path — dict mutation cannot meaningfully fail; no failure port, no log call.
 - Emit `("default", True)` as a sequencing token only; the boolean is never branched on — the consuming `run-process` uses it purely for edge ordering.

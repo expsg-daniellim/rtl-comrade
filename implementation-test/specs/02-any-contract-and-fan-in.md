@@ -1,8 +1,8 @@
-# Spec 02: `any` contract (retained, currently unwired)
+# Spec 02: `any` contract (fans the terminal results into `results-summary`)
 
-> **Scope:** this spec builds only the `any` contract — a plain, general-purpose, reusable scheduling contract. It has **no consumer in the `test` graph**: register it for reuse but leave it **unwired**. Wiring it into a graph is out of scope here; do that only if/when another graph needs it.
+> **Scope:** this spec builds only the `any` contract — a plain, general-purpose, reusable scheduling contract. Its consumer in the `test` graph is the **`results-summary`** node (spec [10d](10d-summarise-results.md)), which uses it to fan the 13 terminal `TestResult` ports into one accumulating sink; that node + edge wiring lives in [10d](10d-summarise-results.md) / [06](../06-graph-yaml.md), not here. The contract itself stays graph-agnostic and reusable by any other graph.
 
-**References:** [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node), [07 items 19, 27](../07-ambiguities-and-assumptions.md).
+**References:** [05 — Re-convergence](../05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node), [10d — summarise-results](10d-summarise-results.md), [07 items 19, 27](../07-ambiguities-and-assumptions.md).
 
 ## Before you start
 
@@ -10,7 +10,7 @@ Read `docs/contracts/implementation.md` — the `get_inputs()` interface, the `C
 
 ## Goal
 
-Implement the **`any` contract** — a general-purpose scheduling contract that fires on any single ready port, one delivery at a time, and propagates `EndSentinel` once all ports have ended. Broadly reusable, and registered as reusable infrastructure even though the `test` graph does not wire it.
+Implement the **`any` contract** — a general-purpose scheduling contract that fires on any single ready port, one delivery at a time, and propagates `EndSentinel` once all ports have ended. Broadly reusable; in the `test` graph it backs the `results-summary` fan-in (spec [10d](10d-summarise-results.md)), delivering each terminal `TestResult` to the sink one at a time.
 
 A single config field `mapping` carries both modes, switched by type:
 
@@ -136,8 +136,8 @@ In `contracts/tests/test_any.py`, driven by `run_contract_scenario(AnyContract, 
 - All enumerated `test_any.py` tests pass.
 - Stress test is not flaky across 100 invocations under `pytest -p no:randomly`.
 - Property-based test runs ≥100 generated cases with no falsifying input.
-- `docs/contracts/index.md` promotion is **deferred** until the `any` contract is actually wired into a graph (it is unwired in `test`). When that happens, add a first-class entry listing invariants (mirrored from [05](../05-branching-and-results.md#the-any-contract-retained-currently-unwired)) and its reusability, per [`docs/creating-documentation.md`](../../docs/creating-documentation.md).
-- The contract manifest entry `{ name: any, class_name: AnyContract }` in `contracts/config.yaml` validates and the harness resolves `any` → `AnyContract` (even though `graphs/test.yaml` leaves it unwired).
+- `docs/contracts/index.md` carries a first-class `any` entry (the contract is now wired into `test` via `results-summary`), listing its invariants (mirrored from [05](../05-branching-and-results.md#the-any-contract-fans-the-terminals-into-results-summary)) and its reusability, per [`docs/creating-documentation.md`](../../docs/creating-documentation.md).
+- The contract manifest entry `{ name: any, class_name: AnyContract }` in `contracts/config.yaml` validates and the harness resolves `any` → `AnyContract`; `graphs/test.yaml` wires it on the `results-summary` node (spec [10d](10d-summarise-results.md)).
 
 ## Constraints
 
@@ -147,9 +147,3 @@ In `contracts/tests/test_any.py`, driven by `run_contract_scenario(AnyContract, 
 - Resolve each port's `state['output']` once at construction. With a `dict` `mapping`, every input port must be assigned exactly one output — an unknown input port, a port mapped to two outputs, or a real port left unmapped is a `log.fatal` (no silent fallback).
 - Consume an `EndSentinel` silently and continue scanning; return `EndSentinel(self.id)` **only** once `pending` is empty (all ports ended). Propagate the sentinel — never synthesise it early or swallow the terminal one (`docs/invariants.md` — EndSentinel).
 - Keep the `Config` **fully optional** (every field defaulted, so `contract_config` may be omitted) and the contract free of side-effects.
-
-## Notes
-
-The pending-task lifetime is the subtle part — tasks created in call N that are not returned must remain in `pending` and be honoured in call N+1. Do not cancel them; that loses items.
-
-`AnyContract` **funnels** many input ports onto few outputs: a `str` `mapping` is n→1 (all inputs onto that name, `"default"` unless configured); a `dict` `mapping` is m→n (groups inputs onto several named outputs). The only construction-time validation is the `state['output']` resolution check (unknown input port; an input claimed by two outputs; a real port left unmapped).

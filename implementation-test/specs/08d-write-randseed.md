@@ -88,4 +88,4 @@ In `modules/tests/test_sim_cycle.py`. Fixtures: `work_dir=tmp_path` passed as th
 
 ## Notes
 
-`write-randseed` is a **side-effect leaf**, not an assembler — its function is persisting the seed record, not assembly. The post-sim region splits into two parallel branches off `proc`: the **side-effect** branch (`write-randseed` → `link-latest`, sequenced by the `randseed_done` signal) and the **classification** branch (`interpret-sim` → `route-post` → `parse-log`/`parse-uvm-log`, each `keyed_join`ing `test` + `proc`). The two branches are independent and concurrent. Mirror [04 — Why each contract](../04-pipeline-and-contracts.md).
+This is the **side-effect** branch of the post-sim region (`write-randseed` → `link-latest`, sequenced by `randseed_done`), running parallel to the **classification** branch (`interpret-sim` → `route-post` → `parse-*`). See [04 — Why each contract](../04-pipeline-and-contracts.md).

@@ -102,7 +102,7 @@ Both instances are config-bearing: the nested `Config` exposes `grace_s: float =
 - **When.** Exactly when step 3a completes — the timeout-and-kill path.
 - **Unambiguous by construction.** A reaped child's `proc.returncode` is always an `int` (non-negative for `exit(N)`, negative `-signum` for a signal death) — never `None`. So `rc is None` in a returned `Proc` can only mean the runner timed the child out; no child exit value can collide with it. (This replaces rtl_buddy's `rc=4444` magic sentinel, which an organic `exit(4444)` could forge.)
 - **Who reads it.** `interpret-sim` routes on `proc.rc is None`. The compile cycle wires `timeout=None`, so `rc is None` cannot appear there.
-- **Divergence from source.** rtl_buddy returns `4444` (`tools/vlog_sim.py:260`) as its timeout sentinel; this plan returns `None` instead — see Notes.
+- **Divergence from source.** rtl_buddy returns `4444` (`tools/vlog_sim.py:260`) as its timeout sentinel; this plan returns `None` instead. Record in [`divergences.md`](../../divergences.md) when implementation lands.
 
 ### Cancellation behaviour
 
@@ -196,8 +196,6 @@ This is the workhorse — both compile and sim are wired instances of this singl
 Both should be recorded in [`divergences.md`](../../divergences.md) when implementation lands.
 
 **Subprocess `cwd` replaces a process-wide `chdir`.** rtl_buddy's regression `os.chdir`s the whole process into each suite's directory and back (`rtl_buddy.py:404,436`) — safe only because it runs suites serially. rtl-comrade runs tests concurrently, so a process-wide `chdir` would race (one node's `chdir` corrupts every concurrent node's relative paths). This module instead passes `cwd=work_dir` to each `create_subprocess_exec`, which is per-child and shares no global state — so each subprocess resolves its relative inputs/outputs (the `-f` filelist contents, `HierInstanceSeed.txt`, tool scratch) against its own `work_dir` while the harness process never `chdir`s. This is what makes `work_dir` (from `work-dir`) the genuine single artefact-location source: the leaf modules root *paths* on it and the runner roots the *child's CWD* on it. Record in [`divergences.md`](../../divergences.md) when implementation lands.
-
-**`rc = None` replaces the `4444` sentinel.** rtl_buddy returns the magic int `4444` on timeout (`tools/vlog_sim.py:260`), which an organic `exit(4444)` could forge. This plan returns `rc = None` instead: a reaped `proc.returncode` is always an `int`, so `rc is None` is an uncounterfeitable timeout signal and needs no companion flag. Record in [`divergences.md`](../../divergences.md) when implementation lands.
 
 **asyncio child-watcher.** Python 3.8+ default `ThreadedChildWatcher` reaps children transparently; no explicit `os.waitpid` is required beyond `proc.wait()`. Confirming the default policy on the target Python is tracked under [07 item 23](../07-ambiguities-and-assumptions.md) (async subprocess hardening — empirical verification before the module is built).
 

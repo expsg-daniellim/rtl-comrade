@@ -30,9 +30,11 @@ informational.
 3. **~~`fan-in-results` module + `any` contract for terminal fan-in~~ — superseded by TODO #15
    (item 27).** Earlier drafts re-converged the 13 terminal outcomes through a
    `fan-in-results` relay + `any` contract feeding `aggregate-results`. The TODO #15 redesign
-   removed both nodes: terminal ports are now unwired and the summary is rendered by a
-   per-graph `SummaryProcessor` logging plugin. The `any` contract remains specified (spec 02)
-   but unwired. See item 27 and [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
+   removed both nodes. Since spec [10d](specs/10d-summarise-results.md) the summary is back in the
+   graph as the `results-summary` node: the 13 result ports are **wired** to it and the `any`
+   contract (spec 02) is its fan-in — but the old `fan-in-results` relay + `aggregate-results` pair
+   is **not** reintroduced (the contract fans straight into the accumulating sink). See item 27 and
+   [05](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node).
 
 4. **`run-process` redirects to caller-supplied files; emits paths.** stdout/stderr go
    straight to files named in `command`, so partial output survives a SIGQUIT and memory
@@ -60,24 +62,27 @@ informational.
 
 9. **No scheduling in modules.** Branches are named output ports; correlation lives in
    `keyed_join`; persistent config lives in the `default` contract. Terminal re-convergence
-   is no longer a contract at all — terminal ports are unwired and the summary lives in a
-   logging handler (item 27). No envelope, no passthrough guards, no `result` field on the
+   is the `any` contract's fan-in into the `results-summary` node (item 27) — the 13 terminal
+   ports are wired there. No envelope, no passthrough guards, no `result` field on the
    main line.
 
-10. **Exit code via logging** (revised by TODO #15, item 27). The exit code is driven by the
-    **per-emission `log.error`** at each failure site: one ERROR sets `handler.failure` →
-    harness exits 1 (reproducing rtl_buddy's OR-accumulated exit code). This is now the
-    **sole** driver — the old `aggregate-results.finalise()` ERROR is gone with the node.
-    PASS and SKIP log no ERROR and contribute nothing. **`early-stop` is the one NA that does
-    not contribute**: `EarlyStopResults` is NA, but a user-requested stop is not a failure, so
-    `early-stop-gate` logs `log.info` (exit 0) rather than `log.error` — a deliberate divergence
-    from rtl_buddy, which exits 1 on `--early-stop` (recorded under "Notable divergences"). A
-    genuine NA from `parse-log`/`parse-uvm-log` still logs `log.error` → exit 1. CRITICAL is
-    reserved for fatal config
+10. **Exit code via logging** (revised by TODO #15, item 27). The exit code is driven by
+    `log.error` at **two layers**: each failure terminal's **per-case** event at origin, plus
+    the consolidated `log.error("test_failures", count=…)` that `results-summary.finalise()`
+    emits on any FAIL row. Either sets `handler.failure` → harness exits 1 (reproducing
+    rtl_buddy's OR-accumulated exit code). A PASS / SKIP outcome is recorded by its `TestResult`
+    only — a `TestResult`-producing node logs solely the errors it encounters, so it contributes
+    nothing. **`early-stop` is the one NA that does not contribute**: `EarlyStopResults` is NA, but a
+    user-requested stop is not a failure, so `early-stop-gate` emits no `log.error`
+    (exit 0), and an early-stop NA is not a FAIL row so the consolidated check skips it — a
+    deliberate divergence from rtl_buddy, which exits 1 on `--early-stop` (recorded under "Notable
+    divergences"). A genuine NA from `parse-log`/`parse-uvm-log` still logs `log.error`
+    (`parse_log_unknown`) → exit 1. CRITICAL is reserved for fatal config
     errors (matching `logger.critical` → `typer.Abort`). Per-test config-domain failures
     (`load-model` missing/malformed, `write-filelist` source-not-found, `expand-sweep` exec
     crash, `run-preproc` exec crash, `resolve-seed` REPLAY missing/malformed `.randseed`)
-    emit on a `fail` output port (now **unwired**) and `log.error` once at emission.
+    emit on a `fail` output port (wired to `results-summary`) and `log.error` once at emission
+    under their per-case event name.
     `run-process` subprocess-launch failure (binary not on PATH, permission denied) is
     `log.fatal` (system-wide, not per-test). Parse-machinery exceptions distinct from FAIL
     classification are deferred pending item 15. Full per-site table in
@@ -131,8 +136,9 @@ informational.
     13 edge-derived ports) paired with a general-purpose `any` contract (fire on any
     single ready port; end when all end). `aggregate-results` retained `run(self, result)`
     with `default`. No harness change required. **Superseded by TODO #15 (item 27):** both
-    `fan-in-results` and `aggregate-results` were removed; the `any` contract sketch survives
-    in [spec 02](specs/02-any-contract-and-fan-in.md) but is unwired. (Number kept at 19 to
+    `fan-in-results` and `aggregate-results` were removed; the `any` contract (spec
+    [02](specs/02-any-contract-and-fan-in.md)) is now wired as the `results-summary` fan-in
+    (spec [10d](specs/10d-summarise-results.md)), without the relay/sink pair. (Number kept at 19 to
     preserve cross-references.)
 
 21. **`default` + persistent port with no upstream edge** (settled 2026-06-02). For
@@ -259,12 +265,22 @@ informational.
     The CWD-relative half of the "CWD assumptions preserved" Implementation notes entry below is
     now explicit, not silent.
 
-27. **`git-status` recorded + summary rendered by a logging plugin** (settled 2026-06-10;
-    resolves TODO #15). Decision: **include** git state, as a logging concern, not a
+27. **`git-status` recorded + summary returned to the graph** (settled 2026-06-10; **further
+    revised 2026-06-25**; resolves TODO #15).
+
+    > **Superseded in part (spec [10d](specs/10d-summarise-results.md), 2026-06-25).** The summary
+    > **returned to the graph** as the in-graph `results-summary` node: the 13 result ports are
+    > **wired** there via the `any` contract, each terminal logs a **per-case** event (no generic
+    > `test_result`), and `results-summary.finalise()` renders the table *and* emits the
+    > consolidated `log.error("test_failures", …)` exit signal. The `SummaryProcessor` logging
+    > plugin described below is retired to dormant infra ([10c](specs/10c-summary-handler.md)). The
+    > `git-status` decision stands unchanged. The historical TODO #15 record follows.
+
+    Decision: **include** git state, as a logging concern, not a
     graph-routed payload. A new [`git-status`](03-module-catalog.md) zero-input setup node calls
     `log.info("git_state", branch=..., sha=..., dirty=...)` once. The results summary is no
     longer produced by a graph sink: `fan-in-results` and `aggregate-results` are **removed**,
-    the 13 terminal ports are left **unwired**, each terminal node calls
+    the 13 result ports are left **unwired**, each terminal node calls
     `log.info("test_result", ...)` at emission, and a per-graph **`SummaryProcessor`** (a
     stateful structlog processor in `graphs/log/summary.py` — **not** a `logging.Handler`)
     accumulates the `test_result` rows (**results only**) and renders the table in its
@@ -273,7 +289,7 @@ informational.
     needed. `git_state` is **not** collected by the processor — it falls through to the console
     and prints at run start. The exit code is driven solely by per-emission `log.error`
     (item 10). Rationale, sketches, and the CRITICAL path in
-    [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node);
+    [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node);
     spec in [10](idx-10-control-aggregate.md).
 
     **Plugin form revised 2026-06-11 (processor, not handler).** The plugin was first specified
@@ -352,8 +368,8 @@ informational.
   `exit_code |= 0 if is_pass() else 1` (`rtl_buddy/src/rtl_buddy/rtl_buddy.py:206`;
   `EarlyStopResults` at `runner/test_results.py:53-60`) makes `rtl_buddy test --early-stop <phase>`
   exit **1**. This plan treats a user-requested stop as a deliberate, successful early exit, not a
-  failure: `early-stop-gate` emits `log.info("test_result", result="NA", …)` (never `log.error`),
-  so the run exits **0**. The per-test `NA` verdict is unchanged, but the `desc` also diverges:
+  failure: `early-stop-gate` emits no `log.error` (a user-requested stop is not a
+  failure, and an NA row is not a FAIL row so the consolidated check skips it too), so the run exits **0**. The per-test `NA` verdict is unchanged, but the `desc` also diverges:
   `early-stop-gate` emits `"Stopped early at <phase>"` using the phase token (`pre`/`comp`/`sim`),
   whereas rtl_buddy emits `"Stopped early at preproc"`/`"…compile"`/`"…sim"`
   (`runner/test_runner.py:60,68,76`) — so the `desc` matches only for `sim` and diverges for
@@ -402,10 +418,12 @@ informational.
   item 17 (see [05 — Interim CWD-collision posture](05-branching-and-results.md#interim-cwd-collision-posture--per-tag-artefact-naming)).
 - **`git-status` is recorded as a logging event** (settled 27) — this plan includes git-state
   capture (rtl_buddy's `show_git_rev` at `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522`) but
-  routes it through `log.info("git_state")`, which falls through to the console (the
-  `SummaryProcessor` plugin accumulates results only), not through the graph. The summary
-  **results** table is rendered by that plugin (departing from the `do_cmd_test` print loop at
-  `rtl_buddy.py:203-207`) rather than an `aggregate-results` sink.
+  routes it through `log.info("git_state")`, which falls through to the console (it is not a
+  terminal result, so it does not reach `results-summary`), not through the graph. The summary
+  **results** table is rendered by the in-graph `results-summary` node's `finalise()` (spec
+  [10d](specs/10d-summarise-results.md); reproducing the `do_cmd_test` print loop at
+  `rtl_buddy.py:203-207`), fed by the `any` contract — not a `fan-in-results`/`aggregate-results`
+  pair.
 - **`postproc_path` not executed** (settled 14) — parity with rtl_buddy, which loads
   `postproc` (`config/test.py:254-264`, `get_postproc_path`) but never runs it (no caller in
   `VlogSim.post`, `tools/vlog_sim.py:283-300`).

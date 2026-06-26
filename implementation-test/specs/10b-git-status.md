@@ -1,7 +1,7 @@
 # Spec 10b: git-status (`GitStatusMod`)
 
 **Depends on:** spec 01 (schema).
-**References:** [03 — Control section](../03-module-catalog.md), [07 item 27](../07-ambiguities-and-assumptions.md). Parent index: [idx-10 — Control module, git-status, and the summary logging plugin](../idx-10-control-aggregate.md).
+**References:** [03 — Control section](../03-module-catalog.md), [07 item 27](../07-ambiguities-and-assumptions.md). Parent index: [idx-10 — Control module, git-status, and the results-summary node](../idx-10-control-aggregate.md).
 
 ## Before you start
 
@@ -37,7 +37,7 @@ class GitStatusMod:
 ## Algorithm
 
 1. Collect git state via three `subprocess.run(..., capture_output=True, text=True, check=True)` calls: `branch` from `git rev-parse --abbrev-ref HEAD`, `sha` from `git rev-parse HEAD`, and `dirty = bool(... "git status --porcelain" ...stdout.strip())`.
-2. Record it once: `log.info("git_state", branch=branch, sha=sha, dirty=dirty)`. The event is not collected by `SummaryProcessor` (results-only), so it falls through to the console and prints at run start.
+2. Record it once: `log.info("git_state", branch=branch, sha=sha, dirty=dirty)`; it falls through to the console and prints at run start.
 3. Emit `("default", True)` — the port is unwired; the node exists only for the side-effect log.
 4. **Failure — not a repo / git absent.** Wrap step 1 in `try/except (CalledProcessError, FileNotFoundError)` → `log.warning("git_state_unavailable", reason=str(e))`. **Never** `log.error`/`log.fatal`: missing git state must not fail the run. Step 3 still emits.
 
@@ -45,7 +45,7 @@ class GitStatusMod:
 
 In `modules/rtl_buddy/setup.py` — `GitStatusMod`:
 
-Zero-input `default` node — zero input ports is what bounds it to one invocation, so `default` suffices and `unit` would be an empty guarantee. `run(self)` shells out to git (`git rev-parse --abbrev-ref HEAD`, `git rev-parse HEAD`, `git status --porcelain`) and calls `log.info("git_state", branch=..., sha=..., dirty=bool(...))` once. The `git_state` event is not collected by any plugin — it falls through the `SummaryProcessor` (which accumulates results only) to the console and prints at run start. If not in a git repo or `git` is unavailable, `log.warning("git_state_unavailable", reason=...)` — **never** `log.error`/`log.fatal`. Returns `("default", True)`; the port is unwired (the node exists only for the side-effect log).
+Zero-input `default` node — zero input ports is what bounds it to one invocation, so `default` suffices and `unit` would be an empty guarantee. `run(self)` shells out to git (`git rev-parse --abbrev-ref HEAD`, `git rev-parse HEAD`, `git status --porcelain`) and calls `log.info("git_state", branch=..., sha=..., dirty=bool(...))` once. If not in a git repo or `git` is unavailable, `log.warning("git_state_unavailable", reason=...)` — **never** `log.error`/`log.fatal`. Returns `("default", True)`; the port is unwired (the node exists only for the side-effect log).
 
 **Compatibility source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev` (here emitted as one structured `git_state` event rather than printed).
 
@@ -74,5 +74,5 @@ Zero-input `default` node — zero input ports is what bounds it to one invocati
 
 - `default` contract, zero-input — runs once (zero input ports bound it, not the contract) for its `log.info("git_state", …)` side-effect.
 - Catch `(subprocess.CalledProcessError, FileNotFoundError)` (not a repo / `git` absent) → `log.warning("git_state_unavailable", …)`. **Never** `log.error`/`log.fatal` — missing git state must not fail or abort the run.
-- `git_state` is **not** collected by `SummaryProcessor` (results-only); it falls through to the console at run start.
+- `git_state` is a log side-effect, not a graph-routed result; it falls through to the console at run start.
 - Emit `("default", True)` — the port is unwired; the node exists only for the log side-effect.

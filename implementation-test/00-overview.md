@@ -38,18 +38,20 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
    which inputs are matched, how branches re-converge) lives in contracts, and **we author
    the contracts the design needs** — contracts are plugins, not framework internals.
 
-3. **Branching is data routing via output ports; the summary is a logging concern.** A stage
+3. **Branching is data routing via output ports; the summary is one in-graph node.** A stage
    that produces a terminal outcome (skip, early-stop, compile-fail, timeout, parsed result)
    emits it on a dedicated output port that routes the item *off the main line*. Items that
    continue stay on the main line. Because terminal items leave, downstream stages never see
-   them — which is why no module needs a guard. There is **no collector node**: each terminal
-   port is left unwired and its module additionally **logs its outcome** — the otherwise-silent
-   paths (`parse-log`/`parse-uvm-log`, `filter.skip`, `early-stop`) emit a `test_result` event,
-   while the failure terminals add `test_name`/`result`/`desc` to their existing `log.error`. A per-graph
-   **`SummaryProcessor` logging plugin** collects those events via a configured watch-list and
-   renders the table in its `finalise()` hook. `git-status` logs its git stateline separately and
-   it falls through to the console. The exit code is driven by per-emission `log.error`. This is
-   the TODO #15 redesign — see [05](05-branching-and-results.md).
+   them — which is why no module needs a guard. The 13 result ports fan into a single
+   **`results-summary`** node (the `any` contract is the fan-in; no relay), which renders the
+   PASS/FAIL/NA table in its `finalise()` hook from the `TestResult` payloads — `test_name` rides
+   the payload as the table's first column (spec [10d](specs/10d-summarise-results.md)). The exit
+   code is driven by `log.error` at two layers: each failure terminal's own **per-case** event at
+   origin (`compile_failed`/`sim_timeout`/`model_*`/`sweep_*`/`preproc_*`/`filelist_*`/`replay_seed_*`/`parse_log_*`/`parse_uvm_*` — no generic
+   `test_result`), plus the consolidated `test_failures` error `finalise()` emits on any FAIL row.
+   `git-status` logs its git stateline separately and it falls through to the console. (An earlier TODO #15 draft
+   rendered the table out-of-graph via a `SummaryProcessor` logging plugin, now dormant —
+   [10c](specs/10c-summary-handler.md).) See [05](05-branching-and-results.md).
 
 4. **`compile` and `sim` are one reusable module.** `run-process` — `run(self, command,
    timeout=None) -> {rc, stdout_path, stderr_path}` (`rc is None` ⟺ timed out) — is the single subprocess
@@ -106,8 +108,9 @@ config/setup edges carry concrete classes (`RootConfig`, `RtlBuilderConfig`, `Su
 or scalars (`Path`, `bool`, `str`). Colours:
 
 - **blue, bold** — main-line continue ports (the work spine), each labelled with its payload;
-- **grey, dashed** — the 13 **unwired** terminal ports routing an item *off the main line*
-  (and `git-status`, which falls through to the console);
+- **teal, solid** — the 13 result ports routing an item *off the main line* into the
+  `results-summary` sink (fanned in by the `any` contract);
+- **grey, dashed** — `git-status`'s lone stateline edge, which falls through to the console (not a result port);
 - **orange** — setup chain + persistent config broadcasts (`root_cfg`, `builder_cfg`, …);
 - **purple** — env-setup ordering plus artefact-dir provenance: the `$PATH` prepend is sequenced
   by `prepend-path`'s `env_ready` token wired **directly** to each `run-process` (edge
@@ -124,10 +127,10 @@ route/parse nodes, and the multi-edge gates. The same node names appear in the [
 
 ```mermaid
 flowchart TD
-  route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select<br/>(fan-out)"]
+  route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select"]
   select m2@-->|"test"| filter["filter"]
   filter m3@-->|"test"| load_model["load-model"]
-  load_model m4@-->|"test"| sweep["sweep<br/>(keyed_join · fan-out)"]
+  load_model m4@-->|"test"| sweep["sweep<br/>(keyed_join)"]
   load_model m4b@-->|"model"| sweep
   sweep m5@-->|"test"| preproc["preproc<br/>(keyed_join)"]
   sweep m5b@-->|"model"| preproc
@@ -140,12 +143,12 @@ flowchart TD
   cc_build m10@-->|"test + simv"| cc_int["cc-int<br/>(keyed_join)"]
   cc_run m11@-->|"proc"| cc_int
   cc_int m12@-->|"test + simv"| gate_comp["gate-comp<br/>(keyed_join)"]
-  gate_comp m13@-->|"test + simv"| runs["runs<br/>(keyed_join · fan-out)"]
+  gate_comp m13@-->|"test + simv"| runs["runs<br/>(keyed_join)"]
   runs m14@-->|"test + run_id + simv"| seed["seed<br/>(keyed_join)"]
   seed m15@-->|"test + run_id + simv + seed"| sim_build["sim-build<br/>(keyed_join)"]
-  sim_build m16@-->|"command + timeout"| sim_run["sim-run<br/>(keyed_join · run-process)"]
-  sim_build m17@-->|"randseed"| randseed["write-randseed<br/>(keyed_join · leaf)"]
-  sim_build m17b@-->|"randseed"| link_latest["link-latest<br/>(keyed_join · terminal)"]
+  sim_build m16@-->|"command + timeout"| sim_run["sim-run<br/>(keyed_join)"]
+  sim_build m17@-->|"randseed"| randseed["write-randseed<br/>(keyed_join)"]
+  sim_build m17b@-->|"randseed"| link_latest["link-latest<br/>(keyed_join)"]
   sim_build m17c@-->|"test"| sim_int["sim-int<br/>(keyed_join)"]
   sim_run m18@-->|"proc (gate)"| randseed
   sim_run m18b@-->|"proc"| link_latest
@@ -157,19 +160,19 @@ flowchart TD
   route_post m24@-->|"uvm: test + proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
   route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
 
-  filter t1@-."skip:TestResult(SKIP)".-> TERM["unwired terminal ports<br/>each edge carries a self-keyed TestResult {key, type_, result, desc}<br/>pass-like: log.info(test_result); fail/timeout: log.error(domain event w/ result,desc) → exit 1<br/>SummaryProcessor watch-list collects them; renders the table in finalise()"]
-  load_model t2@-."fail:TestResult(FAIL)".-> TERM
-  sweep t3@-."fail:TestResult(FAIL)".-> TERM
-  preproc t4@-."fail:TestResult(FAIL)".-> TERM
-  gate_pre t5@-."stop:TestResult(EARLY_STOP)".-> TERM
-  filelist t6@-."fail:TestResult(FAIL)".-> TERM
-  cc_int t7@-."fail:TestResult(COMPILE_FAIL)".-> TERM
-  gate_comp t8@-."stop:TestResult(EARLY_STOP)".-> TERM
-  seed t9@-."fail:TestResult(FAIL)".-> TERM
-  sim_int t10@-."timeout:TestResult(SIM_TIMEOUT)".-> TERM
-  gate_sim t11@-."stop:TestResult(EARLY_STOP)".-> TERM
-  parse_log t12@-."result:TestResult(PARSE)".-> TERM
-  parse_uvm t13@-."result:TestResult(PARSE)".-> TERM
+  filter t1@-->|"skip:TestResult(SKIP)"| TERM["results-summary<br/>(any)"]
+  load_model t2@-->|"fail:TestResult(FAIL)"| TERM
+  sweep t3@-->|"fail:TestResult(FAIL)"| TERM
+  preproc t4@-->|"fail:TestResult(FAIL)"| TERM
+  gate_pre t5@-->|"stop:TestResult(EARLY_STOP)"| TERM
+  filelist t6@-->|"fail:TestResult(FAIL)"| TERM
+  cc_int t7@-->|"fail:TestResult(COMPILE_FAIL)"| TERM
+  gate_comp t8@-->|"stop:TestResult(EARLY_STOP)"| TERM
+  seed t9@-->|"fail:TestResult(FAIL)"| TERM
+  sim_int t10@-->|"timeout:TestResult(SIM_TIMEOUT)"| TERM
+  gate_sim t11@-->|"stop:TestResult(EARLY_STOP)"| TERM
+  parse_log t12@-->|"result:TestResult(PARSE)"| TERM
+  parse_uvm t13@-->|"result:TestResult(PARSE)"| TERM
 
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
@@ -213,31 +216,32 @@ flowchart TD
 
   classDef fanout fill:#e6f2ff,stroke:#1f6feb;
   classDef join fill:#fff3cd,stroke:#bf8700;
-  classDef term fill:#f5f5f5,stroke:#888888,stroke-dasharray:4 3;
+  classDef sink fill:#eef5f5,stroke:#3a7d7d,stroke-width:2px;
   classDef cli fill:#eef7ee,stroke:#2da44e;
   class select,sweep,runs fanout;
   class filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
-  class TERM term;
+  class TERM sink;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
   %% edge styling by class — each styled edge has a unique ID; per-type class lists below.
   %% Inserting/removing an edge: add/remove its ID in one list; no positional renumbering.
   classDef mainEdge stroke:#1f6feb,stroke-width:2px;
-  classDef termEdge stroke:#6e7781,stroke-width:1px;
+  classDef resultEdge stroke:#3a7d7d,stroke-width:2px;
   classDef cfgEdge stroke:#bf8700,stroke-width:1.5px;
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
   class m1,m2,m3,m4,m4b,m5,m5b,m6,m6b,m7,m7b,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
-  class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 termEdge;
+  class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 resultEdge;
   class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
   class e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12 envEdge;
   class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;
   class gs1 gitEdge;
 ```
 
-There is **no fan-in node** — the 13 terminal ports are unwired and the summary is a logging
-concern (TODO #15). Under the split, most main-line nodes are `keyed_join` (they correlate ≥2
+There is **one fan-in sink** — the 13 result ports wire into `results-summary`, where the
+`any` contract fans them in (no relay) and the node renders the table in `finalise()` (spec
+[10d](specs/10d-summarise-results.md)). Under the split, most main-line nodes are `keyed_join` (they correlate ≥2
 keyed edges by key); only the single-keyed-input nodes (`filter`, `load-model`) stay `default`
 (`sweep`/`preproc`/`gate-pre` became `keyed_join` once the `model` edge began riding alongside
 `test` through them), with `select`/`sweep`/`runs` the fan-out generators.
@@ -252,7 +256,7 @@ keyed edges by key); only the single-keyed-input nodes (`filter`, `load-model`) 
 | `--early-stop` phase truncation | `early-stop-gate` nodes emitting on `stop` |
 | compile vs sim | one reusable `run-process` module + two command builders |
 | matching async results to their test | `keyed_join` on the correlation key (at `cc-int`, the sim-side nodes, and every multi-edge node) |
-| collecting all outcomes | each terminal logs its outcome (`test_result` from the silent paths; `compile_failed`/`sim_timeout`/`*_failed` from the failure terminals) → `SummaryProcessor` watch-list collects and renders the table |
-| OR-accumulated exit code | per-emission `log.error` at each failure site (harness maps ERROR → exit 1) |
+| collecting all outcomes | the 13 result ports fan into the `results-summary` node (the `any` contract) → it renders the table from the `TestResult` payloads in `finalise()` |
+| OR-accumulated exit code | per-case `log.error` at each failure terminal + `results-summary.finalise()`'s consolidated `test_failures` error (harness maps ERROR → exit 1) |
 | git state recorded | `git-status` setup node `log.info("git_state", …)` → falls through to the console (not in the summary table) |
 | `RootConfig`/`SuiteConfig` monolithic loaders | reimplemented as atomic setup nodes; config schema preserved |

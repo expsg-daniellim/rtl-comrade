@@ -151,10 +151,10 @@ Record the repository's git state once at run start, for reproducibility and bug
 (rtl_buddy logs git state alongside results). Zero-input; reads `git` via subprocess (or
 `subprocess.run(["git", "rev-parse", ...])`) and emits a single structured log event
 `log.info("git_state", branch=..., sha=..., dirty=...)`. It routes **nothing through the
-graph**: the `git_state` event falls through the `SummaryProcessor` logging plugin (which
-accumulates results only) to the console, printing at run start (see
-[05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node)).
-Git state is recorded as a logging concern, not a
+graph**: `git_state` is not a terminal result, so it does not reach `results-summary` — it
+falls through to the console, printing at run start (see
+[05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node)).
+Git state is recorded as a log event, not a
 graph-routed payload, which is what makes it a one-line setup node.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:500-522` — `show_git_rev`: the `git status -sb` / `git log -1 --pretty=%h` subprocess calls and the branch/mod/staged derivation (here emitted as one structured `log.info("git_state", ...)` rather than printed).
@@ -217,7 +217,7 @@ single output — because there is no name-only port, not because this node need
 - **Source:** `rtl_buddy/src/rtl_buddy/rtl_buddy.py:349-357` — the `_do_test_suite` level filter (`t_lvl > reg_level` / `t_lvl < start_level` → `_append_skip_results`). Level resolution is `TestConfig.get_reglvl` at `config/test.py:287-299`; the SKIP payload is `SkipResults` at `runner/test_results.py:71-78`.
 - **In:** `test`, `builder_cfg`, `reg_level=None`, `start_level=None`
 - **Out:** `("test", test)` (forwarded unchanged) | `("skip", result)`
-- **Log idiom:** port-routed `skip` `result`; on skip logs one INFO `test_result` (SKIP is pass-like — collected by `SummaryProcessor`, never `log.error`/drives exit). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Log idiom:** port-routed `skip` `result` (→ `results-summary`); on skip emits its `TestResult` (a skip is not an error, so no `log.error`; the summary row rides the payload). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ### `load-model`  · tags: select · contract: `default`
 Load the test's `models.yaml` (resolving `model_path` relative to the suite dir recorded by
@@ -342,7 +342,7 @@ is carried for correlation only — `run-process` never reads or branches on it.
 Joins `test`, `simv` (born at `build-compile-cmd`), and the subprocess `proc` by key.
 `rc == 0` → forward `test` and `simv` unchanged (co-gated, so `simv` proceeds only on compile
 success and the downstream `expand-runs` join cannot dangle). `rc != 0` → emit `fail`
-(`TestResult.compile_fail(key)`; reads `proc.stderr_path`/`stdout_path` and logs at ERROR), dropping
+(`TestResult.compile_fail(key, test_name)`; reads `proc.stderr_path`/`stdout_path` and logs at ERROR), dropping
 `test`/`simv`. Takes only the three keyed ports — no config port, since `keyed_join`
 joins *every* port by key.
 
@@ -433,7 +433,7 @@ the artifacts were written upstream.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:72-73` — the `execute_returncode == 4444 → SimTimeoutResults` branch in `TestRunner.run`. rtl_buddy's `4444` sentinel is set in `tools/vlog_sim.py:258-261`; the FAIL payload is `SimTimeoutResults` at `runner/test_results.py:62-69`. This plan keys on `proc.rc is None` rather than the magic `rc`.
 - **In:** `test`, `proc` (joined by key)
-- **Out:** `("test", test)` + `("proc", proc)` (clean run, co-gated) | `("timeout", TestResult.sim_timeout(key))`
+- **Out:** `("test", test)` + `("proc", proc)` (clean run, co-gated) | `("timeout", TestResult.sim_timeout(key, test_name))`
 - **Log idiom:** port-routed `timeout` `result` (`TestResult.sim_timeout`, `type_=SIM_TIMEOUT`) when `proc.rc is None`; `log.error` at emission with the sim stderr path. See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
 ---
@@ -452,7 +452,7 @@ return — not scheduling. This is the only place the uvm/plain decision lives.
 
 ### `parse-log`  · tags: post · contract: `keyed_join` (`key_field: key`)
 Reimplements `VlogPost` with corrections (see [07 settled 15](07-ambiguities-and-assumptions.md)):
-the `PASS/FAIL/ERR/FAT` regex scan on `proc.stdout_path` (the log `proc` echoes). Emits the self-keyed `TestResult.parse(key, verdict, desc)` (`type_=PARSE`).
+the `PASS/FAIL/ERR/FAT` regex scan on `proc.stdout_path` (the log `proc` echoes). Emits the self-keyed `TestResult.parse(key, test_name, verdict, desc)` (`type_=PARSE`).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:23-45` — `VlogPost.get_results`: the per-line `^PASS` / `^FAIL` / `^(ERR|FAT):` searches and the `NA`/`FAIL`/`PASS` precedence. This plan **corrects** the quirks (PASS-after-FAIL override, partial-match `match_err` crash) — see [07 settled 15](07-ambiguities-and-assumptions.md).
 - **In:** `test`, `proc` (joined by key — plain branch of `route-post`)
@@ -463,7 +463,7 @@ the `PASS/FAIL/ERR/FAT` regex scan on `proc.stdout_path` (the log `proc` echoes)
 ### `parse-uvm-log`  · tags: post · contract: `keyed_join` (`key_field: key`)
 Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
 `proc.stdout_path` and compare against `test.uvm.max_warns`/`max_errors`
-(FATAL must be 0). Emits the self-keyed `TestResult.parse(key, verdict, desc)` (`type_=PARSE`).
+(FATAL must be 0). Emits the self-keyed `TestResult.parse(key, test_name, verdict, desc)` (`type_=PARSE`).
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_post.py:58-81` — `UvmVlogPost.get_results`: the `UVM Report Summary` regex, the severity-count `finditer`, the missing/invalid-summary FAILs, and the `WARNING <= max_warns and ERROR <= max_errors and FATAL <= 0` PASS rule. Thresholds come from `UVMConfig` (`config/uvm.py:3-19`).
 - **In:** `test`, `proc` (joined by key — uvm branch of `route-post`)
@@ -476,7 +476,7 @@ Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
 
 ### `early-stop-gate`  · tags: (cross-cutting) · contract: `default` (gate-pre) / `keyed_join` (gate-comp, gate-sim) (persistent: `early_stop`)
 Compare the global `early_stop` phase against this gate's configured `phase`. Stop here →
-emit `stop` (`TestResult.early_stop(key, desc)`); else forward. One module serves three instances via
+emit `stop` (`TestResult.early_stop(key, test_name, desc)`); else forward. One module serves three instances via
 `**edges`: it **co-gates** by forwarding *every* input edge on its same-named port on "go",
 and drops them all on "stop". Wired `{test}` at `gate-pre`, `{test, simv}` at `gate-comp`,
 `{test, proc}` at `gate-sim`; identity comes from the always-present `test` edge.
@@ -484,27 +484,28 @@ and drops them all on "stop". Wired `{test}` at `gate-pre`, `{test, simv}` at `g
 - **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the three `if self.run_depth == RunDepth.{PRE,COMP,SIM}: return EarlyStopResults(...)` checkpoints in `TestRunner.run`. The `RunDepth` enum is `test_runner.py:14-18`; the `--early-stop` flag is `rtl_buddy.py:121`; the payload is `EarlyStopResults` at `runner/test_results.py:53-60`.
 - **In:** `**edges` (per instance: `{test}` / `{test, simv}` / `{test, proc}`), `early_stop:str = "post"` (persistent)
 - **Config:** `phase:str` (`pre`|`comp`|`sim`)
-- **Out:** each input edge forwarded on its same-named port (on "go") | `("stop", TestResult.early_stop(key, desc))`
-- **Log idiom:** `log.info("test_result", …, result="NA", desc="Stopped early at {phase}")` at the `stop` emission (a user-requested stop is NA but **not** a failure — deliberate exit-0 divergence; the `stop` port is unwired, `SummaryProcessor` collects the event). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
+- **Out:** each input edge forwarded on its same-named port (on "go") | `("stop", TestResult.early_stop(key, test_name, desc))`
+- **Log idiom:** **none** at the `stop` emission — a user-requested stop is NA but **not** a failure, so no `log.error` (deliberate exit-0 divergence; the `stop` port is wired to `results-summary`, the emitted `TestResult` is the summary row, and an NA row is not a FAIL row so it drives no exit). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).
 
-### No terminal-aggregation node
+### The terminal-aggregation node (`results-summary`)
 
-> The `test` graph has no terminal-aggregation node. The summary table and the exit code are
-> not produced by a graph sink:
+> The `test` graph's 13 terminal results re-converge at one `results-summary` node (spec
+> [10d](specs/10d-summarise-results.md)), fanned in by the `any` contract:
 >
-> - **Summary** is rendered by a per-graph `SummaryProcessor` (a stateful structlog processor
->   in `log/summary.py`, **not** a `logging.Handler`) from the outcome events each terminal logs
->   at emission — `test_result` from the otherwise-silent paths, the failure terminals' own
->   `compile_failed`/`sim_timeout`/`*_failed` (collected via a `Config` watch-list) — **outcomes
->   only**. It renders the table in its `finalise()` teardown hook. The `git_state` event from
->   `git-status` is not collected; it falls through to the console. See
->   [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
-> - **Exit code** is driven solely by the per-emission `log.error` at each failure site.
-> - The 13 terminal ports are **unwired** — the harness logs `no_destination` at INFO.
+> - **Summary** is rendered by `results-summary.finalise()` from the 13 terminal `TestResult`s
+>   fanned into it (the contract *is* the fan-in; no relay) — **outcomes only**. The `git_state`
+>   event from `git-status` is not a terminal, so it does not reach the node; it falls through to
+>   the console. See
+>   [05 — Re-convergence](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node).
+> - **Exit code** is driven by `log.error` at two layers: each failure terminal's own **per-case**
+>   event at origin (`compile_failed`/`sim_timeout`/`model_*`/`sweep_*`/`preproc_*`/`filelist_*`/`replay_seed_*`/`parse_log_*`/`parse_uvm_*`), plus
+>   the consolidated `log.error("test_failures", count=…)` that `finalise()` emits on any FAIL row.
+>   No terminal uses the generic `test_result` (retired).
+> - The 13 result ports are **wired** to `results-summary` (via `contract_port_mappings`).
 >
-> The `any` contract is retained as a reusable (plain) contract but has no consumer in the
-> `test` graph. The `SummaryProcessor` plugin is specified in
-> [spec 10](idx-10-control-aggregate.md).
+> The `any` contract backs this fan-in and stays reusable by other graphs. The node is specified in
+> [spec 10d](specs/10d-summarise-results.md); the dormant out-of-graph `SummaryProcessor` plugin in
+> [spec 10c](specs/10c-summary-handler.md).
 
 ## Module → rtl_buddy provenance
 
@@ -555,7 +556,7 @@ wins; keep this table in step when a range there changes.
 For the rtl_buddy behaviour each departure in this plan leaves behind, see
 [07 — Notable divergences](07-ambiguities-and-assumptions.md).
 
-> The `do_cmd_test` summary (`rtl_buddy.py:203-207`) is reproduced by the `SummaryProcessor`
-> logging plugin, and the OR-accumulated exit (`rtl_buddy.py:206`) by per-emission
-> `log.error`. See
-> [05](05-branching-and-results.md#re-convergence-the-summary-is-a-logging-concern-not-a-graph-node).
+> The `do_cmd_test` summary (`rtl_buddy.py:203-207`) is reproduced by the in-graph `results-summary`
+> node's `finalise()`, and the OR-accumulated exit (`rtl_buddy.py:206`) by each terminal's per-case
+> `log.error` plus the node's consolidated `test_failures` error. See
+> [05](05-branching-and-results.md#re-convergence-the-summary-returns-as-a-graph-node).
