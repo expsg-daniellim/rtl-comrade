@@ -35,7 +35,7 @@ The serde-decorated type read straight from `tests.yaml`'s `tests:` list — a *
 | `desc`          | `str`                | (none)      | required | Human-readable description.                                                                                    |
 | `model`         | `str`                | (none)      | required | Model name to look up in `models.yaml`. Carried into runtime `TestConfig.model` (same field name).             |
 | `model_path`    | `str`                | (none)      | required | Path to `models.yaml` (relative to suite dir). Resolved by `load-model` (spec [05e](05e-load-model.md)).        |
-| `_reglvl`       | `int \| dict \| None`| `reglvl`    | (none)   | Regression level — uniform int, builder-keyed dict (with optional `default`), or omitted (→ `0`).              |
+| `reglvl`        | `int \| dict \| None`| (none)      | (none)   | Regression level — uniform int, builder-keyed dict (with optional `default`), or omitted (→ `0`).              |
 | `pa`            | `dict \| None`       | `plusargs`  | `None`   | Plusargs dict (`{key: value}`); value may be `None` for bare-flag plusargs.                                    |
 | `pd`            | `dict \| None`       | `plusdefines`| `None`  | Plusdefines dict; same `None`-value semantics.                                                                 |
 | `uvm`           | `UVMConfig \| None`  | (none)      | `None`   | UVM config ([01b](01b-suite-schema.md)/`uvm.py`); presence triggers `parse-uvm-log` post path.                 |
@@ -95,10 +95,7 @@ class ParseSuiteConfigMod:
                 tb = tbs[t.tb]                  # bind testbench within-file
             except KeyError as e:               # testbench name not declared in this file's testbenches
                 log.fatal("unknown_testbench", path=str(path), test=t.name, testbench=t.tb, exc_info=e)
-            tests[t.name] = TestConfig(name=t.name, desc=t.desc, model=t.model, model_path=t.model_path,
-                                       _reglvl=t._reglvl, pa=t.pa, pd=t.pd, uvm=t.uvm,
-                                       preproc_path=t.preproc_path, postproc_path=t.postproc_path, sweep_path=t.sweep_path,
-                                       tb=tb, timeout=t.timeout, suite_dir=path.parent)   # key defaults to name via TestConfig.__post_init__ (born self-keyed); stamp suite_dir; no model field — resolved on its own edge by load-model
+            tests[t.name] = TestConfig(name=t.name, desc=t.desc, model=t.model, model_path=t.model_path, reglvl=t.reglvl, pa=t.pa, pd=t.pd, uvm=t.uvm, preproc_path=t.preproc_path, postproc_path=t.postproc_path, sweep_path=t.sweep_path, tb=tb, timeout=t.timeout, suite_dir=path.parent)   # key defaults to name via TestConfig.__post_init__ (born self-keyed); stamp suite_dir; no model field — resolved on its own edge by load-model
         suite_cfg = SuiteConfig(path=path, tests=tests)
         return ("default", suite_cfg)
 ```
@@ -162,7 +159,7 @@ Failure cases — each exercises a distinct `except` clause; assert the **specif
 ## Constraints
 
 - Contract-agnostic module: pairs with `unit` in test/randtest, `default` in regression. Emit on the string-literal `default` port.
-- The raw `SuiteConfigFile`/`TestConfigFile` types are module-private (`setup.py`), pure serde shapes with **no methods**, and **not** added to the schema package's `__init__.py`. Preserve every `field(rename=...)` target exactly (`reglvl`, `plusargs`, `plusdefines`, `preproc`/`postproc`/`sweep`, `testbench`, `sim_timeout`, `rtl-buddy-filetype`); do **not** Pythonify the on-disk names.
+- The raw `SuiteConfigFile`/`TestConfigFile` types are module-private (`setup.py`), pure serde shapes with **no methods**, and **not** added to the schema package's `__init__.py`. Preserve every `field(rename=...)` target exactly (`plusargs`, `plusdefines`, `preproc`/`postproc`/`sweep`, `testbench`, `sim_timeout`, `rtl-buddy-filetype`); do **not** Pythonify the on-disk names.
 - The raw→runtime conversion is done inline in `run`'s test-dict comprehension — **not** as a method on `TestConfigFile` (rtl_buddy's `initialise` is deliberately not ported as a method; the transform belongs to the node) and **not** factored into a single-use helper. It builds the runtime `TestConfig` with `model=raw.model`, `model_path=raw.model_path` (the `model` field holds the name string; the resolved `ModelConfig` rides its own edge and never overwrites the field) — do **not** eagerly read `models.yaml` here (`load-model`, spec [05e](05e-load-model.md), does the deferred read + lookup).
 - Resolve the locator against CWD up front (`path = Path(test_config).resolve()`); the input is the raw `test_config:str` (CLI default `"tests.yaml"` in test/randtest, `parse-reg-config`'s suite path in regression). A missing file surfaces here as a caught `FileNotFoundError` → `log.fatal`.
 - Stamp `suite_dir=path.parent` onto **every** test so `load-model` (spec [05e](05e-load-model.md)) can resolve `suite_dir / model_path` later.

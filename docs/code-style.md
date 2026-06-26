@@ -40,6 +40,10 @@ def foo(self) -> int:
 
 **`Returns: None.` in `__init__`.** Document the return explicitly even though `__init__` always returns `None`. This keeps the format uniform across all methods that have a docstring.
 
+## Naming
+
+Do not prefix names with a leading underscore — not functions, methods, module-level names, or `self.` attributes. Dunders (`__init__`, `__post_init__`, …) are the only exception.
+
 ## Expressions
 
 Prefer single-line expressions where they fit readably. Chained method calls and list comprehensions with a filter clause do not need to be broken across multiple lines just because they are long. The existing codebase puts the `plugin_name` derivation and the `to_get` list comprehension on one line each — follow that precedent.

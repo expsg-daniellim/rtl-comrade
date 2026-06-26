@@ -62,8 +62,7 @@ class RunProcessMod:
     async def run(self, command:Command, work_dir:Path, timeout:KeyedValue[float | None] | None = None, env_ready:bool = True):
         with open(command.stdout_path, "wb") as out, open(command.stderr_path, "wb") as err:
             try:
-                proc = await asyncio.create_subprocess_exec(*command.argv,
-                         stdout=out, stderr=err, preexec_fn=os.setpgrp, cwd=work_dir)   # run in the artefact base, not ambient CWD
+                proc = await asyncio.create_subprocess_exec(*command.argv, stdout=out, stderr=err, preexec_fn=os.setpgrp, cwd=work_dir)   # run in the artefact base, not ambient CWD
             except (FileNotFoundError, PermissionError) as e:
                 log.fatal("launch_failed", argv0=command.argv[0], exc_info=e)
             try:

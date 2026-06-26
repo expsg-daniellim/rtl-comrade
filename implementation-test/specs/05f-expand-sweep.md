@@ -34,8 +34,7 @@ class ExpandSweepMod:
             yield ("model", model)
             return
         name = test.model                            # the model-name string (the test-edge invariant)
-        ns = {"logger": logger, "TestConfig": TestConfig,
-              "test_cfg": test, "root_cfg": root_cfg, "out_test_cfgs": []}
+        ns = {"logger": logger, "TestConfig": TestConfig, "test_cfg": test, "root_cfg": root_cfg, "out_test_cfgs": []}
         try:                                         # phase 1 — read the script: per-exception I/O events (mirrors io.py); no swap yet, so a read failure needs no restore
             with open(sweep) as f:
                 code = f.read()

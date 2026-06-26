@@ -41,11 +41,7 @@ class ParseRootConfigMod:
     def run(self, path:Path):
         try:
             raw = from_yaml(RootConfigFile, path.read_text())
-            root_cfg = RootConfig(
-                platforms=raw.platforms,
-                rtl_builder_cfgs={c.get_name(): c for c in raw.builders},   # precompute, mirrors root.py:94
-                cfg_rtl_reg=raw.cfg_rtl_reg,
-            )
+            root_cfg = RootConfig(platforms=raw.platforms, rtl_builder_cfgs={c.get_name(): c for c in raw.builders}, cfg_rtl_reg=raw.cfg_rtl_reg)   # rtl_builder_cfgs precompute mirrors root.py:94
             return ("default", root_cfg)
         except (UnicodeDecodeError, FileNotFoundError, IsADirectoryError, PermissionError, OSError) as e:   # file I/O — unrecoverable
             log.fatal("root_config_load_failed", path=str(path), exc_info=e)

@@ -65,16 +65,10 @@ class SummaryProcessor:
         self.suppress = set(config.suppress)    # drop-from-console subset
         self.rows = []                          # fresh per run
 
-    def __call__(self, logger, method_name: str,
-                 event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+    def __call__(self, logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
         name = event_dict.get("event")
         if name in self.events:
-            self.rows.append({                  # harvest the row
-                "test_name": event_dict.get("test_name"),   # summary's first column (rtl_buddy parity)
-                "key": event_dict.get("key"),
-                "result": event_dict.get("result"),
-                "desc": event_dict.get("desc"),
-            })
+            self.rows.append({"test_name": event_dict.get("test_name"), "key": event_dict.get("key"), "result": event_dict.get("result"), "desc": event_dict.get("desc")})   # harvest the row; test_name is the summary's first column (rtl_buddy parity)
             if name in self.suppress:
                 raise DropEvent                  # summary-only → no per-event console line
         return event_dict                        # non-watched events (incl. git_state, failure errors) flow on
