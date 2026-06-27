@@ -134,7 +134,7 @@ In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `tests.yaml` f
 
 - A `test_config` string naming a real `tests.yaml` → emits `("default", suite_cfg)` with `tests: dict[str, TestConfig]`, each `test.tb` bound to its `TestbenchConfig` instance, `test.key == test.name` (born self-keyed), and `suite_dir == Path(test_config).resolve().parent` stamped on every test.
 - **Relative locator resolves against CWD.** `test_config="tests.yaml"` with the file in CWD, and `test_config="sub/tests.yaml"` with the file in `<cwd>/sub/` → both load, and `suite_cfg.path` / `suite_dir` are the resolved absolute path / its parent (boundary: relative `-c sub/tests.yaml` is accepted, not rejected).
-- **Round-trip (raw schema).** Loading an unmodified rtl_buddy `tests.yaml` (e.g. `rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`) yields runtime `TestConfig`s whose name, desc, testbench, plusargs, plusdefines, reglvl, uvm, preproc/postproc/sweep paths, and timeout equal rtl_buddy's `SuiteConfig(path).tests[name]` (modulo `get_model()` being `None` — lazy).
+- **Round-trip (raw schema).** Loading an unmodified rtl_buddy `tests.yaml` (e.g. `rtl-buddy-proj-template/verif/sandbox/tests.yaml`) yields runtime `TestConfig`s whose name, desc, testbench, plusargs, plusdefines, reglvl, uvm, preproc/postproc/sweep paths, and timeout equal rtl_buddy's `SuiteConfig(path).tests[name]` (modulo `get_model()` being `None` — lazy).
 - **YAML renames.** Each `field(rename=...)` in the `TestConfigFile` table produces the documented runtime attribute (a hand-written YAML hitting each rename loads into the expected `TestConfig` field).
 - **`preproc`/`postproc`/`sweep` path deserialiser.** YAML `preproc: { path: foo.py }` → `preproc_path == "foo.py"`; omitting `preproc:` → `preproc_path is None`; YAML `preproc: null` → `preproc_path is None`.
 - **Lazy model.** A freshly-parsed `TestConfig` has `model` holding the model **name** string (not a resolved `ModelConfig`), `model_path` populated, and `suite_dir == Path(test_config).resolve().parent`.
@@ -151,7 +151,7 @@ Failure cases — each exercises a distinct `except` clause; assert the **specif
 ## Acceptance criteria
 
 - Tests pass.
-- Output port `default` exercised: produces a correct `suite_cfg` value (with bound testbenches and stamped `suite_dir`) from a real rtl_buddy `tests.yaml` fixture (the reference suite `../rtl-buddy-proj-template/design/sandbox/verif`, per `rtl_buddy/AGENTS.md`)
+- Output port `default` exercised: produces a correct `suite_cfg` value (with bound testbenches and stamped `suite_dir`) from a real rtl_buddy `tests.yaml` fixture (the reference suite `../rtl-buddy-proj-template/verif/sandbox`, per `rtl_buddy/AGENTS.md`)
  .
 - Failure idioms exercised **per exception type**, each with its category-specific `log.fatal` event: file I/O (`not_found`/`is_directory`/`permission_denied`/`os_error`/`invalid_unicode`), parse (`serde_error`/`yaml_invalid`/`yaml_unreadable`), validation (`invalid_uvm_config` on negative `max_warns`/`max_errors`), and unknown testbench (`unknown_testbench`) → `log.fatal` (harness exit 1). No blanket `Exception` catch.
 - The `modules/config.yaml` manifest entry `{ name: parse-suite-config, class_name: ParseSuiteConfigMod }` validates and the harness resolves `parse-suite-config` → `ParseSuiteConfigMod`.

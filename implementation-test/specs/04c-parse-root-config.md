@@ -89,7 +89,7 @@ In `modules/tests/test_setup.py`. Fixtures: a committed rtl_buddy `root_config.y
 ## Acceptance criteria
 
 - Tests pass.
-- Output port `default` exercised: produces a correct `root_cfg` value from a real rtl_buddy `root_config.yaml` fixture (the reference suite `../rtl-buddy-proj-template/design/sandbox`, per `rtl_buddy/AGENTS.md`).
+- Output port `default` exercised: produces a correct `root_cfg` value from a real rtl_buddy `root_config.yaml` fixture (`../rtl-buddy-proj-template/root_config.yaml`, per `rtl_buddy/AGENTS.md`).
 - Failure idiom exercised: an unreadable / unparseable / schema-mismatched config → `log.fatal(f"failed to load {path}: {e}")` (harness exit 1).
 - The `modules/config.yaml` manifest entry `{ name: parse-root-config, class_name: ParseRootConfigMod }` validates and the harness resolves `parse-root-config` → `ParseRootConfigMod`.
 

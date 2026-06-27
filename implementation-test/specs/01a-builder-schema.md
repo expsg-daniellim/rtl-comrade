@@ -81,7 +81,7 @@ Mirrors `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:73-80`. The detection is on `
 
 ## Tests (`modules/tests/test_builder_schema.py`)
 
-- **Round-trip.** Load an unmodified rtl_buddy `root_config.yaml` (e.g. from `rtl-buddy-proj-template/design/sandbox`); for each `cfg-rtl-builder` entry, every field round-trips equal to the equivalent rtl_buddy `RtlBuilderConfig` constructed over the same YAML.
+- **Round-trip.** Load an unmodified rtl_buddy `root_config.yaml` (e.g. from `rtl-buddy-proj-template`); for each `cfg-rtl-builder` entry, every field round-trips equal to the equivalent rtl_buddy `RtlBuilderConfig` constructed over the same YAML.
 - **`process_opts` happy path.** `"-Wall  -Wextra"` → `["-Wall", "-Wextra"]`; `"  -single-flag  "` → `["-single-flag"]`; `"a\n\tb"` → `["a", "b"]`.
 - **`process_opts` `None` passthrough.** A YAML omitting `compile-time` leaves `RtlBuilderConfigOpts.compile_time is None`; same for `run-time`.
 - **`get_compile_time_opts("debug")`** returns the deserialised list for that mode.

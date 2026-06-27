@@ -62,7 +62,7 @@ In `modules/tests/test_selection.py`. Fixtures: a 3-test `suite_cfg` fixture (an
 ## Acceptance criteria
 
 - Tests pass.
-- Output port `test` exercised: a fixture `tests.yaml` with three tests fans out to three `test` edges, each carrying its construction-set `key == name` (streamed end-to-end against the reference suite `../rtl-buddy-proj-template/design/sandbox/verif/tests.yaml`).
+- Output port `test` exercised: a fixture `tests.yaml` with three tests fans out to three `test` edges, each carrying its construction-set `key == name` (streamed end-to-end against the reference suite `../rtl-buddy-proj-template/verif/sandbox/tests.yaml`).
 - Failure idiom exercised: a supplied `test_name` absent from the suite → `SuiteConfig.get_tests` emits `log.fatal` (harness exit 1).
 - The `modules/config.yaml` manifest entry `{ name: select-tests, class_name: SelectTestsMod }` validates and the harness resolves `select-tests` → `SelectTestsMod`.
 
