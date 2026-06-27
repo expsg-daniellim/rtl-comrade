@@ -11,7 +11,7 @@ spec [01b](specs/01b-suite-schema.md) (`BuildCompileCmdMod` reads
 ## Goal
 
 Build the per-test compile leg: assemble the compile argv (with log paths placed in
-`command`), fold `simv` into `ctx`, run the subprocess via `run-process` (spec 03), and
+`command`), emit `simv` as its own keyed edge, run the subprocess via `run-process` (spec 03), and
 route on the rc.
 
 This spec is split into one ticket per module — build them as independent units. Both live
@@ -19,7 +19,7 @@ in `modules/rtl_buddy/build.py`; tests in `modules/tests/test_compile_cycle.py`.
 
 | Ticket | Module | What it does |
 |---|---|---|
-| [07a](specs/07a-build-compile-cmd.md) | `BuildCompileCmdMod` | Assemble compile argv; fold `simv` into `ctx`. |
+| [07a](specs/07a-build-compile-cmd.md) | `BuildCompileCmdMod` | Assemble compile argv; emit `simv` as its own keyed edge. |
 | [07b](specs/07b-interpret-compile.md) | `InterpretCompileMod` | Route on rc (`keyed_join`); emit `TestResult.compile_fail`. |
 
 **Manifest** — these modules append to the `rtl_buddy/build.py` block in `modules/config.yaml`

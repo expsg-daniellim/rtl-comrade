@@ -115,8 +115,8 @@ responsibility.
 The plugin is a stateful structlog **processor**, not a `logging.Handler`. It sits in the
 harness handler's formatter chain **before** `ConsoleRenderer` (non-terminal under
 `include_default: true`, so `__call__` returns an `EventDict`). A `Config` carries the
-**watch-list** of outcome event names it collects (default: `test_result` plus the failure
-terminals' `compile_failed`/`sim_timeout`/`*_failed`) and a `suppress` subset (default just
+**watch-list** of outcome event names it collects (default: just `test_result`; callers add
+further outcome events via config) and a `suppress` subset (default just
 `test_result`). On each watched event it harvests `{key, result, desc}` into a row; for events in
 `suppress` it then raises `DropEvent` to drop the per-event console line, while the failure events
 are collected **and** returned so they still print as errors. Every non-watched event (including
@@ -134,9 +134,7 @@ from structlog.exceptions import DropEvent
 class SummaryProcessor:
     @serde
     class Config:
-        events: list[str] = field(default_factory=lambda: [
-            "test_result", "compile_failed", "sim_timeout", "load_model_failed",
-            "sweep_failed", "preproc_failed", "filelist_failed", "replay_seed_invalid"])
+        events: list[str] = field(default_factory=lambda: ["test_result"])   # default watch-list — just the universal test_result; callers add outcome events via config (spec 10c)
         suppress: list[str] = field(default_factory=lambda: ["test_result"])
 
     def __init__(self, config):
@@ -239,8 +237,8 @@ test.get_name())` and derives per-tag paths, so most artefacts are already isola
 
 Change (B) is the filelist naming: `write-filelist` writes `run.{test_tag}.f` and emits that
 `Path` on its `filelist` port; `build-compile-cmd` already passes `filelist.value` to `-f`,
-so no edge or downstream change is needed. `write-filelist` reverts to the plain `default`
-contract. On top of (B), R14 roots `run.f` and `obj_dir_<tag>/` on `work-dir`'s `work_dir`
+so no edge or downstream change is needed. `write-filelist` is a `keyed_join` (it joins
+`test`+`model` by key — the `model` edge `load-model` puts in flight). On top of (B), R14 roots `run.f` and `obj_dir_<tag>/` on `work-dir`'s `work_dir`
 (both writers take it as a load-bearing persistent input), bringing them under the same
 artefact-location provider model as `logs/` so a relocation is a one-node change.
 
@@ -396,4 +394,4 @@ rides the `TestResult` fanned into `results-summary`.
 
 | Site | Failure | Status |
 |---|---|---|
-| `parse-log` / `parse-uvm-log` | parse-machinery exception distinct from FAIL classification (log file missing; regex raises on malformed content) | Deferred pending TODO #13 (VlogPost quirks: replicate vs fix) |
+| `parse-log` / `parse-uvm-log` | regex raising on pathological/malformed log content, distinct from FAIL classification | Log-missing/unreadable now handled (`parse_log_unreadable` / `parse_uvm_unreadable`, specs [09b](specs/09b-parse-log.md)/[09c](specs/09c-parse-uvm-log.md)); only the malformed-content quirk remains KIV |

@@ -75,10 +75,10 @@ of each test (compile fail → no sim; timeout → no post; `--early-stop` → s
 With no god-object carrying everything, a stage needs its inputs *matched up* under
 concurrency. The chosen strategy (see [02](02-payload-conventions.md)):
 
-- **Per-test data rides as separate keyed edges, not a bag.** Each is a `{key, value}` dict
+- **Per-test data rides as separate keyed edges.** Each is a `{key, value}` dict
   (Shape 1 in [02](02-payload-conventions.md)): `test` threads the whole pipeline; `simv`,
   `run_id`, and `seed` are born at `build-compile-cmd` / `expand-runs` / `resolve-seed` and
-  **die at `build-sim-cmd`**. There is **no `ctx` and no `test_run`** — the post-sim region
+  **die at `build-sim-cmd`**. The post-sim region
   consumes `test` + `proc` + `randseed` directly. Cohesive multi-field messages (`command`,
   `proc`, `randseed`) keep named fields (Shape 2). No `result` field ever enters a main-line edge.
 - A stable **correlation key** defaults to `name` (`TestConfig.__post_init__`, so the test is
@@ -87,11 +87,10 @@ concurrency. The chosen strategy (see [02](02-payload-conventions.md)):
 - **Joins are by key, pervasively.** Every node consuming ≥2 keyed edges is a `keyed_join`
   correlating them by key — the command-builders, the interpret/route/parse nodes, and the
   multi-edge gates; config singletons reach them as `persistent_inputs`.
-  Single-keyed-input nodes stay `default`. This replaces the bag design's
-  reliance on lockstep arrival order with explicit key correlation.
+  Single-keyed-input nodes stay `default`. Correlation is by explicit key match, not
+  lockstep arrival order.
 
-This is the explicit difference from the rejected single-envelope design: there is no envelope
-at all — each node's inbound edges are exactly its inputs, modules read only the ports they
+Each node's inbound edges are exactly its inputs, modules read only the ports they
 declare, and no module contains scheduling. The full node/contract/edge table and edge-wiring
 list are in [`06-graph-yaml.md`](06-graph-yaml.md).
 

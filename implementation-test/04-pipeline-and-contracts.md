@@ -114,17 +114,17 @@ work edge plus cached config: `filter` and `load-model` (one `test` edge) and `c
 `command` edge). The config nodes emit once at start; listing their ports in `persistent_inputs`
 caches the first value and replays it for every item — the documented "enrich each item with a
 slowly-changing config" pattern. A stage that consumes **two or more** keyed work edges does
-**not** use `default`: with the `ctx`/`test_run`/`sim_cmd` bags dissolved into independent
-per-field edges (`test`/`model`/`simv`/`filelist`/`seed`/`run_id`/`timeout`/`proc`), those edges
-are paced independently, so positional pairing is unsafe and every such node uses `keyed_join` on
+**not** use `default`: its per-field keyed edges
+(`test`/`model`/`simv`/`filelist`/`seed`/`run_id`/`timeout`/`proc`) are paced
+independently, so positional pairing is unsafe and every such node uses `keyed_join` on
 `key` (below). This is why all the multi-input main-line nodes are joins, not just the
 run-process (`proc`) convergence points.
 
 ### `keyed_join` — pairing independent keyed edges
-With the bags split, `keyed_join` on `key` is the norm rather than the exception: every node
+`keyed_join` on `key` is the norm rather than the exception: every node
 consuming ≥2 keyed work edges uses it. Two distinct reasons drive it:
 
-1. **Edge re-pairing.** Edges that once rode a single `ctx`/`test_run` bag are now independent —
+1. **Edge re-pairing.** A node's keyed inputs are separate per-field edges —
    `sweep`/`preproc`/`gate-pre` join `test`+`model`, `filelist` joins `test`+`model`, `cc-build`
    joins `test`+`filelist`, `gate-comp` joins `test`+`simv`, `runs` joins `test`+`simv`, `seed`
    joins `test`+`run_id`+`simv`, `sim-build` joins `test`+`run_id`+`simv`+`seed`, and `sim-run`
@@ -143,7 +143,7 @@ requires no re-derivation downstream.
 `randseed` (write-randseed) takes two keyed ports: `randseed` (the cohesive seed message from
 `sim-build`) and `proc` (from `sim-run`, joined only as a completion gate). It is a
 **side-effect leaf** — it writes the `.randseed` record and emits a `randseed_done` ordering
-signal; there is **no `test_run` assembly** (the post-sim bag is dissolved). Post-sim is two
+signal, and builds no result record. Post-sim is two
 parallel branches off `proc`: the side-effect branch (`write-randseed` → `link-latest`,
 sequenced by `randseed_done`) and the classification branch (`interpret-sim` → `gate-sim` →
 `route-post` → `parse-log`/`parse-uvm-log`), where each classification node `keyed_join`s

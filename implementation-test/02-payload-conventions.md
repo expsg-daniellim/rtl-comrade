@@ -63,7 +63,7 @@ correlated.) Modules copy the key forward; they never parse or branch on it.
 
 ## Shape 1 — the split per-test/per-run edges
 
-There is **no `ctx` bag**. Per-test data rides the main line as **separate keyed edges**. The `test` edge carries a **bare, self-keyed `TestConfig`** (the key is its own identity); every other single-value edge rides the generic frozen `KeyedValue[T]` envelope (`key: str`, `value: T`) because its key is *not* its own identity. The edge name says what rides it:
+Per-test data rides the main line as **separate keyed edges**. The `test` edge carries a **bare, self-keyed `TestConfig`** (the key is its own identity); every other single-value edge rides the generic frozen `KeyedValue[T]` envelope (`key: str`, `value: T`) because its key is *not* its own identity. The edge name says what rides it:
 
 ```python
 test     = <TestConfig key="alu_smoke#0#0">            # bare TestConfig (self-keyed)   select → … → post-sim (long-lived); mutated in place by run-preproc, re-keyed via replace at expand-runs
@@ -84,15 +84,6 @@ The envelope wraps every Shape-1 edge **except `test`**, because the key on thos
 - **No `result` field, ever.** Terminal outcomes leave as Shape-3 result edges.
 - **Why split, not bagged:** the per-field edges expose true data dependencies (each node's inputs = exactly what it reads) and let `keyed_join` correlate by key rather than relying on lockstep arrival order. Config singletons (`builder_cfg`, `logs_dir`, …) reach the command-builders as `persistent_inputs` on those same `keyed_join` nodes. Full rationale + the node/contract/edge table + edge-wiring list: [`06-graph-yaml.md`](06-graph-yaml.md).
 
-## Shape 1b — `test_run`: dissolved
-
-There is **no post-sim bag**. The split runs all the way through. After `run-process` (sim), the post-sim region consumes the `test` edge + `proc` (the subprocess result — it echoes the sim log/err paths as `stdout_path`/`stderr_path`) + `randseed`, joined by key. `write-randseed` **no longer assembles a `test_run` record** — it is a side-effect leaf (write the seed file, emit a `randseed_done` ordering signal). The post-sim region is **two parallel branches off `proc`**:
-
-- **side-effects:** `write-randseed` (writes `.randseed`; emits `randseed_done`) → `link-latest` (forces the `test.*` symlinks; terminal).
-- **classification:** `interpret-sim` → `gate-sim` → `route-post` → `parse-log` / `parse-uvm-log`, each `keyed_join`ing `test` + `proc`.
-
-`run_id` is **dead post-sim** (it survives only in the `key` suffix and the already-composed paths), so it is not carried past `build-sim-cmd`. Removing the assembly was the atomicity fix — `write-randseed`'s function is "persist the seed record", not "build the result bundle".
-
 ## Shape 2 — multi-field cohesive messages
 
 Payloads produced whole by one node for specific consumers, carrying the key so a `keyed_join` can match. These get **their own named dataclass** (not the generic `KeyedValue[T]` envelope) because each is one cohesive message with several parts produced in one shot:
@@ -107,7 +98,7 @@ randseed      = RandSeed(k, seed=int, randseed_path=Path,    # build-sim-cmd   �
 randseed_done = RandSeedDone(k)                              # write-randseed  → link-latest (ordering signal only)
 ```
 
-`proc` echoes the redirect paths (`stdout_path`/`stderr_path` = the sim log/err), so the post-sim parsers read the log from `proc` — there is no separate `sim_cmd` bag (its parts became `command` + `randseed`). Single-value edges (`filelist`, `seed`, `timeout`) use the `KeyedValue[T]` envelope (Shape 1). These never accumulate; each is consumed by exactly the next stage(s).
+`proc` echoes the redirect paths (`stdout_path`/`stderr_path` = the sim log/err), so the post-sim parsers read the log from `proc` (the sim command's parts ride `command` + `randseed`). Single-value edges (`filelist`, `seed`, `timeout`) use the `KeyedValue[T]` envelope (Shape 1). These never accumulate; each is consumed by exactly the next stage(s).
 
 ## Shape 3 — result payloads (terminal; fanned into `results-summary`)
 

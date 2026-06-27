@@ -6,7 +6,7 @@ ids match [04](04-pipeline-and-contracts.md); payload shapes and ports match
 [02](02-payload-conventions.md)/[03](03-module-catalog.md).
 
 This doc is the **wiring authority**: the `graphs/test.yaml` below carries the split-edge model
-(per-field keyed edges, no `ctx`/`test_run`/`sim_cmd` bags). Spec
+(per-field keyed edges). Spec
 [11](specs/11-graph-and-manifests.md) assembles exactly this graph.
 
 **Edge payload shapes (the split model).** The `test` edge carries a **bare self-keyed
@@ -17,9 +17,7 @@ share it; `keyed_join` reads it attribute-first, so a field on `TestConfig` or o
 are both fine). Cohesive multi-field messages keep named fields:
 `command{key,argv,stdout_path,stderr_path}`, `proc{key,rc,stdout_path,stderr_path}` (`rc is None` ⟺ timed out),
 `randseed{key,seed,randseed_path,argv}`. The result-diversion ports (`skip`/`fail`/`timeout`/`stop`/`default`)
-carry a self-keyed `TestResult` (`{key, test_name, type_, result, desc}`) → `results-summary`. There is **no** `ctx` / `test_run` / `sim_cmd` bag — bags assembled across the
-graph were split into these keyed edges, while bags produced whole by one node (`proc`, `command`,
-`filelist`, `randseed`, `seed`) stay whole. Every router co-gates every edge a downstream `keyed_join`
+carry a self-keyed `TestResult` (`{key, test_name, type_, result, desc}`) → `results-summary`. Every router co-gates every edge a downstream `keyed_join`
 needs on its success branch, so a fail/stop never dangles a join.
 
 ## `rtl_comrade_config.yaml` (add the command)
@@ -119,7 +117,7 @@ nodes:
   contract_config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ] }
 - id: sim-build
   module: build-sim-cmd
-  contract: keyed_join                                       # keyed_join(test, run_id, simv, seed) — the bag-dissolution point
+  contract: keyed_join                                       # keyed_join(test, run_id, simv, seed) — simv/run_id/seed consumed here
   contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ] }
 - id: sim-run
   module: run-process
@@ -251,7 +249,7 @@ edges:
 - { src: { node: route-list, port: list }, dst: { node: list-names, port: suite_cfg } }
 - { src: { node: route-list, port: run },  dst: { node: select,     port: suite_cfg } }
 
-# ---- main line: split per-test / per-run keyed edges (no ctx / test_run / sim_cmd bags) ----
+# ---- main line: split per-test / per-run keyed edges ----
 # Pre-sim per-test chain. load-model adds the 1:1 `model` edge right after `filter`; it then rides alongside `test` through sweep → preproc → gate-pre (each keyed_joins it to `test` by key and co-gates it) to write-filelist, where it is consumed. Routers co-gate every edge a downstream join needs.
 - { src: { node: select,     port: test }, dst: { node: filter,     port: test } }
 - { src: { node: filter,     port: test }, dst: { node: load-model, port: test } }   # filter.skip → results-summary
@@ -282,7 +280,7 @@ edges:
 - { src: { node: seed, port: run_id }, dst: { node: sim-build, port: run_id } }
 - { src: { node: seed, port: simv },   dst: { node: sim-build, port: simv } }
 - { src: { node: seed, port: seed },   dst: { node: sim-build, port: seed } }
-# Sim build (bag-dissolution): emits command + separate timeout{key,value} + randseed + test; simv/run_id/seed die here.
+# Sim build: emits command + separate timeout{key,value} + randseed + test; simv/run_id/seed die here.
 - { src: { node: sim-build, port: command },  dst: { node: sim-run,     port: command } }
 - { src: { node: sim-build, port: timeout },  dst: { node: sim-run,     port: timeout } }
 - { src: { node: sim-build, port: randseed }, dst: { node: randseed,    port: randseed } }
@@ -367,8 +365,8 @@ Notes:
   `test`+`model` together and write-filelist's join can't dangle; `gate-sim` is
   `{test, proc}`/`keyed_join`.)
 - `randseed` (`write-randseed`) `keyed_join`s `randseed` + a `proc` completion gate and is a
-  side-effect leaf — it writes the `.randseed` file and emits a `randseed_done` ordering signal;
-  there is **no** `test_run` bag. Post-sim is two parallel branches off `proc`: the side-effect
+  side-effect leaf — it writes the `.randseed` file and emits a `randseed_done` ordering signal.
+  Post-sim is two parallel branches off `proc`: the side-effect
   branch (`randseed` → `link-latest`) and the classification branch (`sim-int` → `route-post` →
   `parse-*`), each `keyed_join`ing `test`/`proc` by key.
 - `run-process` writes the `.log`/`.err` files itself (redirect, paths supplied in

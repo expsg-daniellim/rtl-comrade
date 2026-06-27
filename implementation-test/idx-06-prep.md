@@ -36,7 +36,7 @@ compile cycle (`07a`, [`03`](specs/03-run-process.md), `07b`) appends to the sam
 ## Acceptance criteria
 
 - Each child ticket's tests pass.
-- Integration coverage lives in the child tickets' own acceptance criteria (`ctx`
+- Integration coverage lives in the child tickets' own acceptance criteria (`test`/`model` edge
   forward/mutate, byte-for-byte `VlogFilelist` parity, and both `fail` ports); the prep leg is
   wired and exercised end-to-end in [spec 11](specs/11-graph-and-manifests.md) and
   [spec 12](specs/12-end-to-end.md).

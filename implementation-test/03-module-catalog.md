@@ -8,7 +8,7 @@ documentation-level labels (the manifest has no tag field — see
 [07](07-ambiguities-and-assumptions.md)); they replace the old phase structure.
 
 Conventions: `test`, `model`, `simv`, `run_id`, `seed`, `timeout`, `filelist`, `command`, `proc`, `randseed`, `randseed_done`, `result`
-are the split per-test/per-run payload shapes from [02](02-payload-conventions.md) (no `ctx`/`test_run`/`sim_cmd` bags). **Contract** is the recommended pairing
+are the split per-test/per-run payload shapes from [02](02-payload-conventions.md). **Contract** is the recommended pairing
 ([04](04-pipeline-and-contracts.md)).
 
 > **Source citations.** Every module below carries a `Source:` line naming the rtl_buddy
@@ -405,9 +405,8 @@ A post-sim **side-effect leaf**: persist the seed record. `keyed_join`s `randsee
 unread; that drives the parallel classification branch). Writes `randseed.randseed_path` from
 `randseed.seed`, then appends `HierInstanceSeed.txt` **iff** `"hier_inst_seed" in randseed.argv`
 (rtl_buddy parity). Emits a `("randseed_done", RandSeedDone(randseed.key))` ordering signal so
-`link-latest` sequences after the file is on disk. **No `test_run` assembly** — the post-sim
-split dissolved that bag (spec [08d](specs/08d-write-randseed.md)); this node reads neither
-`test` nor `run_id` and builds no result record. The directory was created at startup by
+`link-latest` sequences after the file is on disk. This node reads neither
+`test` nor `run_id` and builds no result record (it is a side-effect leaf, per the header). The directory was created at startup by
 `ensure-logs-dir`.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/tools/vlog_sim.py:263-269` — the `with open(f"{log_path}.randseed", "w")` block in `VlogSim.execute`: writes the seed and appends `HierInstanceSeed.txt` when `hier_inst_seed` is in the run cmd.
@@ -474,15 +473,15 @@ Reimplements `UvmVlogPost`: parse the UVM Report Summary severity counts from
 
 ## Control / aggregation
 
-### `early-stop-gate`  · tags: (cross-cutting) · contract: `default` (gate-pre) / `keyed_join` (gate-comp, gate-sim) (persistent: `early_stop`)
+### `early-stop-gate`  · tags: (cross-cutting) · contract: `keyed_join` (gate-pre, gate-comp, gate-sim) (persistent: `early_stop`)
 Compare the global `early_stop` phase against this gate's configured `phase`. Stop here →
 emit `stop` (`TestResult.early_stop(key, test_name, desc)`); else forward. One module serves three instances via
 `**edges`: it **co-gates** by forwarding *every* input edge on its same-named port on "go",
-and drops them all on "stop". Wired `{test}` at `gate-pre`, `{test, simv}` at `gate-comp`,
+and drops them all on "stop". Wired `{test, model}` at `gate-pre`, `{test, simv}` at `gate-comp`,
 `{test, proc}` at `gate-sim`; identity comes from the always-present `test` edge.
 
 - **Source:** `rtl_buddy/src/rtl_buddy/runner/test_runner.py:59-76` — the three `if self.run_depth == RunDepth.{PRE,COMP,SIM}: return EarlyStopResults(...)` checkpoints in `TestRunner.run`. The `RunDepth` enum is `test_runner.py:14-18`; the `--early-stop` flag is `rtl_buddy.py:121`; the payload is `EarlyStopResults` at `runner/test_results.py:53-60`.
-- **In:** `**edges` (per instance: `{test}` / `{test, simv}` / `{test, proc}`), `early_stop:str = "post"` (persistent)
+- **In:** `**edges` (per instance: `{test, model}` / `{test, simv}` / `{test, proc}`), `early_stop:str = "post"` (persistent)
 - **Config:** `phase:str` (`pre`|`comp`|`sim`)
 - **Out:** each input edge forwarded on its same-named port (on "go") | `("stop", TestResult.early_stop(key, test_name, desc))`
 - **Log idiom:** **none** at the `stop` emission — a user-requested stop is NA but **not** a failure, so no `log.error` (deliberate exit-0 divergence; the `stop` port is wired to `results-summary`, the emitted `TestResult` is the summary row, and an NA row is not a FAIL row so it drives no exit). See [05 — Log idioms](05-branching-and-results.md#log-idioms-per-failure-site).

@@ -42,7 +42,7 @@ Source: `rtl_buddy/src/rtl_buddy/config/model.py:9-51`.
 
 ### `ModelConfigFileItem` / `ModelConfigFile` — defined in `load-model`
 
-The raw read shape — `ModelConfigFileItem` (`name` + `filelist`, the per-entry YAML shape, **no** `path`) and `ModelConfigFile` (`rtl-buddy-filetype` discriminator + `models: list[ModelConfigFileItem]`) — is **owned by `load-model`** (spec [05e](05e-load-model.md#raw-schema-owned-here)), read-once and never on an edge. Their field tables, the read + name-lookup, the construction of `ModelConfig` from the matched item, and the raise-not-`log.fatal` divergence live there. The runtime `ModelConfig` `load-model` builds is defined above.
+The raw read shape — `ModelConfigFileItem` (`name` + `filelist`, the per-entry YAML shape, **no** `path`) and `ModelConfigFile` (`rtl-buddy-filetype` discriminator + `models: list[ModelConfigFileItem]`) — is **owned by `load-model`** (spec [05e](05e-load-model.md#raw-schema--conversion-owned-here)), read-once and never on an edge. Their field tables, the read + name-lookup, the construction of `ModelConfig` from the matched item, and the raise-not-`log.fatal` divergence live there. The runtime `ModelConfig` `load-model` builds is defined above.
 
 ## Integration
 
@@ -60,7 +60,7 @@ The raw read shape — `ModelConfigFileItem` (`name` + `filelist`, the per-entry
 1. **`get_model_name` bug fix.** rtl_buddy returns `self.model_name` (a non-existent attribute); this plan returns `self.name`. Informational only — no current consumer calls this method.
 2. **Raw/runtime split; frozen value object.** rtl_buddy makes `ModelConfig` the list-element serde type and mutates `path` onto it in `ModelConfigLoader.get_model`. This plan reads the YAML into the raw `ModelConfigFileItem` (no `path`) and **constructs** a `frozen=True` `ModelConfig` from it with `path` set (spec [05e](05e-load-model.md)) — `path` is runtime provenance set once at construction, never a read field nor an in-place mutation.
 
-(The **failure-routing** divergence — `load-model` raises rather than `log.fatal`-ing so it can route a per-test FAIL — lives with the read + lookup it unrolls in spec [05e](05e-load-model.md#raw-schema-owned-here); see also [07 settled 10](../07-ambiguities-and-assumptions.md).)
+(The **failure-routing** divergence — `load-model` raises rather than `log.fatal`-ing so it can route a per-test FAIL — lives with the read + lookup it unrolls in spec [05e](05e-load-model.md#raw-schema--conversion-owned-here); see also [07 settled 10](../07-ambiguities-and-assumptions.md).)
 
 ## Tests (`modules/tests/test_model_schema.py`)
 

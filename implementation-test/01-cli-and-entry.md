@@ -28,7 +28,7 @@ in either `do_cmd_test` (`:166-173`) or the global `root_options` (`:114-123`).
 | rtl_buddy arg | flag | type | default | CLI edge `cli` name | feeds node | rtl_buddy src |
 |---|---|---|---|---|---|---|
 | `test_config` | `-c/--test-config` | str | `tests.yaml` | `test_config` | `parse-suite-config` (resolves it against CWD) | `rtl_buddy.py:167` |
-| *(none)* | `-L/--logs-dir` | str | `logs` | `logs_dir` | `ensure-logs-dir`, `build-compile-cmd`, `build-sim-cmd`, `resolve-seed` | *(new — Notable divergence; `"logs"` literal at `tools/vlog_sim.py:55`)* |
+| *(none)* | `-L/--logs-dir` | str | `logs` | `logs_dir` | `ensure-logs-dir` (subdir name; the resolved `Path` then feeds `build-compile-cmd`/`build-sim-cmd`/`resolve-seed`) | *(new — Notable divergence; `"logs"` literal at `tools/vlog_sim.py:55`)* |
 | `test_name` | positional (optional) | str | `""` (= all) | `test_name` | `select-tests` | `rtl_buddy.py:168` |
 | `list_tests` | `--list` | bool | `false` | `list` | `route-list-mode` | `rtl_buddy.py:169` |
 | `rnd_new` | `-n/--rnd-new` | bool | `false` | `rnd_new` | `derive-seed-mode` | `rtl_buddy.py:171` |

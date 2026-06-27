@@ -18,14 +18,17 @@ informational.
    `parse-root-config`, `select-platform`, `resolve-builder`, `parse-suite-config`,
    `load-model`). `TestResults` and `SeedMode` are reimplemented as a thin shared schema.
 
-2. **Correlation strategy.** `ctx` starts as `{key, test, run_id}` from `select`;
-   `build-compile-cmd` adds `simv`, giving `{key, test, run_id, simv}`. No further fields
-   are added after that point. `seed`/`log`/`err`/`randseed_path` travel as
-   `sim_cmd = {key, seed, log, err, randseed_path}` emitted by `sim-build`.
-   `write-randseed` is a 3-port `keyed_join` (`ctx`, `proc`, `sim_cmd`) that assembles
-   `test_run = {key, test, run_id, rc, log, err, randseed_path}` once; all
-   post-sim nodes receive `test_run`. The only `keyed_join`s are `cc-int` (2 ports) and
-   `randseed` (3 ports). Everywhere else is single-source lockstep on `default`.
+2. **Correlation strategy** (revised — split-edge model; supersedes the original
+   single-envelope draft). Per-test/per-run data rides as
+   separate keyed edges (`test` bare and self-keyed; `model`/`simv`/`run_id`/`seed`/`timeout`/
+   `filelist` as `KeyedValue` envelopes; `command`/`proc`/`randseed`/`randseed_done` as cohesive
+   messages), each carrying the correlation `key`, so every node consuming ≥2 keyed edges is a
+   `keyed_join` — not just `cc-int`/`randseed`. `write-randseed` is a 2-port `keyed_join`
+   (`randseed` + a `proc` completion gate) and a **side-effect leaf**: it builds no result
+   record; the post-sim region consumes `test` + `proc` directly. Only the single-keyed-input
+   nodes (`filter`, `load-model`) stay `default`; config singletons reach the joins as
+   `persistent_inputs`. Full detail in [02](02-payload-conventions.md),
+   [04](04-pipeline-and-contracts.md), [06](06-graph-yaml.md).
 
 3. **~~`fan-in-results` module + `any` contract for terminal fan-in~~ — superseded by TODO #15
    (item 27).** Earlier drafts re-converged the 13 terminal outcomes through a
@@ -39,7 +42,7 @@ informational.
 4. **`run-process` redirects to caller-supplied files; emits paths.** stdout/stderr go
    straight to files named in `command`, so partial output survives a SIGQUIT and memory
    stays bounded regardless of log size. It carries an opaque correlation `key` (never read
-   or branched on) so downstream `keyed_join` can match `proc` to `ctx`. Used as two node
+   or branched on) so downstream `keyed_join` can match `proc` to the per-test edges by key. Used as two node
    instances (compile/sim).
 
 5. **Post-sim trio (atomic split).** `write-randseed` writes `.randseed` and holds the
@@ -154,10 +157,10 @@ informational.
     (Number kept at 21 to preserve cross-references — sits in Settled despite being
     numerically out of order.)
 
-22. **`keyed_join` payload delivery** (settled 2026-06-02). Modules at the two join nodes
-    (`cc-int`, `randseed`) receive their keyed port payloads unwrapped — no `Payload`
-    wrapper. `cc-int` receives `ctx` and `proc`; `randseed` receives `ctx`, `proc`, and
-    `sim_cmd`. Settled by `docs/modules/implementation.md` Runtime Call Model:
+22. **`keyed_join` payload delivery** (settled 2026-06-02). Modules at the `keyed_join` nodes
+    receive their keyed port payloads unwrapped — no `Payload`
+    wrapper. E.g. `cc-int` receives `test`, `simv`, and `proc`; `write-randseed` receives
+    `randseed` and `proc`. Settled by `docs/modules/implementation.md` Runtime Call Model:
     "the harness unwraps the payload objects to raw values" and "modules receive raw
     values, not `Payload` wrappers." The unwrap happens at `src/rtl_comrade/node.py:281`
     before `module.run(**inputs)` and is contract-agnostic, so `keyed_join` delivers raw
@@ -243,7 +246,7 @@ informational.
     single data source rather than a leaf-level convention. **`-L/--logs-dir`** (default `"logs"`,
     the subdirectory **name**) is a small Notable divergence from rtl_buddy (which has no override)
     — it is a CLI edge to `ensure-logs-dir` only. `write-randseed` does not consume `logs_dir` —
-    `build-sim-cmd` emits `randseed_path` in `sim_cmd` so the `keyed_join` receives it as a
+    `build-sim-cmd` emits `randseed_path` on the `randseed` message so the `keyed_join` receives it as a
     dedicated keyed port (no persistent config port on keyed_join — see Implementation notes).
     **Sequencing**: `ensure-logs-dir` carries **no `env_ready` token** (revised; an earlier draft
     relayed one `prepend-path → ensure-logs → cc-run/sim-run`). The two env-setup orderings are now
@@ -375,7 +378,7 @@ informational.
   (`runner/test_runner.py:60,68,76`) — so the `desc` matches only for `sim` and diverges for
   `pre`/`comp`. Both the exit code and the `pre`/`comp` `desc` wording are deliberate deltas.
   Genuine NA verdicts from
-  `parse-log`/`parse-uvm-log` are unaffected and still exit 1. See [02 table](02-payload-conventions.md#testresults-values-used-at-the-terminal-ports),
+  `parse-log`/`parse-uvm-log` are unaffected and still exit 1. See [02 table](02-payload-conventions.md#testresult-values-used-at-the-result-ports),
   [05 — Result aggregation](05-branching-and-results.md#result-aggregation-and-exit-code), and
   [spec 10a](specs/10a-early-stop-gate.md).
 - **Verible config dropped; builder resolution re-homed** (R3). rtl_buddy's `RootConfig`
@@ -476,11 +479,11 @@ informational.
   (the fixed non-verilator `simv` name, the shared `test.*` pointer names), not CWD-relativity.
   `regression`'s per-suite `chdir` feeds a different `work_dir` to the same providers.
 - **`exec`'d preproc/sweep scripts reproduced as-is.** `run-preproc`/`expand-sweep` emit the
-  mutated/expanded `TestConfig` in `ctx`, not via hidden global mutation.
+  mutated/expanded `TestConfig` on the `test` edge, not via hidden global mutation.
 - **`keyed_join` cannot hold a persistent config port** (it joins every port by key). That's
-  why `sim_cmd = {key, seed, log, err, randseed_path}` is a dedicated keyed payload from
-  `sim-build` to the `randseed` join rather than a persistent config port. `simv` needs no
-  port at all — it is set by `build-compile-cmd` and carried in `ctx`.
+  why the per-run seed / randseed-path / argv ride the dedicated `randseed` message from
+  `build-sim-cmd` to the `write-randseed` join rather than a persistent config port. `simv`
+  rides its own `KeyedValue[str]` edge, born at `build-compile-cmd` and joined downstream by key.
 
 ## Process note
 

@@ -242,12 +242,12 @@ graph's streaming execution. The answer hinges on whether the list is *config* o
   (typically a single-digit `rnd_cnt`). The "streaming" question doesn't really apply to
   startup config.
 - The actual streaming/fan-out happens **downstream at `expand-runs`** — that node is a
-  generator: one compiled-test `ctx` in, `N` per-run `ctx`s out, each immediately available
+  generator: one compiled-test's edges (`test`+`simv`) in, `N` per-run edge-sets out, each immediately available
   to the sim pipeline as it is yielded. Multiple compiled tests' run-expansions interleave
   naturally with each other and with subsequent sims.
 - Emitting individual `int`s from `derive-randtest-runs` would require `expand-runs` to
   *buffer* the full set before fanning out any test (it needs to know `N` per test), or
-  would require a new "cartesian product" contract pairing the ctx stream with a run-id
+  would require a new "cartesian product" contract pairing the per-test edge stream with a run-id
   stream. Neither improves throughput for fixed small `N`; both add machinery.
 
 If, in a future where `rnd_cnt` could be unbounded, this trade-off shifts — drop
