@@ -3,13 +3,16 @@ commit-message.txt
 rtl_buddy/
 rtl-buddy-proj-template/
 
+prompt.txt
+dataflow-diagram.svg
+
 # Test files
 
 # Vim
 # Swap
 [._]*.s[a-v][a-z]
 # comment out the next line if you don't need vector files
-!*.svg
+#*.svg
 [._]*.sw[a-p]
 [._]s[a-rt-v][a-z]
 [._]ss[a-gi-z]
