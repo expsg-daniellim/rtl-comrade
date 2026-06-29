@@ -11,3 +11,6 @@ files:
     class_name: AddMod
   - name: alu
     class_name: ALUMod
+- file: rtl_buddy/setup.py
+  plugins:
+  - { name: discover-config-file, class_name: DiscoverConfigFileMod }
