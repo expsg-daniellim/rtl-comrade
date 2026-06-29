@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from serde import serde
 import structlog
@@ -27,3 +28,11 @@ class DiscoverConfigFileMod:
         except PermissionError as e:
             log.fatal("config_discovery_denied", filename=self.filename, dir=str(d), exc_info=e)
         log.fatal("config_not_found", filename=self.filename)
+
+
+class PrependCwdPathMod:
+    def run(self):
+        parts = [p for p in os.environ.get("PATH", "").split(os.pathsep) if p]
+        if "." not in parts:
+            os.environ["PATH"] = os.pathsep.join(["."] + parts)
+        return ("default", True)

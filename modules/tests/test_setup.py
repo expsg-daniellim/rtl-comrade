@@ -1,6 +1,8 @@
 """Tests for modules/rtl_buddy/setup.py using the module testing harness."""
 
 import importlib.util
+import os
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +20,7 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 DiscoverConfigFileMod = _mod.DiscoverConfigFileMod
+PrependCwdPathMod = _mod.PrependCwdPathMod
 
 
 # ---------------------------------------------------------------------------
@@ -80,3 +83,65 @@ async def test_discover_permission_error(tmp_path, monkeypatch, logging_handler)
             expected_emissions={},
             config=DiscoverConfigFileMod.Config(filename="root_config.yaml"),
         )
+
+
+# ---------------------------------------------------------------------------
+# PrependCwdPathMod
+# ---------------------------------------------------------------------------
+
+
+async def test_prepend_path_without_dot(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    await run_module_scenario(
+        PrependCwdPathMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [True]},
+    )
+    assert os.environ["PATH"] == "." + os.pathsep + "/usr/bin:/bin"
+
+
+async def test_prepend_path_already_at_head(monkeypatch):
+    monkeypatch.setenv("PATH", ".:/usr/bin:/bin")
+    await run_module_scenario(
+        PrependCwdPathMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [True]},
+    )
+    assert os.environ["PATH"] == ".:/usr/bin:/bin"
+
+
+async def test_prepend_path_dot_in_middle(monkeypatch):
+    monkeypatch.setenv("PATH", "/usr/bin:.:/bin")
+    await run_module_scenario(
+        PrependCwdPathMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [True]},
+    )
+    assert os.environ["PATH"] == "/usr/bin:.:/bin"
+
+
+async def test_prepend_path_unset(monkeypatch):
+    monkeypatch.delenv("PATH", raising=False)
+    await run_module_scenario(
+        PrependCwdPathMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [True]},
+    )
+    assert os.environ["PATH"] == "."
+
+
+async def test_prepend_path_end_to_end(tmp_path, monkeypatch):
+    script = tmp_path / "local_tool"
+    script.write_text("#!/bin/sh\nexit 0\n")
+    script.chmod(0o755)
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("PATH", "/usr/bin:/bin")
+    with pytest.raises(FileNotFoundError):
+        subprocess.run(["local_tool"])
+    await run_module_scenario(
+        PrependCwdPathMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [True]},
+    )
+    result = subprocess.run(["local_tool"])
+    assert result.returncode == 0

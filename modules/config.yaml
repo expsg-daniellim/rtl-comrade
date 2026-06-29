@@ -14,3 +14,4 @@ files:
 - file: rtl_buddy/setup.py
   plugins:
   - { name: discover-config-file, class_name: DiscoverConfigFileMod }
+  - { name: prepend-cwd-path, class_name: PrependCwdPathMod }
