@@ -25,3 +25,4 @@ For the expected structure of per-contract files, see [doc-structure.md](doc-str
 | [latest](latest.md) | Caches the most-recent value from state ports; triggers on each item from trigger ports |
 | [group\_until\_end](group_until_end.md) | Accumulates items into a list until a `GroupEnd` sentinel; passes the full batch to the module |
 | [branch\_aware\_join](branch_aware_join.md) | Like `keyed_join` but uses each port's `branch_labels` to exclude ports whose control-flow arm was not selected for a key |
+| [any](any.md) | Fires on whichever input port is ready first, one delivery per call; ends when all ports end. General-purpose fan-in; reusable across graphs |
