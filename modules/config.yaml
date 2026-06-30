@@ -38,3 +38,4 @@ files:
 - file: rtl_buddy/sim.py
   plugins:
   - { name: expand-runs, class_name: ExpandRunsMod }
+  - { name: resolve-seed, class_name: ResolveSeedMod }

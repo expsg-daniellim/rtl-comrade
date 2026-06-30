@@ -1,9 +1,13 @@
-"""Tests for modules/rtl_buddy/sim.py — ExpandRunsMod (spec 08a)."""
+"""Tests for modules/rtl_buddy/sim.py — ExpandRunsMod (spec 08a), ResolveSeedMod (spec 08b)."""
 
 import importlib.util
+import random
 from pathlib import Path
 
-from modules.rtl_buddy.schema import KeyedValue
+import pytest
+
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult
+from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -15,6 +19,8 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 ExpandRunsMod = _mod.ExpandRunsMod
+ResolveSeedMod = _mod.ResolveSeedMod
+run_suffix = _mod.run_suffix
 
 
 def _make_tb():
@@ -150,3 +156,127 @@ def test_inbound_not_mutated():
     assert copies[0] is not test
     assert copies[1] is not test
     assert copies[0] is not copies[1]
+
+
+# ---------------------------------------------------------------------------
+# ResolveSeedMod (spec 08b)
+# ---------------------------------------------------------------------------
+
+
+def _make_builder_cfg_rs(seed=99999):
+    return RtlBuilderConfig(
+        name="vcs", exe="vcs", simv="simv",
+        sim_rand_seed=seed,
+        sim_rand_prefix="+ntb_random_seed=",
+        opts={"debug": RtlBuilderConfigOpts(compile_time=["-Wall"], run_time=["-debug"])},
+    )
+
+
+def _make_run_id_kv(key, value=None):
+    return KeyedValue(key, value)
+
+
+def test_resolve_seed_new(monkeypatch):
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    builder_cfg = _make_builder_cfg_rs()
+    monkeypatch.setattr(random, "randrange", lambda n: 42000)
+    mod = ResolveSeedMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.NEW, builder_cfg=builder_cfg, logs_dir=Path("/unused")))
+    assert len(results) == 4
+    assert results[0] == ("test", test)
+    assert results[1] == ("run_id", run_id)
+    assert results[2] == ("simv", simv)
+    port, kv = results[3]
+    assert port == "seed"
+    assert kv.key == test.key
+    assert kv.value == 42000
+    assert 0 <= kv.value < 1_000_000
+
+
+def test_resolve_seed_default():
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    builder_cfg = _make_builder_cfg_rs(seed=77777)
+    mod = ResolveSeedMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.DEFAULT, builder_cfg=builder_cfg, logs_dir=Path("/unused")))
+    assert len(results) == 4
+    assert results[0] == ("test", test)
+    assert results[1] == ("run_id", run_id)
+    assert results[2] == ("simv", simv)
+    port, kv = results[3]
+    assert port == "seed"
+    assert kv.key == test.key
+    assert kv.value == 77777
+
+
+def test_resolve_seed_replay_round_trip(tmp_path):
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key, value=3)
+    simv = _make_simv(test.key)
+    builder_cfg = _make_builder_cfg_rs()
+    seed_path = tmp_path / f"{test.get_name()}_0003.randseed"
+    seed_path.write_text("55555\n")
+    mod = ResolveSeedMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
+    assert len(results) == 4
+    assert results[0] == ("test", test)
+    assert results[1] == ("run_id", run_id)
+    assert results[2] == ("simv", simv)
+    port, kv = results[3]
+    assert port == "seed"
+    assert kv.key == test.key
+    assert kv.value == 55555
+
+
+def test_resolve_seed_replay_custom_logs_dir(tmp_path):
+    custom_dir = tmp_path / "custom_logs"
+    custom_dir.mkdir()
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)  # value=None → no suffix
+    simv = _make_simv(test.key)
+    builder_cfg = _make_builder_cfg_rs()
+    seed_path = custom_dir / f"{test.get_name()}.randseed"
+    seed_path.write_text("12345\n")
+    mod = ResolveSeedMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=custom_dir))
+    assert len(results) == 4
+    port, kv = results[3]
+    assert port == "seed"
+    assert kv.value == 12345
+
+
+def test_resolve_seed_replay_missing_file(tmp_path, logging_handler):
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = ResolveSeedMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert val.result == "FAIL"
+    expected_path = tmp_path / f"{test.get_name()}.randseed"
+    assert str(expected_path) in val.desc
+    assert logging_handler.failure is True
+
+
+def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    builder_cfg = _make_builder_cfg_rs()
+    seed_path = tmp_path / f"{test.get_name()}.randseed"
+    seed_path.write_text("not_an_int\n")
+    mod = ResolveSeedMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert val.result == "FAIL"
+    assert logging_handler.failure is True
