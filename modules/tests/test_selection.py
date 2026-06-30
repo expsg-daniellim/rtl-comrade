@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import SuiteConfig, TestResult, KeyedValue, ModelConfig
+from modules.rtl_buddy.schema import SuiteConfig, TestResult, KeyedValue, ModelConfig, RootConfig, RootRtlField
 from modules.rtl_buddy.schema.suite import TestbenchConfig, TestConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -23,6 +23,7 @@ SelectTestsMod = _mod.SelectTestsMod
 FilterRegLvlMod = _mod.FilterRegLvlMod
 LoadModelMod = _mod.LoadModelMod
 ModelConfigFile = _mod.ModelConfigFile
+ExpandSweepMod = _mod.ExpandSweepMod
 
 _MODELS_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "design" / "sandbox" / "models.yaml"
 
@@ -350,6 +351,147 @@ def test_load_model_empty_models_list(tmp_path, logging_handler):
     test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
     mod = LoadModelMod()
     results = list(mod.run(test=test))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# ExpandSweepMod helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_sweep_root_cfg():
+    return RootConfig(platforms=[], rtl_builder_cfgs={}, cfg_rtl_reg=RootRtlField(path=""))
+
+
+def _make_sweep_model(key:str, name:str = "sandbox"):
+    return KeyedValue(key, ModelConfig(name=name, filelist=["rtl/model.sv"]))
+
+
+# ---------------------------------------------------------------------------
+# ExpandSweepMod
+# ---------------------------------------------------------------------------
+
+
+def test_expand_sweep_no_sweep():
+    test = _make_test("t1")  # sweep_path=None by default
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert len(results) == 2
+    assert results[0] == ("test", test)
+    assert results[1] == ("model", model)
+    assert test.key == "t1"  # unchanged
+
+
+def test_expand_sweep_four_variants(tmp_path):
+    script = tmp_path / "sweep.py"
+    script.write_text(
+        "import dataclasses\n"
+        "for _ in range(4):\n"
+        "    out_test_cfgs.append(dataclasses.replace(test_cfg))\n"
+    )
+    test = _make_test("t1", sweep_path=str(script))
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert len(results) == 8
+    for i in range(4):
+        port_t, variant = results[i * 2]
+        port_m, kv = results[i * 2 + 1]
+        assert port_t == "test"
+        assert port_m == "model"
+        assert variant.key == f"t1#{i}"
+        assert variant.model == "sandbox"  # name string — not ModelConfig
+        assert kv.key == f"t1#{i}"
+        assert kv.value == model.value  # same resolved ModelConfig
+
+
+def test_expand_sweep_script_sees_resolved_model(tmp_path):
+    script = tmp_path / "sweep.py"
+    script.write_text(
+        "model_name = test_cfg.model.get_model_name()\n"  # AttributeError if model is still a str
+        "import dataclasses\n"
+        "out_test_cfgs.append(dataclasses.replace(test_cfg))\n"
+    )
+    test = _make_test("t1", sweep_path=str(script))
+    model = _make_sweep_model(test.key, name="sandbox")
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert test.model == "sandbox"  # name string restored after exec
+    test_ports = [ v for p, v in results if p == "test" ]
+    assert len(test_ports) == 1
+
+
+def test_expand_sweep_script_raises(tmp_path, logging_handler):
+    script = tmp_path / "sweep.py"
+    script.write_text("raise RuntimeError('boom')\n")
+    test = _make_test("t1", sweep_path=str(script))
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+    assert test.model == "sandbox"  # restored synchronously in the except clause
+
+
+def test_expand_sweep_script_not_found(tmp_path, logging_handler):
+    test = _make_test("t1", sweep_path=str(tmp_path / "nonexistent.py"))
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+
+
+def test_expand_sweep_empty_variants(tmp_path):
+    script = tmp_path / "sweep.py"
+    script.write_text("pass\n")  # out_test_cfgs stays empty
+    test = _make_test("t1", sweep_path=str(script))
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert results == []
+
+
+def test_expand_sweep_non_iterable_out_test_cfgs(tmp_path, logging_handler):
+    script = tmp_path / "sweep.py"
+    script.write_text("out_test_cfgs = 42\n")  # TypeError when the fan-out iterates
+    test = _make_test("t1", sweep_path=str(script))
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+
+
+def test_expand_sweep_variant_rejects_key_assignment(tmp_path, logging_handler):
+    script = tmp_path / "sweep.py"
+    script.write_text("out_test_cfgs.append(object())\n")  # AttributeError on variant.key = ...
+    test = _make_test("t1", sweep_path=str(script))
+    model = _make_sweep_model(test.key)
+    root_cfg = _make_sweep_root_cfg()
+    mod = ExpandSweepMod()
+    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
     assert len(results) == 1
     port, val = results[0]
     assert port == "fail"

@@ -252,3 +252,43 @@ class LoadModelMod:
         except OSError as e:
             log.error("model_read_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror, errno=e.errno)
             yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read {resolved}"))
+
+
+class ExpandSweepMod:
+    def run(self, test:TestConfig, model:KeyedValue, root_cfg:RootConfig):
+        sweep = test.get_sweep_path()
+        if sweep is None:
+            yield ("test", test)
+            yield ("model", model)
+            return
+        name = test.model
+        ns = {"logger": log, "TestConfig": TestConfig, "test_cfg": test, "root_cfg": root_cfg, "out_test_cfgs": []}
+        try:
+            with open(sweep) as f:
+                code = f.read()
+        except FileNotFoundError:
+            log.error("sweep_script_not_found", key=test.key, test_name=test.get_name(), sweep_path=str(sweep))
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script not found: {sweep}")); return
+        except PermissionError as e:
+            log.error("sweep_script_permission", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=e.strerror)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read sweep script {sweep}")); return
+        except OSError as e:
+            log.error("sweep_script_read_error", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=e.strerror, errno=e.errno)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read sweep script {sweep}")); return
+        test.model = model.value
+        try:
+            exec(compile(code, sweep, "exec"), ns)
+        except Exception as e:
+            test.model = name
+            log.error("sweep_script_error", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), exc_info=e)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script raised: {e}")); return
+        test.model = name
+        try:
+            for i, variant in enumerate(ns["out_test_cfgs"]):
+                variant.key = f"{test.key}#{i}"
+                variant.model = name
+                yield ("test", variant)
+                yield ("model", KeyedValue(variant.key, model.value))
+        except (TypeError, AttributeError, KeyError) as e:
+            log.error("sweep_output_invalid", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=str(e))
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script produced malformed out_test_cfgs: {e}"))
