@@ -87,3 +87,8 @@ class ResolveBuilderMod:
         if builder_cfg is None:
             log.fatal(f"named builder {name} not in configured builders {sorted(root_cfg.rtl_builder_cfgs)}")
         return ("default", builder_cfg)
+
+
+class WorkDirMod:
+    def run(self):
+        return ("default", Path.cwd().resolve())

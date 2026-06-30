@@ -25,6 +25,7 @@ PrependCwdPathMod = _mod.PrependCwdPathMod
 ParseRootConfigMod = _mod.ParseRootConfigMod
 SelectPlatformMod = _mod.SelectPlatformMod
 ResolveBuilderMod = _mod.ResolveBuilderMod
+WorkDirMod = _mod.WorkDirMod
 
 _FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
 
@@ -344,3 +345,41 @@ def test_resolve_builder_empty_dict(logging_handler):
     mod = ResolveBuilderMod()
     with pytest.raises(typer.Exit):
         mod.run(root_cfg=root_cfg, platform_cfg=platform_cfg, builder="")
+
+
+# ---------------------------------------------------------------------------
+# WorkDirMod
+# ---------------------------------------------------------------------------
+
+
+async def test_work_dir_known_cwd(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    await run_module_scenario(
+        WorkDirMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [tmp_path.resolve()]},
+    )
+
+
+async def test_work_dir_changes_with_chdir(tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    await run_module_scenario(
+        WorkDirMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [other.resolve()]},
+    )
+
+
+async def test_work_dir_resolves_symlink(tmp_path, monkeypatch):
+    real = tmp_path / "real"
+    real.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real)
+    monkeypatch.chdir(link)
+    await run_module_scenario(
+        WorkDirMod,
+        input_sequence=[{}],
+        expected_emissions={"default": [real.resolve()]},
+    )

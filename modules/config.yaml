@@ -18,3 +18,4 @@ files:
   - { name: parse-root-config, class_name: ParseRootConfigMod }
   - { name: select-platform, class_name: SelectPlatformMod }
   - { name: resolve-builder, class_name: ResolveBuilderMod }
+  - { name: work-dir, class_name: WorkDirMod }
