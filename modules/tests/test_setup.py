@@ -10,7 +10,7 @@ import pytest
 import typer
 
 from rtl_comrade.testing import run_module_scenario
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, SeedMode
 
 _spec = importlib.util.spec_from_file_location(
     "modules_rtl_buddy_setup",
@@ -28,6 +28,7 @@ ResolveBuilderMod = _mod.ResolveBuilderMod
 WorkDirMod = _mod.WorkDirMod
 EnsureLogsDirMod = _mod.EnsureLogsDirMod
 ParseSuiteConfigMod = _mod.ParseSuiteConfigMod
+DeriveSeedModeMod = _mod.DeriveSeedModeMod
 
 _FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
 _SUITE_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "verif" / "sandbox" / "tests.yaml"
@@ -698,3 +699,33 @@ tests:
     mod = ParseSuiteConfigMod()
     with pytest.raises(typer.Exit):
         mod.run(test_config=str(bad))
+
+
+# ---------------------------------------------------------------------------
+# DeriveSeedModeMod
+# ---------------------------------------------------------------------------
+
+
+def test_derive_seed_mode_rnd_new_wins_over_rnd_last():
+    mod = DeriveSeedModeMod()
+    assert mod.run(rnd_new=True, rnd_last=True) == ("default", SeedMode.NEW)
+
+
+def test_derive_seed_mode_rnd_new_only():
+    mod = DeriveSeedModeMod()
+    assert mod.run(rnd_new=True, rnd_last=False) == ("default", SeedMode.NEW)
+
+
+def test_derive_seed_mode_rnd_last_only():
+    mod = DeriveSeedModeMod()
+    assert mod.run(rnd_new=False, rnd_last=True) == ("default", SeedMode.REPLAY)
+
+
+def test_derive_seed_mode_neither():
+    mod = DeriveSeedModeMod()
+    assert mod.run(rnd_new=False, rnd_last=False) == ("default", SeedMode.DEFAULT)
+
+
+def test_derive_seed_mode_defaults():
+    mod = DeriveSeedModeMod()
+    assert mod.run() == ("default", SeedMode.DEFAULT)

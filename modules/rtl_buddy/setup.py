@@ -10,7 +10,7 @@ from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
 
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode
 
 log = structlog.get_logger()
 
@@ -164,3 +164,13 @@ class ParseSuiteConfigMod:
             tests[t.name] = TestConfig(name=t.name, desc=t.desc, model=t.model, model_path=t.model_path, reglvl=t.reglvl, pa=t.pa, pd=t.pd, uvm=t.uvm, preproc_path=t.preproc_path, postproc_path=t.postproc_path, sweep_path=t.sweep_path, tb=tb, timeout=t.timeout, suite_dir=path.parent)
         suite_cfg = SuiteConfig(path=path, tests=tests)
         return ("default", suite_cfg)
+
+
+class DeriveSeedModeMod:
+    def run(self, rnd_new:bool = False, rnd_last:bool = False):
+        mode = SeedMode.DEFAULT
+        if rnd_new:
+            mode = SeedMode.NEW
+        elif rnd_last:
+            mode = SeedMode.REPLAY
+        return ("default", mode)
