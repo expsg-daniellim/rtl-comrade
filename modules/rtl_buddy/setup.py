@@ -292,3 +292,15 @@ class ExpandSweepMod:
         except (TypeError, AttributeError, KeyError) as e:
             log.error("sweep_output_invalid", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=str(e))
             yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script produced malformed out_test_cfgs: {e}"))
+
+
+class GitStatusMod:
+    def run(self):
+        try:
+            branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+            sha = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+            dirty = bool(subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, check=True).stdout.strip())
+            log.info("git_state", branch=branch, sha=sha, dirty=dirty)
+        except (subprocess.CalledProcessError, FileNotFoundError) as e:
+            log.warning("git_state_unavailable", reason=str(e))
+        return ("default", True)

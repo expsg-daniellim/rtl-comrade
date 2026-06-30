@@ -35,6 +35,7 @@ files:
   - { name: filter-reglvl, class_name: FilterRegLvlMod }
   - { name: load-model, class_name: LoadModelMod }
   - { name: expand-sweep, class_name: ExpandSweepMod }
+  - { name: git-status, class_name: GitStatusMod }
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }

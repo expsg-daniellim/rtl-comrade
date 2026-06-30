@@ -245,3 +245,67 @@ def test_invalid_early_stop(logging_handler):
     mod = _make_mod("comp")
     with pytest.raises(typer.Exit):
         list(mod.run(early_stop="bogus", test=test, simv=simv))
+
+
+# ---------------------------------------------------------------------------
+# GitStatusMod (spec 10b)
+# ---------------------------------------------------------------------------
+
+import subprocess
+import structlog.testing
+from unittest.mock import patch
+
+_setup_spec = importlib.util.spec_from_file_location(
+    "modules_rtl_buddy_setup",
+    Path(__file__).parent.parent / "rtl_buddy" / "setup.py",
+)
+assert _setup_spec is not None
+assert _setup_spec.loader is not None
+_setup_mod = importlib.util.module_from_spec(_setup_spec)
+_setup_spec.loader.exec_module(_setup_mod)
+GitStatusMod = _setup_mod.GitStatusMod
+
+
+def _init_git_repo(path):
+    subprocess.run(["git", "init", str(path)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(path), "config", "user.email", "test@test.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(path), "config", "user.name", "Test"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(path), "commit", "--allow-empty", "-m", "init"], check=True, capture_output=True)
+
+
+def test_git_status_clean(tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    monkeypatch.chdir(tmp_path)
+    with structlog.testing.capture_logs() as logs:
+        result = GitStatusMod().run()
+    assert result == ("default", True)
+    git_events = [e for e in logs if e.get("event") == "git_state"]
+    assert len(git_events) == 1
+    assert git_events[0]["dirty"] is False
+    assert not any(e.get("log_level") in ("warning", "error", "critical") for e in logs)
+
+
+def test_git_status_dirty(tmp_path, monkeypatch):
+    _init_git_repo(tmp_path)
+    (tmp_path / "dirty.txt").write_text("change")
+    monkeypatch.chdir(tmp_path)
+    with structlog.testing.capture_logs() as logs:
+        result = GitStatusMod().run()
+    assert result == ("default", True)
+    git_events = [e for e in logs if e.get("event") == "git_state"]
+    assert len(git_events) == 1
+    assert git_events[0]["dirty"] is True
+
+
+def test_git_status_not_a_repo(tmp_path, monkeypatch, logging_handler):
+    monkeypatch.chdir(tmp_path)
+    result = GitStatusMod().run()
+    assert result == ("default", True)
+    assert logging_handler.failure is False
+
+
+def test_git_status_git_unavailable(logging_handler):
+    with patch("subprocess.run", side_effect=FileNotFoundError("git not found")):
+        result = GitStatusMod().run()
+    assert result == ("default", True)
+    assert logging_handler.failure is False
