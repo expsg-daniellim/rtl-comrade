@@ -50,3 +50,6 @@ files:
   - { name: route-post, class_name: RoutePostMod }
   - { name: parse-log, class_name: ParseLogMod }
   - { name: parse-uvm-log, class_name: ParseUvmLogMod }
+- file: rtl_buddy/summarise_results.py
+  plugins:
+  - { name: summarise-results, class_name: SummariseResultsMod }
