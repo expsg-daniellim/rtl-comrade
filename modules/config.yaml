@@ -39,3 +39,4 @@ files:
   plugins:
   - { name: expand-runs, class_name: ExpandRunsMod }
   - { name: resolve-seed, class_name: ResolveSeedMod }
+  - { name: build-sim-cmd, class_name: BuildSimCmdMod }

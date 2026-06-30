@@ -4,7 +4,7 @@ from pathlib import Path
 
 import structlog
 
-from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RtlBuilderConfig
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RtlBuilderConfig, Command, RandSeed
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log = structlog.get_logger()
@@ -46,3 +46,27 @@ class ResolveSeedMod:
         yield ("run_id", run_id)
         yield ("simv", simv)
         yield ("seed", KeyedValue(test.key, seed))
+
+
+class BuildSimCmdMod:
+    def run(self, test:TestConfig, run_id:KeyedValue[int | None], simv:KeyedValue[str], seed:KeyedValue[int], builder_cfg:RtlBuilderConfig, builder_mode:str, logs_dir:Path):
+        plusdefines = []
+        pd = test.get_plusdefines()
+        if pd is not None:
+            for k, v in pd.items():
+                plusdefines.append(f"+define+{k}={v}" if v is not None else f"+define+{k}")
+        plusargs = []
+        pa = test.get_plusargs()
+        if pa is not None:
+            for k, v in pa.items():
+                plusargs.append(f"+{k}={v}" if v is not None else f"+{k}")
+        argv = [simv.value, *builder_cfg.get_run_time_opts(builder_mode, seed=seed.value), *plusdefines, *plusargs]
+        timeout, is_custom = test.get_timeout()
+        if is_custom:
+            log.warning("custom_sim_timeout", key=test.key, timeout=timeout)
+        stem = logs_dir / f"{test.get_name()}{run_suffix(run_id.value)}"
+        log_path, err_path, rs_path = f"{stem}.log", f"{stem}.err", f"{stem}.randseed"
+        yield ("test", test)
+        yield ("command", Command(test.key, argv=argv, stdout_path=log_path, stderr_path=err_path))
+        yield ("timeout", KeyedValue(test.key, float(timeout)))
+        yield ("randseed", RandSeed(test.key, seed=seed.value, randseed_path=rs_path, argv=argv))

@@ -1,12 +1,13 @@
-"""Tests for modules/rtl_buddy/sim.py — ExpandRunsMod (spec 08a), ResolveSeedMod (spec 08b)."""
+"""Tests for modules/rtl_buddy/sim.py — ExpandRunsMod (spec 08a), ResolveSeedMod (spec 08b), BuildSimCmdMod (spec 08c)."""
 
 import importlib.util
 import random
 from pathlib import Path
 
 import pytest
+import typer
 
-from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RandSeed
 from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -21,6 +22,7 @@ _spec.loader.exec_module(_mod)
 ExpandRunsMod = _mod.ExpandRunsMod
 ResolveSeedMod = _mod.ResolveSeedMod
 run_suffix = _mod.run_suffix
+BuildSimCmdMod = _mod.BuildSimCmdMod
 
 
 def _make_tb():
@@ -280,3 +282,106 @@ def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
     assert isinstance(val, TestResult)
     assert val.result == "FAIL"
     assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# BuildSimCmdMod (spec 08c)
+# ---------------------------------------------------------------------------
+
+
+def test_build_sim_cmd_default():
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    seed = KeyedValue(test.key, 42)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = BuildSimCmdMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
+    assert len(results) == 4
+    assert results[0] == ("test", test)
+    port_c, cmd = results[1]
+    assert port_c == "command"
+    expected_argv = [simv.value, *builder_cfg.get_run_time_opts("debug", seed=seed.value)]
+    assert cmd.argv == expected_argv
+    port_to, kv_to = results[2]
+    assert port_to == "timeout"
+    assert kv_to.value == 60.0
+    port_rs, rs = results[3]
+    assert port_rs == "randseed"
+    assert rs.seed == seed.value
+    assert rs.argv == expected_argv
+    assert rs.randseed_path.endswith(".randseed")
+    assert cmd.stdout_path.endswith(".log")
+    assert cmd.stderr_path.endswith(".err")
+
+
+def test_build_sim_cmd_custom_timeout(logging_handler):
+    test = _make_test(timeout=300)
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    seed = KeyedValue(test.key, 42)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = BuildSimCmdMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
+    assert len(results) == 4
+    port_to, kv_to = results[2]
+    assert port_to == "timeout"
+    assert kv_to.value == 300.0
+
+
+def test_build_sim_cmd_plusargs_plusdefines():
+    test = _make_test(pa={"X": 5, "Y": None}, pd={"D": None})
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    seed = KeyedValue(test.key, 42)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = BuildSimCmdMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
+    port_c, cmd = results[1]
+    assert "+X=5" in cmd.argv
+    assert "+Y" in cmd.argv
+    assert "+define+D" in cmd.argv
+    assert "+Y=None" not in cmd.argv
+    assert "+define+D=None" not in cmd.argv
+
+
+def test_build_sim_cmd_custom_logs_dir():
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    seed = KeyedValue(test.key, 42)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = BuildSimCmdMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/work/custom")))
+    port_c, cmd = results[1]
+    assert cmd.stdout_path.startswith("/work/custom/")
+    assert cmd.stderr_path.startswith("/work/custom/")
+    port_rs, rs = results[3]
+    assert rs.randseed_path.startswith("/work/custom/")
+
+
+def test_build_sim_cmd_run_id_suffix():
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key, value=5)
+    simv = _make_simv(test.key)
+    seed = KeyedValue(test.key, 42)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = BuildSimCmdMod()
+    results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
+    port_c, cmd = results[1]
+    port_rs, rs = results[3]
+    assert "_0005" in cmd.stdout_path
+    assert "_0005" in cmd.stderr_path
+    assert "_0005" in rs.randseed_path
+    assert rs.argv == cmd.argv
+
+
+def test_build_sim_cmd_bad_builder_mode(logging_handler):
+    test = _make_test()
+    run_id = _make_run_id_kv(test.key)
+    simv = _make_simv(test.key)
+    seed = KeyedValue(test.key, 42)
+    builder_cfg = _make_builder_cfg_rs()
+    mod = BuildSimCmdMod()
+    with pytest.raises(typer.Exit):
+        list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="nonexistent", logs_dir=Path("/logs")))
