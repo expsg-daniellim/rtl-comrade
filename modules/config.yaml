@@ -25,3 +25,4 @@ files:
   - { name: route-list-mode, class_name: RouteListModeMod }
   - { name: list-test-names, class_name: ListTestNamesMod }
   - { name: select-tests, class_name: SelectTestsMod }
+  - { name: filter-reglvl, class_name: FilterRegLvlMod }

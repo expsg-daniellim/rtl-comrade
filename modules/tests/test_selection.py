@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import SuiteConfig
+from modules.rtl_buddy.schema import SuiteConfig, TestResult
 from modules.rtl_buddy.schema.suite import TestbenchConfig, TestConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -20,6 +20,7 @@ _spec.loader.exec_module(_mod)
 RouteListModeMod = _mod.RouteListModeMod
 ListTestNamesMod = _mod.ListTestNamesMod
 SelectTestsMod = _mod.SelectTestsMod
+FilterRegLvlMod = _mod.FilterRegLvlMod
 
 
 def _suite_cfg(tests=None):
@@ -179,3 +180,77 @@ def test_select_tests_empty_suite():
     mod = SelectTestsMod()
     results = list(mod.run(suite_cfg=suite, test_name=""))
     assert results == []
+
+
+# ---------------------------------------------------------------------------
+# FilterRegLvlMod helpers
+# ---------------------------------------------------------------------------
+
+
+class FakeBuilderCfg:
+    def __init__(self, name):
+        self.name = name
+
+    def get_name(self):
+        return self.name
+
+
+# ---------------------------------------------------------------------------
+# FilterRegLvlMod
+# ---------------------------------------------------------------------------
+
+
+def test_filter_reglvl_both_bounds_none():
+    test = _make_test("foo", reglvl=3)
+    builder_cfg = FakeBuilderCfg("b")
+    mod = FilterRegLvlMod()
+    port, value = mod.run(test=test, builder_cfg=builder_cfg)
+    assert port == "test"
+    assert value is test
+
+
+def test_filter_reglvl_inside_window():
+    test = _make_test("foo", reglvl=3)
+    builder_cfg = FakeBuilderCfg("b")
+    mod = FilterRegLvlMod()
+    port, value = mod.run(test=test, builder_cfg=builder_cfg, reg_level=5, start_level=1)
+    assert port == "test"
+    assert value is test
+
+
+def test_filter_reglvl_at_upper_boundary():
+    test = _make_test("foo", reglvl=5)
+    builder_cfg = FakeBuilderCfg("b")
+    mod = FilterRegLvlMod()
+    port, value = mod.run(test=test, builder_cfg=builder_cfg, reg_level=5, start_level=1)
+    assert port == "test"
+    assert value is test
+
+
+def test_filter_reglvl_at_lower_boundary():
+    test = _make_test("foo", reglvl=1)
+    builder_cfg = FakeBuilderCfg("b")
+    mod = FilterRegLvlMod()
+    port, value = mod.run(test=test, builder_cfg=builder_cfg, reg_level=5, start_level=1)
+    assert port == "test"
+    assert value is test
+
+
+def test_filter_reglvl_above_upper_bound(logging_handler):
+    test = _make_test("foo", reglvl=6)
+    builder_cfg = FakeBuilderCfg("b")
+    mod = FilterRegLvlMod()
+    port, result = mod.run(test=test, builder_cfg=builder_cfg, reg_level=5)
+    assert port == "skip"
+    assert result == TestResult.skip("foo", "foo", "lvl 6 > cmd end_level 5")
+    assert result.type_ == TestResult.skip("foo", "foo", "").type_
+    assert logging_handler.failure is False
+
+
+def test_filter_reglvl_below_lower_bound(logging_handler):
+    test = _make_test("foo", reglvl=0)
+    builder_cfg = FakeBuilderCfg("b")
+    mod = FilterRegLvlMod()
+    port, result = mod.run(test=test, builder_cfg=builder_cfg, start_level=1)
+    assert port == "skip"
+    assert result == TestResult.skip("foo", "foo", "lvl 0 < cmd start_level 1")

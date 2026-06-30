@@ -10,7 +10,7 @@ from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
 
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode, TestResult
 
 log = structlog.get_logger()
 
@@ -190,3 +190,16 @@ class SelectTestsMod:
     def run(self, suite_cfg:SuiteConfig, test_name:str = ""):
         for t in suite_cfg.get_tests(test_name or None):
             yield ("test", t)
+
+
+class FilterRegLvlMod:
+    def run(self, test:TestConfig, builder_cfg:RtlBuilderConfig, reg_level:int | None = None, start_level:int | None = None):
+        lvl = test.get_reglvl(builder_cfg.get_name())
+        if reg_level is not None and lvl > reg_level:
+            desc = f"lvl {lvl} > cmd end_level {reg_level}"
+        elif start_level is not None and lvl < start_level:
+            desc = f"lvl {lvl} < cmd start_level {start_level}"
+        else:
+            return ("test", test)
+        result = TestResult.skip(test.key, test.get_name(), desc)
+        return ("skip", result)
