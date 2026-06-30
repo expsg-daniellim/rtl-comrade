@@ -41,3 +41,4 @@ files:
   - { name: resolve-seed, class_name: ResolveSeedMod }
   - { name: build-sim-cmd, class_name: BuildSimCmdMod }
   - { name: write-randseed, class_name: WriteRandseedMod }
+  - { name: link-latest, class_name: LinkLatestMod }

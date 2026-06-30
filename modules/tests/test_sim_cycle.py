@@ -1,6 +1,7 @@
 """Tests for modules/rtl_buddy/sim.py — ExpandRunsMod (spec 08a), ResolveSeedMod (spec 08b), BuildSimCmdMod (spec 08c)."""
 
 import importlib.util
+import os
 import random
 from pathlib import Path
 
@@ -24,6 +25,7 @@ ResolveSeedMod = _mod.ResolveSeedMod
 run_suffix = _mod.run_suffix
 BuildSimCmdMod = _mod.BuildSimCmdMod
 WriteRandseedMod = _mod.WriteRandseedMod
+LinkLatestMod = _mod.LinkLatestMod
 
 
 def _make_tb():
@@ -482,3 +484,116 @@ def test_write_randseed_missing_hier_inst_seed_file(tmp_path, logging_handler):
     result = mod.run(randseed=randseed, proc=proc, work_dir=tmp_path)
     assert result == ("randseed_done", RandSeedDone(key))
     assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# LinkLatestMod (spec 08e)
+# ---------------------------------------------------------------------------
+
+
+def _make_link_proc(key, work_dir):
+    log_path = work_dir / f"{key}.log"
+    err_path = work_dir / f"{key}.err"
+    log_path.write_text("stdout")
+    err_path.write_text("stderr")
+    return Proc(key=key, rc=0, stdout_path=log_path, stderr_path=err_path)
+
+
+def _make_link_randseed(key, work_dir):
+    rs_path = work_dir / f"{key}.randseed"
+    rs_path.write_text("12345\n")
+    return RandSeed(key=key, seed=12345, randseed_path=str(rs_path), argv=["/simv"])
+
+
+def test_link_latest_fresh_work_dir(tmp_path):
+    key = "mytest"
+    proc = _make_link_proc(key, tmp_path)
+    randseed = _make_link_randseed(key, tmp_path)
+    randseed_done = RandSeedDone(key)
+    mod = LinkLatestMod()
+    result = mod.run(randseed=randseed, proc=proc, randseed_done=randseed_done, work_dir=tmp_path)
+    assert result is None
+    assert (tmp_path / "test.log").is_symlink()
+    assert (tmp_path / "test.err").is_symlink()
+    assert (tmp_path / "test.randseed").is_symlink()
+    assert os.readlink(tmp_path / "test.log") == str(proc.stdout_path)
+    assert os.readlink(tmp_path / "test.err") == str(proc.stderr_path)
+    assert os.readlink(tmp_path / "test.randseed") == randseed.randseed_path
+
+
+def test_link_latest_links_land_in_work_dir_not_cwd(tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    other.mkdir()
+    work = tmp_path / "work"
+    work.mkdir()
+    key = "mytest"
+    proc = _make_link_proc(key, work)
+    randseed = _make_link_randseed(key, work)
+    randseed_done = RandSeedDone(key)
+    monkeypatch.chdir(other)
+    mod = LinkLatestMod()
+    mod.run(randseed=randseed, proc=proc, randseed_done=randseed_done, work_dir=work)
+    assert (work / "test.log").is_symlink()
+    assert (work / "test.err").is_symlink()
+    assert (work / "test.randseed").is_symlink()
+    assert not (other / "test.log").exists()
+    assert not (other / "test.err").exists()
+    assert not (other / "test.randseed").exists()
+
+
+def test_link_latest_replaces_existing_links(tmp_path):
+    key = "mytest"
+    old_log = tmp_path / "old.log"
+    old_err = tmp_path / "old.err"
+    old_rs = tmp_path / "old.randseed"
+    old_log.write_text("old")
+    old_err.write_text("old")
+    old_rs.write_text("old")
+    (tmp_path / "test.log").symlink_to(old_log)
+    (tmp_path / "test.err").symlink_to(old_err)
+    (tmp_path / "test.randseed").symlink_to(old_rs)
+    proc = _make_link_proc(key, tmp_path)
+    randseed = _make_link_randseed(key, tmp_path)
+    randseed_done = RandSeedDone(key)
+    mod = LinkLatestMod()
+    mod.run(randseed=randseed, proc=proc, randseed_done=randseed_done, work_dir=tmp_path)
+    assert os.readlink(tmp_path / "test.log") == str(proc.stdout_path)
+    assert os.readlink(tmp_path / "test.err") == str(proc.stderr_path)
+    assert os.readlink(tmp_path / "test.randseed") == randseed.randseed_path
+
+
+def test_link_latest_replaces_dangling_symlink(tmp_path):
+    key = "mytest"
+    gone = tmp_path / "gone.log"
+    (tmp_path / "test.log").symlink_to(gone)  # dangling — target never created
+    gone_err = tmp_path / "gone.err"
+    (tmp_path / "test.err").symlink_to(gone_err)
+    gone_rs = tmp_path / "gone.randseed"
+    (tmp_path / "test.randseed").symlink_to(gone_rs)
+    proc = _make_link_proc(key, tmp_path)
+    randseed = _make_link_randseed(key, tmp_path)
+    randseed_done = RandSeedDone(key)
+    mod = LinkLatestMod()
+    mod.run(randseed=randseed, proc=proc, randseed_done=randseed_done, work_dir=tmp_path)
+    assert os.readlink(tmp_path / "test.log") == str(proc.stdout_path)
+    assert os.readlink(tmp_path / "test.err") == str(proc.stderr_path)
+    assert os.readlink(tmp_path / "test.randseed") == randseed.randseed_path
+
+
+def test_link_latest_two_sequential_invocations_last_writer_wins(tmp_path):
+    key = "mytest"
+    run1_dir = tmp_path / "run1"
+    run1_dir.mkdir()
+    run2_dir = tmp_path / "run2"
+    run2_dir.mkdir()
+    proc1 = _make_link_proc(key, run1_dir)
+    rs1 = _make_link_randseed(key, run1_dir)
+    proc2 = _make_link_proc(key, run2_dir)
+    rs2 = _make_link_randseed(key, run2_dir)
+    randseed_done = RandSeedDone(key)
+    mod = LinkLatestMod()
+    mod.run(randseed=rs1, proc=proc1, randseed_done=randseed_done, work_dir=tmp_path)
+    mod.run(randseed=rs2, proc=proc2, randseed_done=randseed_done, work_dir=tmp_path)
+    assert os.readlink(tmp_path / "test.log") == str(proc2.stdout_path)
+    assert os.readlink(tmp_path / "test.err") == str(proc2.stderr_path)
+    assert os.readlink(tmp_path / "test.randseed") == rs2.randseed_path

@@ -1,4 +1,5 @@
 import dataclasses
+import os
 import random
 from pathlib import Path
 
@@ -82,3 +83,16 @@ class WriteRandseedMod:
         except OSError as e:  # FileNotFoundError (missing HierInstanceSeed.txt) is an OSError subclass
             log.error("randseed_write_failed", key=randseed.key, path=randseed.randseed_path, exc_info=e)
         return ("randseed_done", RandSeedDone(randseed.key))  # ordering signal emitted regardless, so link-latest can't dangle
+
+
+def force_symlink(target, link_name) -> None:
+    tmp = f"{link_name}.{os.getpid()}.tmp"
+    os.symlink(target, tmp)
+    os.replace(tmp, link_name)  # atomic rename over any existing link (or absent target)
+
+
+class LinkLatestMod:
+    def run(self, randseed: RandSeed, proc: Proc, randseed_done: RandSeedDone, work_dir: Path):  # randseed_done: ordering gate (after write-randseed); unread. work_dir persistent
+        force_symlink(proc.stdout_path, Path(work_dir) / "test.log")
+        force_symlink(proc.stderr_path, Path(work_dir) / "test.err")
+        force_symlink(randseed.randseed_path, Path(work_dir) / "test.randseed")
