@@ -1,10 +1,13 @@
+import asyncio
 import os
 import re
+import signal
 from pathlib import Path
 
 import structlog
+from serde import serde
 
-from modules.rtl_buddy.schema import RootConfig, TestResult, KeyedValue, ModelConfig
+from modules.rtl_buddy.schema import RootConfig, TestResult, KeyedValue, ModelConfig, Command, Proc
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log = structlog.get_logger()
@@ -134,3 +137,57 @@ class WriteFilelistMod:
         except OSError as e:
             log.error("filelist_write_error", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror, errno=e.errno)
             yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot write {path}"))
+
+
+class RunProcessMod:
+    @serde
+    class Config:
+        grace_s:float = 5.0  # SIGQUIT→SIGKILL escalation grace; per-node, default 5.0 s
+
+    def __init__(self, config):
+        self.grace_s = config.grace_s
+
+    async def run(self, command:Command, work_dir:Path, timeout:KeyedValue[float | None] | None = None, env_ready:bool = True):
+        with open(command.stdout_path, "wb") as out, open(command.stderr_path, "wb") as err:
+            try:
+                proc = await asyncio.create_subprocess_exec(
+                    *command.argv,
+                    stdout=out,
+                    stderr=err,
+                    preexec_fn=os.setpgrp,
+                    cwd=work_dir,
+                )
+            except (FileNotFoundError, PermissionError) as e:
+                log.fatal("launch_failed", argv0=command.argv[0], exc_info=e)
+            try:
+                await asyncio.wait_for(proc.wait(), timeout.value if timeout else None)
+                rc = proc.returncode
+            except asyncio.TimeoutError:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGQUIT)
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.wait_for(proc.wait(), self.grace_s)
+                except asyncio.TimeoutError:
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    await proc.wait()
+                rc = None
+            except asyncio.CancelledError:
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGQUIT)
+                except ProcessLookupError:
+                    pass
+                try:
+                    await asyncio.shield(asyncio.wait_for(proc.wait(), self.grace_s))
+                except (asyncio.TimeoutError, asyncio.CancelledError):
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    await asyncio.shield(proc.wait())
+                raise
+        return Proc(command.key, rc=rc, stdout_path=command.stdout_path, stderr_path=command.stderr_path)
