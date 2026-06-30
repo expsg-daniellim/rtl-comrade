@@ -274,3 +274,41 @@ def test_pass_skip_and_na_table_still_emitted(logging_handler):
     assert "\nTest Results Summary" in table
     lines = table.splitlines()
     assert len(lines) == 5  # '' + header + 3 rows
+
+
+import re
+
+PrintSummaryMod = _mod.PrintSummaryMod
+
+
+# ---------------------------------------------------------------------------
+# PrintSummaryMod — console sink (spec 10e)
+# ---------------------------------------------------------------------------
+
+
+def test_print_summary_tty_colourises_verdicts(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    table = "test_a                         PASS     desc\ntest_b                         FAIL     error\ntest_c                         NA       stopped\ntest_d                         SKIP     below"
+    PrintSummaryMod().run(table=table)
+    out = capsys.readouterr().out
+    assert "\033[1;92mPASS\033[0m" in out
+    assert "\033[1;91mFAIL\033[0m" in out
+    assert "\033[1;93mNA\033[0m" in out
+    assert not re.search(r'\x1b\[[^m]*mSKIP', out)
+
+
+def test_print_summary_non_tty_plain(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    table = "test_a                         PASS     desc\ntest_b                         FAIL     error"
+    PrintSummaryMod().run(table=table)
+    out = capsys.readouterr().out
+    assert "\x1b" not in out
+
+
+def test_print_summary_content_matches_input(capsys, monkeypatch):
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    table = "test_a                         PASS     desc\ntest_b                         FAIL     error\ntest_c                         NA       stopped"
+    PrintSummaryMod().run(table=table)
+    out = capsys.readouterr().out.rstrip("\n")
+    plain = re.sub(r'\x1b\[[^m]*m', '', out)
+    assert plain == table

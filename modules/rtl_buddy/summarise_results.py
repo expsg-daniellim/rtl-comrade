@@ -22,3 +22,21 @@ class SummariseResultsMod:
         if n_fail > 0:  # consolidated summary signal → drives the exit (handler.failure)
             log.error("test_failures", count=n_fail)
         return ("table", table)  # emit the plain table on the `table` port
+
+
+import re
+import sys
+
+VERDICT_COLOURS = {"PASS": "\033[1;92m", "FAIL": "\033[1;91m", "NA": "\033[1;93m"}  # SKIP left plain — rtl_buddy parity
+COLOUR_END = "\033[0m"
+
+
+def colourise(text:str) -> str:  # mirror PassFailFormatter (rtl_buddy.py:52-60): wrap verdict tokens, SKIP uncoloured
+    for tok, colour in VERDICT_COLOURS.items():
+        text = re.sub(rf"\b{tok}\b", f"{colour}{tok}{COLOUR_END}", text)
+    return text
+
+
+class PrintSummaryMod:
+    def run(self, table):
+        print(colourise(table) if sys.stdout.isatty() else table)

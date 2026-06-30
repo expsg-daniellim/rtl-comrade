@@ -53,3 +53,4 @@ files:
 - file: rtl_buddy/summarise_results.py
   plugins:
   - { name: summarise-results, class_name: SummariseResultsMod }
+  - { name: print-summary, class_name: PrintSummaryMod }
