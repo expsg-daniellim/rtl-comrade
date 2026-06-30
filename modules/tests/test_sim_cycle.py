@@ -597,3 +597,42 @@ def test_link_latest_two_sequential_invocations_last_writer_wins(tmp_path):
     assert os.readlink(tmp_path / "test.log") == str(proc2.stdout_path)
     assert os.readlink(tmp_path / "test.err") == str(proc2.stderr_path)
     assert os.readlink(tmp_path / "test.randseed") == rs2.randseed_path
+
+
+# ---------------------------------------------------------------------------
+# InterpretSimMod (spec 08f)
+# ---------------------------------------------------------------------------
+
+InterpretSimMod = _mod.InterpretSimMod
+
+
+def test_interpret_sim_clean_rc_zero():
+    test = _make_test()
+    proc = _make_proc(test.key)  # rc=0
+    mod = InterpretSimMod()
+    results = list(mod.run(test=test, proc=proc))
+    assert len(results) == 2
+    assert results[0] == ("test", test)
+    assert results[1] == ("proc", proc)
+
+
+def test_interpret_sim_timeout(logging_handler):
+    test = _make_test()
+    proc = Proc(key=test.key, rc=None, stdout_path=Path("/tmp/sim.log"), stderr_path=Path("/tmp/sim.err"))
+    mod = InterpretSimMod()
+    results = list(mod.run(test=test, proc=proc))
+    assert len(results) == 1
+    port, result = results[0]
+    assert port == "timeout"
+    assert result == TestResult.sim_timeout(test.key, test.get_name())
+    assert logging_handler.failure is True
+
+
+def test_interpret_sim_nonzero_rc():
+    test = _make_test()
+    proc = Proc(key=test.key, rc=1, stdout_path=Path("/tmp/sim.log"), stderr_path=Path("/tmp/sim.err"))
+    mod = InterpretSimMod()
+    results = list(mod.run(test=test, proc=proc))
+    assert len(results) == 2
+    assert results[0] == ("test", test)
+    assert results[1] == ("proc", proc)

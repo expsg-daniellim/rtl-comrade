@@ -42,3 +42,4 @@ files:
   - { name: build-sim-cmd, class_name: BuildSimCmdMod }
   - { name: write-randseed, class_name: WriteRandseedMod }
   - { name: link-latest, class_name: LinkLatestMod }
+  - { name: interpret-sim, class_name: InterpretSimMod }

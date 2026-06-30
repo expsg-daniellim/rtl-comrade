@@ -96,3 +96,14 @@ class LinkLatestMod:
         force_symlink(proc.stdout_path, Path(work_dir) / "test.log")
         force_symlink(proc.stderr_path, Path(work_dir) / "test.err")
         force_symlink(randseed.randseed_path, Path(work_dir) / "test.randseed")
+
+
+class InterpretSimMod:
+    def run(self, test:TestConfig, proc:Proc):
+        if proc.rc is None:
+            result = TestResult.sim_timeout(test.key, test.get_name())
+            log.error("sim_timeout", key=test.key, err=proc.stderr_path)
+            yield ("timeout", result)
+        else:
+            yield ("test", test)
+            yield ("proc", proc)
