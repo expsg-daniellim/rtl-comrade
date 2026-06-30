@@ -226,3 +226,128 @@ def test_parse_log_unreadable_file(tmp_path, logging_handler):
     assert result.result == "FAIL"
     assert str(missing) in result.desc
     assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# ParseUvmLogMod (spec 09c)
+# ---------------------------------------------------------------------------
+
+ParseUvmLogMod = _mod.ParseUvmLogMod
+
+
+def _make_uvm_test(max_warns=5, max_errors=2, name="uvmtest"):
+    uvm = UVMConfig(max_warns=max_warns, max_errors=max_errors)
+    return _make_test(uvm=uvm, name=name)
+
+
+def _make_uvm_log(tmp_path, warns=0, errors=0, fatal=0, info=10, filename="uvm.log"):
+    log_file = tmp_path / filename
+    log_file.write_text(
+        f"--------- UVM Report Summary ---------\n"
+        f"** Report counts by severity\n"
+        f"UVM_INFO   : {info}\n"
+        f"UVM_WARNING : {warns}\n"
+        f"UVM_ERROR   : {errors}\n"
+        f"UVM_FATAL  : {fatal}\n"
+    )
+    return log_file
+
+
+def _make_uvm_proc(key, log_path):
+    return Proc(key=key, rc=0, stdout_path=log_path, stderr_path=Path("/tmp/sim.err"))
+
+
+def test_parse_uvm_log_all_zero_pass(tmp_path, logging_handler):
+    test = _make_uvm_test(max_warns=5, max_errors=2)
+    log_file = _make_uvm_log(tmp_path, warns=0, errors=0, fatal=0)
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert isinstance(result, TestResult)
+    assert result.result == "PASS"
+    assert logging_handler.failure is False
+
+
+def test_parse_uvm_log_boundary_pass(tmp_path, logging_handler):
+    test = _make_uvm_test(max_warns=2, max_errors=1)
+    log_file = _make_uvm_log(tmp_path, warns=2, errors=1, fatal=0)
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "PASS"
+    assert logging_handler.failure is False
+
+
+def test_parse_uvm_log_error_over_threshold_fail(tmp_path, logging_handler):
+    test = _make_uvm_test(max_warns=5, max_errors=2)
+    log_file = _make_uvm_log(tmp_path, warns=0, errors=3, fatal=0)
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert "uvm error" in result.desc
+    assert logging_handler.failure is True
+
+
+def test_parse_uvm_log_warn_over_threshold_fail(tmp_path, logging_handler):
+    test = _make_uvm_test(max_warns=1, max_errors=5)
+    log_file = _make_uvm_log(tmp_path, warns=2, errors=0, fatal=0)
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert "uvm warning" in result.desc
+    assert logging_handler.failure is True
+
+
+def test_parse_uvm_log_fatal_nonzero_fail(tmp_path, logging_handler):
+    test = _make_uvm_test(max_warns=5, max_errors=5)
+    log_file = _make_uvm_log(tmp_path, warns=0, errors=0, fatal=1)
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert logging_handler.failure is True
+
+
+def test_parse_uvm_log_no_summary_block(tmp_path, logging_handler):
+    log_file = tmp_path / "uvm.log"
+    log_file.write_text("simulation running\ntest completed\n")
+    test = _make_uvm_test()
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert "No UVM Report Summary detected" in result.desc
+    assert str(log_file) in result.desc
+    assert logging_handler.failure is True
+
+
+def test_parse_uvm_log_invalid_summary_missing_severity(tmp_path, logging_handler):
+    log_file = tmp_path / "uvm.log"
+    log_file.write_text(
+        "--------- UVM Report Summary ---------\n"
+        "** Report counts by severity\n"
+        "UVM_INFO   : 10\n"
+        "UVM_WARNING : 2\n"
+        "UVM_ERROR   : 0\n"
+    )
+    test = _make_uvm_test()
+    proc = _make_uvm_proc(test.key, log_file)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert "Invalid UVM Report Summary detected" in result.desc
+    assert str(log_file) in result.desc
+    assert logging_handler.failure is True
+
+
+def test_parse_uvm_log_unreadable_file(tmp_path, logging_handler):
+    missing = tmp_path / "nonexistent_uvm.log"
+    test = _make_uvm_test()
+    proc = _make_uvm_proc(test.key, missing)
+    port, result = ParseUvmLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert str(missing) in result.desc
+    assert logging_handler.failure is True

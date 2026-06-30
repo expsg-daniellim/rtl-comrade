@@ -45,3 +45,4 @@ files:
   - { name: interpret-sim, class_name: InterpretSimMod }
   - { name: route-post, class_name: RoutePostMod }
   - { name: parse-log, class_name: ParseLogMod }
+  - { name: parse-uvm-log, class_name: ParseUvmLogMod }

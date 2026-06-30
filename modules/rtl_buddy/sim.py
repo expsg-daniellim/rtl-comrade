@@ -149,3 +149,44 @@ class ParseLogMod:
         if event is not None:
             log.error(event, key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc=result.desc)
         return ("default", result)
+
+
+class ParseUvmLogMod:
+    def run(self, test:TestConfig, proc:Proc):
+        uvm = test.uvm
+        path = proc.stdout_path
+        try:
+            text = Path(path).read_text()
+            summary = re.search(
+                r"-+\s*UVM Report Summary\s*-+\s*\**\s*Report counts by severity\s*((?:UVM_(?:INFO|WARNING|ERROR|FATAL)\s*:?\s*[0-9]+\s?)+)",
+                text,
+            )
+            if summary is None:
+                result = TestResult.parse(test.key, test.get_name(), "FAIL", f"No UVM Report Summary detected. See {path}.")
+                event = "parse_uvm_no_summary"
+            else:
+                totals = dict(
+                    (m.group(1), int(m.group(2)))
+                    for m in re.finditer(r"^UVM_(INFO|WARNING|ERROR|FATAL)\s*:?\s*([0-9]+)", summary.group(1), re.MULTILINE)
+                )
+                if "WARNING" not in totals or "ERROR" not in totals or "FATAL" not in totals:
+                    result = TestResult.parse(test.key, test.get_name(), "FAIL", f"Invalid UVM Report Summary detected. See {path}")
+                    event = "parse_uvm_invalid_summary"
+                else:
+                    message_summary = ", ".join(
+                        f"{v} uvm {k.lower()}{'s' if v != 1 else ''}"
+                        for k, v in totals.items() if k != "INFO"
+                    )
+                    results_str = f"{message_summary} detected. max_warnings={uvm.max_warns}, max_err={uvm.max_errors}"
+                    if totals["WARNING"] <= uvm.max_warns and totals["ERROR"] <= uvm.max_errors and totals["FATAL"] == 0:
+                        result = TestResult.parse(test.key, test.get_name(), "PASS", results_str)
+                        event = None
+                    else:
+                        result = TestResult.parse(test.key, test.get_name(), "FAIL", f"{results_str}. See {path}")
+                        event = "parse_uvm_failed"
+        except OSError as e:
+            result = TestResult.parse(test.key, test.get_name(), "FAIL", str(e))
+            event = "parse_uvm_unreadable"
+        if event is not None:
+            log.error(event, key=test.key, test_name=test.get_name(), path=str(path), desc=result.desc)
+        return ("default", result)
