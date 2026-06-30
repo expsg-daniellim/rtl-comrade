@@ -19,3 +19,4 @@ files:
   - { name: select-platform, class_name: SelectPlatformMod }
   - { name: resolve-builder, class_name: ResolveBuilderMod }
   - { name: work-dir, class_name: WorkDirMod }
+  - { name: ensure-logs-dir, class_name: EnsureLogsDirMod }

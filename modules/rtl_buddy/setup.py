@@ -92,3 +92,14 @@ class ResolveBuilderMod:
 class WorkDirMod:
     def run(self):
         return ("default", Path.cwd().resolve())
+
+
+class EnsureLogsDirMod:
+    def run(self, work_dir:Path, logs_dir:str = "logs"):
+        path = Path(work_dir) / logs_dir
+        try:
+            path.mkdir(parents=True, exist_ok=True)
+        except OSError as e:
+            log.fatal("logs_dir_create_failed", path=str(path), exc_info=e)
+        log.info("logs_dir_ready", path=str(path.resolve()))
+        return ("logs_dir", path)

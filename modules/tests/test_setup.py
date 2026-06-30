@@ -26,6 +26,7 @@ ParseRootConfigMod = _mod.ParseRootConfigMod
 SelectPlatformMod = _mod.SelectPlatformMod
 ResolveBuilderMod = _mod.ResolveBuilderMod
 WorkDirMod = _mod.WorkDirMod
+EnsureLogsDirMod = _mod.EnsureLogsDirMod
 
 _FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
 
@@ -383,3 +384,53 @@ async def test_work_dir_resolves_symlink(tmp_path, monkeypatch):
         input_sequence=[{}],
         expected_emissions={"default": [real.resolve()]},
     )
+
+
+# ---------------------------------------------------------------------------
+# EnsureLogsDirMod
+# ---------------------------------------------------------------------------
+
+
+def test_ensure_logs_dir_creates_default(tmp_path):
+    mod = EnsureLogsDirMod()
+    port, path = mod.run(work_dir=tmp_path)
+    assert port == "logs_dir"
+    assert path == tmp_path / "logs"
+    assert (tmp_path / "logs").is_dir()
+
+
+def test_ensure_logs_dir_idempotent(tmp_path):
+    (tmp_path / "logs").mkdir()
+    mod = EnsureLogsDirMod()
+    port, path = mod.run(work_dir=tmp_path)
+    assert port == "logs_dir"
+    assert path == tmp_path / "logs"
+    assert (tmp_path / "logs").is_dir()
+
+
+def test_ensure_logs_dir_nested(tmp_path):
+    mod = EnsureLogsDirMod()
+    port, path = mod.run(work_dir=tmp_path, logs_dir="build/logs")
+    assert port == "logs_dir"
+    assert path == tmp_path / "build" / "logs"
+    assert (tmp_path / "build" / "logs").is_dir()
+
+
+def test_ensure_logs_dir_roots_on_work_dir_not_cwd(tmp_path, monkeypatch):
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    mod = EnsureLogsDirMod()
+    port, path = mod.run(work_dir=tmp_path)
+    assert port == "logs_dir"
+    assert path == tmp_path / "logs"
+    assert (tmp_path / "logs").is_dir()
+    assert not (other / "logs").exists()
+
+
+def test_ensure_logs_dir_permission_error(tmp_path, monkeypatch, logging_handler):
+    from unittest.mock import patch as mock_patch
+    mod = EnsureLogsDirMod()
+    with mock_patch("pathlib.Path.mkdir", side_effect=PermissionError("denied")):
+        with pytest.raises(typer.Exit):
+            mod.run(work_dir=tmp_path)
