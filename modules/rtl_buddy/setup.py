@@ -174,3 +174,8 @@ class DeriveSeedModeMod:
         elif rnd_last:
             mode = SeedMode.REPLAY
         return ("default", mode)
+
+
+class RouteListModeMod:
+    def run(self, suite_cfg:SuiteConfig, list:bool = False):
+        return ("list", suite_cfg) if list else ("run", suite_cfg)

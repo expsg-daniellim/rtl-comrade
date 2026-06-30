@@ -22,3 +22,4 @@ files:
   - { name: ensure-logs-dir, class_name: EnsureLogsDirMod }
   - { name: parse-suite-config, class_name: ParseSuiteConfigMod }
   - { name: derive-seed-mode, class_name: DeriveSeedModeMod }
+  - { name: route-list-mode, class_name: RouteListModeMod }
