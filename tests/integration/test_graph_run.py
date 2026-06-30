@@ -739,17 +739,19 @@ def test_it18_blank_cli_name(logging_handler, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# IT-19: Duplicate CLI name causes fatal error during graph construction
+# IT-19: one CLI source wired to multiple destinations fans out (identical defs dedup to one param)
 # ---------------------------------------------------------------------------
 
 
-def test_it19_duplicate_cli_name(logging_handler, tmp_path):
+def test_it19_cli_fanout_across_edges(logging_handler, tmp_path):
 	_write_plugin(
 		tmp_path,
 		"mods.py",
 		"""\
         class Collect:
             def run(self, x):
+                import tests.integration.test_graph_run as t
+                t.SIDE_CHANNEL.append(x)
                 return None
     """,
 	)
@@ -761,18 +763,48 @@ def test_it19_duplicate_cli_name(logging_handler, tmp_path):
 		],
 		edges=[
 			GraphConfigEdge(
-				src=GraphConfigSrcCLI(cli="value"),
+				src=GraphConfigSrcCLI(cli="value", type="int"),
 				dst=GraphConfigDstPort(node="collect1", port=1),
 			),
 			GraphConfigEdge(
-				src=GraphConfigSrcCLI(cli="value"),
+				src=GraphConfigSrcCLI(cli="value", type="int"),
 				dst=GraphConfigDstPort(node="collect2", port=1),
 			),
 		],
 		modules=[tmp_path / "mods.py"],
 	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert list(graph_config.sig.parameters) == ["value"]  # deduped to a single param
+	assert [name for name, _ in graph_config.cli_srcs] == ["cli-value", "cli-value"]  # but one src per destination
+	Graph.construct_run(graph_config, lambda p, h, d: None, lambda: None)(value=7)
+	assert sorted(SIDE_CHANNEL) == [7, 7]  # the one value reached both nodes
+	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# IT-19b: same CLI name with conflicting definitions across edges is fatal
+# ---------------------------------------------------------------------------
+
+
+def test_it19b_mismatched_cli_across_edges(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			_node("collect1", "collect"),
+			_node("collect2", "collect"),
+		],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value", type="int"),
+				dst=GraphConfigDstPort(node="collect1", port=1),
+			),
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value", type="str"),
+				dst=GraphConfigDstPort(node="collect2", port=1),
+			),
+		],
+	)
 	with pytest.raises(typer.Exit):
-		Graph.from_config(GraphConfig.from_file_config(config))
+		GraphConfig.from_file_config(config)
 
 
 # ---------------------------------------------------------------------------
@@ -991,17 +1023,38 @@ def test_it24_blank_cli_name_in_cli_config(logging_handler, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# IT-25: duplicate cli name across edge CLI and cli_config causes fatal error
+# IT-25: identical cli name across edge CLI and cli_config dedups; a mismatch is fatal
 # ---------------------------------------------------------------------------
 
 
-def test_it25_duplicate_cli_name_across_edge_and_config(logging_handler, tmp_path):
+def test_it25_identical_cli_across_edge_and_config_dedups(logging_handler):
 	config = GraphFileConfig(
 		nodes=[
 			GraphConfigNode(
 				id="collect",
 				module="m",
 				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+			)
+		],
+		edges=[
+			GraphConfigEdge(
+				src=GraphConfigSrcCLI(cli="value"),
+				dst=GraphConfigDstPort(node="collect", port=1),
+			)
+		],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert list(graph_config.sig.parameters) == ["value"]
+	assert logging_handler.failure is False
+
+
+def test_it25b_mismatched_cli_across_edge_and_config(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="collect",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="value", default=5)},
 			)
 		],
 		edges=[
@@ -1073,11 +1126,11 @@ def test_it27_required_default_input(logging_handler, tmp_path):
 
 
 # ---------------------------------------------------------------------------
-# IT-26: duplicate cli name across two nodes' cli_config causes fatal error
+# IT-26: identical cli name across two nodes' cli_config dedups to one param
 # ---------------------------------------------------------------------------
 
 
-def test_it26_duplicate_cli_name_across_nodes(logging_handler):
+def test_it26_identical_cli_across_nodes_dedups(logging_handler):
 	config = GraphFileConfig(
 		nodes=[
 			GraphConfigNode(
@@ -1089,6 +1142,27 @@ def test_it26_duplicate_cli_name_across_nodes(logging_handler):
 				id="n2",
 				module="m",
 				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+			),
+		],
+		edges=[],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert list(graph_config.sig.parameters) == ["value"]
+	assert logging_handler.failure is False
+
+
+def test_it26b_mismatched_cli_across_nodes(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+			),
+			GraphConfigNode(
+				id="n2",
+				module="m",
+				cli_config={"field": GraphConfigSrcCLI(cli="value", default=5)},
 			),
 		],
 		edges=[],
@@ -1118,11 +1192,11 @@ def test_it28_blank_cli_name_in_cli_contract_config(logging_handler):
 
 
 # ---------------------------------------------------------------------------
-# IT-29: duplicate cli name across two nodes' cli_contract_config causes fatal error
+# IT-29: identical cli name across two nodes' cli_contract_config dedups to one param
 # ---------------------------------------------------------------------------
 
 
-def test_it29_duplicate_cli_name_across_contract_configs(logging_handler):
+def test_it29_identical_cli_across_contract_configs_dedups(logging_handler):
 	config = GraphFileConfig(
 		nodes=[
 			GraphConfigNode(
@@ -1134,6 +1208,27 @@ def test_it29_duplicate_cli_name_across_contract_configs(logging_handler):
 				id="n2",
 				module="m",
 				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+			),
+		],
+		edges=[],
+	)
+	graph_config = GraphConfig.from_file_config(config)
+	assert list(graph_config.sig.parameters) == ["n"]
+	assert logging_handler.failure is False
+
+
+def test_it29b_mismatched_cli_across_contract_configs(logging_handler):
+	config = GraphFileConfig(
+		nodes=[
+			GraphConfigNode(
+				id="n1",
+				module="m",
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+			),
+			GraphConfigNode(
+				id="n2",
+				module="m",
+				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n", default=5)},
 			),
 		],
 		edges=[],

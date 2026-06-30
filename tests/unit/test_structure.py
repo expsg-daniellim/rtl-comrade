@@ -2,6 +2,7 @@
 
 import ast
 import inspect
+from types import SimpleNamespace
 from unittest.mock import patch
 
 import pytest
@@ -377,6 +378,11 @@ def test_non_str_port_name_raises():
 
 
 # --- Fatal paths — getsource / ast.parse / signature failures ---
+
+
+def test_collect_emits_non_callable_method_fatal(logging_handler):
+	with pytest.raises(typer.Exit):
+		ModuleStructure.collect_emits("M", SimpleNamespace(__name__="run"))
 
 
 def test_run_signature_type_error_fatal(logging_handler):

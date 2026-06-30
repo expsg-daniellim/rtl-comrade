@@ -51,7 +51,7 @@ Each `<field>` under `cli_config` or `cli_contract_config` is the name of the co
 
 If a field name appears in both `config` and `cli_config` (or both `contract_config` and `cli_contract_config`), the CLI value takes precedence and the harness emits a warning at startup.
 
-CLI parameter names (the `cli` field) must be unique across all edges, `cli_config`, and `cli_contract_config` entries in the graph.
+A `cli` name may be reused across edges, `cli_config`, and `cli_contract_config` entries to wire one CLI parameter to several destinations — every reuse must declare an identical descriptor (same `option`, `type`, `default`, and `help`). The name is surfaced as a single subcommand parameter regardless of how many times it appears. Two occurrences of the same `cli` name with differing descriptor fields are a fatal error.
 
 ### Contract port mappings
 
@@ -115,7 +115,7 @@ edges:
     required: <bool>         # optional — when true, the default contract awaits a real value on this port even if the input has a default; defaults to false
 ```
 
-A CLI edge injects a value supplied on the command line directly into a destination node's input port. The harness creates a virtual `ModuleCLI` node for each distinct `cli` name and wires it to the declared destination. The parameter is surfaced as a subcommand option or argument depending on the `option` field. When `option: false`, the positional argument order matches the declaration order of CLI edges in the `edges` list.
+A CLI edge injects a value supplied on the command line directly into a destination node's input port. The harness creates one virtual `ModuleCLI` node per distinct `cli` name and wires it to every destination declared for that name, so a single CLI parameter can fan out to multiple input ports (each occurrence must declare an identical descriptor). The parameter is surfaced as a subcommand option or argument depending on the `option` field. When `option: false`, the positional argument order matches the declaration order of CLI edges in the `edges` list.
 
 The destination `port` field accepts either a string name matching a `run(...)` parameter name or a 1-based integer index into the parameter list.
 
