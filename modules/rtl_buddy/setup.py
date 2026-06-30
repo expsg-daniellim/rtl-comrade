@@ -10,7 +10,7 @@ from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
 
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig
 
 log = structlog.get_logger()
 
@@ -103,3 +103,64 @@ class EnsureLogsDirMod:
             log.fatal("logs_dir_create_failed", path=str(path), exc_info=e)
         log.info("logs_dir_ready", path=str(path.resolve()))
         return ("logs_dir", path)
+
+
+@serde
+@dataclass
+class TestConfigFile:
+    name:str
+    desc:str
+    model:str
+    model_path:str
+    tb:str = field(rename='testbench')
+    reglvl:int | dict | None = field(default=None)
+    pa:dict | None = field(default=None, rename='plusargs')
+    pd:dict | None = field(default=None, rename='plusdefines')
+    uvm:UVMConfig | None = field(default=None)
+    preproc_path:str | None = field(default=None, rename='preproc', deserializer=lambda data: data.get('path') if data is not None else None)
+    postproc_path:str | None = field(default=None, rename='postproc', deserializer=lambda data: data.get('path') if data is not None else None)
+    sweep_path:str | None = field(default=None, rename='sweep', deserializer=lambda data: data.get('path') if data is not None else None)
+    timeout:int | None = field(default=None, rename='sim_timeout')
+
+
+@serde
+@dataclass
+class SuiteConfigFile:
+    filetype:Literal['test_config'] = field(rename='rtl-buddy-filetype')
+    testbenches:list[TestbenchConfig]
+    tests:list[TestConfigFile]
+
+
+class ParseSuiteConfigMod:
+    def run(self, test_config:str = "tests.yaml"):
+        path = Path(test_config).resolve()
+        try:
+            raw = from_yaml(SuiteConfigFile, path.read_text())
+        except UnicodeDecodeError as e:
+            log.fatal("invalid_unicode", path=str(path), reason=e.reason, exc_info=e)
+        except FileNotFoundError as e:
+            log.fatal("not_found", path=str(path), exc_info=e)
+        except IsADirectoryError as e:
+            log.fatal("is_directory", path=str(path), exc_info=e)
+        except PermissionError as e:
+            log.fatal("permission_denied", path=str(path), exc_info=e)
+        except OSError as e:
+            log.fatal("os_error", path=str(path), err=e.strerror, errno=e.errno, exc_info=e)
+        except SerdeError as e:
+            log.fatal("serde_error", path=str(path), message=str(e), exc_info=e)
+        except MarkedYAMLError as e:
+            log.fatal("yaml_invalid", path=str(path), problem=e.problem, exc_info=e)
+        except ReaderError as e:
+            log.fatal("yaml_unreadable", path=str(path), reason=e.reason, exc_info=e)
+        except ValueError as e:
+            log.fatal("invalid_uvm_config", path=str(path), reason=str(e), exc_info=e)
+        tbs = { tb.get_name(): tb for tb in raw.testbenches }
+        tests = {}
+        for t in raw.tests:
+            try:
+                tb = tbs[t.tb]
+            except KeyError as e:
+                log.fatal("unknown_testbench", path=str(path), test=t.name, testbench=t.tb, exc_info=e)
+            tests[t.name] = TestConfig(name=t.name, desc=t.desc, model=t.model, model_path=t.model_path, reglvl=t.reglvl, pa=t.pa, pd=t.pd, uvm=t.uvm, preproc_path=t.preproc_path, postproc_path=t.postproc_path, sweep_path=t.sweep_path, tb=tb, timeout=t.timeout, suite_dir=path.parent)
+        suite_cfg = SuiteConfig(path=path, tests=tests)
+        return ("default", suite_cfg)

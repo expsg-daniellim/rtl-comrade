@@ -20,3 +20,4 @@ files:
   - { name: resolve-builder, class_name: ResolveBuilderMod }
   - { name: work-dir, class_name: WorkDirMod }
   - { name: ensure-logs-dir, class_name: EnsureLogsDirMod }
+  - { name: parse-suite-config, class_name: ParseSuiteConfigMod }

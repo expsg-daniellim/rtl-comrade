@@ -27,8 +27,10 @@ SelectPlatformMod = _mod.SelectPlatformMod
 ResolveBuilderMod = _mod.ResolveBuilderMod
 WorkDirMod = _mod.WorkDirMod
 EnsureLogsDirMod = _mod.EnsureLogsDirMod
+ParseSuiteConfigMod = _mod.ParseSuiteConfigMod
 
 _FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
+_SUITE_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "verif" / "sandbox" / "tests.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -434,3 +436,265 @@ def test_ensure_logs_dir_permission_error(tmp_path, monkeypatch, logging_handler
     with mock_patch("pathlib.Path.mkdir", side_effect=PermissionError("denied")):
         with pytest.raises(typer.Exit):
             mod.run(work_dir=tmp_path)
+
+
+# ---------------------------------------------------------------------------
+# ParseSuiteConfigMod
+# ---------------------------------------------------------------------------
+
+_MINIMAL_SUITE_YAML = """\
+rtl-buddy-filetype: test_config
+testbenches:
+  - name: "tb"
+    filelist: ["tb.sv"]
+tests:
+  - name: "t"
+    desc: "d"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb"
+"""
+
+
+def test_parse_suite_config_happy_path():
+    from modules.rtl_buddy.schema.suite import SuiteConfig, TestConfig, TestbenchConfig
+    mod = ParseSuiteConfigMod()
+    result = mod.run(test_config=str(_SUITE_FIXTURE))
+    assert result is not None
+    port, suite_cfg = result
+    assert port == "default"
+    assert isinstance(suite_cfg, SuiteConfig)
+    assert suite_cfg.path == _SUITE_FIXTURE.resolve()
+    assert "basic" in suite_cfg.tests
+    for test in suite_cfg.tests.values():
+        assert isinstance(test, TestConfig)
+        assert isinstance(test.tb, TestbenchConfig)
+        assert test.key == test.name
+        assert test.suite_dir == _SUITE_FIXTURE.resolve().parent
+
+
+def test_parse_suite_config_relative_cwd(tmp_path, monkeypatch):
+    yaml_path = tmp_path / "tests.yaml"
+    yaml_path.write_text(_MINIMAL_SUITE_YAML)
+    monkeypatch.chdir(tmp_path)
+    mod = ParseSuiteConfigMod()
+    result = mod.run(test_config="tests.yaml")
+    assert result is not None
+    port, suite_cfg = result
+    assert port == "default"
+    assert suite_cfg.path == yaml_path.resolve()
+    assert suite_cfg.tests["t"].suite_dir == yaml_path.resolve().parent
+
+
+def test_parse_suite_config_relative_subdir(tmp_path, monkeypatch):
+    sub = tmp_path / "sub"
+    sub.mkdir()
+    yaml_path = sub / "tests.yaml"
+    yaml_path.write_text(_MINIMAL_SUITE_YAML)
+    monkeypatch.chdir(tmp_path)
+    mod = ParseSuiteConfigMod()
+    result = mod.run(test_config="sub/tests.yaml")
+    assert result is not None
+    port, suite_cfg = result
+    assert port == "default"
+    assert suite_cfg.path == yaml_path.resolve()
+    assert suite_cfg.tests["t"].suite_dir == sub.resolve()
+
+
+def test_parse_suite_config_round_trip():
+    mod = ParseSuiteConfigMod()
+    _, suite_cfg = mod.run(test_config=str(_SUITE_FIXTURE))
+    basic = suite_cfg.tests["basic"]
+    assert basic.name == "basic"
+    assert basic.desc == "basic testcase"
+    assert basic.tb.name == "tb_top"
+    assert basic.reglvl == 0
+    assert basic.pa == {"a": "8", "b": None, "lvm_verbosity": 2}
+    assert basic.pd is None
+    assert basic.uvm is None
+    assert basic.preproc_path is None
+    assert basic.postproc_path is None
+    assert basic.sweep_path is None
+    assert basic.timeout is None
+    assert isinstance(basic.model, str)
+    assert basic.model == "test_module"
+    assert basic.model_path == "../../design/sandbox/models.yaml"
+    sim_timeout_test = suite_cfg.tests["sim_timeout"]
+    assert sim_timeout_test.timeout == 5
+
+
+def test_parse_suite_config_yaml_renames(tmp_path):
+    yaml_text = """\
+rtl-buddy-filetype: test_config
+testbenches:
+  - name: "tb"
+    filelist: ["tb.sv"]
+tests:
+  - name: "t"
+    desc: "desc"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb"
+    plusargs:
+      A: "1"
+    plusdefines:
+      B: "2"
+    preproc:
+      path: pre.py
+    postproc:
+      path: post.py
+    sweep:
+      path: sweep.py
+    sim_timeout: 99
+    reglvl: 7
+"""
+    p = tmp_path / "tests.yaml"
+    p.write_text(yaml_text)
+    mod = ParseSuiteConfigMod()
+    _, suite_cfg = mod.run(test_config=str(p))
+    t = suite_cfg.tests["t"]
+    assert t.tb.name == "tb"
+    assert t.pa == {"A": "1"}
+    assert t.pd == {"B": "2"}
+    assert t.preproc_path == "pre.py"
+    assert t.postproc_path == "post.py"
+    assert t.sweep_path == "sweep.py"
+    assert t.timeout == 99
+    assert t.reglvl == 7
+
+
+def test_parse_suite_config_preproc_mapping(tmp_path):
+    yaml_text = """\
+rtl-buddy-filetype: test_config
+testbenches:
+  - name: "tb"
+    filelist: []
+tests:
+  - name: "t"
+    desc: "d"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb"
+    preproc:
+      path: foo.py
+"""
+    p = tmp_path / "tests.yaml"
+    p.write_text(yaml_text)
+    mod = ParseSuiteConfigMod()
+    _, suite_cfg = mod.run(test_config=str(p))
+    assert suite_cfg.tests["t"].preproc_path == "foo.py"
+
+
+def test_parse_suite_config_preproc_omitted(tmp_path):
+    p = tmp_path / "tests.yaml"
+    p.write_text(_MINIMAL_SUITE_YAML)
+    mod = ParseSuiteConfigMod()
+    _, suite_cfg = mod.run(test_config=str(p))
+    assert suite_cfg.tests["t"].preproc_path is None
+
+
+def test_parse_suite_config_preproc_null(tmp_path):
+    yaml_text = """\
+rtl-buddy-filetype: test_config
+testbenches:
+  - name: "tb"
+    filelist: []
+tests:
+  - name: "t"
+    desc: "d"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb"
+    preproc: null
+"""
+    p = tmp_path / "tests.yaml"
+    p.write_text(yaml_text)
+    mod = ParseSuiteConfigMod()
+    _, suite_cfg = mod.run(test_config=str(p))
+    assert suite_cfg.tests["t"].preproc_path is None
+
+
+def test_parse_suite_config_lazy_model():
+    mod = ParseSuiteConfigMod()
+    _, suite_cfg = mod.run(test_config=str(_SUITE_FIXTURE))
+    for test in suite_cfg.tests.values():
+        assert isinstance(test.model, str)
+        assert len(test.model) > 0
+        assert isinstance(test.model_path, str)
+        assert test.suite_dir == _SUITE_FIXTURE.resolve().parent
+
+
+def test_parse_suite_config_not_found(tmp_path, logging_handler):
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(tmp_path / "nonexistent.yaml"))
+
+
+def test_parse_suite_config_is_directory(tmp_path, logging_handler):
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(tmp_path))
+
+
+def test_parse_suite_config_invalid_unicode(tmp_path, logging_handler):
+    bad = tmp_path / "tests.yaml"
+    bad.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(bad))
+
+
+def test_parse_suite_config_yaml_invalid(tmp_path, logging_handler):
+    bad = tmp_path / "tests.yaml"
+    bad.write_text("key: [\nnot closed")
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(bad))
+
+
+def test_parse_suite_config_serde_error(tmp_path, logging_handler):
+    bad = tmp_path / "tests.yaml"
+    bad.write_text("rtl-buddy-filetype: wrong_type\ntestbenches: []\ntests: []\n")
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(bad))
+
+
+def test_parse_suite_config_invalid_uvm_config(tmp_path, logging_handler):
+    bad = tmp_path / "tests.yaml"
+    bad.write_text("""\
+rtl-buddy-filetype: test_config
+testbenches:
+  - name: "tb"
+    filelist: []
+tests:
+  - name: "t"
+    desc: "d"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb"
+    uvm:
+      max_warns: -1
+""")
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(bad))
+
+
+def test_parse_suite_config_unknown_testbench(tmp_path, logging_handler):
+    bad = tmp_path / "tests.yaml"
+    bad.write_text("""\
+rtl-buddy-filetype: test_config
+testbenches:
+  - name: "tb_a"
+    filelist: []
+tests:
+  - name: "t"
+    desc: "d"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb_nonexistent"
+""")
+    mod = ParseSuiteConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(test_config=str(bad))
