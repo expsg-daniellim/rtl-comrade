@@ -7,7 +7,7 @@ from pathlib import Path
 import structlog
 from serde import serde
 
-from modules.rtl_buddy.schema import RootConfig, TestResult, KeyedValue, ModelConfig, Command, Proc
+from modules.rtl_buddy.schema import RootConfig, TestResult, KeyedValue, ModelConfig, Command, Proc, RtlBuilderConfig
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log = structlog.get_logger()
@@ -191,3 +191,24 @@ class RunProcessMod:
                     await asyncio.shield(proc.wait())
                 raise
         return Proc(command.key, rc=rc, stdout_path=command.stdout_path, stderr_path=command.stderr_path)
+
+
+class BuildCompileCmdMod:
+    def run(self, test:TestConfig, filelist:KeyedValue[Path], builder_cfg:RtlBuilderConfig, logs_dir:Path, work_dir:Path, builder_mode:str = "debug"):
+        test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
+        exe = builder_cfg.get_exe()
+        is_verilator = os.path.basename(exe).startswith("verilator")
+        build_dir = str(Path(work_dir) / f"obj_dir_{test_tag}")
+        simv = f"{build_dir}/simv" if is_verilator else builder_cfg.get_simv()
+        argv = [exe, *builder_cfg.get_compile_time_opts(builder_mode)]
+        if is_verilator:
+            argv += ["--Mdir", build_dir]
+        plusdefines = []
+        pd = test.get_plusdefines()
+        if pd is not None:
+            for k, v in pd.items():
+                plusdefines.append(f"+define+{k}={v}" if v is not None else f"+define+{k}")
+        argv += [*plusdefines, "-f", str(filelist.value)]
+        yield ("test", test)
+        yield ("simv", KeyedValue(test.key, simv))
+        yield ("command", Command(test.key, argv=argv, stdout_path=str(logs_dir / f"{test_tag}.compile.log"), stderr_path=str(logs_dir / f"{test_tag}.compile.err")))
