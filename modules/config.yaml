@@ -14,6 +14,7 @@ files:
 - file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc, class_name: RunPreprocMod }
+  - { name: write-filelist, class_name: WriteFilelistMod }
 - file: rtl_buddy/setup.py
   plugins:
   - { name: discover-config-file, class_name: DiscoverConfigFileMod }

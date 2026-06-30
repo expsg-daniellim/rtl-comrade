@@ -15,6 +15,7 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 RunPreprocMod = _mod.RunPreprocMod
+WriteFilelistMod = _mod.WriteFilelistMod
 
 
 def _make_tb():
@@ -135,5 +136,126 @@ def test_run_preproc_script_not_found(tmp_path, logging_handler):
     port, val = results[0]
     assert port == "fail"
     assert isinstance(val, TestResult)
+    assert val.result == "FAIL"
+    assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# WriteFilelistMod
+# ---------------------------------------------------------------------------
+
+
+def _make_model_kv(key:str, filelist=None, path=None, name="sandbox"):
+    return KeyedValue(key, ModelConfig(name=name, filelist=filelist or [], path=path))
+
+
+def test_write_filelist_success(tmp_path):
+    """Writes .f under work_dir, yields test then filelist; entries are work_dir-relative."""
+    (tmp_path / "rtl").mkdir()
+    (tmp_path / "rtl" / "model.sv").write_text("// model")
+    (tmp_path / "tb").mkdir()
+    (tmp_path / "tb" / "top.sv").write_text("// tb")
+    test = _make_test("basic", tb=TestbenchConfig(name="tb_top", filelist=["tb/top.sv"]))
+    model = _make_model_kv(test.key, filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
+    results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+    assert len(results) == 2
+    assert results[0] == ("test", test)
+    port, kv = results[1]
+    assert port == "filelist"
+    assert kv == KeyedValue(test.key, tmp_path / "run.basic.f")
+    content = (tmp_path / "run.basic.f").read_text()
+    assert content.startswith("// rtl-buddy generated model filelist\n")
+    assert "rtl/model.sv\n" in content
+    assert "tb/top.sv\n" in content
+
+
+def test_write_filelist_location_follows_work_dir(tmp_path, monkeypatch):
+    """The .f is written under work_dir regardless of the process CWD."""
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    (tmp_path / "rtl").mkdir()
+    (tmp_path / "rtl" / "model.sv").write_text("// model")
+    test = _make_test("loc", tb=TestbenchConfig(name="tb_top", filelist=[]))
+    model = _make_model_kv(test.key, filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
+    list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+    assert (tmp_path / "run.loc.f").exists()
+    assert not (other / "run.loc.f").exists()
+
+
+def test_write_filelist_contents_follow_work_dir(tmp_path, monkeypatch):
+    """Entry paths are relpath from work_dir, not from the process CWD."""
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "a.sv").write_text("// a")
+    test = _make_test("ct", tb=TestbenchConfig(name="tb_top", filelist=[]))
+    model = _make_model_kv(test.key, filelist=["src/a.sv"], path=str(tmp_path / "models.yaml"))
+    list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+    content = (tmp_path / "run.ct.f").read_text()
+    assert "src/a.sv\n" in content
+    assert ".." not in content  # no CWD-relative escape
+
+
+def test_write_filelist_tag_sanitization(tmp_path):
+    """Shell-unsafe characters in the test name are replaced with underscores in the filename."""
+    test = _make_test("a/b:c", tb=TestbenchConfig(name="tb_top", filelist=[]))
+    model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+    results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+    f_path = tmp_path / "run.a_b_c.f"
+    assert f_path.exists()
+    port, kv = results[1]
+    assert port == "filelist"
+    assert kv.value == f_path
+
+
+def test_write_filelist_resolve_error(tmp_path, logging_handler):
+    """Unresolvable -F include (KeyError) or missing testbench (AttributeError) emits fail."""
+    # -F include that does not exist → KeyError → filelist_resolve_error
+    test1 = _make_test("re1", tb=TestbenchConfig(name="tb_top", filelist=[]))
+    model1 = _make_model_kv(test1.key, filelist=["-F nonexistent.f"], path=str(tmp_path / "models.yaml"))
+    results1 = list(WriteFilelistMod().run(test=test1, model=model1, work_dir=tmp_path))
+    assert len(results1) == 1
+    assert results1[0][0] == "fail"
+    assert isinstance(results1[0][1], TestResult)
+    assert results1[0][1].result == "FAIL"
+    # missing testbench (tb=None) → AttributeError → filelist_resolve_error
+    test2 = _make_test("re2", tb=None)
+    model2 = _make_model_kv(test2.key, path=str(tmp_path / "models.yaml"))
+    results2 = list(WriteFilelistMod().run(test=test2, model=model2, work_dir=tmp_path))
+    assert len(results2) == 1
+    assert results2[0][0] == "fail"
+    assert results2[0][1].result == "FAIL"
+    assert logging_handler.failure is True
+
+
+def test_write_filelist_permission_error(tmp_path, logging_handler):
+    """A read-only work_dir triggers PermissionError → filelist_permission_denied → fail."""
+    work_dir = tmp_path / "readonly"
+    work_dir.mkdir()
+    work_dir.chmod(0o555)
+    test = _make_test("perm", tb=TestbenchConfig(name="tb_top", filelist=[]))
+    model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+    try:
+        results = list(WriteFilelistMod().run(test=test, model=model, work_dir=work_dir))
+    finally:
+        work_dir.chmod(0o755)
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert val.result == "FAIL"
+    assert logging_handler.failure is True
+
+
+def test_write_filelist_dir_not_found(tmp_path, logging_handler):
+    """A non-existent work_dir parent causes FileNotFoundError → filelist_dir_not_found → fail."""
+    missing = tmp_path / "nonexistent" / "subdir"
+    test = _make_test("dnf", tb=TestbenchConfig(name="tb_top", filelist=[]))
+    model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+    results = list(WriteFilelistMod().run(test=test, model=model, work_dir=missing))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
     assert val.result == "FAIL"
     assert logging_handler.failure is True
