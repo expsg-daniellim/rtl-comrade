@@ -78,7 +78,7 @@ omit = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests", "contracts/tests", "modules/tests"]
+testpaths = ["tests", "contracts/tests", "modules/tests", "graphs/tests"]
 
 [dependency-groups]
 dev = [
