@@ -10,6 +10,7 @@ import pytest
 import typer
 
 from rtl_comrade.testing import run_module_scenario
+from modules.rtl_buddy.schema import RootConfig
 
 _spec = importlib.util.spec_from_file_location(
     "modules_rtl_buddy_setup",
@@ -21,6 +22,9 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 DiscoverConfigFileMod = _mod.DiscoverConfigFileMod
 PrependCwdPathMod = _mod.PrependCwdPathMod
+ParseRootConfigMod = _mod.ParseRootConfigMod
+
+_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
 
 
 # ---------------------------------------------------------------------------
@@ -145,3 +149,70 @@ async def test_prepend_path_end_to_end(tmp_path, monkeypatch):
     )
     result = subprocess.run(["local_tool"])
     assert result.returncode == 0
+
+
+# ---------------------------------------------------------------------------
+# ParseRootConfigMod
+# ---------------------------------------------------------------------------
+
+
+def test_parse_root_config_valid():
+    mod = ParseRootConfigMod()
+    result = mod.run(path=_FIXTURE)
+    assert result is not None
+    port, root_cfg = result
+    assert port == "default"
+    assert isinstance(root_cfg, RootConfig)
+    assert root_cfg.cfg_rtl_reg.path == "design/regression.yaml"
+    assert len(root_cfg.platforms) == 2
+    assert root_cfg.platforms[0].os == "osx"
+    assert root_cfg.platforms[1].os == "server"
+    assert set(root_cfg.rtl_builder_cfgs.keys()) == {"verilator", "vcs"}
+    assert root_cfg.rtl_builder_cfgs["verilator"].get_name() == "verilator"
+    assert root_cfg.rtl_builder_cfgs["vcs"].get_name() == "vcs"
+
+
+def test_parse_root_config_verible_keys_ignored():
+    mod = ParseRootConfigMod()
+    result = mod.run(path=_FIXTURE)
+    assert result is not None
+    _, root_cfg = result
+    assert isinstance(root_cfg, RootConfig)
+    assert root_cfg.cfg_rtl_reg.path == "design/regression.yaml"
+    assert set(root_cfg.rtl_builder_cfgs.keys()) == {"verilator", "vcs"}
+
+
+def test_parse_root_config_nonexistent(logging_handler):
+    mod = ParseRootConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(path=Path("/nonexistent/path/root_config.yaml"))
+
+
+def test_parse_root_config_is_directory(tmp_path, logging_handler):
+    mod = ParseRootConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(path=tmp_path)
+
+
+def test_parse_root_config_non_utf8(tmp_path, logging_handler):
+    bad = tmp_path / "root_config.yaml"
+    bad.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
+    mod = ParseRootConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(path=bad)
+
+
+def test_parse_root_config_malformed_yaml(tmp_path, logging_handler):
+    bad = tmp_path / "root_config.yaml"
+    bad.write_text("key: [\nunot closed")
+    mod = ParseRootConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(path=bad)
+
+
+def test_parse_root_config_schema_mismatch(tmp_path, logging_handler):
+    bad = tmp_path / "root_config.yaml"
+    bad.write_text("rtl-buddy-filetype: wrong_type\ncfg-rtl-reg:\n  reg-cfg-path: x\n")
+    mod = ParseRootConfigMod()
+    with pytest.raises(typer.Exit):
+        mod.run(path=bad)
