@@ -107,3 +107,13 @@ class InterpretSimMod:
         else:
             yield ("test", test)
             yield ("proc", proc)
+
+
+class RoutePostMod:
+    def run(self, test:TestConfig, proc:Proc):
+        if test.uvm is not None:
+            yield ("uvm_test", test)
+            yield ("uvm_proc", proc)
+        else:
+            yield ("plain_test", test)
+            yield ("plain_proc", proc)
