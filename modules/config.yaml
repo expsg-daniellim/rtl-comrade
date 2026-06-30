@@ -35,3 +35,6 @@ files:
   - { name: filter-reglvl, class_name: FilterRegLvlMod }
   - { name: load-model, class_name: LoadModelMod }
   - { name: expand-sweep, class_name: ExpandSweepMod }
+- file: rtl_buddy/sim.py
+  plugins:
+  - { name: expand-runs, class_name: ExpandRunsMod }
