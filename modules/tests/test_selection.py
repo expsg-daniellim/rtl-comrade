@@ -14,6 +14,7 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 RouteListModeMod = _mod.RouteListModeMod
+ListTestNamesMod = _mod.ListTestNamesMod
 
 
 def _suite_cfg(tests=None):
@@ -55,3 +56,37 @@ def test_route_list_mode_empty_suite():
     port, result = mod.run(suite_cfg=cfg, list=False)
     assert port == "run"
     assert result is cfg
+
+
+# ---------------------------------------------------------------------------
+# ListTestNamesMod
+# ---------------------------------------------------------------------------
+
+
+def test_list_test_names_three_tests(capsys):
+    cfg = _suite_cfg({"alpha": None, "beta": None, "gamma": None})
+    mod = ListTestNamesMod()
+    result = mod.run(suite_cfg=cfg)
+    assert result is None
+    assert capsys.readouterr().out == "alpha  beta  gamma\n"
+
+
+def test_list_test_names_declaration_order(capsys):
+    cfg = _suite_cfg({"zebra": None, "alpha": None})
+    mod = ListTestNamesMod()
+    mod.run(suite_cfg=cfg)
+    assert capsys.readouterr().out == "zebra  alpha\n"
+
+
+def test_list_test_names_single(capsys):
+    cfg = _suite_cfg({"only": None})
+    mod = ListTestNamesMod()
+    mod.run(suite_cfg=cfg)
+    assert capsys.readouterr().out == "only\n"
+
+
+def test_list_test_names_empty(capsys):
+    cfg = _suite_cfg()
+    mod = ListTestNamesMod()
+    mod.run(suite_cfg=cfg)
+    assert capsys.readouterr().out == "\n"
