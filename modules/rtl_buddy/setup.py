@@ -1,4 +1,5 @@
 import os
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -65,3 +66,15 @@ class ParseRootConfigMod:
             log.fatal(f"failed to load {path}: {e}")
         except (SerdeError, MarkedYAMLError, ReaderError) as e:
             log.fatal(f"failed to load {path}: {e}")
+
+
+class SelectPlatformMod:
+    def run(self, root_cfg:RootConfig):
+        try:
+            uname = subprocess.run(["uname"], capture_output=True, text=True).stdout.strip()
+        except FileNotFoundError as e:
+            log.fatal("uname_unavailable", exc_info=e)
+        for platform_cfg in root_cfg.platforms:
+            if uname in platform_cfg.unames:
+                return ("default", platform_cfg)
+        log.fatal(f"cannot find cfg-platform for uname {uname}")

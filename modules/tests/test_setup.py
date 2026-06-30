@@ -10,7 +10,7 @@ import pytest
 import typer
 
 from rtl_comrade.testing import run_module_scenario
-from modules.rtl_buddy.schema import RootConfig
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField
 
 _spec = importlib.util.spec_from_file_location(
     "modules_rtl_buddy_setup",
@@ -23,6 +23,7 @@ _spec.loader.exec_module(_mod)
 DiscoverConfigFileMod = _mod.DiscoverConfigFileMod
 PrependCwdPathMod = _mod.PrependCwdPathMod
 ParseRootConfigMod = _mod.ParseRootConfigMod
+SelectPlatformMod = _mod.SelectPlatformMod
 
 _FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
 
@@ -216,3 +217,70 @@ def test_parse_root_config_schema_mismatch(tmp_path, logging_handler):
     mod = ParseRootConfigMod()
     with pytest.raises(typer.Exit):
         mod.run(path=bad)
+
+
+# ---------------------------------------------------------------------------
+# SelectPlatformMod
+# ---------------------------------------------------------------------------
+
+
+class _FakeProc:
+    def __init__(self, stdout):
+        self.stdout = stdout
+
+
+def _fake_uname(uname_str):
+    return lambda *a, **kw: _FakeProc(uname_str)
+
+
+def _root_cfg(*uname_lists):
+    platforms = [
+        PlatformConfig(os=f"os{i}", unames=list(ul), builder=f"b{i}")
+        for i, ul in enumerate(uname_lists)
+    ]
+    return RootConfig(platforms=platforms, rtl_builder_cfgs={}, cfg_rtl_reg=RootRtlField(path="x"))
+
+
+def test_select_platform_first_match(monkeypatch, logging_handler):
+    root_cfg = _root_cfg(["Darwin"], ["Linux"])
+    monkeypatch.setattr(subprocess, "run", _fake_uname("Darwin"))
+    mod = SelectPlatformMod()
+    port, cfg = mod.run(root_cfg=root_cfg)
+    assert port == "default"
+    assert cfg is root_cfg.platforms[0]
+
+
+def test_select_platform_later_match(monkeypatch, logging_handler):
+    root_cfg = _root_cfg(["Darwin"], ["Linux"])
+    monkeypatch.setattr(subprocess, "run", _fake_uname("Linux"))
+    mod = SelectPlatformMod()
+    port, cfg = mod.run(root_cfg=root_cfg)
+    assert port == "default"
+    assert cfg is root_cfg.platforms[1]
+
+
+def test_select_platform_first_wins_overlap(monkeypatch, logging_handler):
+    root_cfg = _root_cfg(["Darwin"], ["Darwin", "Linux"])
+    monkeypatch.setattr(subprocess, "run", _fake_uname("Darwin"))
+    mod = SelectPlatformMod()
+    port, cfg = mod.run(root_cfg=root_cfg)
+    assert port == "default"
+    assert cfg is root_cfg.platforms[0]
+
+
+def test_select_platform_no_match(monkeypatch, logging_handler):
+    root_cfg = _root_cfg(["Darwin"], ["Linux"])
+    monkeypatch.setattr(subprocess, "run", _fake_uname("IRIX"))
+    mod = SelectPlatformMod()
+    with pytest.raises(typer.Exit):
+        mod.run(root_cfg=root_cfg)
+
+
+def test_select_platform_uname_not_found(monkeypatch, logging_handler):
+    root_cfg = _root_cfg(["Darwin"])
+    def raise_fnf(*a, **kw):
+        raise FileNotFoundError("no uname binary")
+    monkeypatch.setattr(subprocess, "run", raise_fnf)
+    mod = SelectPlatformMod()
+    with pytest.raises(typer.Exit):
+        mod.run(root_cfg=root_cfg)
