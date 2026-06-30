@@ -17,6 +17,7 @@ files:
   - { name: write-filelist, class_name: WriteFilelistMod }
   - { name: run-process, class_name: RunProcessMod }
   - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
+  - { name: interpret-compile, class_name: InterpretCompileMod }
 - file: rtl_buddy/setup.py
   plugins:
   - { name: discover-config-file, class_name: DiscoverConfigFileMod }

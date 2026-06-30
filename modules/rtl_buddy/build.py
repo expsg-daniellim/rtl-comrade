@@ -212,3 +212,23 @@ class BuildCompileCmdMod:
         yield ("test", test)
         yield ("simv", KeyedValue(test.key, simv))
         yield ("command", Command(test.key, argv=argv, stdout_path=str(logs_dir / f"{test_tag}.compile.log"), stderr_path=str(logs_dir / f"{test_tag}.compile.err")))
+
+
+class InterpretCompileMod:
+    def run(self, test:TestConfig, simv:KeyedValue[str], proc:Proc):
+        if proc.rc == 0:
+            yield ("test", test)
+            yield ("simv", simv)
+            return
+        stderr_tail = None
+        try:
+            with open(proc.stderr_path, "r", errors="replace") as f:
+                content = f.read()
+            stderr_tail = content[-4096:] if len(content) > 4096 else content
+        except OSError:
+            pass
+        log_kw = dict(key=test.key, test_name=test.get_name(), rc=proc.rc, stderr_path=str(proc.stderr_path))
+        if stderr_tail is not None:
+            log_kw["stderr_tail"] = stderr_tail
+        log.error("compile_failed", **log_kw)
+        yield ("fail", TestResult.compile_fail(test.key, test.get_name()))

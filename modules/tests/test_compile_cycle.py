@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import KeyedValue, Command
+from modules.rtl_buddy.schema import KeyedValue, Command, TestResult, Proc
 from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -19,6 +19,7 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 BuildCompileCmdMod = _mod.BuildCompileCmdMod
+InterpretCompileMod = _mod.InterpretCompileMod
 
 
 def _make_tb():
@@ -202,3 +203,66 @@ def test_bad_builder_mode(tmp_path, logging_handler):
     mod = BuildCompileCmdMod()
     with pytest.raises(typer.Exit):
         list(mod.run(test=test, filelist=filelist, builder_cfg=builder_cfg, logs_dir=logs_dir, work_dir=tmp_path, builder_mode="nonexistent"))
+
+
+# ---------------------------------------------------------------------------
+# InterpretCompileMod (spec 07b)
+# ---------------------------------------------------------------------------
+
+
+def _make_proc(key, rc, tmp_path, stderr_content=None):
+    stdout_path = tmp_path / "compile.log"
+    stderr_path = tmp_path / "compile.err"
+    if stderr_content is not None:
+        stderr_path.write_text(stderr_content)
+    return Proc(key=key, rc=rc, stdout_path=str(stdout_path), stderr_path=str(stderr_path))
+
+
+def test_interpret_compile_success(tmp_path):
+    test = _make_test("t1")
+    simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+    proc = _make_proc(test.key, rc=0, tmp_path=tmp_path, stderr_content="")
+    mod = InterpretCompileMod()
+    results = list(mod.run(test=test, simv=simv, proc=proc))
+    assert results == [("test", test), ("simv", simv)]
+
+
+def test_interpret_compile_fail_rc2_with_stderr(tmp_path, logging_handler):
+    test = _make_test("t1")
+    simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+    proc = _make_proc(test.key, rc=2, tmp_path=tmp_path, stderr_content="Error: syntax error near 'module'\n")
+    mod = InterpretCompileMod()
+    results = list(mod.run(test=test, simv=simv, proc=proc))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert val == TestResult.compile_fail(test.key, test.get_name())
+    assert logging_handler.failure is True
+
+
+def test_interpret_compile_signal_fail(tmp_path, logging_handler):
+    test = _make_test("t1")
+    simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+    proc = _make_proc(test.key, rc=-11, tmp_path=tmp_path, stderr_content="Segmentation fault\n")
+    mod = InterpretCompileMod()
+    results = list(mod.run(test=test, simv=simv, proc=proc))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert val == TestResult.compile_fail(test.key, test.get_name())
+    assert logging_handler.failure is True
+
+
+def test_interpret_compile_missing_stderr(tmp_path, logging_handler):
+    test = _make_test("t1")
+    simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+    proc = Proc(key=test.key, rc=1, stdout_path=str(tmp_path / "compile.log"), stderr_path=str(tmp_path / "missing.err"))
+    mod = InterpretCompileMod()
+    results = list(mod.run(test=test, simv=simv, proc=proc))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert val == TestResult.compile_fail(test.key, test.get_name())
+    assert logging_handler.failure is True
