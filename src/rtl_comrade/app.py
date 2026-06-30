@@ -137,6 +137,7 @@ class App:
 		except click.UsageError as e:
 			log.error('usage_error', context='harness.app.cli', message=e.message)
 			exit_code = e.exit_code
+
 		return exit_code or 0
 
 	def setup_logging(self, processors:list[LoggingPlugin], handlers:list[LoggingPlugin], include_default:bool):
