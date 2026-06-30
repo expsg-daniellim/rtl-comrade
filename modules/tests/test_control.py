@@ -1,0 +1,247 @@
+"""Tests for modules/rtl_buddy/control.py — EarlyStopGateMod (spec 10a)."""
+
+import importlib.util
+from pathlib import Path
+
+import pytest
+import typer
+
+from modules.rtl_buddy.schema import TestResult, RunDepth, KeyedValue, ModelConfig, Proc
+from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
+
+_spec = importlib.util.spec_from_file_location(
+    "modules_rtl_buddy_control",
+    Path(__file__).parent.parent / "rtl_buddy" / "control.py",
+)
+assert _spec is not None
+assert _spec.loader is not None
+_mod = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_mod)
+EarlyStopGateMod = _mod.EarlyStopGateMod
+
+
+def _make_tb():
+    return TestbenchConfig(name="tb_top", filelist=["rtl/top.sv"])
+
+
+def _make_test(name="t1"):
+    return TestConfig(
+        name=name,
+        desc=f"{name} test",
+        model="sandbox",
+        model_path="models.yaml",
+        suite_dir=Path("/design/verif"),
+        reglvl=None,
+        pa=None,
+        pd=None,
+        uvm=None,
+        preproc_path=None,
+        postproc_path=None,
+        sweep_path=None,
+        tb=_make_tb(),
+        timeout=None,
+    )
+
+
+def _make_model(key):
+    return KeyedValue(key, ModelConfig(name="sandbox", filelist=["rtl/model.sv"]))
+
+
+def _make_simv(key):
+    return KeyedValue(key, "/build/obj_dir_t1/simv")
+
+
+def _make_proc(key, tmp_path):
+    return Proc(key=key, rc=0, stdout_path=str(tmp_path / "sim.log"), stderr_path=str(tmp_path / "sim.err"))
+
+
+def _make_mod(phase):
+    return EarlyStopGateMod(config=EarlyStopGateMod.Config(phase=phase))
+
+
+_ORDER = [d.value for d in RunDepth]  # ["pre", "comp", "sim", "post"]
+
+
+# ---------------------------------------------------------------------------
+# Parametrised matrix — all three phases × all four early_stop values
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("phase,early_stop", [
+    (phase, es) for phase in ("pre", "comp", "sim") for es in ("pre", "comp", "sim", "post")
+])
+def test_matrix(phase, early_stop, tmp_path):
+    test = _make_test()
+    if phase == "pre":
+        edges = {"test": test, "model": _make_model(test.key)}
+    elif phase == "comp":
+        edges = {"test": test, "simv": _make_simv(test.key)}
+    else:
+        edges = {"test": test, "proc": _make_proc(test.key, tmp_path)}
+
+    mod = _make_mod(phase)
+    results = list(mod.run(early_stop=early_stop, **edges))
+    should_stop = _ORDER.index(early_stop) <= _ORDER.index(phase)
+
+    if should_stop:
+        assert len(results) == 1
+        port, val = results[0]
+        assert port == "stop"
+        assert val == TestResult.early_stop(test.key, test.get_name(), f"Stopped early at {phase}")
+    else:
+        assert len(results) == len(edges)
+        result_dict = dict(results)
+        for name, payload in edges.items():
+            assert result_dict[name] == payload
+
+
+# ---------------------------------------------------------------------------
+# Co-gating — gate-pre: go forwards both edges, stop drops both
+# ---------------------------------------------------------------------------
+
+
+def test_cogate_pre_go():
+    test = _make_test()
+    model = _make_model(test.key)
+    mod = _make_mod("pre")
+    results = list(mod.run(early_stop="comp", test=test, model=model))
+    assert len(results) == 2
+    assert ("test", test) in results
+    assert ("model", model) in results
+
+
+def test_cogate_pre_stop():
+    test = _make_test()
+    model = _make_model(test.key)
+    mod = _make_mod("pre")
+    results = list(mod.run(early_stop="pre", test=test, model=model))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "stop"
+    assert val == TestResult.early_stop(test.key, test.get_name(), "Stopped early at pre")
+
+
+# ---------------------------------------------------------------------------
+# Co-gating — gate-comp: go forwards both edges, stop drops both
+# ---------------------------------------------------------------------------
+
+
+def test_cogate_comp_go():
+    test = _make_test()
+    simv = _make_simv(test.key)
+    mod = _make_mod("comp")
+    results = list(mod.run(early_stop="sim", test=test, simv=simv))
+    assert len(results) == 2
+    assert ("test", test) in results
+    assert ("simv", simv) in results
+
+
+def test_cogate_comp_stop():
+    test = _make_test()
+    simv = _make_simv(test.key)
+    mod = _make_mod("comp")
+    results = list(mod.run(early_stop="comp", test=test, simv=simv))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "stop"
+    assert val == TestResult.early_stop(test.key, test.get_name(), "Stopped early at comp")
+
+
+# ---------------------------------------------------------------------------
+# Co-gating — gate-sim: go forwards both edges, stop drops both
+# ---------------------------------------------------------------------------
+
+
+def test_cogate_sim_go(tmp_path):
+    test = _make_test()
+    proc = _make_proc(test.key, tmp_path)
+    mod = _make_mod("sim")
+    results = list(mod.run(early_stop="post", test=test, proc=proc))
+    assert len(results) == 2
+    assert ("test", test) in results
+    assert ("proc", proc) in results
+
+
+def test_cogate_sim_stop(tmp_path):
+    test = _make_test()
+    proc = _make_proc(test.key, tmp_path)
+    mod = _make_mod("sim")
+    results = list(mod.run(early_stop="sim", test=test, proc=proc))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "stop"
+    assert val == TestResult.early_stop(test.key, test.get_name(), "Stopped early at sim")
+
+
+# ---------------------------------------------------------------------------
+# Boundary: own-phase stop is inclusive (early_stop <= phase → stop)
+# ---------------------------------------------------------------------------
+
+
+def test_own_phase_stops():
+    test = _make_test()
+    simv = _make_simv(test.key)
+    mod = _make_mod("comp")
+    results = list(mod.run(early_stop="comp", test=test, simv=simv))
+    assert len(results) == 1
+    port, _ = results[0]
+    assert port == "stop"
+
+
+# ---------------------------------------------------------------------------
+# Boundary: default early_stop="post" never stops any phase
+# ---------------------------------------------------------------------------
+
+
+def test_default_post_never_stops_pre():
+    test = _make_test()
+    model = _make_model(test.key)
+    mod = _make_mod("pre")
+    results = list(mod.run(test=test, model=model))
+    assert all(port != "stop" for port, _ in results)
+    assert len(results) == 2
+
+
+def test_default_post_never_stops_comp():
+    test = _make_test()
+    simv = _make_simv(test.key)
+    mod = _make_mod("comp")
+    results = list(mod.run(test=test, simv=simv))
+    assert all(port != "stop" for port, _ in results)
+    assert len(results) == 2
+
+
+def test_default_post_never_stops_sim(tmp_path):
+    test = _make_test()
+    proc = _make_proc(test.key, tmp_path)
+    mod = _make_mod("sim")
+    results = list(mod.run(test=test, proc=proc))
+    assert all(port != "stop" for port, _ in results)
+    assert len(results) == 2
+
+
+# ---------------------------------------------------------------------------
+# Stop emits no log.error/log.fatal — logging_handler.failure stays False
+# ---------------------------------------------------------------------------
+
+
+def test_stop_no_failure(logging_handler):
+    test = _make_test()
+    simv = _make_simv(test.key)
+    mod = _make_mod("comp")
+    results = list(mod.run(early_stop="comp", test=test, simv=simv))
+    assert len(results) == 1
+    assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# Invalid early_stop → log.fatal → typer.Exit
+# ---------------------------------------------------------------------------
+
+
+def test_invalid_early_stop(logging_handler):
+    test = _make_test()
+    simv = _make_simv(test.key)
+    mod = _make_mod("comp")
+    with pytest.raises(typer.Exit):
+        list(mod.run(early_stop="bogus", test=test, simv=simv))
