@@ -178,7 +178,9 @@ class DeriveSeedModeMod:
 
 class RouteListModeMod:
     def run(self, suite_cfg:SuiteConfig, list:bool = False):
-        return ("list", suite_cfg) if list else ("run", suite_cfg)
+        if list:
+            return ("list", suite_cfg)
+        return ("run", suite_cfg)
 
 
 class ListTestNamesMod:
