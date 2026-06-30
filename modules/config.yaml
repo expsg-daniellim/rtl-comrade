@@ -54,3 +54,4 @@ files:
   plugins:
   - { name: summarise-results, class_name: SummariseResultsMod }
   - { name: print-summary, class_name: PrintSummaryMod }
+  - { name: write-summary-log, class_name: WriteSummaryLogMod }

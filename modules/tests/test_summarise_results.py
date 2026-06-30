@@ -312,3 +312,52 @@ def test_print_summary_content_matches_input(capsys, monkeypatch):
     out = capsys.readouterr().out.rstrip("\n")
     plain = re.sub(r'\x1b\[[^m]*m', '', out)
     assert plain == table
+
+
+WriteSummaryLogMod = _mod.WriteSummaryLogMod
+
+
+# ---------------------------------------------------------------------------
+# WriteSummaryLogMod — file sink (spec 10f)
+# ---------------------------------------------------------------------------
+
+
+def test_write_summary_log_writes_table_plus_newline(tmp_path):
+    log_file = tmp_path / "rtl_buddy.log"
+    table = "test_a                         PASS     desc"
+    mod = WriteSummaryLogMod(WriteSummaryLogMod.Config(log_path=log_file))
+    mod.run(table=table)
+    assert log_file.read_text(encoding="utf-8") == table + "\n"
+
+
+def test_write_summary_log_plain_no_ansi(tmp_path):
+    log_file = tmp_path / "rtl_buddy.log"
+    table = "test_a                         PASS     desc\ntest_b                         FAIL     error"
+    mod = WriteSummaryLogMod(WriteSummaryLogMod.Config(log_path=log_file))
+    mod.run(table=table)
+    assert "\x1b" not in log_file.read_text(encoding="utf-8")
+
+
+def test_write_summary_log_verbatim_with_verdict_tokens(tmp_path):
+    log_file = tmp_path / "rtl_buddy.log"
+    table = "test_a                         PASS     desc\ntest_b                         FAIL     error\ntest_c                         NA       stopped"
+    mod = WriteSummaryLogMod(WriteSummaryLogMod.Config(log_path=log_file))
+    mod.run(table=table)
+    assert log_file.read_text(encoding="utf-8") == table + "\n"
+
+
+def test_write_summary_log_truncate_per_run(tmp_path):
+    log_file = tmp_path / "rtl_buddy.log"
+    table1 = "first table content"
+    table2 = "second table content"
+    WriteSummaryLogMod(WriteSummaryLogMod.Config(log_path=log_file)).run(table=table1)
+    WriteSummaryLogMod(WriteSummaryLogMod.Config(log_path=log_file)).run(table=table2)
+    content = log_file.read_text(encoding="utf-8")
+    assert content == table2 + "\n"
+    assert table1 not in content
+
+
+def test_write_summary_log_write_failure_logs_error_and_sets_failure(tmp_path, logging_handler):
+    mod = WriteSummaryLogMod(WriteSummaryLogMod.Config(log_path=tmp_path))  # directory → OSError
+    mod.run(table="some table")  # must not raise
+    assert logging_handler.failure is True

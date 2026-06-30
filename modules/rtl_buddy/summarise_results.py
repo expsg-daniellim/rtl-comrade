@@ -1,4 +1,5 @@
-from __future__ import annotations
+from pathlib import Path
+from serde import serde
 import structlog
 
 log = structlog.get_logger()
@@ -40,3 +41,19 @@ def colourise(text:str) -> str:  # mirror PassFailFormatter (rtl_buddy.py:52-60)
 class PrintSummaryMod:
     def run(self, table):
         print(colourise(table) if sys.stdout.isatty() else table)
+
+
+class WriteSummaryLogMod:
+    @serde
+    class Config:
+        log_path: Path = Path("rtl_buddy.log")
+
+    def __init__(self, config):
+        self.log_path = config.log_path
+
+    def run(self, table):
+        try:
+            with open(self.log_path, "w", encoding="utf-8") as f:
+                f.write(table + "\n")
+        except OSError as e:
+            log.error("summary_log_write_failed", path=str(self.log_path), err=e.strerror, errno=e.errno)
