@@ -26,3 +26,4 @@ files:
   - { name: list-test-names, class_name: ListTestNamesMod }
   - { name: select-tests, class_name: SelectTestsMod }
   - { name: filter-reglvl, class_name: FilterRegLvlMod }
+  - { name: load-model, class_name: LoadModelMod }

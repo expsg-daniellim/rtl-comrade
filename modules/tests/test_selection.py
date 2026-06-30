@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import SuiteConfig, TestResult
+from modules.rtl_buddy.schema import SuiteConfig, TestResult, KeyedValue, ModelConfig
 from modules.rtl_buddy.schema.suite import TestbenchConfig, TestConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -21,6 +21,10 @@ RouteListModeMod = _mod.RouteListModeMod
 ListTestNamesMod = _mod.ListTestNamesMod
 SelectTestsMod = _mod.SelectTestsMod
 FilterRegLvlMod = _mod.FilterRegLvlMod
+LoadModelMod = _mod.LoadModelMod
+ModelConfigFile = _mod.ModelConfigFile
+
+_MODELS_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "design" / "sandbox" / "models.yaml"
 
 
 def _suite_cfg(tests=None):
@@ -254,3 +258,100 @@ def test_filter_reglvl_below_lower_bound(logging_handler):
     port, result = mod.run(test=test, builder_cfg=builder_cfg, start_level=1)
     assert port == "skip"
     assert result == TestResult.skip("foo", "foo", "lvl 0 < cmd start_level 1")
+
+
+# ---------------------------------------------------------------------------
+# LoadModelMod helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_model_test(name="alu", model="test_module", model_path="models.yaml", suite_dir=None, **overrides):
+    return _make_test(name, model=model, model_path=model_path, suite_dir=suite_dir or _MODELS_FIXTURE.parent, **overrides)
+
+
+# ---------------------------------------------------------------------------
+# LoadModelMod
+# ---------------------------------------------------------------------------
+
+
+def test_load_model_happy_path(logging_handler):
+    test = _make_model_test()
+    mod = LoadModelMod()
+    results = list(mod.run(test=test))
+    assert len(results) == 2
+    port0, val0 = results[0]
+    port1, val1 = results[1]
+    assert port0 == "test"
+    assert val0 is test
+    assert test.model == "test_module"  # name string unchanged — not overwritten with ModelConfig
+    assert port1 == "model"
+    assert isinstance(val1, KeyedValue)
+    assert val1.key == test.key
+    assert val1.value.name == "test_module"
+    assert val1.value.filelist == ["-F test_modules.f"]
+    assert val1.value.path == str(_MODELS_FIXTURE)
+    assert logging_handler.failure is False
+
+
+def test_load_model_raw_shape_no_path():
+    from serde.yaml import from_yaml as _from_yaml
+    with open(_MODELS_FIXTURE) as f:
+        file_obj = _from_yaml(ModelConfigFile, f.read())
+    for item in file_obj.models:
+        assert hasattr(item, 'name')
+        assert hasattr(item, 'filelist')
+        assert not hasattr(item, 'path')
+    # emitted ModelConfig.path is set at construction from resolved, not from YAML
+    test = _make_model_test()
+    mod = LoadModelMod()
+    results = list(mod.run(test=test))
+    _, val = results[1]
+    assert val.value.path == str(_MODELS_FIXTURE)
+
+
+def test_load_model_not_in_file(logging_handler):
+    test = _make_model_test(model="nonexistent_model")
+    mod = LoadModelMod()
+    results = list(mod.run(test=test))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+
+
+def test_load_model_file_not_found(logging_handler):
+    test = _make_model_test(model_path="nonexistent_models.yaml")
+    mod = LoadModelMod()
+    results = list(mod.run(test=test))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+
+
+def test_load_model_parse_error(tmp_path, logging_handler):
+    bad = tmp_path / "models.yaml"
+    bad.write_text("rtl-buddy-filetype: bad_type\nmodels: []\n")
+    test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
+    mod = LoadModelMod()
+    results = list(mod.run(test=test))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True
+
+
+def test_load_model_empty_models_list(tmp_path, logging_handler):
+    empty = tmp_path / "models.yaml"
+    empty.write_text("rtl-buddy-filetype: model_config\nmodels: []\n")
+    test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
+    mod = LoadModelMod()
+    results = list(mod.run(test=test))
+    assert len(results) == 1
+    port, val = results[0]
+    assert port == "fail"
+    assert isinstance(val, TestResult)
+    assert logging_handler.failure is True

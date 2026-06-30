@@ -10,7 +10,7 @@ from yaml.error import MarkedYAMLError
 from yaml.reader import ReaderError
 import structlog
 
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode, TestResult
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode, TestResult, KeyedValue, ModelConfig
 
 log = structlog.get_logger()
 
@@ -203,3 +203,52 @@ class FilterRegLvlMod:
             return ("test", test)
         result = TestResult.skip(test.key, test.get_name(), desc)
         return ("skip", result)
+
+
+@serde
+@dataclass
+class ModelConfigFileItem:
+    name:str
+    filelist:list[str]
+
+
+@serde
+@dataclass
+class ModelConfigFile:
+    filetype:Literal['model_config'] = field(rename='rtl-buddy-filetype')
+    models:list[ModelConfigFileItem] = field(default_factory=list)
+
+
+class LoadModelMod:
+    def run(self, test:TestConfig):
+        resolved = test.suite_dir / test.model_path
+        try:
+            with open(resolved) as f:
+                file = from_yaml(ModelConfigFile, f.read())
+            item = next((m for m in file.models if m.name == test.model), None)
+            if item is None:
+                raise LookupError(f"model {test.model!r} not in {resolved}")
+            model = ModelConfig(name=item.name, filelist=item.filelist, path=str(resolved))
+            yield ("test", test)
+            yield ("model", KeyedValue(test.key, model))
+        except FileNotFoundError:
+            log.error("model_file_not_found", key=test.key, test_name=test.get_name(), model_path=str(resolved))
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"models.yaml not found: {resolved}"))
+        except IsADirectoryError:
+            log.error("model_is_directory", key=test.key, test_name=test.get_name(), model_path=str(resolved))
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"{resolved} is a directory"))
+        except PermissionError as e:
+            log.error("model_permission_denied", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read {resolved}"))
+        except UnicodeDecodeError as e:
+            log.error("model_invalid_unicode", key=test.key, test_name=test.get_name(), model_path=str(resolved), reason=e.reason)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"{resolved} is not valid UTF-8"))
+        except (SerdeError, MarkedYAMLError, ReaderError) as e:
+            log.error("model_parse_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=str(e))
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"malformed {resolved}: {e}"))
+        except LookupError:
+            log.error("model_not_found", key=test.key, test_name=test.get_name(), model_path=str(resolved), model=test.model)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"model {test.model!r} not in {resolved}"))
+        except OSError as e:
+            log.error("model_read_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror, errno=e.errno)
+            yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read {resolved}"))
