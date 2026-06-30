@@ -24,3 +24,4 @@ files:
   - { name: derive-seed-mode, class_name: DeriveSeedModeMod }
   - { name: route-list-mode, class_name: RouteListModeMod }
   - { name: list-test-names, class_name: ListTestNamesMod }
+  - { name: select-tests, class_name: SelectTestsMod }

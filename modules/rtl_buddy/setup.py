@@ -184,3 +184,9 @@ class RouteListModeMod:
 class ListTestNamesMod:
     def run(self, suite_cfg:SuiteConfig):
         print("  ".join(suite_cfg.get_test_names()))
+
+
+class SelectTestsMod:
+    def run(self, suite_cfg:SuiteConfig, test_name:str = ""):
+        for t in suite_cfg.get_tests(test_name or None):
+            yield ("test", t)
