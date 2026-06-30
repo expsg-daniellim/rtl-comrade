@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RandSeed
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, Proc, RandSeed, RandSeedDone
 from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -23,6 +23,7 @@ ExpandRunsMod = _mod.ExpandRunsMod
 ResolveSeedMod = _mod.ResolveSeedMod
 run_suffix = _mod.run_suffix
 BuildSimCmdMod = _mod.BuildSimCmdMod
+WriteRandseedMod = _mod.WriteRandseedMod
 
 
 def _make_tb():
@@ -385,3 +386,99 @@ def test_build_sim_cmd_bad_builder_mode(logging_handler):
     mod = BuildSimCmdMod()
     with pytest.raises(typer.Exit):
         list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="nonexistent", logs_dir=Path("/logs")))
+
+
+# ---------------------------------------------------------------------------
+# WriteRandseedMod (spec 08d)
+# ---------------------------------------------------------------------------
+
+
+def _make_randseed(key, tmp_path, seed=12345, argv=None):
+    if argv is None:
+        argv = ["/build/simv", "+ntb_random_seed=12345"]
+    rs_path = str(tmp_path / f"{key}.randseed")
+    return RandSeed(key=key, seed=seed, randseed_path=rs_path, argv=argv)
+
+
+def _make_proc(key):
+    return Proc(key=key, rc=0, stdout_path=Path("/tmp/sim.log"), stderr_path=Path("/tmp/sim.err"))
+
+
+def test_write_randseed_no_hier_inst_seed(tmp_path):
+    key = "mytest"
+    randseed = _make_randseed(key, tmp_path)
+    proc = _make_proc(key)
+    mod = WriteRandseedMod()
+    result = mod.run(randseed=randseed, proc=proc, work_dir=tmp_path)
+    assert result == ("randseed_done", RandSeedDone(key))
+    assert Path(randseed.randseed_path).read_text() == f"{randseed.seed}\n"
+
+
+def test_write_randseed_custom_logs_dir(tmp_path):
+    key = "mytest"
+    custom_logs = tmp_path / "custom_logs"
+    custom_logs.mkdir()
+    rs_path = str(custom_logs / "mytest.randseed")
+    randseed = RandSeed(key=key, seed=99, randseed_path=rs_path, argv=["/simv"])
+    proc = _make_proc(key)
+    mod = WriteRandseedMod()
+    mod.run(randseed=randseed, proc=proc, work_dir=tmp_path)
+    assert Path(rs_path).read_text() == "99\n"
+
+
+def test_write_randseed_hier_inst_seed_appended(tmp_path):
+    key = "mytest"
+    argv = ["/build/simv", "hier_inst_seed"]
+    randseed = _make_randseed(key, tmp_path, seed=42, argv=argv)
+    proc = _make_proc(key)
+    hier_file = tmp_path / "HierInstanceSeed.txt"
+    hier_file.write_text("inst_a 111\ninst_b 222\n")
+    mod = WriteRandseedMod()
+    result = mod.run(randseed=randseed, proc=proc, work_dir=tmp_path)
+    assert result == ("randseed_done", RandSeedDone(key))
+    content = Path(randseed.randseed_path).read_text()
+    assert content.startswith(f"{randseed.seed}\n")
+    assert "inst_a 111\n" in content
+    assert "inst_b 222\n" in content
+
+
+def test_write_randseed_reads_from_work_dir_not_cwd(tmp_path, monkeypatch):
+    other_dir = tmp_path / "other"
+    other_dir.mkdir()
+    work_dir = tmp_path / "work"
+    work_dir.mkdir()
+    key = "mytest"
+    argv = ["/build/simv", "hier_inst_seed"]
+    randseed = RandSeed(key=key, seed=7, randseed_path=str(work_dir / "mytest.randseed"), argv=argv)
+    proc = _make_proc(key)
+    (work_dir / "HierInstanceSeed.txt").write_text("inst_x 555\n")
+    monkeypatch.chdir(other_dir)
+    mod = WriteRandseedMod()
+    result = mod.run(randseed=randseed, proc=proc, work_dir=work_dir)
+    assert result == ("randseed_done", RandSeedDone(key))
+    content = Path(randseed.randseed_path).read_text()
+    assert "inst_x 555\n" in content
+
+
+def test_write_randseed_no_hier_inst_seed_in_argv_no_open(tmp_path):
+    key = "mytest"
+    argv = ["/build/simv", "+ntb_random_seed=5"]
+    randseed = _make_randseed(key, tmp_path, seed=5, argv=argv)
+    proc = _make_proc(key)
+    # HierInstanceSeed.txt is intentionally absent — if opened, an OSError would result
+    mod = WriteRandseedMod()
+    result = mod.run(randseed=randseed, proc=proc, work_dir=tmp_path)
+    assert result == ("randseed_done", RandSeedDone(key))
+    assert Path(randseed.randseed_path).read_text() == f"{randseed.seed}\n"
+
+
+def test_write_randseed_missing_hier_inst_seed_file(tmp_path, logging_handler):
+    key = "mytest"
+    argv = ["/build/simv", "hier_inst_seed"]
+    randseed = _make_randseed(key, tmp_path, seed=3, argv=argv)
+    proc = _make_proc(key)
+    # HierInstanceSeed.txt is absent — FileNotFoundError should be caught
+    mod = WriteRandseedMod()
+    result = mod.run(randseed=randseed, proc=proc, work_dir=tmp_path)
+    assert result == ("randseed_done", RandSeedDone(key))
+    assert logging_handler.failure is True

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import structlog
 
-from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RtlBuilderConfig, Command, RandSeed
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RtlBuilderConfig, Command, Proc, RandSeed, RandSeedDone
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log = structlog.get_logger()
@@ -70,3 +70,15 @@ class BuildSimCmdMod:
         yield ("command", Command(test.key, argv=argv, stdout_path=log_path, stderr_path=err_path))
         yield ("timeout", KeyedValue(test.key, float(timeout)))
         yield ("randseed", RandSeed(test.key, seed=seed.value, randseed_path=rs_path, argv=argv))
+
+
+class WriteRandseedMod:
+    def run(self, randseed:RandSeed, proc:Proc, work_dir:Path):  # proc joined as a completion gate (rc unread); work_dir persistent
+        try:
+            Path(randseed.randseed_path).write_text(f"{randseed.seed}\n")
+            if "hier_inst_seed" in randseed.argv:  # rtl_buddy membership check against the sim argv
+                with open(Path(work_dir) / "HierInstanceSeed.txt") as f, Path(randseed.randseed_path).open("a") as out:
+                    out.writelines(f)  # read from work_dir (where the sim dropped it), not ambient CWD (rtl_buddy vlog_sim.py:263-269 parity)
+        except OSError as e:  # FileNotFoundError (missing HierInstanceSeed.txt) is an OSError subclass
+            log.error("randseed_write_failed", key=randseed.key, path=randseed.randseed_path, exc_info=e)
+        return ("randseed_done", RandSeedDone(randseed.key))  # ordering signal emitted regardless, so link-latest can't dangle
