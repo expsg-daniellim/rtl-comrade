@@ -10,7 +10,7 @@ import pytest
 import typer
 
 from rtl_comrade.testing import run_module_scenario
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig
 
 _spec = importlib.util.spec_from_file_location(
     "modules_rtl_buddy_setup",
@@ -24,6 +24,7 @@ DiscoverConfigFileMod = _mod.DiscoverConfigFileMod
 PrependCwdPathMod = _mod.PrependCwdPathMod
 ParseRootConfigMod = _mod.ParseRootConfigMod
 SelectPlatformMod = _mod.SelectPlatformMod
+ResolveBuilderMod = _mod.ResolveBuilderMod
 
 _FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
 
@@ -284,3 +285,62 @@ def test_select_platform_uname_not_found(monkeypatch, logging_handler):
     mod = SelectPlatformMod()
     with pytest.raises(typer.Exit):
         mod.run(root_cfg=root_cfg)
+
+
+# ---------------------------------------------------------------------------
+# ResolveBuilderMod
+# ---------------------------------------------------------------------------
+
+
+def _builder_cfg(name):
+    return RtlBuilderConfig(name=name, exe="sim", simv="simv", sim_rand_seed=42, sim_rand_prefix="+seed=", opts={})
+
+
+def _resolve_root_cfg(*names):
+    return RootConfig(platforms=[], rtl_builder_cfgs={n: _builder_cfg(n) for n in names}, cfg_rtl_reg=RootRtlField(path="x"))
+
+
+def _platform_cfg(builder):
+    return PlatformConfig(os="osx", unames=["Darwin"], builder=builder)
+
+
+def test_resolve_builder_no_override_uses_platform():
+    root_cfg = _resolve_root_cfg("verilator", "vcs")
+    platform_cfg = _platform_cfg("verilator")
+    mod = ResolveBuilderMod()
+    port, cfg = mod.run(root_cfg=root_cfg, platform_cfg=platform_cfg, builder="")
+    assert port == "default"
+    assert cfg is root_cfg.rtl_builder_cfgs["verilator"]
+
+
+def test_resolve_builder_override_wins():
+    root_cfg = _resolve_root_cfg("verilator", "vcs")
+    platform_cfg = _platform_cfg("verilator")
+    mod = ResolveBuilderMod()
+    port, cfg = mod.run(root_cfg=root_cfg, platform_cfg=platform_cfg, builder="vcs")
+    assert port == "default"
+    assert cfg is root_cfg.rtl_builder_cfgs["vcs"]
+
+
+def test_resolve_builder_unknown_override(logging_handler):
+    root_cfg = _resolve_root_cfg("verilator")
+    platform_cfg = _platform_cfg("verilator")
+    mod = ResolveBuilderMod()
+    with pytest.raises(typer.Exit):
+        mod.run(root_cfg=root_cfg, platform_cfg=platform_cfg, builder="unknown")
+
+
+def test_resolve_builder_platform_none_no_override(logging_handler):
+    root_cfg = _resolve_root_cfg("verilator")
+    platform_cfg = _platform_cfg(None)
+    mod = ResolveBuilderMod()
+    with pytest.raises(typer.Exit):
+        mod.run(root_cfg=root_cfg, platform_cfg=platform_cfg, builder="")
+
+
+def test_resolve_builder_empty_dict(logging_handler):
+    root_cfg = _resolve_root_cfg()
+    platform_cfg = _platform_cfg("verilator")
+    mod = ResolveBuilderMod()
+    with pytest.raises(typer.Exit):
+        mod.run(root_cfg=root_cfg, platform_cfg=platform_cfg, builder="")

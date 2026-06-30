@@ -17,3 +17,4 @@ files:
   - { name: prepend-cwd-path, class_name: PrependCwdPathMod }
   - { name: parse-root-config, class_name: ParseRootConfigMod }
   - { name: select-platform, class_name: SelectPlatformMod }
+  - { name: resolve-builder, class_name: ResolveBuilderMod }

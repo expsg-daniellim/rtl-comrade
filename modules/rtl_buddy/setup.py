@@ -78,3 +78,12 @@ class SelectPlatformMod:
             if uname in platform_cfg.unames:
                 return ("default", platform_cfg)
         log.fatal(f"cannot find cfg-platform for uname {uname}")
+
+
+class ResolveBuilderMod:
+    def run(self, root_cfg:RootConfig, platform_cfg:PlatformConfig, builder:str = ""):
+        name = builder or platform_cfg.builder
+        builder_cfg = root_cfg.rtl_builder_cfgs.get(name)
+        if builder_cfg is None:
+            log.fatal(f"named builder {name} not in configured builders {sorted(root_cfg.rtl_builder_cfgs)}")
+        return ("default", builder_cfg)
