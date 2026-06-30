@@ -44,3 +44,4 @@ files:
   - { name: link-latest, class_name: LinkLatestMod }
   - { name: interpret-sim, class_name: InterpretSimMod }
   - { name: route-post, class_name: RoutePostMod }
+  - { name: parse-log, class_name: ParseLogMod }

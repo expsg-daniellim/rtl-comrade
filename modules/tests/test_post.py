@@ -16,6 +16,7 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 RoutePostMod = _mod.RoutePostMod
+ParseLogMod = _mod.ParseLogMod
 
 
 def _make_tb():
@@ -124,3 +125,104 @@ def test_route_post_identity_passthrough_plain():
     assert "uvm_proc" not in ports
     assert results[0][1] is test  # same object, not a copy
     assert results[1][1] is proc
+
+
+# ---------------------------------------------------------------------------
+# ParseLogMod (spec 09b)
+# ---------------------------------------------------------------------------
+
+
+from modules.rtl_buddy.schema import TestResult  # noqa: E402
+
+
+def _make_log_proc(key, log_path):
+    return Proc(key=key, rc=0, stdout_path=log_path, stderr_path=Path("/tmp/sim.err"))
+
+
+def test_parse_log_pass_emits_pass(tmp_path):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("PASS test completed\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert isinstance(result, TestResult)
+    assert result.result == "PASS"
+
+
+def test_parse_log_pass_no_exit_driver(tmp_path, logging_handler):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("PASS test completed\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    ParseLogMod().run(test=test, proc=proc)
+    assert logging_handler.failure is False
+
+
+def test_parse_log_fail_with_err(tmp_path, logging_handler):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("FAIL sim failed\nERR: assertion at line 42\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert "assertion at line 42" in result.desc
+    assert logging_handler.failure is True
+
+
+def test_parse_log_fail_wins_over_pass(tmp_path, logging_handler):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("PASS test ran\nFAIL assertion failed\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert logging_handler.failure is True
+
+
+def test_parse_log_fail_without_err_no_crash(tmp_path, logging_handler):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("FAIL assertion at line 99\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert result.desc == "assertion at line 99"
+    assert logging_handler.failure is True
+
+
+def test_parse_log_passthrough_is_na(tmp_path, logging_handler):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("PASSTHROUGH message\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "NA"
+    assert logging_handler.failure is True
+
+
+def test_parse_log_no_keywords_is_na(tmp_path, logging_handler):
+    log_file = tmp_path / "sim.log"
+    log_file.write_text("INFO: simulation running\nDEBUG: checkpoint\n")
+    test = _make_test()
+    proc = _make_log_proc(test.key, log_file)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "NA"
+    assert result.desc == "test result unknown"
+    assert logging_handler.failure is True
+
+
+def test_parse_log_unreadable_file(tmp_path, logging_handler):
+    missing = tmp_path / "nonexistent.log"
+    test = _make_test()
+    proc = _make_log_proc(test.key, missing)
+    port, result = ParseLogMod().run(test=test, proc=proc)
+    assert port == "default"
+    assert result.result == "FAIL"
+    assert str(missing) in result.desc
+    assert logging_handler.failure is True

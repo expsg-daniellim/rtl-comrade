@@ -1,6 +1,7 @@
 import dataclasses
 import os
 import random
+import re
 from pathlib import Path
 
 import structlog
@@ -117,3 +118,34 @@ class RoutePostMod:
         else:
             yield ("plain_test", test)
             yield ("plain_proc", proc)
+
+
+class ParseLogMod:
+    def run(self, test:TestConfig, proc:Proc):
+        try:
+            text = Path(proc.stdout_path).read_text()
+            match_pass = None
+            match_fail = None
+            match_err = None
+            for line in text.splitlines():
+                if match_pass is None:
+                    match_pass = re.match(r"PASS\b\s*(.*)", line)
+                if match_fail is None:
+                    match_fail = re.match(r"FAIL\b\s*(.*)", line)
+                if match_err is None:
+                    match_err = re.match(r"(ERR|FAT):\s*(.*)", line)
+            if match_fail is not None:
+                verdict = "FAIL"
+                desc = f'{match_fail.group(1)} {match_err.group(2).strip()}' if match_err is not None else match_fail.group(1)
+            elif match_pass is not None:
+                verdict, desc = "PASS", match_pass.group(1)
+            else:
+                verdict, desc = "NA", "test result unknown"
+            result = TestResult.parse(test.key, test.get_name(), verdict, desc)
+            event = {"FAIL": "parse_log_failed", "NA": "parse_log_unknown"}.get(verdict)
+        except OSError as e:
+            result = TestResult.parse(test.key, test.get_name(), "FAIL", str(e))
+            event = "parse_log_unreadable"
+        if event is not None:
+            log.error(event, key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc=result.desc)
+        return ("default", result)
