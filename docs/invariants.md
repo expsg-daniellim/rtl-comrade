@@ -29,3 +29,7 @@ Do not demote a `CRITICAL` to `ERROR` or vice versa without understanding the ex
 ## Input ports are single-source
 
 Multiple upstream edges feeding the same input port on a node is a configuration error, not a merge. The harness rejects this at validation time with an "overloaded input" error.
+
+## Branch-legitimate termination is not a mismatch
+
+A node whose inputs come from different branch arms may see one arm end while another stays live. This is a normal branch outcome, not a desync. Contracts distinguish it via each port's `branch_labels`, assigned by the label-propagation pass in `Graph.from_config`. Do not reintroduce a flat "some ended, some have data" mismatch check that ignores labels — see [harness/branch_labels.md](harness/branch_labels.md).

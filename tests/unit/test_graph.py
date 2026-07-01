@@ -77,6 +77,16 @@ class _MixedDefaultModule:
 		return None
 
 
+class _BranchModule:
+	"""Source that emits on two mutually-exclusive arms, p and q."""
+
+	def run(self):
+		if True:  # pylint: disable=using-constant-test
+			yield ("p", 1)
+		else:
+			yield ("q", 2)
+
+
 # Mapping helpers
 _MODULE_MAP = {
 	"source_mod": _SourceModule,
@@ -86,6 +96,7 @@ _MODULE_MAP = {
 	"dynamic_emit_mod": _DynamicEmitModule,
 	"kwargs_mod": _KwargsModule,
 	"mixed_mod": _MixedDefaultModule,
+	"branch_mod": _BranchModule,
 }
 _CONTRACT_MAP = {
 	"basic_contract": _BasicContract,
@@ -292,8 +303,8 @@ def test_two_node_graph(logging_handler):
 	assert "src" in graph.nodes
 	assert "sink" in graph.nodes
 	src_node = graph.nodes["src"]
-	assert len(src_node.dsts) == 1
-	assert src_node.dsts[0].other_node.id == "sink"
+	assert len(src_node.dsts["default"]) == 1
+	assert src_node.dsts["default"][0] is graph.nodes["sink"].ports["a"]
 
 
 def test_dst_port_by_index_resolves(logging_handler):
@@ -319,8 +330,8 @@ def test_dst_port_by_index_resolves(logging_handler):
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		graph = Graph.from_config(config)
 	src_node = graph.nodes["src"]
-	assert src_node.dsts is not None
-	assert src_node.dsts[0].other_port == "b"
+	assert "default" in src_node.dsts
+	assert src_node.dsts["default"][0] is graph.nodes["sink"].ports["b"]
 
 
 def test_non_definite_emits_warns(logging_handler):
@@ -387,7 +398,7 @@ def test_non_definite_inputs_allows_undeclared_dst_port(logging_handler):
 		graph = Graph.from_config(config)
 	assert "agg" in graph.nodes
 	assert logging_handler.failure is False
-	assert graph.nodes["src"].dsts[0].other_port == "any_port"
+	assert graph.nodes["src"].dsts["default"][0] is graph.nodes["agg"].ports["any_port"]
 
 
 def test_non_definite_inputs_rejects_positional_dst_port(logging_handler):
@@ -516,7 +527,7 @@ def test_contract_port_mappings_definite_surface_resolves(logging_handler):
 	)
 	graph = _from_config(config)
 	assert set(graph.nodes["dst"].ports.keys()) == {"cp_a", "cp_b"}
-	assert graph.nodes["src"].dsts[0].other_port == "cp_a"
+	assert graph.nodes["src"].dsts["default"][0] is graph.nodes["dst"].ports["cp_a"]
 	# has_default is derived from the targets: a has no default, b does.
 	assert graph.nodes["dst"].ports["cp_a"].has_default is False
 	assert graph.nodes["dst"].ports["cp_b"].has_default is True
@@ -599,3 +610,26 @@ def test_contract_port_mappings_kwargs_valid_no_warning(logging_handler, caplog)
 	assert graph.nodes["dst"].ports["cp_a"].has_default is False
 	assert logging_handler.failure is False
 	assert "non_definite_inputs" not in caplog.text
+
+
+def test_branch_labels_propagate_distinct_arms(logging_handler):
+	config = _make_config(
+		nodes=[_node("b", "branch_mod"), _node("n", "two_input_mod")],
+		edges=[_edge("b", "p", "n", "a"), _edge("b", "q", "n", "b")],
+	)
+	graph = _from_config(config)
+	# The two inputs descend from different arms of the same branch, so they carry different labels — the labels
+	# live only on the contract's ports, where the contract consumes them.
+	label_a = graph.nodes["n"].contract.ports["a"].branch_labels
+	label_b = graph.nodes["n"].contract.ports["b"].branch_labels
+	assert label_a == frozenset({("b", frozenset({"p"}))})
+	assert label_b == frozenset({("b", frozenset({"q"}))})
+
+
+def test_branch_labels_empty_for_unbranched_edge(logging_handler):
+	config = _make_config(
+		nodes=[_node("s", "source_mod"), _node("k", "sink_mod")],
+		edges=[_edge("s", "default", "k", "a")],
+	)
+	graph = _from_config(config)
+	assert graph.nodes["k"].contract.ports["a"].branch_labels == frozenset()

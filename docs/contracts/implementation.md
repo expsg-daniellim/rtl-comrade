@@ -90,6 +90,7 @@ Each `ContractPort` provides:
 - `has_ended()`: whether the port has already seen an end sentinel
 - `has_default`: whether the corresponding module parameter has a Python default value
 - `required`: whether the graph config marks this port required; the built-in default contract awaits a real value and ignores `has_default` for such ports
+- `branch_labels`: control-dependence labels assigned during graph construction — the branch arms whose non-selection can end this port's stream. Ports with equal `branch_labels` are co-fated; the built-in default contract only treats a data/end split between co-fated ports as a mismatch. See [docs/harness/branch_labels.md](../harness/branch_labels.md)
 - `state`: a dict for contract-owned per-port state
 
 Important details:

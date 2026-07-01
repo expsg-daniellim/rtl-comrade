@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict
+from collections import OrderedDict, deque
 from dataclasses import dataclass
 import inspect
+from itertools import groupby
 from typing import cast, Any, Callable, Self
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
@@ -16,36 +17,28 @@ from .loader_plugin import load_plugins
 from .logging import HarnessLogger
 from .module import GraphModule
 from .module_cli import ModuleCLI
-from .node import Connection, Node
+from .node import Connection, Node, PreNode
 from .port import Port
 from .validation import validate_no_static_deadlock
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
-@dataclass
+@dataclass(frozen=True, slots=True)
 class Graph:
 	"""A runnable graph composed of instantiated nodes.
 
 	Attributes:
 		nodes: Mapping from node id to the instantiated runtime Node.
+		cli_nodes: List of virtual GraphCLI module nodes designed for CLI argument ingress.
+		sig: Virtual function signature for use with typer command derivation.
 	"""
 
 	nodes: dict[str, Node]
 	cli_nodes: list[Node]
 	sig: inspect.Signature
 
-	def __init__(self):
-		"""Create an empty graph to be populated during loading.
-
-		Returns:
-			None.
-		"""
-
-		self.nodes = {}
-		self.cli_nodes = []
-
 	@classmethod
-	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:  # pylint: disable=too-many-locals
+	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:  # pylint: disable=too-many-locals,too-many-branches
 		"""Construct a runnable graph from an already-parsed GraphConfig.
 
 		Args:
@@ -55,7 +48,6 @@ class Graph:
 			The constructed Graph instance.
 		"""
 
-		graph = cls()
 		if cli_kwargs is None:
 			cli_kwargs = {}
 
@@ -80,7 +72,9 @@ class Graph:
 		if len(missing_get_inputs) > 0:
 			log.fatal("missing_functions", context='harness.load.contract', plugins=missing_get_inputs)
 
-		# Initialise the nodes in the graph
+		# Initialise the initialise set of contractless prenodes
+		prenodes:dict[str, PreNode] = {}
+		cli_ids:list[str] = []
 		errors = False
 		for i, node in enumerate(config.nodes):
 			has_error = False
@@ -126,40 +120,37 @@ class Graph:
 						node.contract_config[name] = cli_kwargs[param.cli]
 
 				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-				graph.nodes[node.id] = Node(id=node.id, module=mod, config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
+				prenodes[node.id] = PreNode(id=node.id, module=mod, config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
 			else:
 				errors = True
 
 		if errors:
 			log.fatal('invalid_nodes', context='harness.graph.validation')
 
-		# Initialise the (virtual) cli nodes in the graph
+		# Initialise the (virtual) cli prenodes in the graph
 		module_cli = GraphModule.from_module(ModuleCLI)
 		for (port_name, src) in config.cli_srcs:
-			n = Node(id=port_name, module=module_cli, config={ 'cli': src.cli }, Contract=DefaultContract)
-			graph.nodes[n.id] = n
-			graph.cli_nodes.append(n)
+			prenodes[port_name] = PreNode(id=port_name, module=module_cli, config={ 'cli': src.cli }, Contract=DefaultContract)
+			cli_ids.append(port_name)
 
-		graph.sig = config.sig
-
-		# Initialise the edges in the graph.
+		# Consolidate and validate graph edges
 		errors = False
-		source_tracker = {} # Verify each dst only has one source
-		for node in graph.nodes.values():
-			dsts = []
+		source_tracker = {} # Verify each dst only has one source (keyed by (dst id, dst port))
+		node_dsts:dict[str, list[Connection]] = { nid: [] for nid in prenodes }
+		for pre in prenodes.values():
 			for edge in config.edges:
-				if edge.src.node == node.id: # ty: ignore[unresolved-attribute] — config.edges holds only GraphConfigSrcPort sources after from_file_config normalises CLI edges
+				if edge.src.node == pre.id: # ty: ignore[unresolved-attribute] — config.edges holds only GraphConfigSrcPort sources after from_file_config normalises CLI edges
 					# Validate src/dst ports
 					has_error = False
-					dst_name = graph.nodes[edge.dst.node].get_canonical_port(edge.dst.port)
+					dst_name = prenodes[edge.dst.node].get_canonical_port(edge.dst.port)
 					if dst_name is None:
-						if graph.nodes[edge.dst.node].definite_inputs or not isinstance(edge.dst.port, str):
+						if prenodes[edge.dst.node].definite_inputs or not isinstance(edge.dst.port, str):
 							has_error = True
 							log.error('invalid_dst_port', context='harness.graph.edge', edge=edge)
 						else:  # pragma: no cover
 							dst_name = edge.dst.port  # pragma: no cover
 
-					if edge.src.port not in node.structure.emits and node.structure.definite_emits: # ty: ignore[unresolved-attribute] — config.edges holds only GraphConfigSrcPort sources after from_file_config normalises CLI edges
+					if edge.src.port not in pre.structure.emits and pre.structure.definite_emits: # ty: ignore[unresolved-attribute] — config.edges holds only GraphConfigSrcPort sources after from_file_config normalises CLI edges
 						has_error = True
 						log.error('invalid_src_port', context='harness.graph.edge', edge=edge)
 
@@ -167,23 +158,19 @@ class Graph:
 						errors = True
 						continue
 
-					if not node.structure.definite_emits:
-						log.warn('non_definite_emits', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
+					if not pre.structure.definite_emits:
+						log.warn('non_definite_emits', context='harness.graph.node', node=pre.id, module=type(pre.module).__name__)
 
-					dsts.append(Connection(edge.src.port, graph.nodes[edge.dst.node], dst_name))  # ty: ignore[invalid-argument-type, unresolved-attribute] — dst_name is narrowed to str by the preceding get_canonical_port check, and config.edges holds only GraphConfigSrcPort sources; ty cannot follow either path
+					node_dsts[pre.id].append(Connection(edge.src.port, edge.dst.node, dst_name))  # ty: ignore[unresolved-attribute, invalid-argument-type] — dst_name is narrowed to a real port name by the get_canonical_port check; config.edges holds only GraphConfigSrcPort sources
 
 					# Source tracking
 					key = (edge.dst.node, dst_name)
-					if key not in source_tracker:
-						source_tracker[key] = 1
-					else:
-						source_tracker[key] += 1
+					source_tracker[key] = source_tracker.get(key, 0) + 1
 
-			dsts.sort(key=lambda conn: conn.self_port)
-			node.set_dsts(dsts)
+			node_dsts[pre.id].sort(key=lambda conn: conn.self_port)
 
-			if not node.definite_inputs:
-				log.warn('non_definite_inputs', context='harness.graph.node', node=node.id, module=type(node.module).__name__)
+			if not pre.definite_inputs:
+				log.warn('non_definite_inputs', context='harness.graph.node', node=pre.id, module=type(pre.module).__name__)
 
 		if errors:
 			log.fatal('invalid_edges', context='harness.graph.validation')
@@ -194,7 +181,7 @@ class Graph:
 			log.fatal('overloaded_srcs', context='harness.graph.validation', node_ports=node_ports)
 
 		# Static validation of the graph edges
-		static_validation_res = validate_no_static_deadlock(graph)
+		static_validation_res = validate_no_static_deadlock(prenodes, node_dsts)
 		# 1. Every first-run-required input must have an incoming edge.
 		if len(static_validation_res.edgeless_inputs) > 0:
 			log.error('edgeless_inputs', context='harness.graph.validation', nodes=static_validation_res.edgeless_inputs)
@@ -208,7 +195,41 @@ class Graph:
 		if static_validation_res.has_error():
 			log.fatal('has_deadlock', context='harness.graph.validation')
 
-		return graph
+		# Propagate control-dependence labels to each input port (topological over the already-acyclic graph)
+		input_labels:dict[str, dict[str, frozenset]] = { nid: {} for nid in prenodes }
+		indegree = { nid: 0 for nid in prenodes }
+		for conns in node_dsts.values():
+			for conn in conns:
+				indegree[conn.other_node] += 1
+
+		queue = deque(nid for nid in prenodes if indegree[nid] == 0)
+		while len(queue) > 0:
+			pre = prenodes[queue.popleft()]
+
+			inherited:frozenset = frozenset()
+			for name, port in pre.ports.items():
+				# A gating input is one the node cannot produce its first output without, so its label flows on.
+				if not (port.has_default and name not in pre.required_ports):
+					inherited |= input_labels[pre.id].get(name, frozenset())
+
+			full_outputs = set(pre.structure.emits) if pre.structure.definite_emits else { conn.self_port for conn in node_dsts[pre.id] }
+			arm_map = pre.structure.resolve_arms(full_outputs, getattr(pre.module, 'output_groups', None))
+
+			for conn in node_dsts[pre.id]:
+				arm = arm_map.get(conn.self_port)
+				input_labels[conn.other_node][conn.other_port] = inherited if arm is None else inherited | { (pre.id, arm) }
+				indegree[conn.other_node] -= 1
+				if indegree[conn.other_node] == 0:
+					queue.append(conn.other_node)
+
+		# Construct each node's runtime dispatch map (source output port -> destination Ports) from its id-space connections.
+		port_dsts = { nid: { self_port: [ prenodes[conn.other_node].ports[conn.other_port] for conn in conns ] for self_port, conns in groupby(node_dsts[nid], key=lambda conn: conn.self_port) } for nid in prenodes }
+
+		# Build graph nodes from prenodes
+		nodes = { nid: Node.from_prenode(pre, port_dsts[nid], input_labels[nid]) for nid, pre in prenodes.items() }
+		cli_nodes = [ nodes[cid] for cid in cli_ids ]
+
+		return cls(nodes=nodes, cli_nodes=cli_nodes, sig=config.sig)
 
 	def run(self):  # pragma: no cover
 		"""Dummy place holder for the run function. Should never be called.

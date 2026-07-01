@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 from rtl_comrade.config import GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort, GraphConfigDstPort
 from rtl_comrade.config_graph import GraphConfig
-from rtl_comrade.graph import Graph
+from rtl_comrade.node import Connection
 from rtl_comrade.port import Port
 from rtl_comrade.validation import (
 	StaticDeadlockValidationResults,
@@ -96,89 +96,81 @@ def test_has_error_true_non_reachable():
 
 
 # --- validate_no_static_deadlock ---
-# These tests need actual Graph objects, so we use inline module classes + Node.
+# Screening runs over PreNodes (port metadata) plus id-space connections keyed by source node id, so the tests build those directly.
 
 
-def _make_graph(node_specs):
+def _make_prenodes(node_specs):
 	"""
 	node_specs: list of (id, port_names_with_defaults)
 	port_names_with_defaults: list of (port_name, has_default)
 	"""
-	graph = Graph()
+	prenodes = {}
 	for node_id, ports in node_specs:
-		node = MagicMock()
-		node.id = node_id
-		node.ports = OrderedDict({name: Port(name=name, has_default=hd) for name, hd in ports})
-		node.dsts = []
-		node.required_ports = set()
-		graph.nodes[node_id] = node
-	return graph
+		pre = MagicMock()
+		pre.id = node_id
+		pre.ports = OrderedDict({name: Port(name=name, has_default=hd) for name, hd in ports})
+		pre.required_ports = set()
+		prenodes[node_id] = pre
+	return prenodes
 
 
 def test_deadlock_well_formed():
 	# source node (all-default inputs) → required-input node
-	graph = _make_graph(
+	prenodes = _make_prenodes(
 		[
 			("src", [("out", True)]),
 			("sink", [("inp", False)]),
 		]
 	)
-	# wire src -> sink
-	src_node = graph.nodes["src"]
-	sink_node = graph.nodes["sink"]
-	conn = MagicMock()
-	conn.other_node = sink_node
-	conn.other_port = "inp"
-	src_node.dsts = [conn]
-	result = validate_no_static_deadlock(graph)
+	node_dsts = {"src": [Connection("out", "sink", "inp")]}
+	result = validate_no_static_deadlock(prenodes, node_dsts)
 	assert result.has_error() is False
 
 
 def test_deadlock_edgeless_required_input():
 	# sink has a required input but no incoming edge
-	graph = _make_graph(
+	prenodes = _make_prenodes(
 		[
 			("src", []),
 			("sink", [("inp", False)]),
 		]
 	)
-	graph.nodes["src"].dsts = []
-	result = validate_no_static_deadlock(graph)
+	result = validate_no_static_deadlock(prenodes, {})
 	assert "sink" in result.edgeless_inputs
 
 
 def test_deadlock_no_source_capable():
 	# all nodes require an input
-	graph = _make_graph(
+	prenodes = _make_prenodes(
 		[
 			("a", [("x", False)]),
 			("b", [("y", False)]),
 		]
 	)
-	result = validate_no_static_deadlock(graph)
+	result = validate_no_static_deadlock(prenodes, {})
 	assert result.has_source_capable is False
 
 
 def test_deadlock_non_reachable():
 	# src can run on its own; isolated has no incoming edge from any source
-	graph = _make_graph(
+	prenodes = _make_prenodes(
 		[
 			("src", []),  # source-capable
 			("isolated", [("x", False)]),  # no edge from src
 		]
 	)
-	result = validate_no_static_deadlock(graph)
+	result = validate_no_static_deadlock(prenodes, {})
 	assert "isolated" in result.non_reachable_nodes
 
 
 def test_deadlock_required_default_port_not_source_capable():
 	# A node whose only input has a default but is marked required is not source-capable,
 	# so a graph resting on it as the sole source is a deadlock.
-	graph = _make_graph(
+	prenodes = _make_prenodes(
 		[
 			("only", [("inp", True)]),
 		]
 	)
-	graph.nodes["only"].required_ports = {"inp"}
-	result = validate_no_static_deadlock(graph)
+	prenodes["only"].required_ports = {"inp"}
+	result = validate_no_static_deadlock(prenodes, {})
 	assert result.has_source_capable is False

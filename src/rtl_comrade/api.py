@@ -36,8 +36,14 @@ class EndSentinel:
 
 	source: str
 
+@dataclass(frozen=True, slots=True)
+class RestSentinel:
+	"""Marker used as an ``output_groups`` member list meaning "all outputs not named in another group"."""
+
+REST = RestSentinel()
+
 @dataclass(slots=True)
-class ContractPort(Generic[T]):
+class ContractPort(Generic[T]):  # pylint: disable=too-many-instance-attributes
 	"""A contract-facing adapter around one node input port.
 
 	Attributes:
@@ -48,6 +54,8 @@ class ContractPort(Generic[T]):
 		has_default: Whether the corresponding module input has a Python default value.
 		required: Whether the graph config marks this port required; the default contract
 			awaits a real value and ignores has_default for this port.
+		branch_labels: Control-dependence labels — the branch arms whose non-selection can
+			end this port's stream. Two ports are co-fated iff their label sets are equal.
 		state: Contract-owned mutable state associated with this port.
 	"""
 
@@ -57,4 +65,5 @@ class ContractPort(Generic[T]):
 	has_ended: Callable[[], bool]
 	has_default: bool = False
 	required: bool = False
+	branch_labels: frozenset = field(default_factory=frozenset)
 	state: dict[str, Any] = field(default_factory=dict)

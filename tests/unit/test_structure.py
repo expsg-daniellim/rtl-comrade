@@ -8,11 +8,14 @@ from unittest.mock import patch
 import pytest
 import typer
 
+from rtl_comrade.api import REST
 from rtl_comrade.structure import (
 	ModuleStructure,
 	ModuleStructureArg,
 	StructureInvalidTupleError,
 	StructureNonStrPortNameError,
+	expand_output_groups,
+	partition_over,
 	walk_ast,
 )
 
@@ -380,9 +383,9 @@ def test_non_str_port_name_raises():
 # --- Fatal paths — getsource / ast.parse / signature failures ---
 
 
-def test_collect_emits_non_callable_method_fatal(logging_handler):
+def test_parse_emits_non_callable_method_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
-		ModuleStructure.collect_emits("M", SimpleNamespace(__name__="run"))
+		ModuleStructure.parse_emits("M", SimpleNamespace(__name__="run"))
 
 
 def test_run_signature_type_error_fatal(logging_handler):
@@ -443,3 +446,185 @@ def test_ast_parse_recursion_error_fatal(logging_handler):
 	with patch.object(ast, "parse", side_effect=RecursionError("max recursion depth")):
 		with pytest.raises(typer.Exit):
 			ModuleStructure(_NoArgs)
+
+
+# --- ModuleStructure arm determination ---
+
+
+class _IfElse:
+	def run(self, x):
+		if x:
+			yield ("a", 1)
+		else:
+			yield ("b", 2)
+
+
+class _ForLoop:
+	def run(self, xs):
+		for i in xs:
+			yield ("a", i)
+
+
+class _WhileLoop:
+	def run(self, n):
+		while n:
+			yield ("a", n)
+
+
+class _MatchCase:
+	def run(self, x):
+		match x:
+			case 1:
+				yield ("a", 1)
+			case _:
+				yield ("b", 2)
+
+
+class _TryExcept:
+	def run(self):
+		try:
+			yield ("a", 1)
+		except Exception:  # pylint: disable=broad-except
+			yield ("b", 2)
+
+
+class _WithBlock:
+	def run(self, ctx):
+		with ctx:
+			yield ("a", 1)
+
+
+class _MixedCond:
+	def run(self, x):
+		yield ("always", 0)
+		if x:
+			yield ("cond", 1)
+
+
+class _MultiPath:
+	def run(self, x):
+		if x:
+			yield ("a", 1)
+		else:
+			yield ("a", 2)
+
+
+class _DynBranch:
+	"""Dynamic emitter: a named 'stop' arm versus a dynamic passthrough arm."""
+
+	def run(self, **edges):
+		if edges:
+			yield ("stop", 1)
+		else:
+			for k, v in edges.items():
+				yield (k, v)
+
+
+def test_arms_if_else_exclusive():
+	s = ModuleStructure(_IfElse)
+	assert set(s.arms) == {frozenset({"a"}), frozenset({"b"})}
+
+
+def test_arms_for_loop_conditional():
+	s = ModuleStructure(_ForLoop)
+	assert set(s.arms) == {frozenset({"a"})}
+
+
+def test_arms_while_loop_conditional():
+	s = ModuleStructure(_WhileLoop)
+	assert set(s.arms) == {frozenset({"a"})}
+
+
+def test_arms_match_cases_exclusive():
+	s = ModuleStructure(_MatchCase)
+	assert set(s.arms) == {frozenset({"a"}), frozenset({"b"})}
+
+
+def test_arms_try_except_independent_singletons():
+	s = ModuleStructure(_TryExcept)
+	assert set(s.arms) == {frozenset({"a"}), frozenset({"b"})}
+
+
+def test_arms_with_block_unconditional():
+	s = ModuleStructure(_WithBlock)
+	assert s.emits == ["a"]
+	assert s.arms == []  # pylint: disable=use-implicit-booleaness-not-comparison
+
+
+def test_arms_mixed_conditional_and_unconditional():
+	s = ModuleStructure(_MixedCond)
+	assert set(s.arms) == {frozenset({"cond"})}  # 'always' is unconditional, so in no arm
+
+
+def test_arms_multi_path_port_is_unconditional():
+	s = ModuleStructure(_MultiPath)
+	assert s.emits == ["a"]
+	assert s.arms == []  # 'a' emitted under two guards, so it belongs to no single arm  # pylint: disable=use-implicit-booleaness-not-comparison
+
+
+# --- expand_output_groups ---
+
+
+def test_expand_output_groups_rest():
+	arms = expand_output_groups({"stop": ["stop"], "pass": REST}, {"stop", "a", "b"}, "M")
+	assert set(arms) == {frozenset({"stop"}), frozenset({"a", "b"})}
+
+
+def test_expand_output_groups_rest_empty_omitted():
+	arms = expand_output_groups({"g": ["a", "b"], "r": REST}, {"a", "b"}, "M")
+	assert arms == [frozenset({"a", "b"})]
+
+
+def test_expand_output_groups_multiple_rest_fatal(logging_handler):
+	with pytest.raises(typer.Exit):
+		expand_output_groups({"x": REST, "y": REST}, {"a"}, "M")
+
+
+def test_expand_output_groups_overlapping_fatal(logging_handler):
+	with pytest.raises(typer.Exit):
+		expand_output_groups({"g1": ["a"], "g2": ["a"]}, {"a"}, "M")
+
+
+def test_expand_output_groups_unknown_port_fatal(logging_handler):
+	with pytest.raises(typer.Exit):
+		expand_output_groups({"g": ["z"]}, {"a"}, "M")
+
+
+# --- partition_over ---
+
+
+def test_partition_over_groups_and_always():
+	arm = frozenset({"a", "b", "dyn"})
+	part, always = partition_over({"a", "b", "c"}, {"a": arm, "b": arm})
+	assert part == frozenset({frozenset({"a", "b"})})
+	assert always == frozenset({"c"})
+
+
+# --- ModuleStructure.resolve_arms matrix ---
+
+
+def test_resolve_arms_definite_no_declaration():
+	# _IfElse: 'a' and 'b' are exclusive arms.
+	assert ModuleStructure(_IfElse).resolve_arms({"a", "b"}, None) == {"a": frozenset({"a"}), "b": frozenset({"b"})}
+
+
+def test_resolve_arms_nondefinite_no_declaration_shared_arm():
+	# _ReturnDynamic emits nothing statically, so the fallback treats all outputs as one shared arm.
+	result = ModuleStructure(_ReturnDynamic).resolve_arms({"a", "b"}, None)
+	assert result == {"a": frozenset({"a", "b"}), "b": frozenset({"a", "b"})}
+
+
+def test_resolve_arms_definite_declaration_agrees():
+	assert ModuleStructure(_IfElse).resolve_arms({"a", "b"}, {"g1": ["a"], "g2": ["b"]}) == {"a": frozenset({"a"}), "b": frozenset({"b"})}
+
+
+def test_resolve_arms_nondefinite_declaration_fills_dynamic():
+	result = ModuleStructure(_DynBranch).resolve_arms({"stop", "x", "y"}, {"stop": ["stop"], "pass": REST})
+	assert result["stop"] == frozenset({"stop"})
+	assert result["x"] == frozenset({"x", "y"})
+
+
+def test_resolve_arms_declaration_contradicts_ast_fatal(logging_handler):
+	# _IfElse's AST proves 'a' and 'b' are separate arms; the declaration lumps them together.
+	with pytest.raises(typer.Exit):
+		ModuleStructure(_IfElse).resolve_arms({"a", "b"}, {"g": ["a", "b"]})

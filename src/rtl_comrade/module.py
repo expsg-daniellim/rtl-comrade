@@ -38,7 +38,7 @@ class GraphModule:
 			Module: Module plugin class to wrap.
 
 		Returns:
-			A frozen GraphModule descriptor ready for use by Node.__init__.
+			A frozen GraphModule descriptor ready for use by PreNode.__init__.
 		"""
 		# Perform validation
 		bind_contextvars(module=Module.__name__)

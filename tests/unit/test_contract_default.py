@@ -318,3 +318,40 @@ async def test_persistent_port_updates_eagerly_then_reuses():
 		],
 		config=DefaultContract.Config(persistent_inputs=["scale"]),
 	)
+
+
+# --- DefaultContract.get_inputs — branch-aware mismatch relaxation ---
+
+
+def _labelled_contract(port_labels):
+	"""port_labels: {name: (Port, branch_labels)}. Returns (DefaultContract, contract_ports)."""
+	contract_ports = {
+		name: ContractPort(name=p.name, get=p.get, try_get=p.try_get, has_ended=p.has_ended, has_default=p.has_default, required=False, branch_labels=labels)
+		for name, (p, labels) in port_labels.items()
+	}
+	return DefaultContract(id="test_node.contract", config=DefaultContract.Config(), ports=contract_ports), contract_ports
+
+
+async def test_branch_divergence_across_partitions_no_error(logging_handler):
+	port_a = _make_port("a")
+	port_b = _make_port("b")
+	contract, _ = _labelled_contract({"a": (port_a, frozenset({("origin", frozenset({"a"}))})), "b": (port_b, frozenset())})
+
+	await port_a.queue.put(EndSentinel("src"))  # branch arm ended
+	await port_b.queue.put(Payload("src", 0, 1))  # unbranched context still live
+	result = await contract.get_inputs()
+	assert isinstance(result, EndSentinel)
+	assert logging_handler.failure is False
+
+
+async def test_branch_divergence_within_partition_logs_error(logging_handler):
+	port_a = _make_port("a")
+	port_b = _make_port("b")
+	shared = frozenset({("origin", frozenset({"a", "b"}))})
+	contract, _ = _labelled_contract({"a": (port_a, shared), "b": (port_b, shared)})
+
+	await port_a.queue.put(Payload("src", 0, 1))
+	await port_b.queue.put(EndSentinel("src"))  # co-fated port ended while sibling has data
+	result = await contract.get_inputs()
+	assert isinstance(result, EndSentinel)
+	assert logging_handler.failure is True

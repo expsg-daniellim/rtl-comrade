@@ -1,4 +1,4 @@
-"""Unit tests for node.py — Node construction, get_canonical_port, accept, process_result, run."""
+"""Unit tests for node.py — PreNode construction, get_canonical_port, process_result, run."""
 
 import inspect
 from pathlib import Path
@@ -13,7 +13,7 @@ from serde.compat import UserError
 from rtl_comrade.api import Payload, EndSentinel
 from rtl_comrade.contract_default import DefaultContract
 from rtl_comrade.module import GraphModule
-from rtl_comrade.node import Node, Connection
+from rtl_comrade.node import Node, PreNode
 from rtl_comrade.port import Port
 
 
@@ -299,20 +299,20 @@ class _ContractWithPathConfig:
 		return EndSentinel(self.id)
 
 
-def _make_node(Module, config=None, Contract=None, contract_config=None):
-	if config is None:
-		config = {}
-	if Contract is None:
-		Contract = DefaultContract
-	if contract_config is None:
-		contract_config = {}
-	return Node(
+def _make_prenode(Module, config=None, Contract=None, contract_config=None, relative_path=Path()):
+	return PreNode(
 		id="test_node",
 		module=GraphModule.from_module(Module),
-		config=config,
-		Contract=Contract,
-		contract_config=contract_config,
+		config=config if config is not None else {},
+		Contract=Contract if Contract is not None else DefaultContract,
+		contract_config=contract_config if contract_config is not None else {},
+		relative_path=relative_path,
 	)
+
+
+def _make_node(Module, config=None, Contract=None, contract_config=None, relative_path=Path(), dsts=None):
+	pre = _make_prenode(Module, config, Contract, contract_config, relative_path)
+	return Node.from_prenode(pre, dsts if dsts is not None else {}, {})
 
 
 # --- Initialization ---
@@ -335,73 +335,34 @@ def test_init_config_with_config_class(logging_handler):
 
 
 def test_init_graph_sentinel_path_resolved_against_relative_path(logging_handler, tmp_path):
-	node = Node(
-		id="test_node",
-		module=GraphModule.from_module(_ModuleWithPathConfig),
-		config={"file": "{graph}/data.txt"},
-		Contract=DefaultContract,
-		relative_path=tmp_path,
-	)
+	node = _make_node(_ModuleWithPathConfig, config={"file": "{graph}/data.txt"}, relative_path=tmp_path)
 	assert node.module.cfg.file == tmp_path / "data.txt"
 
 
 def test_init_absolute_path_config_not_modified_by_relative_path(logging_handler, tmp_path):
 	abs_file = tmp_path / "data.txt"
-	node = Node(
-		id="test_node",
-		module=GraphModule.from_module(_ModuleWithPathConfig),
-		config={"file": str(abs_file)},
-		Contract=DefaultContract,
-		relative_path=Path("/some/other/dir"),
-	)
+	node = _make_node(_ModuleWithPathConfig, config={"file": str(abs_file)}, relative_path=Path("/some/other/dir"))
 	assert node.module.cfg.file == abs_file
 
 
 def test_init_relative_path_config_without_sentinel_not_modified(logging_handler, tmp_path):
-	node = Node(
-		id="test_node",
-		module=GraphModule.from_module(_ModuleWithPathConfig),
-		config={"file": "relative/path.txt"},
-		Contract=DefaultContract,
-		relative_path=tmp_path,
-	)
+	node = _make_node(_ModuleWithPathConfig, config={"file": "relative/path.txt"}, relative_path=tmp_path)
 	assert node.module.cfg.file == Path("relative/path.txt")
 
 
 def test_init_contract_graph_sentinel_path_resolved_against_relative_path(logging_handler, tmp_path):
-	node = Node(
-		id="test_node",
-		module=GraphModule.from_module(_MinimalModule),
-		config={},
-		Contract=_ContractWithPathConfig,
-		contract_config={"file": "{graph}/data.txt"},
-		relative_path=tmp_path,
-	)
+	node = _make_node(_MinimalModule, Contract=_ContractWithPathConfig, contract_config={"file": "{graph}/data.txt"}, relative_path=tmp_path)
 	assert node.contract.cfg.file == tmp_path / "data.txt"
 
 
 def test_init_contract_absolute_path_config_not_modified_by_relative_path(logging_handler, tmp_path):
 	abs_file = tmp_path / "data.txt"
-	node = Node(
-		id="test_node",
-		module=GraphModule.from_module(_MinimalModule),
-		config={},
-		Contract=_ContractWithPathConfig,
-		contract_config={"file": str(abs_file)},
-		relative_path=Path("/some/other/dir"),
-	)
+	node = _make_node(_MinimalModule, Contract=_ContractWithPathConfig, contract_config={"file": str(abs_file)}, relative_path=Path("/some/other/dir"))
 	assert node.contract.cfg.file == abs_file
 
 
 def test_init_contract_relative_path_config_without_sentinel_not_modified(logging_handler, tmp_path):
-	node = Node(
-		id="test_node",
-		module=GraphModule.from_module(_MinimalModule),
-		config={},
-		Contract=_ContractWithPathConfig,
-		contract_config={"file": "relative/path.txt"},
-		relative_path=tmp_path,
-	)
+	node = _make_node(_MinimalModule, Contract=_ContractWithPathConfig, contract_config={"file": "relative/path.txt"}, relative_path=tmp_path)
 	assert node.contract.cfg.file == Path("relative/path.txt")
 
 
@@ -420,142 +381,111 @@ def test_init_contract_with_ports(logging_handler):
 	assert "a" in node.contract.ports
 
 
-# --- get_canonical_port ---
+def test_from_prenode_injects_branch_labels(logging_handler):
+	# Labels supplied for an input port land on the contract's ContractPort.
+	pre = _make_prenode(_ModuleOneInput)
+	labels = frozenset({("origin", frozenset({"a"}))})
+	node = Node.from_prenode(pre, {}, {"a": labels})
+	assert node.contract.ports["a"].branch_labels == labels
+
+
+# --- get_canonical_port (on PreNode) ---
 
 
 def test_get_canonical_port_by_name(logging_handler):
-	node = _make_node(_ModuleTwoInputs)
-	assert node.get_canonical_port("a") == "a"
-	assert node.get_canonical_port("b") == "b"
+	pre = _make_prenode(_ModuleTwoInputs)
+	assert pre.get_canonical_port("a") == "a"
+	assert pre.get_canonical_port("b") == "b"
 
 
 def test_get_canonical_port_unknown_name(logging_handler):
-	node = _make_node(_ModuleTwoInputs)
-	assert node.get_canonical_port("nope") is None
+	pre = _make_prenode(_ModuleTwoInputs)
+	assert pre.get_canonical_port("nope") is None
 
 
 def test_get_canonical_port_by_index(logging_handler):
-	node = _make_node(_ModuleTwoInputs)
-	assert node.get_canonical_port(1) == "a"
-	assert node.get_canonical_port(2) == "b"
+	pre = _make_prenode(_ModuleTwoInputs)
+	assert pre.get_canonical_port(1) == "a"
+	assert pre.get_canonical_port(2) == "b"
 
 
 def test_get_canonical_port_zero_returns_none(logging_handler):
-	node = _make_node(_ModuleTwoInputs)
-	assert node.get_canonical_port(0) is None
+	pre = _make_prenode(_ModuleTwoInputs)
+	assert pre.get_canonical_port(0) is None
 
 
 def test_get_canonical_port_out_of_range(logging_handler):
-	node = _make_node(_ModuleTwoInputs)
-	assert node.get_canonical_port(99) is None
+	pre = _make_prenode(_ModuleTwoInputs)
+	assert pre.get_canonical_port(99) is None
 
 
-# --- accept ---
-
-
-async def test_accept_queues_payload(logging_handler):
-	node = _make_node(_ModuleOneInput)
-	node.set_dsts([])
-	payload = Payload("up", 0, 1)
-	await node.accept(payload, "a")
-	assert not node.ports["a"].queue.empty()
-
-
-async def test_accept_unknown_port_logs_error(logging_handler):
-	node = _make_node(_ModuleOneInput)
-	node.set_dsts([])
-	before = node.ports["a"].queue.qsize()
-	await node.accept(Payload("up", 0, 1), "nonexistent")
-	assert logging_handler.failure is True
-	assert node.ports["a"].queue.qsize() == before  # queue unchanged
-
-
-# --- process_result ---
+# --- process_result — dispatch enqueues directly onto the destination Port ---
 
 
 async def test_process_result_none_does_nothing(logging_handler):
 	node = _make_node(_MinimalModule)
-	node.set_dsts([])
 	await node.process_result(None)
 	assert logging_handler.failure is False
 
 
 async def test_process_result_non_tuple_dispatches_default(logging_handler):
-	recv_node = _make_node(_ModuleOneInput)
-	recv_node.set_dsts([])
-	node = _make_node(_MinimalModule)
-	conn = Connection(self_port="default", other_node=recv_node, other_port="a")
-	node.set_dsts([conn])
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, dsts={"default": [recv]})
 	await node.process_result(42)
-	assert not recv_node.ports["a"].queue.empty()
-	item = await recv_node.ports["a"].queue.get()
+	assert not recv.queue.empty()
+	item = await recv.queue.get()
 	assert item.payload == 42
 
 
 async def test_process_result_named_tuple(logging_handler):
-	recv_node = _make_node(_ModuleOneInput)
-	recv_node.set_dsts([])
-	node = _make_node(_MinimalModule)
-	conn = Connection(self_port="out", other_node=recv_node, other_port="a")
-	node.set_dsts([conn])
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, dsts={"out": [recv]})
 	await node.process_result(("out", 7))
-	item = await recv_node.ports["a"].queue.get()
+	item = await recv.queue.get()
 	assert item.payload == 7
 
 
 async def test_process_result_wrong_length_logs_error(logging_handler):
 	node = _make_node(_MinimalModule)
-	node.set_dsts([])
 	await node.process_result((1, 2, 3))
 	assert logging_handler.failure is True
 
 
 async def test_process_result_non_str_port_logs_error(logging_handler):
 	node = _make_node(_MinimalModule)
-	node.set_dsts([])
 	await node.process_result((42, "value"))
 	assert logging_handler.failure is True
 
 
 async def test_process_result_dst_count_increments(logging_handler):
-	recv_node = _make_node(_ModuleOneInput)
-	recv_node.set_dsts([])
-	node = _make_node(_MinimalModule)
-	conn = Connection(self_port="default", other_node=recv_node, other_port="a")
-	node.set_dsts([conn])
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, dsts={"default": [recv]})
 
 	await node.process_result(1)
 	await node.process_result(2)
 
-	key = (recv_node.id, "a")
-	assert node.dst_counts[key] == 1  # started at -1, now 1
+	assert node.dst_counts["default"][0] == 2  # two payloads sent to the one edge
 
 
 async def test_process_result_payload_n_sequence(logging_handler):
-	recv_node = _make_node(_ModuleOneInput)
-	recv_node.set_dsts([])
-	node = _make_node(_MinimalModule)
-	conn = Connection(self_port="default", other_node=recv_node, other_port="a")
-	node.set_dsts([conn])
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, dsts={"default": [recv]})
 
 	await node.process_result("first")
 	await node.process_result("second")
 
 	items = []
-	while not recv_node.ports["a"].queue.empty():
-		items.append(await recv_node.ports["a"].queue.get())
+	while not recv.queue.empty():
+		items.append(recv.queue.get_nowait())
 
 	assert items[0].n == 0
 	assert items[1].n == 1
 
 
 async def test_process_result_no_destination_logs_info(logging_handler):
-	recv_node = _make_node(_ModuleOneInput)
-	recv_node.set_dsts([])
-	node = _make_node(_MinimalModule)
-	# Wire to "other" port but emit on "default" — no matching dst
-	conn = Connection(self_port="other", other_node=recv_node, other_port="a")
-	node.set_dsts([conn])
+	recv = Port(name="a")
+	# Wire from "other" but emit on "default" — no matching dst.
+	node = _make_node(_MinimalModule, dsts={"other": [recv]})
 	await node.process_result(42)  # emits on "default", not "other"
 	assert logging_handler.failure is False  # INFO only
 
@@ -564,38 +494,29 @@ async def test_process_result_no_destination_logs_info(logging_handler):
 
 
 async def _run_node_with_input(Module, inputs_dict):
-	"""Helper: run node once supplying given inputs, collect outputs."""
-	outputs = []
+	"""Helper: run node once supplying given inputs, collect payloads dispatched to the destination Port."""
+	collect = Port(name="x")
 
 	class _CollectContract:
 		def __init__(self, id, ports):  # pylint: disable=redefined-builtin
 			self.id = id
 			self.ports = ports
-			self._called = False
+			self.called = False
 
 		async def get_inputs(self):
-			if self._called:
+			if self.called:
 				return EndSentinel(self.id)
-			self._called = True
+			self.called = True
 			return {name: Payload("src", 0, val) for name, val in inputs_dict.items()}
 
-	class _CollectNode:
-		id = "collect"
-		ports = {"x": Port(name="x")}
-
-		async def accept(self, val, port):
-			if isinstance(val, Payload):
-				outputs.append(val.payload)
-
-		def set_dsts(self, dsts):
-			self.dsts = dsts  # pylint: disable=attribute-defined-outside-init
-
-	collect = _CollectNode()
-	node = Node(id="runner", module=GraphModule.from_module(Module), config={}, Contract=_CollectContract)
-	conn = Connection(self_port="default", other_node=collect, other_port="x")  # ty: ignore[invalid-argument-type] — _CollectNode is a duck-typed test double satisfying Node's runtime interface without inheriting it
-	node.set_dsts([conn])
-	collect.set_dsts([])
+	node = _make_node(Module, Contract=_CollectContract, dsts={"default": [collect]})
 	await node.run()
+
+	outputs = []
+	while not collect.queue.empty():
+		item = collect.queue.get_nowait()
+		if isinstance(item, Payload):
+			outputs.append(item.payload)
 	return outputs
 
 
@@ -776,19 +697,11 @@ def test_contract_init_typer_exit_propagates(logging_handler):
 # --- process_result — dsts not initialised ---
 
 
-async def test_process_result_dsts_not_initialised_logs_error(logging_handler):
-	node = _make_node(_MinimalModule)
-	# Intentionally skip set_dsts — self.dsts remains None.
-	await node.process_result(42)
-	assert logging_handler.failure is True
-
-
 # --- run — fatal paths ---
 
 
 async def test_run_invalid_enqueued_error_fatal(logging_handler):
-	node = _make_node(_ModuleOneInput)
-	node.set_dsts([])
+	node = _make_node(_ModuleOneInput, dsts={})
 	# Put a non-Payload/EndSentinel value directly into the port queue.
 	node.ports["a"].queue.put_nowait(42)
 	with pytest.raises(typer.Exit):
@@ -796,25 +709,15 @@ async def test_run_invalid_enqueued_error_fatal(logging_handler):
 
 
 async def test_run_get_inputs_exception_fatal(logging_handler):
-	node = Node(id="test", module=GraphModule.from_module(_MinimalModule), config={}, Contract=_CrashGetInputsContract)
-	node.set_dsts([])
+	node = _make_node(_MinimalModule, Contract=_CrashGetInputsContract, dsts={})
 	with pytest.raises(typer.Exit):
 		await node.run()
 
 
 async def test_run_get_inputs_typer_exit_propagates(logging_handler):
-	node = _make_node(_MinimalModule, Contract=_ContractGetInputsExitContract)
-	node.set_dsts([])
+	node = _make_node(_MinimalModule, Contract=_ContractGetInputsExitContract, dsts={})
 	with pytest.raises(typer.Exit):
 		await node.run()
-
-
-async def test_run_dsts_not_initialised_at_end_logs_error(logging_handler):
-	# _MinimalModule has no inputs → len(inputs)==0 breaks the loop immediately.
-	# Without set_dsts, the post-loop sentinel check logs an error.
-	node = _make_node(_MinimalModule)
-	await node.run()
-	assert logging_handler.failure is True
 
 
 async def test_run_sync_contract_get_inputs(logging_handler):
@@ -827,8 +730,7 @@ async def test_run_sync_contract_get_inputs(logging_handler):
 		def get_inputs(self):  # intentionally sync
 			return EndSentinel(self.id)
 
-	node = Node(id="test", module=GraphModule.from_module(_MinimalModule), config={}, Contract=_SyncTerminateContract)
-	node.set_dsts([])
+	node = _make_node(_MinimalModule, Contract=_SyncTerminateContract, dsts={})
 	await node.run()  # should terminate cleanly via the sync EndSentinel
 
 
@@ -836,43 +738,37 @@ async def test_run_sync_contract_get_inputs(logging_handler):
 
 
 async def test_run_sync_finalise_called(logging_handler):
-	node = _make_node(_ModuleWithSyncFinalise)
-	node.set_dsts([])
+	node = _make_node(_ModuleWithSyncFinalise, dsts={})
 	await node.run()
 	assert node.module.finalise_called is True
 
 
 async def test_run_async_finalise_called(logging_handler):
-	node = _make_node(_ModuleWithAsyncFinalise)
-	node.set_dsts([])
+	node = _make_node(_ModuleWithAsyncFinalise, dsts={})
 	await node.run()
 	assert node.module.finalise_called is True
 
 
 async def test_run_no_finalise_runs_cleanly(logging_handler):
-	node = _make_node(_MinimalModule)
-	node.set_dsts([])
+	node = _make_node(_MinimalModule, dsts={})
 	await node.run()
 	assert logging_handler.failure is False
 
 
 async def test_run_finalise_exception_is_fatal(logging_handler):
-	node = _make_node(_ModuleWithCrashingFinalise)
-	node.set_dsts([])
+	node = _make_node(_ModuleWithCrashingFinalise, dsts={})
 	with pytest.raises(typer.Exit):
 		await node.run()
 
 
 async def test_run_finalise_typer_exit_propagates(logging_handler):
-	node = _make_node(_ModuleWithFinaliseExitModule)
-	node.set_dsts([])
+	node = _make_node(_ModuleWithFinaliseExitModule, dsts={})
 	with pytest.raises(typer.Exit):
 		await node.run()
 
 
 async def test_run_non_callable_finalise_ignored(logging_handler):
-	node = _make_node(_ModuleWithNonCallableFinalise)
-	node.set_dsts([])
+	node = _make_node(_ModuleWithNonCallableFinalise, dsts={})
 	await node.run()
 	assert logging_handler.failure is False
 
@@ -883,13 +779,10 @@ async def test_run_finalise_plain_return_dispatched(logging_handler):
 
 
 async def test_run_finalise_named_port_return_dispatched(logging_handler):
-	recv_node = _make_node(_ModuleOneInput)
-	recv_node.set_dsts([])
-	node = _make_node(_ModuleWithFinaliseNamedReturn)
-	conn = Connection(self_port="out", other_node=recv_node, other_port="a")
-	node.set_dsts([conn])
+	recv = Port(name="a")
+	node = _make_node(_ModuleWithFinaliseNamedReturn, dsts={"out": [recv]})
 	await node.run()
-	item = await recv_node.ports["a"].queue.get()
+	item = await recv.queue.get()
 	assert isinstance(item, Payload)
 	assert item.payload == 42
 
