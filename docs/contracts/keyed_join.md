@@ -41,7 +41,7 @@ contract_config:
 
 ## Termination
 
-Ends when any keyed port ends. Buffered items whose key is incomplete at that point are logged as an error. Persistent ports do not drive termination.
+Ends when all keyed ports have ended. Buffered items whose key is still incomplete at that point are logged as an error. Persistent ports do not drive termination.
 
 ## Example use cases
 

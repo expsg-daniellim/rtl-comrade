@@ -102,6 +102,43 @@ async def test_incomplete_key_at_stream_end_logs_error(logging_handler):
 	assert logging_handler.failure is True
 
 
+async def test_lagging_keyed_port_awaited_not_terminated(logging_handler):
+	# Two keyed ports deliver key 1 and end before the third (proc-like) port produces it. The
+	# join must wait for the lagging port rather than terminating on the early ends (Bug A).
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1}, EndSentinel("src")],
+			"b": [{"id": 1}, EndSentinel("src")],
+			"c": [PortTestInput({"id": 1}, delay=2), PortTestInput(EndSentinel("src"), delay=3)],
+		},
+		expected_outputs=[
+			{"a": {"id": 1}, "b": {"id": 1}, "c": {"id": 1}},
+			EndSentinel("test"),
+		],
+		config=_CFG,
+	)
+	assert logging_handler.failure is False
+
+
+async def test_key_completed_after_one_port_ends():
+	# Port a ends having buffered key 2; port b delivers key 2 only afterwards. The key still
+	# completes because the join waits for all keyed ports to end, not just the first.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1}, {"id": 2}, EndSentinel("src")],
+			"b": [PortTestInput({"id": 1}, delay=1), PortTestInput({"id": 2}, delay=3), PortTestInput(EndSentinel("src"), delay=4)],
+		},
+		expected_outputs=[
+			{"a": {"id": 1}, "b": {"id": 1}},
+			{"a": {"id": 2}, "b": {"id": 2}},
+			EndSentinel("test"),
+		],
+		config=_CFG,
+	)
+
+
 async def test_object_payloads_keyed_by_attribute():
 	# Payloads are objects exposing the key_field as an attribute rather than dicts; the
 	# contract correlates them by that attribute. key_field defaults to "key" here.

@@ -24,8 +24,8 @@ class KeyedJoinContract:
 	Items from keyed ports are matched by a correlation key: a payload's ``key_field`` attribute
 	when present, otherwise the ``key_field`` entry of a payload dict. ``key_field`` names the
 	field in both cases and defaults to ``"key"``. Keys may arrive
-	interleaved across ports; partial groups are buffered until complete. When any keyed
-	port ends with buffered incomplete keys, those keys are logged as an error.
+	interleaved across ports; partial groups are buffered until complete. When all keyed
+	ports have ended, any keys still incomplete are logged as an error.
 
 	Ports named in ``persistent_inputs`` are singletons replayed on every keyed assembly.
 	A persistent input need not carry a key; when it does, its latest value is
@@ -62,8 +62,6 @@ class KeyedJoinContract:
 			port.state['keyed'] = {}
 
 	async def get_inputs(self) -> dict[str, Payload] | EndSentinel:
-		saw_end: list[str] = []
-
 		while True:
 			for name, port in self.ports.items():
 				if port.has_ended():
@@ -73,7 +71,7 @@ class KeyedJoinContract:
 					if val is None:
 						break
 					if isinstance(val, EndSentinel):
-						self._on_end(name, saw_end)
+						self._on_end(name)
 						break
 					self._store(name, val)
 
@@ -90,13 +88,10 @@ class KeyedJoinContract:
 				# port ending does not cancel an already-complete group. Block on persistent.
 				blocking = self._persistent
 			else:
-				if saw_end:
-					incomplete = self._find_incomplete_keys()
-					if incomplete:
-						log.error("incomplete_keys", contract=self.id, keys=incomplete)
-					return EndSentinel(self.id)
-
 				if all(port.has_ended() for port in self._keyed.values()):
+					incomplete = self._find_incomplete_keys()
+					if len(incomplete) > 0:
+						log.error("incomplete_keys", contract=self.id, keys=incomplete)
 					return EndSentinel(self.id)
 
 				blocking = self._keyed
@@ -111,7 +106,7 @@ class KeyedJoinContract:
 					continue
 				val = await port.get()
 				if isinstance(val, EndSentinel):
-					self._on_end(name, saw_end)
+					self._on_end(name)
 				else:
 					self._store(name, val)
 				break
@@ -126,10 +121,8 @@ class KeyedJoinContract:
 			key = _key_of(val.payload, self.config.key_field)
 			self._buffers.setdefault(name, {})[key] = val
 
-	def _on_end(self, name: str, saw_end: list[str]) -> None:
-		if name in self._keyed:
-			saw_end.append(name)  # keyed endings drive termination
-		elif self._persistent[name].state['last_value'] is None and not _can_default(self._persistent[name]):
+	def _on_end(self, name: str) -> None:
+		if name in self._persistent and self._persistent[name].state['last_value'] is None and not _can_default(self._persistent[name]):
 			log.error("persistent_input_ended_without_value", contract=self.id, port=name)
 
 	def _find_complete_key(self) -> Any:
