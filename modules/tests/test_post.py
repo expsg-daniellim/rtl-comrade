@@ -3,7 +3,7 @@
 import importlib.util
 from pathlib import Path
 
-from modules.rtl_buddy.schema import Proc
+from modules.rtl_buddy.schema import Proc, TestResult
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 from modules.rtl_buddy.schema.uvm import UVMConfig
 
@@ -130,9 +130,6 @@ def test_route_post_identity_passthrough_plain():
 # ---------------------------------------------------------------------------
 # ParseLogMod (spec 09b)
 # ---------------------------------------------------------------------------
-
-
-from modules.rtl_buddy.schema import TestResult  # noqa: E402
 
 
 def _make_log_proc(key, log_path):

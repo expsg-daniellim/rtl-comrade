@@ -32,9 +32,9 @@ The key under which a plugin file is registered in `sys.modules` (`plugin_name`)
 
 ## Cross-file imports
 
-Before importing a plugin file, `import_plugin_file` inserts the appropriate directory into `sys.path` so that plugin files can import siblings via Python's normal import machinery. For a package directory (one containing `__init__.py`) the parent is inserted so that `from pkg.sibling import X` resolves; for a plain directory the directory itself is inserted.
+Before importing a plugin file, `import_plugin_file` inserts the appropriate directory into `sys.path` so that plugin files can import siblings via Python's normal import machinery. For a package directory `package_root_dir` walks the whole `__init__.py` chain up to the top-most package and inserts *its* parent, so multi-level absolute imports (`from modules.rtl_buddy.schema import X`) resolve, not just single-level ones; for a plain directory the directory itself is inserted.
 
 ## Caveats
 
-- a module already present in `sys.modules` under its canonical name or `plugin_name` is reused rather than re-executed; re-executing would produce a second distinct class object and break `isinstance` checks. The canonical name is only computed for package directories — plain-directory file stems (e.g. `io`, `re`) collide with stdlib.
+- a module already present in `sys.modules` under its canonical name or `plugin_name` is reused rather than re-executed; re-executing would produce a second distinct class object and break `isinstance` checks. The canonical name is computed relative to the top-most package's parent (the same root used for `sys.path`), and only for package directories — plain-directory file stems (e.g. `io`, `re`) collide with stdlib.
 - because `structure.py` later uses `inspect.getsource(...)`, this loader intentionally inserts imported modules into `sys.modules`.

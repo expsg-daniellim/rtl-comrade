@@ -12,7 +12,6 @@ Deliberate divergences from rtl_buddy (expected mismatches):
 """
 
 import importlib.util
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -32,31 +31,12 @@ _RB_BIN = str(_VENV_BIN / "rtl-buddy")
 _CAPTURES = Path(__file__).parent / "captures"
 
 
-def _rc_env():
-    """Build a subprocess env that exposes the project root as a package search path.
-
-    Required because module files (modules/rtl_buddy/*.py) do ``from modules.rtl_buddy…``
-    imports, which resolve only when the project root is on sys.path. When running
-    from the sandbox the OS-level CWD is not the project root, so PYTHONPATH must
-    supply it explicitly.
-    """
-    env = os.environ.copy()
-    pythonpath = env.get("PYTHONPATH", "")
-    entries = [e for e in pythonpath.split(os.pathsep) if e]
-    root = str(_PROJECT_ROOT)
-    if root not in entries:
-        entries.insert(0, root)
-    env["PYTHONPATH"] = os.pathsep.join(entries)
-    return env
-
-
 def _run_rc(args, *, cwd=None):
     return subprocess.run(
         [_RC_BIN, *args],
         cwd=cwd or _SANDBOX,
         capture_output=True,
         text=True,
-        env=_rc_env(),
     )
 
 

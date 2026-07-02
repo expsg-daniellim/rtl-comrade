@@ -410,6 +410,15 @@ nodes:
   module: add
 ```
 
+## Cross-File Imports
+
+A plugin file may import from sibling files. For sibling imports to resolve, the loader puts the right directory on `sys.path` — but it treats a folder as a package only when that folder contains an `__init__.py`. Add an empty `__init__.py` to any folder you want to import through:
+
+- A plain folder (no `__init__.py`) is put on `sys.path` directly, so `import sibling` works but `from folder.sibling import X` does not.
+- A package folder (with `__init__.py`) has its parent put on `sys.path` instead, so absolute imports like `from modules.rtl_buddy.schema import X` resolve. The loader walks the whole `__init__.py` chain, so every folder in a multi-level package (e.g. both `modules/` and `modules/rtl_buddy/`) needs its own `__init__.py`; a gap anywhere in the chain stops the walk and the absolute import fails.
+
+See [docs/harness/loader_utils.md](../harness/loader_utils.md) for the exact `sys.path` rule.
+
 ## Design Advice
 
 - Keep scheduling logic in contracts, not in modules.
