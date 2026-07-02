@@ -30,8 +30,8 @@ EnsureLogsDirMod = _mod.EnsureLogsDirMod
 ParseSuiteConfigMod = _mod.ParseSuiteConfigMod
 DeriveSeedModeMod = _mod.DeriveSeedModeMod
 
-_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "root_config.yaml"
-_SUITE_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "verif" / "sandbox" / "tests.yaml"
+_FIXTURE = Path(__file__).parent / "fixtures" / "root_config.yaml"
+_SUITE_FIXTURE = Path(__file__).parent / "fixtures" / "verif" / "sandbox" / "tests.yaml"
 
 
 # ---------------------------------------------------------------------------

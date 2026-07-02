@@ -97,7 +97,7 @@ uv run pytest tests/ contracts/tests/ modules/tests/
 
 ### Committed fixtures
 
-The suite fixtures live under `tests/e2e/fixtures/proj/` and are committed. They are ported from `rtl-buddy-proj-template` (whose live tree is gitignored) and mirror its directory layout so the `tests.yaml` / `models.yaml` relative paths (`+incdir+../../common`, `../../design/sandbox/models.yaml`, `-F test_modules.f`) resolve unchanged. Only source fixtures are tracked; the `.gitignore` under that tree excludes everything a run generates in the suite dirs (`logs/`, `obj_dir*/`, `run.*.f`, `test.log`/`.err`/`.randseed`, `dump.fst`, `rtl_buddy.log`). The graph itself is resolved via the repo-root `rtl_comrade_config.yaml`; `root_config.yaml` is committed inside the fixture because config discovery ascends from the suite dir to find it.
+The suite fixtures live under `tests/e2e/fixtures/proj/` and are committed. Their directory layout makes the `tests.yaml` / `models.yaml` relative paths (`+incdir+../../common`, `../../design/sandbox/models.yaml`, `-F test_modules.f`) resolve unchanged. Only source fixtures are tracked; the `.gitignore` under that tree excludes everything a run generates in the suite dirs (`logs/`, `obj_dir*/`, `run.*.f`, `test.log`/`.err`/`.randseed`, `dump.fst`, `rtl_buddy.log`). The graph itself is resolved via the repo-root `rtl_comrade_config.yaml`; `root_config.yaml` is committed inside the fixture because config discovery ascends from the suite dir to find it.
 
 ### Required binaries
 

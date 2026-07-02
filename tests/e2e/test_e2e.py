@@ -1,7 +1,7 @@
 """End-to-end parity tests: rtl-comrade test vs rtl_buddy test.
 
 Drives the committed suite fixtures under tests/e2e/fixtures/proj (ported from
-rtl-buddy-proj-template, whose live tree is gitignored) and compares rtl-comrade's
+rtl-buddy-proj-template) and compares rtl-comrade's
 exit code and per-test verdicts to rtl_buddy's reference output, with the
 deliberate divergences from [07] applied.
 
@@ -20,7 +20,7 @@ import pytest
 
 _PROJECT_ROOT = Path(__file__).parents[2]
 # Suite fixtures are committed under tests/e2e/fixtures/proj (ported from the
-# rtl-buddy-proj-template, whose live tree is gitignored). The directory layout
+# rtl-buddy-proj-template). The directory layout
 # mirrors the template so the tests.yaml/models.yaml relative paths resolve.
 _FIXTURE_PROJ = Path(__file__).parent / "fixtures" / "proj"
 _SANDBOX = _FIXTURE_PROJ / "verif" / "sandbox"

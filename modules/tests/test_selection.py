@@ -25,7 +25,7 @@ LoadModelMod = _mod.LoadModelMod
 ModelConfigFile = _mod.ModelConfigFile
 ExpandSweepMod = _mod.ExpandSweepMod
 
-_MODELS_FIXTURE = Path(__file__).parent.parent.parent / "rtl-buddy-proj-template" / "design" / "sandbox" / "models.yaml"
+_MODELS_FIXTURE = Path(__file__).parent / "fixtures" / "design" / "sandbox" / "models.yaml"
 
 
 def _suite_cfg(tests=None):
