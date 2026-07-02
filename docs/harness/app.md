@@ -46,6 +46,8 @@ commands:
 
 `App` searches for this file by ascending the directory tree from the current working directory, stopping at the git repository root (a directory containing `.git/`) or the filesystem root. The file name searched for defaults to `rtl_comrade_config.yaml` and can be changed with `--config-file`. This is a filename, not a path — the directory tree search still runs from the current working directory regardless.
 
+If the cwd search finds nothing, `App` falls back to the same ascent seeded from the harness source folder (`Path(__file__).resolve().parent`). This is a **fragile, dev-only stopgap**: it assumes a source/editable checkout where `rtl_comrade_config.yaml` and `graphs/` sit above `src/rtl_comrade/`. It breaks for a real wheel install (those assets are not shipped as package data) and where `__file__` is unavailable (zip/frozen imports). It exists only until modules, contracts, and graphs are distributed and discovered as installed packages rather than co-located files.
+
 The config is parsed into `RtlComradeConfig` and `CommandConfig` via `pyserde`. The directory in which the file was found is stored on `RtlComradeConfig.relative_path` and used to resolve graph paths at subcommand registration time.
 
 ## Two-Pass Argument Parsing
