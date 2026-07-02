@@ -8,6 +8,7 @@ See also:
 - [docs/modules/index.md](../modules/index.md) — reference for every node module
 - [docs/running.md](../running.md) — global options, config discovery, exit codes
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format
+- [docs/divergences.md](../divergences.md) — behavioural deltas from baseline `rtl_buddy`
 
 ## Available graphs
 

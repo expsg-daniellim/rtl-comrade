@@ -6,7 +6,7 @@ Behavioural deltas discovered or confirmed during end-to-end validation (spec 12
 
 ## Deliberate divergences (anticipated by [07])
 
-These are documented in [07 — Notable divergences](implementation-test/07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy) and are expected.
+These are documented in [07 — Notable divergences](07-ambiguities-and-assumptions.md#notable-divergences-from-rtl_buddy) and are expected.
 
 ### `--early-stop` exits 0 instead of 1
 
@@ -47,23 +47,23 @@ These are recorded inline in their specs ("Record in `divergences.md` when imple
 
 ### `sim` timeout signalled by `rc is None`, not a `4444` sentinel
 
-rtl_buddy returns `rc=4444` as its timeout sentinel (`tools/vlog_sim.py:260`), which an organic `exit(4444)` could forge. rtl-comrade's `run-process` returns `Proc.rc = None` on the timeout-and-kill path; a reaped child's returncode is always an `int`, so `rc is None` unambiguously means the runner timed the child out. `interpret-sim` routes on `proc.rc is None` (`modules/rtl_buddy/sim.py:104`). Spec [03](implementation-test/specs/03-run-process.md).
+rtl_buddy returns `rc=4444` as its timeout sentinel (`tools/vlog_sim.py:260`), which an organic `exit(4444)` could forge. rtl-comrade's `run-process` returns `Proc.rc = None` on the timeout-and-kill path; a reaped child's returncode is always an `int`, so `rc is None` unambiguously means the runner timed the child out. `interpret-sim` routes on `proc.rc is None` (`modules/rtl_buddy/sim.py:104`). Spec [03](specs/03-run-process.md).
 
 ### Timeout signals the whole process group (`os.killpg`)
 
-rtl_buddy signals only the process-group leader (`process.send_signal(SIGQUIT)`, `tools/vlog_sim.py:259`), so processes the simulator spawned (licence servers, helper shells) are never reached. rtl-comrade uses `os.killpg(os.getpgid(proc.pid), SIGQUIT)` (`build.py:167,181`) to reach the whole group. Spec [03](implementation-test/specs/03-run-process.md).
+rtl_buddy signals only the process-group leader (`process.send_signal(SIGQUIT)`, `tools/vlog_sim.py:259`), so processes the simulator spawned (licence servers, helper shells) are never reached. rtl-comrade uses `os.killpg(os.getpgid(proc.pid), SIGQUIT)` (`build.py:167,181`) to reach the whole group. Spec [03](specs/03-run-process.md).
 
 ### SIGKILL escalation after a grace window
 
-rtl_buddy has no SIGKILL escalation — a SIGQUIT-trapping simulator hangs the suite indefinitely. rtl-comrade waits `grace_s` (per-node, default `5.0`s) after SIGQUIT, then escalates to `os.killpg(..., SIGKILL)` (`build.py:145,171-174,185-188`). Spec [03](implementation-test/specs/03-run-process.md).
+rtl_buddy has no SIGKILL escalation — a SIGQUIT-trapping simulator hangs the suite indefinitely. rtl-comrade waits `grace_s` (per-node, default `5.0`s) after SIGQUIT, then escalates to `os.killpg(..., SIGKILL)` (`build.py:145,171-174,185-188`). Spec [03](specs/03-run-process.md).
 
 ### Per-child `cwd=work_dir` replaces a process-wide `chdir`
 
-rtl_buddy `os.chdir`s the whole process into each suite's directory and back (`rtl_buddy.py:404,436`) — safe only because it runs suites serially. rtl-comrade runs tests concurrently, where a process-wide `chdir` would race, so it passes `cwd=work_dir` to each `create_subprocess_exec` (`build.py:158`) — per-child, no shared global state. This is what makes `work_dir` the single artefact-location source: the leaves root their paths on it, the runner roots each child's CWD on it, and the harness process never `chdir`s. Spec [03](implementation-test/specs/03-run-process.md).
+rtl_buddy `os.chdir`s the whole process into each suite's directory and back (`rtl_buddy.py:404,436`) — safe only because it runs suites serially. rtl-comrade runs tests concurrently, where a process-wide `chdir` would race, so it passes `cwd=work_dir` to each `create_subprocess_exec` (`build.py:158`) — per-child, no shared global state. This is what makes `work_dir` the single artefact-location source: the leaves root their paths on it, the runner roots each child's CWD on it, and the harness process never `chdir`s. Spec [03](specs/03-run-process.md).
 
 ### Atomic `force_symlink`
 
-rtl_buddy's `force_symlink` does a non-atomic `os.remove` + `os.symlink` (`tools/vlog_sim.py:26-30`), leaving a window with no link. rtl-comrade symlinks to a unique temp name then `os.replace`s it over the target (`sim.py:89-92`), so the "latest" pointer swap is atomic. Spec [08e](implementation-test/specs/08e-link-latest.md).
+rtl_buddy's `force_symlink` does a non-atomic `os.remove` + `os.symlink` (`tools/vlog_sim.py:26-30`), leaving a window with no link. rtl-comrade symlinks to a unique temp name then `os.replace`s it over the target (`sim.py:89-92`), so the "latest" pointer swap is atomic. Spec [08e](specs/08e-link-latest.md).
 
 ---
 
@@ -81,11 +81,11 @@ Their specs gate recording on a condition that has not fired; recorded pre-empti
 
 ### `ModelConfig.get_model_name` bug fix
 
-rtl_buddy's `ModelConfig.get_model_name` returns `self.model_name` (`config/model.py:30`) — an attribute that does not exist on the dataclass (`name` is the real field), so any caller would `AttributeError`. No rtl_buddy caller invokes it, so this never surfaced. rtl-comrade fixes it to return `self.name` (`modules/rtl_buddy/schema/model.py:12`). Spec [01c](implementation-test/specs/01c-model-schema.md) flags recording only if a consumer ever starts using the method; there is currently no production or reference-suite (`rtl-buddy-proj-template`) caller, so this is informational.
+rtl_buddy's `ModelConfig.get_model_name` returns `self.model_name` (`config/model.py:30`) — an attribute that does not exist on the dataclass (`name` is the real field), so any caller would `AttributeError`. No rtl_buddy caller invokes it, so this never surfaced. rtl-comrade fixes it to return `self.name` (`modules/rtl_buddy/schema/model.py:12`). Spec [01c](specs/01c-model-schema.md) flags recording only if a consumer ever starts using the method; there is currently no production or reference-suite (`rtl-buddy-proj-template`) caller, so this is informational.
 
 ### Sweep/preproc script model-view residuals (KIV)
 
-The `sweep`/`preproc` hooks run drop-in user scripts against this plan's reimplemented `TestConfig`/`root_cfg`, and expose the resolved `ModelConfig` as `test_cfg.model` only for the span of the `exec`, restoring the name string before the edge is emitted (specs [05f](implementation-test/specs/05f-expand-sweep.md)/[06a](implementation-test/specs/06a-run-preproc.md)). Two residual deltas from rtl_buddy, neither yet observed in a real script:
+The `sweep`/`preproc` hooks run drop-in user scripts against this plan's reimplemented `TestConfig`/`root_cfg`, and expose the resolved `ModelConfig` as `test_cfg.model` only for the span of the `exec`, restoring the name string before the edge is emitted (specs [05f](specs/05f-expand-sweep.md)/[06a](specs/06a-run-preproc.md)). Two residual deltas from rtl_buddy, neither yet observed in a real script:
 
 1. Reimplemented-`TestConfig` surface differences (method/attribute shapes beyond the `name`/`set_plusarg`/`get_plusargs`/`deepcopy` the reference scripts use) could break a script that relied on rtl_buddy-specific surface.
 2. A script that *reassigns* `test_cfg.model` to a different `ModelConfig` has the reassignment dropped — the post-exec restore puts the name string back and the resolved `model` edge is fixed upstream — whereas in rtl_buddy such a reassignment could change what compiles.

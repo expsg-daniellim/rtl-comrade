@@ -2,6 +2,8 @@
 
 `rtl-buddy` is a monolithic CLI tool for automating tests, regressions, testplan, fpga builds, rtl releases. `rtl-comrade` is a modular version of `rtl-buddy` based on an executable dependency graph, intended for modular construction, rapid iteration and easy extension with a high degree of code reuse. `rtl-buddy` commands become individual graphs that are executed by the harness. The rest of this README covers features specific to the harness. Detailed docs can be found in `docs/`.
 
+The implementations of each command have deferred slightly from baseline `rtl_buddy` v1.4.0, see [`docs/divergences.md`](docs/divergences.md).
+
 ## Setup
 
 Requires [uv](https://docs.astral.sh/uv/#installation) and Python 3.11 or later (uv installs it if needed). Install the locked environment once:
