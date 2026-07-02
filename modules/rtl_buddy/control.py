@@ -1,12 +1,16 @@
 import structlog
 from serde import serde
 
+from rtl_comrade.api import REST
+
 from modules.rtl_buddy.schema import RunDepth, TestResult
 
 log = structlog.get_logger()
 
 
 class EarlyStopGateMod:
+    output_groups = {"stop": ["stop"], "pass": REST}
+
     @serde
     class Config:
         phase: str  # "pre" | "comp" | "sim"
