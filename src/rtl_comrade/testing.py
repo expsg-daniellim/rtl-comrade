@@ -30,7 +30,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 import pytest
@@ -64,10 +64,13 @@ class PortMeta:
 		has_default: Whether the port should report a default value.
 		required: Whether the port is marked required, forcing the default contract to
 			await a real value even when has_default is set.
+		branch_labels: Control-dependence labels the harness would assign during graph
+			construction; ports with equal labels are co-fated. Defaults to no labels.
 	"""
 
 	has_default: bool = False
 	required: bool = False
+	branch_labels: frozenset = field(default_factory=frozenset)
 
 
 @dataclass
@@ -157,6 +160,7 @@ async def run_contract_scenario(
 			has_ended=port.has_ended,
 			has_default=port.has_default,
 			required=meta.get(name, _default_meta).required,
+			branch_labels=meta.get(name, _default_meta).branch_labels,
 		)
 		for name, port in ports.items()
 	}

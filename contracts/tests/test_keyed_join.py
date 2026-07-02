@@ -102,6 +102,21 @@ async def test_incomplete_key_at_stream_end_logs_error(logging_handler):
 	assert logging_handler.failure is True
 
 
+async def test_unselected_branch_arm_incomplete_key_not_error(logging_handler):
+	# Keyed port "b" belongs to a branch arm that was not selected: it ends without key 1 while "a" (a separate partition) buffered it. The key is not co-fated-incomplete, so no error is logged.
+	await run_contract_scenario(
+		KeyedJoinContract,
+		port_inputs={
+			"a": [{"id": 1, "v": "A"}, EndSentinel("src")],
+			"b": [EndSentinel("src")],
+		},
+		expected_outputs=[EndSentinel("test")],
+		port_meta={"b": PortMeta(branch_labels=frozenset({("origin", frozenset({"b"}))}))},
+		config=_CFG,
+	)
+	assert logging_handler.failure is False
+
+
 async def test_lagging_keyed_port_awaited_not_terminated(logging_handler):
 	# Two keyed ports deliver key 1 and end before the third (proc-like) port produces it. The
 	# join must wait for the lagging port rather than terminating on the early ends (Bug A).

@@ -1,7 +1,7 @@
 """Tests for UnitContract."""
 
 from rtl_comrade.api import EndSentinel
-from rtl_comrade.testing import run_contract_scenario
+from rtl_comrade.testing import run_contract_scenario, PortMeta
 
 from contracts.unit import UnitContract
 
@@ -39,6 +39,17 @@ async def test_missing_one_of_multiple_ports_logs_error(logging_handler):
 		expected_outputs=[EndSentinel("test")],
 	)
 	assert logging_handler.failure is True
+
+
+async def test_unselected_branch_arm_is_not_missing_error(logging_handler):
+	# "b" belongs to a branch arm that was not selected, so it ends without data while co-independent "a" delivers; that is a legitimate branch outcome, not a missing required input.
+	await run_contract_scenario(
+		UnitContract,
+		port_inputs={"a": [1], "b": [EndSentinel("src")]},
+		expected_outputs=[EndSentinel("test")],
+		port_meta={"b": PortMeta(branch_labels=frozenset({("origin", frozenset({"b"}))}))},
+	)
+	assert logging_handler.failure is False
 
 
 async def test_duplicate_input_logs_error(logging_handler):

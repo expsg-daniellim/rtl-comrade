@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, cast
 
@@ -25,7 +26,9 @@ class KeyedJoinContract:
 	when present, otherwise the ``key_field`` entry of a payload dict. ``key_field`` names the
 	field in both cases and defaults to ``"key"``. Keys may arrive
 	interleaved across ports; partial groups are buffered until complete. When all keyed
-	ports have ended, any keys still incomplete are logged as an error.
+	ports have ended, a key held by only some co-fated ports (those sharing branch labels)
+	within a partition is logged as an error; a key a whole partition never received is a
+	branch legitimately not selected and is not flagged.
 
 	Ports named in ``persistent_inputs`` are singletons replayed on every keyed assembly.
 	A persistent input need not carry a key; when it does, its latest value is
@@ -133,10 +136,14 @@ class KeyedJoinContract:
 		return min(complete) if complete else None
 
 	def _find_incomplete_keys(self) -> list[Any]:
+		partitions: dict[frozenset, list[str]] = defaultdict(list)
+		for name, port in self._keyed.items():
+			partitions[port.branch_labels].append(name)
 		all_keys: set[Any] = set()
 		for name in self._keyed:
 			all_keys |= set(self._buffers.get(name, {}).keys())
-		return [k for k in all_keys if not all(k in self._buffers.get(n, {}) for n in self._keyed)]
+		# A key is a desync only when a control-dependence partition holds it on some co-fated ports but not all; a whole partition missing the key is an arm legitimately not selected.
+		return [k for k in all_keys if any(0 < sum(k in self._buffers.get(n, {}) for n in names) < len(names) for names in partitions.values())]
 
 	def _persistent_ready(self) -> bool:
 		return all(port.state['last_value'] is not None or port.has_ended() or _can_default(port) for port in self._persistent.values())

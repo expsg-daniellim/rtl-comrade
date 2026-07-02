@@ -81,6 +81,8 @@ await run_contract_scenario(
 
 When a default-valued port has nothing queued the contract omits its key from the returned dict, so `"b"` does not appear in `expected_outputs` for that step. Ports not listed in `port_meta` default to `has_default=False`.
 
+`PortMeta` also accepts `branch_labels` (a `frozenset`, default empty) to set the control-dependence labels the harness would assign during graph construction — ports given equal `branch_labels` are co-fated. Use this to test branch-aware contracts (`branch_aware_join`, and the partition-aware error paths of `keyed_join` / `zip` / `unit`): give two ports the same labels to make them co-fated arms, or leave a port's labels empty to mark it an unconditional participant. See [branch_labels.md](../harness/branch_labels.md).
+
 `PortMeta` also accepts `required=True` to mark a port required, matching a destination marked `required: true` in the graph config. The built-in default contract then awaits a real value on that port even when `has_default=True`, so the key is never omitted. Pair it with `PortTestInput(value, delay=N)` to assert the contract blocks rather than falling back to the default:
 
 ```python

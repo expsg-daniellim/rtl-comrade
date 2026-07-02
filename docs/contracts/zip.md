@@ -12,7 +12,7 @@ None.
 
 ## Termination
 
-Ends when any port ends. If some ports have delivered data and others have delivered `EndSentinel` for the same invocation, the mismatch is logged as an error.
+Ends when any port ends. A data/end split for the same invocation is logged as a `mismatched_ends` error only within a single control-dependence partition (ports sharing the same `branch_labels`): a branch may end one arm while another stays live, so a split across partitions is a legitimate branch outcome, not a mismatch. See [branch_labels.md](../harness/branch_labels.md).
 
 ## Example use cases
 
