@@ -93,7 +93,7 @@ uv run pytest tests/ contracts/tests/ modules/tests/
 
 ## End-to-end tests (`tests/e2e/`)
 
-`tests/e2e/test_e2e.py` drives the assembled `test` graph against a real SystemVerilog suite and compares `rtl-comrade test …` to the reference `rtl_buddy test …` (see `implementation-test/specs/12-end-to-end.md`). They are collected by a bare `uv run pytest` along with the rest of the suite.
+`tests/e2e/test_e2e.py` drives the assembled `test` graph against a real SystemVerilog suite and compares `rtl-comrade test …` to snapshotted `rtl_buddy test …` reference output (see `implementation-test/specs/12-end-to-end.md`). They are collected by a bare `uv run pytest` along with the rest of the suite.
 
 ### Committed fixtures
 
@@ -101,14 +101,25 @@ The suite fixtures live under `tests/e2e/fixtures/proj/` and are committed. Thei
 
 ### Required binaries
 
-These tests **compile and simulate real RTL** and shell out to a **live reference binary**; they are not skip-guarded, so the suite-driving cases fail (not skip) if either tool is absent. Install both before running the full suite:
+These tests **compile and simulate real RTL**, so `verilator` must be installed; the suite-driving cases fail (not skip) if it is absent. The `rtl_buddy` reference is **not** invoked at test time — its output is snapshotted under `tests/e2e/captures/` (see below), so `verilator` is the only binary the suite needs.
 
 | Binary | Version | Role |
 |---|---|---|
 | `verilator` | `v5.042` | the configured builder (`root_config.yaml`) — actually compiles and simulates each test |
-| `rtl-buddy` | `v1.4.0` | the parity reference; run live for the `--list`, compile-fail, sim-timeout, and `--early-stop` scenarios |
 
-`rtl-buddy` is installed from the gitignored `rtl_buddy/` package and resolved at `.venv/bin/rtl-buddy`. The `ParseLogMod` correction tests and the concurrency-note test in the same file are self-contained (no suite, no binaries) and always run.
+The `ParseLogMod` correction tests and the concurrency-note test in the same file are self-contained (no suite, no binary) and always run.
+
+### Snapshotted `rtl_buddy` reference (`tests/e2e/captures/`)
+
+The parity scenarios (`--list`, compile-fail, sim-timeout, and the three `--early-stop` phases) compare `rtl-comrade` against **`rtl_buddy` v1.4.0**. Rather than run that binary live — it is installed only from the gitignored `rtl_buddy/` package and is unavailable in CI — its output is captured once and committed, keyed by scenario:
+
+- `<scenario>.rc` — the reference exit code.
+- `<scenario>.err` — the reference **stderr**, with ANSI colour codes stripped. This holds the deterministic payload the tests read: the verdict summary rows and, for compile-fail, verilator's error dump.
+- `list_names.txt` — the `--list` stdout (the one scenario whose stdout is the asserted result).
+
+`_ref(name)` in `test_e2e.py` loads these; `rtl_buddy` is only re-run against the fixtures when a capture must be refreshed for a new version.
+
+**Why stdout is not captured for the run scenarios.** For `test <name>` invocations `rtl_buddy` writes its verdict summary to stderr and reserves stdout for a per-run banner — `git: <branch> | commit <sha> | mod <n> | staged <n>` — followed by `… vlog compile time N secs` / `run time N secs` progress lines. Both are non-deterministic (they vary with the checkout's git state and with wall-clock timing) and neither is asserted by the tests, so snapshotting stdout would commit machine- and run-specific noise for no gain. `--list` is the exception: it prints no banner and its stdout *is* the result, so that one stdout is captured (`list_names.txt`).
 
 ---
 

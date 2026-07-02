@@ -17,12 +17,9 @@ jobs:
   test:
     name: Test (pytest)
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+    container:
+      image: verilator/verilator:v5.042
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-        with:
-          python-version: ${{ matrix.python-version }}
       - run: uv run --group dev pytest tests/ --cov --cov-report=term-missing

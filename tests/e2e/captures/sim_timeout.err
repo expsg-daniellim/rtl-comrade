@@ -1,0 +1,7 @@
+WARNING: Using custom sim_timeout of 5 seconds
+ERROR: Terminating test (sim_timeout) due to timeout 5 secs. Set 'sim_timeout' for this test in tests.yaml if needed.
+ERROR: sim_timeout vlog run returncode(4444)
+RESULT: 
+Test Results Summary
+sim_timeout                    FAIL     Sim hit timeout               
+

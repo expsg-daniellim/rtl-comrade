@@ -2,8 +2,10 @@
 
 Drives the committed suite fixtures under tests/e2e/fixtures/proj (ported from
 rtl-buddy-proj-template) and compares rtl-comrade's
-exit code and per-test verdicts to rtl_buddy's reference output, with the
-deliberate divergences from [07] applied.
+exit code and per-test verdicts to rtl_buddy's captured reference output
+(tests/e2e/captures/, pinned rtl_buddy v1.4.0), with the deliberate divergences
+from [07] applied. The captures stand in for the rtl_buddy reference binary,
+which is not installed in CI.
 
 Deliberate divergences from rtl_buddy (expected mismatches):
 - --early-stop exits 0 (rtl_buddy exits 1; [07] Notable divergences).
@@ -30,7 +32,6 @@ _SANDBOX = _FIXTURE_PROJ / "verif" / "sandbox"
 _LAZY_MODEL_SUITE = _FIXTURE_PROJ / "verif" / "lazy_model"
 _VENV_BIN = _PROJECT_ROOT / ".venv" / "bin"
 _RC_BIN = str(_VENV_BIN / "rtl-comrade")
-_RB_BIN = str(_VENV_BIN / "rtl-buddy")
 _CAPTURES = Path(__file__).parent / "captures"
 
 
@@ -44,14 +45,17 @@ def _run_rc(args, *, cwd=None):
 	)
 
 
-def _run_rb(args, *, cwd=None):
-	return subprocess.run(
-		[_RB_BIN, *args],
-		cwd=cwd or _SANDBOX,
-		capture_output=True,
-		text=True,
-		check=False,
-	)
+def _ref(name):
+	"""Load a captured rtl_buddy reference result (return code, ANSI-stripped stderr).
+
+	Captures live under tests/e2e/captures/ and replace invoking the rtl_buddy
+	reference binary, which is not installed in CI. Generated from the pinned
+	rtl_buddy v1.4.0 against these fixtures; stdout is not captured (it carries a
+	non-deterministic git banner and compile/run timings the tests never read).
+	"""
+	rc = int((_CAPTURES / f"{name}.rc").read_text())
+	err_path = _CAPTURES / f"{name}.err"
+	return rc, err_path.read_text() if err_path.exists() else ""
 
 
 # ---------------------------------------------------------------------------
@@ -91,9 +95,8 @@ def test_list_exit_and_names():
 	"""
 	expected = (_CAPTURES / "list_names.txt").read_text().strip()
 
-	ref = _run_rb(["test", "--list"])
-	assert ref.returncode == 0
-	assert ref.stdout.strip() == expected
+	ref_rc, _ = _ref("list")
+	assert ref_rc == 0
 
 	result = _run_rc(["test", "--list"])
 	assert result.returncode == 0, (
@@ -154,8 +157,8 @@ def test_compile_fail_exit_and_verdict():
 	Reference: rtl_buddy test compile_fail exits 1, summary shows FAIL.
 	Compile log is persisted under logs/ ([07 settled 12]) — new behaviour vs rtl_buddy.
 	"""
-	ref = _run_rb(["test", "compile_fail"])
-	assert ref.returncode != 0
+	ref_rc, _ = _ref("compile_fail")
+	assert ref_rc != 0
 
 	result = _run_rc(["test", "compile_fail"])
 	assert result.returncode != 0, (
@@ -190,8 +193,8 @@ def test_sim_timeout_exit_and_verdict():
 	Reference: rtl_buddy test sim_timeout exits 1, summary shows FAIL.
 	The ``rc is None`` timeout path (vs rtl_buddy's 4444 sentinel) is [07 settled 23].
 	"""
-	ref = _run_rb(["test", "sim_timeout"])
-	assert ref.returncode != 0
+	ref_rc, _ = _ref("sim_timeout")
+	assert ref_rc != 0
 
 	result = _run_rc(["test", "sim_timeout"])
 	assert result.returncode != 0, (
@@ -221,10 +224,10 @@ def test_early_stop(phase, rb_desc, rc_desc):
 	- Desc for pre/comp: rtl-comrade uses phase token ("pre"/"comp") not rtl_buddy's
 	  "preproc"/"compile" wording. Only "sim" desc is identical between the two.
 	"""
-	ref = _run_rb(["--early-stop", phase, "test", "basic"])
-	assert ref.returncode == 1, f"rtl_buddy --early-stop {phase} should exit 1"
-	ref_vs = _verdicts(_strip_ansi(ref.stderr))
-	assert "basic" in ref_vs, f"No 'basic' row in rtl_buddy output; stderr: {ref.stderr}"
+	ref_rc, ref_err = _ref(f"early_{phase}")
+	assert ref_rc == 1, f"rtl_buddy --early-stop {phase} should exit 1"
+	ref_vs = _verdicts(ref_err)
+	assert "basic" in ref_vs, f"No 'basic' row in rtl_buddy capture; stderr: {ref_err}"
 	assert ref_vs["basic"][0] == "NA"
 	assert rb_desc in ref_vs["basic"][1], (
 		f"Expected rtl_buddy desc '{rb_desc}', got '{ref_vs['basic'][1]}'"
