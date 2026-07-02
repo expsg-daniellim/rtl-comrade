@@ -1,10 +1,12 @@
 """Static analysis of module signatures and emitted output-port names."""
 
 import ast
-from collections import deque, defaultdict
+import builtins
+from collections import Counter, deque, defaultdict
 from dataclasses import dataclass
 import inspect
 from inspect import Parameter
+import keyword
 import textwrap
 import typing
 from typing import cast, NamedTuple
@@ -15,6 +17,9 @@ from .api import RestSentinel
 from .logging import HarnessLogger
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
+
+# `run` arguments that are these plus a trailing underscore have the underscore ignored so a builtin/keyword can be avoided in Python without leaking into the graph.
+RESERVED_NAMES = set(dir(builtins)) | set(keyword.kwlist)
 
 # BFS of the AST filtering out nested function nodes.
 def walk_ast(node):
@@ -72,12 +77,14 @@ class ModuleStructureArg:
 	"""One inferred module input argument from a module ``run(...)`` signature.
 
 	Attributes:
-		name: Input-port name inferred from the parameter name.
+		name: External input-port name, the parameter name with a builtin/keyword-avoiding trailing underscore dropped.
+		param: The literal ``run(...)`` parameter name, used only to key the module call.
 		type_: Stringified annotation, if present on the parameter.
 		has_default: Whether the parameter has a Python default value.
 	"""
 
 	name: str
+	param: str
 	type_: str | None = None
 	has_default: bool = False
 
@@ -139,10 +146,15 @@ class ModuleStructure:
 		non_self = [(name, param) for (name, param) in sig.parameters.items() if name != 'self']
 		self.definite_inputs = not any(param.kind in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD) for (_, param) in non_self)
 		self.args = [ ModuleStructureArg(
-			name=name,
+			name=name[:-1] if name.endswith('_') and name[:-1] in RESERVED_NAMES else name,
+			param=name,
 			type_=str(param.annotation) if param.annotation != Parameter.empty else None,
 			has_default=param.default != Parameter.empty,
 		) for (name, param) in non_self if param.kind not in (Parameter.VAR_POSITIONAL, Parameter.VAR_KEYWORD) ]
+
+		duplicates = [name for (name, count) in Counter(arg.name for arg in self.args).items() if count > 1] # <name> and <name>_ collapse to one external name
+		if len(duplicates) > 0:
+			log.fatal('port_name_collision', context='harness.module.structure', module=self.name, ports=duplicates)
 
 		# Emits come from run and, when it resolves to a callable (as node.py guards at runtime), finalise.
 		run_info = self.parse_emits(Module.__name__, Module.run)

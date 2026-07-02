@@ -29,16 +29,22 @@ class Port(Generic[T]):
 	"""One queue-backed runtime input port owned by a node.
 
 	Attributes:
-		name: Canonical input-port name.
+		name: Canonical external input-port name.
+		param: The module ``run(...)`` parameter this port feeds; defaults to ``name`` for edge-built and contract-surface ports.
 		queue: Async queue carrying Payload and EndSentinel messages.
 		has_default: Whether the corresponding module input has a default value.
 		ended: Whether this port has already observed an EndSentinel.
 	"""
 
 	name: str
+	param: str = ''
 	queue: Queue[Payload[T]|EndSentinel] = field(default_factory=Queue)
 	has_default: bool = False
 	ended: bool = False
+
+	def __post_init__(self):
+		if self.param == '':
+			self.param = self.name
 
 	@classmethod
 	def from_structure(cls, arg:ModuleStructureArg) -> Self:
@@ -51,7 +57,7 @@ class Port(Generic[T]):
 			A Port initialized from that argument description.
 		"""
 
-		return cls(name=arg.name, has_default=arg.has_default)
+		return cls(name=arg.name, param=arg.param, has_default=arg.has_default)
 
 	async def get(self) -> Payload[T]|EndSentinel:
 		"""Wait for and return the next runtime message for this port.

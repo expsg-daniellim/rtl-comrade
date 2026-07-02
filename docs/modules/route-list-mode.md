@@ -13,6 +13,8 @@ Routes the whole suite to either the list-names branch or the run branch, based 
 | `suite_cfg` | `SuiteConfig` | — | parsed suite |
 | `list` | `bool` | `False` | `--list`: print names instead of running |
 
+The `list` port is the `list_` parameter in source — a trailing underscore avoids shadowing the builtin, dropped for the port name (see [module-implementation/implementation.md](../module-implementation/implementation.md)).
+
 ## Outputs
 
 `list` — the suite (when `--list`); `run` — the suite (otherwise). Exactly one fires.

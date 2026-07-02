@@ -41,7 +41,7 @@ def _suite_cfg(tests=None):
 def test_route_list_mode_list_true():
 	cfg = _suite_cfg({"t1": None})
 	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg, list=True)
+	port, result = mod.run(suite_cfg=cfg, list_=True)
 	assert port == "list"
 	assert result is cfg
 
@@ -49,7 +49,7 @@ def test_route_list_mode_list_true():
 def test_route_list_mode_list_false():
 	cfg = _suite_cfg({"t1": None})
 	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg, list=False)
+	port, result = mod.run(suite_cfg=cfg, list_=False)
 	assert port == "run"
 	assert result is cfg
 
@@ -65,7 +65,7 @@ def test_route_list_mode_default():
 def test_route_list_mode_empty_suite():
 	cfg = _suite_cfg()
 	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg, list=False)
+	port, result = mod.run(suite_cfg=cfg, list_=False)
 	assert port == "run"
 	assert result is cfg
 

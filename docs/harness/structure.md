@@ -22,7 +22,7 @@ This file performs static analysis of module methods so the harness can infer:
 ## Main Responsibilities
 
 - inspect `Module.run` signatures
-- record parameter names, annotations, and whether each parameter has a default
+- record each input's external port name, its literal `run(...)` parameter name, annotation, and whether it has a default
 - parse the source of `run(...)` and, when present and callable, `finalise()`
 - walk each AST while avoiding nested function bodies
 - collect statically known emitted port names from both methods
@@ -31,6 +31,10 @@ This file performs static analysis of module methods so the harness can infer:
 ## Place In The System
 
 This is the harness reflection layer for modules. `node.py` depends on it to construct ports, and `graph.py` depends on it to validate source-port references.
+
+## Port Name vs Parameter Name
+
+A `run(...)` argument named `<builtin-or-keyword>_` — a single trailing underscore over a Python builtin (`dir(builtins)`) or keyword (`keyword.kwlist`), e.g. `list_`, `class_` — is exposed to the graph under the underscore-dropped external name (`list`, `class`). `ModuleStructureArg` records both the external `name` (used for every graph-facing surface: edges, CLI, `contract_port_mappings`, validation) and the literal `param`, which is used only to key the `run(**inputs)` call in `node.py`. This lets a module avoid shadowing a builtin/keyword in its own code without the underscore leaking into graph YAML. A module whose arguments collapse to the same external name (e.g. both `list` and `list_`) is rejected as fatal.
 
 ## What Counts As An Emit
 

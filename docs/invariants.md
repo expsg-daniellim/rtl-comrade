@@ -26,6 +26,10 @@ Do not demote a `CRITICAL` to `ERROR` or vice versa without understanding the ex
 
 `ModuleStructure` statically infers output ports from the `run(...)` AST. It only recognises static string literals as port names. Dynamic port names are allowed at runtime but set `definite_emits = False`, which weakens graph validation. Do not change the analyzer to be more permissive without understanding what validation guarantees are lost.
 
+## External port names are distinct from `run(...)` parameter names
+
+The graph addresses inputs by **external port name**; the module is called by its **Python parameter name**. They differ only when a parameter carries a builtin/keyword-avoiding trailing underscore (`list_` → port `list`). `structure.py` records both, and `node.py` re-keys inbound payloads from external name to `param` immediately before `run(**inputs)` — the single translation point. Everything graph-facing (edges, CLI, `contract_port_mappings`, validation) must use external names; only the final module call uses parameter names. Do not introduce a second translation site.
+
 ## Input ports are single-source
 
 Multiple upstream edges feeding the same input port on a node is a configuration error, not a merge. The harness rejects this at validation time with an "overloaded input" error.

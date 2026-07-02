@@ -12,15 +12,27 @@ from rtl_comrade.structure import ModuleStructureArg
 
 
 def test_from_structure_copies_fields():
-	arg = ModuleStructureArg(name="val", has_default=True)
+	arg = ModuleStructureArg(name="val", param="val", has_default=True)
 	p = Port.from_structure(arg)
 	assert p.name == "val"
+	assert p.param == "val"
 	assert p.has_default is True
 	assert p.queue.empty()
 
 
+def test_from_structure_carries_param():
+	arg = ModuleStructureArg(name="list", param="list_")
+	p = Port.from_structure(arg)
+	assert p.name == "list"
+	assert p.param == "list_"
+
+
+def test_param_defaults_to_name():
+	assert Port(name="a").param == "a"
+
+
 def test_from_structure_no_default():
-	arg = ModuleStructureArg(name="a")
+	arg = ModuleStructureArg(name="a", param="a")
 	p = Port.from_structure(arg)
 	assert p.has_default is False
 

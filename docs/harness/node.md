@@ -69,7 +69,7 @@ Each node repeatedly:
 
 1. asks its contract for the next input bundle
 2. stops if the contract returns `EndSentinel`
-3. unwraps `Payload.payload` into module keyword arguments
+3. unwraps `Payload.payload` into module keyword arguments, re-keying each from its external port name to the port's `param` (the literal `run(...)` parameter name) so builtin/keyword-avoiding trailing underscores are restored
 4. runs the module, supporting sync, async, generator, and async-generator forms
 5. normalizes outputs through `process_result(...)`
 6. for each destination `Port` under the emitted port name in `dsts`, enqueues a `Payload` directly onto its queue; if the emitted port matches no destination (and the node has at least one wired destination), it logs `no_destination` at INFO and drops the value

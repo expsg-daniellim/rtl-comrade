@@ -302,8 +302,8 @@ class Node:  # pylint: disable=too-many-instance-attributes
 			if isinstance(inputs, EndSentinel):
 				break
 
-			# Break out input Payloads into straight kwargs
-			inputs = { name: i.payload for (name, i) in inputs.items() }
+			# Break out input Payloads into straight kwargs, keyed by the real run parameter name.
+			inputs = { self.ports[name].param if name in self.ports else name: i.payload for (name, i) in inputs.items() }
 
 			# Run module based on async/non-async
 			bind_contextvars(context='harness.node.module', node=self.id, module=type(self.module).__name__)

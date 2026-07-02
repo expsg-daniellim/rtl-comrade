@@ -19,6 +19,7 @@ This file implements the queue-backed input ports owned by each runtime node.
 - expose blocking and non-blocking reads
 - track whether a port has ended
 - record whether the corresponding module parameter has a Python default (`has_default`)
+- carry the module `run(...)` parameter name (`param`) the port feeds, defaulting to `name` for edge-built and contract-surface ports
 
 ## Place In The System
 
@@ -26,7 +27,8 @@ This file implements the queue-backed input ports owned by each runtime node.
 
 ## Key Behaviors
 
-- `Port.from_structure(...)` builds a port from `ModuleStructureArg`
+- `Port.from_structure(...)` builds a port from `ModuleStructureArg`, carrying both its external `name` and its `param`
+- `node.py` re-keys inbound payloads from external port `name` to `param` immediately before `run(**inputs)`, so the module receives its literal parameter names
 - `get()` awaits the next queued item
 - `try_get()` performs a non-blocking queue read
 - reading an `EndSentinel` marks the port as ended

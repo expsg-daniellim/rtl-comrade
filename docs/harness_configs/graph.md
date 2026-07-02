@@ -53,6 +53,8 @@ If a field name appears in both `config` and `cli_config` (or both `contract_con
 
 A `cli` name may be reused across edges, `cli_config`, and `cli_contract_config` entries to wire one CLI parameter to several destinations — every reuse must declare an identical descriptor (same `option`, `type`, `default`, and `help`). The name is surfaced as a single subcommand parameter regardless of how many times it appears. Two occurrences of the same `cli` name with differing descriptor fields are a fatal error.
 
+Do not use `help` as a `cli` name (or as the port name a CLI parameter feeds): the resulting `--help` collides with the auto-generated help flag. A module `run(...)` argument that names a builtin/keyword can carry a trailing underscore to avoid shadowing it in Python (`list_`); the underscore is dropped for the external port name, so `dst.port` and any `cli` targeting it use the bare name (`list`) — see [structure.md](../harness/structure.md).
+
 ### Contract port mappings
 
 `contract_port_mappings` declares the input surface a contract presents when it differs from the module's own `run(...)` signature — typically a contract wrapping a `**kwargs` module that reads its own named "contract ports" and forwards them to module parameters internally. Each key is a contract-accepted port name (where edges deliver and what the contract reads); its value lists the module parameters that port forwards to.

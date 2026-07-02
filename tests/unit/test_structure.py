@@ -87,8 +87,8 @@ def test_args_no_params():
 def test_args_two_plain():
 	s = ModuleStructure(_TwoArgs)
 	assert len(s.args) == 2
-	assert s.args[0] == ModuleStructureArg("a")
-	assert s.args[1] == ModuleStructureArg("b")
+	assert s.args[0] == ModuleStructureArg("a", "a")
+	assert s.args[1] == ModuleStructureArg("b", "b")
 	assert s.args[0].has_default is False
 	assert s.args[1].has_default is False
 	assert s.args[0].type_ is None
@@ -138,9 +138,40 @@ def test_args_var_keyword_excluded():
 def test_args_mixed_variadic_excludes_variadic_keeps_normal():
 	s = ModuleStructure(_MixedVarAndNormal)
 	assert len(s.args) == 2
-	assert s.args[0] == ModuleStructureArg("a")
-	assert s.args[1] == ModuleStructureArg("b")
+	assert s.args[0] == ModuleStructureArg("a", "a")
+	assert s.args[1] == ModuleStructureArg("b", "b")
 	assert s.definite_inputs is False
+
+
+class _ReservedUnderscore:
+	def run(self, list_, class_):
+		return None
+
+
+class _NonReservedUnderscore:
+	def run(self, foo_):
+		return None
+
+
+class _PortNameCollision:
+	def run(self, list, list_):  # pylint: disable=redefined-builtin
+		return None
+
+
+def test_args_reserved_underscore_stripped():
+	s = ModuleStructure(_ReservedUnderscore)
+	assert s.args[0].name == "list" and s.args[0].param == "list_"  # builtin
+	assert s.args[1].name == "class" and s.args[1].param == "class_"  # keyword
+
+
+def test_args_non_reserved_underscore_kept():
+	s = ModuleStructure(_NonReservedUnderscore)
+	assert s.args[0] == ModuleStructureArg("foo_", "foo_")
+
+
+def test_args_port_name_collision_fatal(logging_handler):
+	with pytest.raises(typer.Exit):
+		ModuleStructure(_PortNameCollision)
 
 
 # --- ModuleStructure emit inference ---

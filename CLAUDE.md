@@ -42,8 +42,4 @@ See `docs/running.md` for the full invocation syntax, options, and config file f
 
 ## Testing
 
-```bash
-uv run pytest tests/
-```
-
 See `docs/testing.md` for the full two-stage procedure and coverage requirements.

@@ -95,6 +95,18 @@ The current implementation preserves declaration order, and destination edges ma
 
 That means changing parameter order is a graph-facing API change.
 
+### Avoiding builtin/keyword clashes
+
+If a parameter would shadow a Python builtin or keyword (`list`, `type`, `id`, `class`, …), give it a single trailing underscore (`list_`). The harness exposes the input port under the underscore-dropped name, so the graph and CLI use the bare name while your code keeps the safe one:
+
+```python
+class RouteListModeMod:
+    def run(self, suite_cfg, list_: bool = False):
+        return ("list", suite_cfg) if list_ else ("run", suite_cfg)
+```
+
+Here the input port is `list` (so an edge writes `port: list` and a CLI edge writes `cli: list`), and the value arrives as the `list_` argument. Two parameters that collapse to the same external name (e.g. both `list` and `list_`) are a fatal error. Avoid `help_` — its `--help` collides with the auto-generated help flag.
+
 ## Default Input Values
 
 If a `run(...)` parameter has a Python default value, that input port becomes default-capable.
