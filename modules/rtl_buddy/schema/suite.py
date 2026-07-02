@@ -14,6 +14,8 @@ log = structlog.get_logger()
 class TestbenchConfig:
     """Configuration for a single testbench within a test suite."""
 
+    __test__ = False  # domain type, not a pytest test class despite the Test* name
+
     name:str
     filelist:list[str]
 
@@ -31,6 +33,8 @@ class TestbenchConfig:
 @dataclass
 class TestConfig:
     """Mutable per-test runtime configuration carried on the test edge."""
+
+    __test__ = False  # domain type, not a pytest test class despite the Test* name
 
     name:str
     desc:str

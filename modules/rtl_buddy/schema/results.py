@@ -13,6 +13,8 @@ class ResultType(Enum):
 
 @dataclass(frozen=True)
 class TestResult:
+    __test__ = False  # domain type, not a pytest test class despite the Test* name
+
     key:str
     test_name:str
     type_:ResultType
