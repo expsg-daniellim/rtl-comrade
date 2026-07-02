@@ -1,6 +1,16 @@
 # rtl-comrade
 
-`rtl-comrade` is a modular version of `rtl-buddy` based on an executable dependency graph, intended for modular construction, rapid iteration and easy extension with a high degree of code reuse. `rtl-buddy` commands become individual graphs that are executed by the harness. The rest of this README covers features specific to the harness. Detailed docs can be found in `docs/`.
+`rtl-buddy` is a monolithic CLI tool for automating tests, regressions, testplan, fpga builds, rtl releases. `rtl-comrade` is a modular version of `rtl-buddy` based on an executable dependency graph, intended for modular construction, rapid iteration and easy extension with a high degree of code reuse. `rtl-buddy` commands become individual graphs that are executed by the harness. The rest of this README covers features specific to the harness. Detailed docs can be found in `docs/`.
+
+## Setup
+
+Requires [uv](https://docs.astral.sh/uv/#installation) and Python 3.11 or later (uv installs it if needed). Install the locked environment once:
+
+```bash
+uv sync --locked
+```
+
+Re-run whenever `pyproject.toml` or `uv.lock` changes. See [`docs/running.md`](docs/running.md) for full setup, invocation, and config-discovery details.
 
 ## Running
 
@@ -18,3 +28,17 @@ Subcommands may accept additional options or arguments defined in the graph YAML
 | ------ | ------- | ----------- |
 | `--level <LEVEL>`      | `INFO`                    | Logging level: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`, or `FATAL` (case-insensitive) |
 | `--config-file <NAME>` | `rtl_comrade_config.yaml` | Filename to search for when ascending the directory tree; replaces the default name           |
+
+## Commands
+
+Commands are defined in `rtl_comrade_config.yaml`, each mapping a subcommand name to a graph. For invdividual documentation on the `rtl_buddy`-equivalent commands, see [`docs/graphs/index.md`](docs/graphs/index.md).
+
+| Command | Graph | Description |
+| ------- | ----- | ----------- |
+| `test`  | `graphs/test.yaml` | Compile and simulate a SystemVerilog/UVM test suite — see [`docs/graphs/test.md`](docs/graphs/test.md) |
+
+For example, to run the test named `basic` from a project's suite directory:
+
+```bash
+uv run rtl-comrade test basic
+```

@@ -6,7 +6,7 @@
 
 See also:
 
-- [docs/modules/implementation.md](../modules/implementation.md) — variadic inputs and their effect on port validation
+- [docs/module-implementation/implementation.md](../module-implementation/implementation.md) — variadic inputs and their effect on port validation
 - [docs/harness/branch_labels.md](../harness/branch_labels.md) — how `branch_labels` are determined and propagated
 
 Joins inputs by correlation key like `keyed_join`, but uses each port's `branch_labels` to exclude ports whose branch arm was not selected for a given key. This allows fan-in after `if/else` routing nodes where only one branch executes per item, without the upstream branches emitting any placeholder value.
