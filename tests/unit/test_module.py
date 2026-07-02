@@ -2,7 +2,6 @@
 
 import inspect
 from collections import OrderedDict
-from pathlib import Path
 from unittest.mock import patch
 
 import pytest

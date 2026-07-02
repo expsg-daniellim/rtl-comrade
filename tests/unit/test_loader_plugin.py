@@ -463,7 +463,7 @@ def test_load_plugin_configs_deduplicates_duplicate_path_strings(logging_handler
 
 def test_load_plugin_configs_empty(logging_handler):
 	result = load_plugin_configs([])
-	assert result == []
+	assert len(result) == 0
 
 
 def test_load_plugin_configs_with_relative_path(logging_handler, tmp_path):
@@ -512,7 +512,7 @@ def test_load_plugins_duplicate_name_fatal(logging_handler, tmp_path):
 
 def test_load_plugins_empty(logging_handler):
 	result = load_plugins([])
-	assert result == {}
+	assert len(result) == 0
 
 
 # --- PluginFileConfig.load ---

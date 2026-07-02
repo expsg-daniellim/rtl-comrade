@@ -1,5 +1,6 @@
 """Unit tests for logging.py — LoggingFatalHandler render flag and failure semantics."""
 
+import io
 import logging
 
 import pytest
@@ -20,7 +21,6 @@ def _record(level=logging.INFO, msg="evt"):
 
 def test_emit_render_false_skips_write_but_tracks_failure():
 	# render=False: nothing is written, but an ERROR still sets failure.
-	import io
 	stream = io.StringIO()
 	h = LoggingFatalHandler(stream=stream, render=False)
 	h.setFormatter(logging.Formatter("%(message)s"))
@@ -31,14 +31,12 @@ def test_emit_render_false_skips_write_but_tracks_failure():
 
 def test_emit_render_false_critical_still_exits():
 	# render=False: failure/exit tracking still runs; CRITICAL raises typer.Exit.
-	import io
 	h = LoggingFatalHandler(stream=io.StringIO(), render=False)
 	with pytest.raises(typer.Exit):
 		h.emit(_record(logging.CRITICAL, "fatal"))
 
 
 def test_emit_render_true_writes():
-	import io
 	stream = io.StringIO()
 	h = LoggingFatalHandler(stream=stream, render=True)
 	h.setFormatter(logging.Formatter("%(message)s"))
@@ -49,8 +47,6 @@ def test_emit_render_true_writes():
 
 def test_emit_drop_event_suppressed():
 	# A formatter that raises DropEvent suppresses the write without surfacing an error.
-	import io
-
 	class DroppingFormatter(logging.Formatter):
 		def format(self, record):
 			raise DropEvent
@@ -61,4 +57,3 @@ def test_emit_drop_event_suppressed():
 	h.emit(_record(logging.INFO, "dropme"))
 	assert stream.getvalue() == ""
 	assert h.failure is False
-

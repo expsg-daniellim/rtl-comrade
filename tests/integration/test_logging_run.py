@@ -20,16 +20,12 @@ import typer
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from rtl_comrade.app import App, CommandConfig, RtlComradeConfig
-from rtl_comrade.config import (
-	GraphConfigDstPort,
-	GraphConfigEdge,
-	GraphConfigNode,
-	GraphConfigSrcPort,
-)
+from rtl_comrade.config import GraphConfigNode
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 from rtl_comrade.loader_logger import LoggingHandlerConfig, LoggingConfig
 from rtl_comrade.loader_plugin import PluginFileConfig
+from rtl_comrade.loader_utils import import_plugin_file
 
 _MINIMAL_CONFIG = RtlComradeConfig(commands={"run": CommandConfig(path=Path("g.yaml"))})
 
@@ -246,7 +242,6 @@ def test_custom_handler_receives_records(tmp_path):
 	)
 	_run(config, app)
 	# Reach into the loaded module to read the captured records.
-	from rtl_comrade.loader_utils import import_plugin_file
 	loaded = import_plugin_file(hf, None, "logging")
 	unbind_contextvars("plugin", "file")
 	# The custom handler observed at least one record carrying the raw event dict as msg.
@@ -293,7 +288,6 @@ def test_custom_handler_never_sees_critical(tmp_path):
 	with pytest.raises(typer.Exit):
 		_run(config, app)
 
-	from rtl_comrade.loader_utils import import_plugin_file
 	loaded = import_plugin_file(hf, None, "logging")
 	unbind_contextvars("plugin", "file")
 	# It saw the INFO record but never a CRITICAL one.
