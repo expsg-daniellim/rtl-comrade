@@ -1,0 +1,36 @@
+# RTL-Buddy Test Configuration File
+#
+# Lazy load-model fixture for spec 12 ([07 settled 8]). `skip_broken_model`
+# points its model_path at a deliberately-broken models.yaml. Under rtl-comrade
+# models load lazily, so running this suite with `--reg-level 0` filters that
+# test out *before* load-model and the run completes on `runnable` alone — the
+# broken model is never read. This lives in its own suite (not the parity
+# sandbox) because rtl_buddy loads every test's model eagerly at suite-parse and
+# would trip on the broken file regardless of which test is selected.
+rtl-buddy-filetype: test_config
+
+# Reuses the sandbox testbench + DUT for the runnable test.
+testbenches:
+  - name: "tb_top"
+    filelist:
+      - "+incdir+../../common"
+      - "../sandbox/tb_top.sv"
+
+tests:
+  - name: "runnable"
+    desc: "runnable test with a valid model"
+    reglvl: 0
+    plusargs:
+      a : "10"
+      lvm_verbosity : 2
+    model: "test_module"
+    model_path: "../../design/sandbox/models.yaml"
+    testbench: "tb_top"
+
+  # Skipped via reglvl; its broken model_path is never loaded (lazy).
+  - name: "skip_broken_model"
+    desc: "references a broken models.yaml; skipped, so never loaded"
+    reglvl: 10000
+    model: "broken_model"
+    model_path: "../../design/lazy_model/models.yaml"
+    testbench: "tb_top"

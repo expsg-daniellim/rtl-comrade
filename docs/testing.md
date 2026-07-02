@@ -91,6 +91,27 @@ uv run pytest tests/ contracts/tests/ modules/tests/
 
 ---
 
+## End-to-end tests (`tests/e2e/`)
+
+`tests/e2e/test_e2e.py` drives the assembled `test` graph against a real SystemVerilog suite and compares `rtl-comrade test …` to the reference `rtl_buddy test …` (see `implementation-test/specs/12-end-to-end.md`). They are collected by a bare `uv run pytest` along with the rest of the suite.
+
+### Committed fixtures
+
+The suite fixtures live under `tests/e2e/fixtures/proj/` and are committed. They are ported from `rtl-buddy-proj-template` (whose live tree is gitignored) and mirror its directory layout so the `tests.yaml` / `models.yaml` relative paths (`+incdir+../../common`, `../../design/sandbox/models.yaml`, `-F test_modules.f`) resolve unchanged. Only source fixtures are tracked; the `.gitignore` under that tree excludes everything a run generates in the suite dirs (`logs/`, `obj_dir*/`, `run.*.f`, `test.log`/`.err`/`.randseed`, `dump.fst`, `rtl_buddy.log`). The graph itself is resolved via the repo-root `rtl_comrade_config.yaml`; `root_config.yaml` is committed inside the fixture because config discovery ascends from the suite dir to find it.
+
+### Required binaries
+
+These tests **compile and simulate real RTL** and shell out to a **live reference binary**; they are not skip-guarded, so the suite-driving cases fail (not skip) if either tool is absent. Install both before running the full suite:
+
+| Binary | Version | Role |
+|---|---|---|
+| `verilator` | `v5.042` | the configured builder (`root_config.yaml`) — actually compiles and simulates each test |
+| `rtl-buddy` | `v1.4.0` | the parity reference; run live for the `--list`, compile-fail, sim-timeout, and `--early-stop` scenarios |
+
+`rtl-buddy` is installed from the gitignored `rtl_buddy/` package and resolved at `.venv/bin/rtl-buddy`. The `ParseLogMod` correction tests and the concurrency-note test in the same file are self-contained (no suite, no binaries) and always run.
+
+---
+
 ## Conventions
 
 - `asyncio_mode = "auto"` is set in `pyproject.toml`; async tests need no extra decoration.

@@ -1,0 +1,11 @@
+# Runtime artefacts from e2e runs (rtl-comrade and the rtl_buddy reference). 
+# Only the source fixtures under this tree are committed; everything a run generates in the suite dirs is ignored.
+logs/
+obj_dir*/
+dump.fst
+rtl_buddy.log
+run.f
+run.*.f
+test.log
+test.err
+test.randseed
