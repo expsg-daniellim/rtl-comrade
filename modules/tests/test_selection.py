@@ -358,6 +358,59 @@ def test_load_model_empty_models_list(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+def test_load_model_is_directory(tmp_path, logging_handler):
+	(tmp_path / "models.yaml").mkdir()  # resolved model path is a directory
+	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
+	mod = LoadModelMod()
+	results = list(mod.run(test=test))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert logging_handler.failure is True
+
+
+def test_load_model_permission_denied(tmp_path, logging_handler):
+	bad = tmp_path / "models.yaml"
+	bad.write_text("rtl-buddy-filetype: model_config\nmodels: []\n")
+	bad.chmod(0o000)
+	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
+	mod = LoadModelMod()
+	try:
+		results = list(mod.run(test=test))
+	finally:
+		bad.chmod(0o644)
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert logging_handler.failure is True
+
+
+def test_load_model_invalid_unicode(tmp_path, logging_handler):
+	bad = tmp_path / "models.yaml"
+	bad.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
+	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
+	mod = LoadModelMod()
+	results = list(mod.run(test=test))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert logging_handler.failure is True
+
+
+def test_load_model_os_error(tmp_path, logging_handler):
+	test = _make_model_test(model_path="x" * 5000 + ".yaml", suite_dir=tmp_path)  # ENAMETOOLONG → generic OSError
+	mod = LoadModelMod()
+	results = list(mod.run(test=test))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert logging_handler.failure is True
+
+
 # ---------------------------------------------------------------------------
 # ExpandSweepMod helpers
 # ---------------------------------------------------------------------------
@@ -447,6 +500,40 @@ def test_expand_sweep_script_raises(tmp_path, logging_handler):
 
 def test_expand_sweep_script_not_found(tmp_path, logging_handler):
 	test = _make_test("t1", sweep_path=str(tmp_path / "nonexistent.py"))
+	model = _make_sweep_model(test.key)
+	root_cfg = _make_sweep_root_cfg()
+	mod = ExpandSweepMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert logging_handler.failure is True
+
+
+def test_expand_sweep_script_permission_error(tmp_path, logging_handler):
+	script = tmp_path / "sweep.py"
+	script.write_text("pass\n")
+	script.chmod(0o000)  # unreadable → PermissionError
+	test = _make_test("t1", sweep_path=str(script))
+	model = _make_sweep_model(test.key)
+	root_cfg = _make_sweep_root_cfg()
+	mod = ExpandSweepMod()
+	try:
+		results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	finally:
+		script.chmod(0o644)
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert logging_handler.failure is True
+
+
+def test_expand_sweep_script_read_oserror(tmp_path, logging_handler):
+	sweep_dir = tmp_path / "sweep_dir"
+	sweep_dir.mkdir()  # opening a directory raises IsADirectoryError (an OSError)
+	test = _make_test("t1", sweep_path=str(sweep_dir))
 	model = _make_sweep_model(test.key)
 	root_cfg = _make_sweep_root_cfg()
 	mod = ExpandSweepMod()

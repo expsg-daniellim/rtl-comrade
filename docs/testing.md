@@ -77,7 +77,7 @@ uv run pytest modules/tests/
 uv run pytest modules/tests/ --cov=modules --cov-report=term-missing
 ```
 
-Expected result: 100% on all files. When adding a new module, add a corresponding test file under `modules/tests/`. Use `run_module_scenario` from `rtl_comrade.testing` for straightforward input/output cases.
+Expected result: 100% on all files except the `RunProcessMod` race-guards listed under [Accepted coverage misses](#accepted-coverage-misses). When adding a new module, add a corresponding test file under `modules/tests/`. Use `run_module_scenario` from `rtl_comrade.testing` for straightforward input/output cases.
 
 ---
 
@@ -121,7 +121,7 @@ These tests **compile and simulate real RTL** and shell out to a **live referenc
 
 ## Accepted coverage misses
 
-Five locations in the harness are intentionally excluded from coverage. All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
+Six locations are intentionally excluded from coverage: five in the harness (below) and one in the modules (`RunProcessMod`, last). All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
 
 ### `src/rtl_comrade/__main__.py` — entire file, excluded via `omit`
 
@@ -158,3 +158,7 @@ def run(self):  # pragma: no cover
 `missing_runs` (lines 73–74): the guard `not (hasattr(mod.Module, 'run') and callable(...))` can never be True at runtime — `GraphModule.from_module` is called on every module before this check and always raises (`AttributeError` for a missing `run`, `typer.Exit` for a non-callable one) before returning an entry to `module_mappings`.
 
 `dst_name = edge.dst.port` (line 131): the fallback for a non-definite-input node addressed by a string port that was not found in `get_canonical_port`. Since graph assembly pre-builds every incoming string port into `node.ports` at line 97, `get_canonical_port` always finds them and this branch is never reached.
+
+### `modules/rtl_buddy/build.py` — `RunProcessMod` `except ProcessLookupError` arms, excluded via `# pragma: no cover`
+
+The four `except ProcessLookupError: pass` arms (SIGQUIT and escalated SIGKILL, on both the timeout and cancellation paths) swallow the case where the process group is already dead when we signal it (`killpg` → `ESRCH`). Unlike the harness misses above, these are *reachable* in production — but only via a genuine OS race: the branch runs solely because `proc.wait()` had not completed at the timeout/cancel, so the process would have to exit in the window between that and the `killpg` call. There is no way to win that race deterministically with a real subprocess, and a test that forces `killpg` to raise merely injects the exception the arm already catches (proving nothing about the race while disabling the real kill). Covering them is therefore synthetic-only; they are pragma-excluded rather than tested.

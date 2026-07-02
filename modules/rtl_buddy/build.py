@@ -175,28 +175,28 @@ class RunProcessMod:
 			except asyncio.TimeoutError:
 				try:
 					os.killpg(os.getpgid(proc.pid), signal.SIGQUIT)
-				except ProcessLookupError:
+				except ProcessLookupError:  # pragma: no cover — process-group already dead (ESRCH); race, see docs/testing.md
 					pass
 				try:
 					await asyncio.wait_for(proc.wait(), self.grace_s)
 				except asyncio.TimeoutError:
 					try:
 						os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-					except ProcessLookupError:
+					except ProcessLookupError:  # pragma: no cover — process-group already dead (ESRCH); race, see docs/testing.md
 						pass
 					await proc.wait()
 				rc = None
 			except asyncio.CancelledError:
 				try:
 					os.killpg(os.getpgid(proc.pid), signal.SIGQUIT)
-				except ProcessLookupError:
+				except ProcessLookupError:  # pragma: no cover — process-group already dead (ESRCH); race, see docs/testing.md
 					pass
 				try:
 					await asyncio.shield(asyncio.wait_for(proc.wait(), self.grace_s))
 				except (asyncio.TimeoutError, asyncio.CancelledError):
 					try:
 						os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
-					except ProcessLookupError:
+					except ProcessLookupError:  # pragma: no cover — process-group already dead (ESRCH); race, see docs/testing.md
 						pass
 					await asyncio.shield(proc.wait())
 				raise

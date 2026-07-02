@@ -3,6 +3,9 @@
 import importlib.util
 from pathlib import Path
 
+import pytest
+import typer
+
 from modules.rtl_buddy.schema import RootConfig, RootRtlField, TestResult, KeyedValue, ModelConfig
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -140,6 +143,42 @@ def test_run_preproc_script_not_found(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+def test_run_preproc_script_permission_error(tmp_path, logging_handler):
+	script = tmp_path / "preproc.py"
+	script.write_text("test_cfg.set_plusarg('X', 1)\n")
+	script.chmod(0o000)  # unreadable → PermissionError
+	test = _make_test("t1", preproc_path=str(script))
+	model = _make_model(test.key)
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	try:
+		results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	finally:
+		script.chmod(0o644)
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
+
+
+def test_run_preproc_script_read_oserror(tmp_path, logging_handler):
+	preproc_dir = tmp_path / "preproc_dir"
+	preproc_dir.mkdir()  # opening a directory raises IsADirectoryError (an OSError)
+	test = _make_test("t1", preproc_path=str(preproc_dir))
+	model = _make_model(test.key)
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
+
+
 # ---------------------------------------------------------------------------
 # WriteFilelistMod
 # ---------------------------------------------------------------------------
@@ -254,6 +293,89 @@ def test_write_filelist_dir_not_found(tmp_path, logging_handler):
 	test = _make_test("dnf", tb=TestbenchConfig(name="tb_top", filelist=[]))
 	model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
 	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=missing))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
+
+
+def test_write_filelist_extract_options(tmp_path, logging_handler):
+	"""Comments/blanks are skipped, +incdir+ and +libext+ options are recognised, -F is unrolled, and duplicate entries are deduplicated."""
+	(tmp_path / "incdir_dir").mkdir()
+	(tmp_path / "rtl").mkdir()
+	(tmp_path / "rtl" / "model.sv").write_text("// model")
+	(tmp_path / "rtl" / "extra.sv").write_text("// extra")
+	(tmp_path / "child.f").write_text("rtl/extra.sv\n")
+	filelist = [
+		"// a comment",
+		"",
+		"+incdir+incdir_dir",
+		"+libext+sv+v",
+		"rtl/model.sv",
+		"rtl/model.sv",  # duplicate → deduplicated
+		"-F child.f",    # unrolled: pulls in rtl/extra.sv
+	]
+	test = _make_test("opts", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, filelist=filelist, path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	assert len(results) == 2
+	content = (tmp_path / "run.opts.f").read_text()
+	assert "// a comment" not in content
+	assert "+incdir+incdir_dir\n" in content
+	assert content.count("rtl/model.sv\n") == 1  # deduplicated
+	assert "rtl/extra.sv\n" in content
+	libext_lines = [ln for ln in content.splitlines() if ln.startswith("+libext+")]
+	assert len(libext_lines) == 1
+	assert set(libext_lines[0].removeprefix("+libext+").split("+")) == {"sv", "v"}
+	assert not logging_handler.failure
+
+
+def test_write_filelist_process_warnings(tmp_path, logging_handler):
+	"""A +incdir+ target that is not a directory, a missing source file, and a malformed option each log an error but the .f is still written."""
+	(tmp_path / "rtl").mkdir()
+	(tmp_path / "not_a_dir").write_text("i am a file")
+	filelist = [
+		"+incdir+not_a_dir",  # incdir target is a file, not a directory → warn
+		"rtl/missing.sv",     # referenced source does not exist → warn
+		"+incdir+",           # malformed: option prefix with no path → warn
+	]
+	test = _make_test("warn", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, filelist=filelist, path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	assert len(results) == 2  # still writes despite the warnings
+	content = (tmp_path / "run.warn.f").read_text()
+	assert "+incdir+not_a_dir\n" in content
+	assert "rtl/missing.sv\n" in content
+	assert logging_handler.failure is True
+
+
+def test_write_filelist_lower_f_fatal(tmp_path, logging_handler):
+	"""A lowercase -f include is disallowed and fatals → typer.Exit."""
+	test = _make_test("lowerf", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, filelist=["-f included.f"], path=str(tmp_path / "models.yaml"))
+	with pytest.raises(typer.Exit):
+		list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+
+
+def test_write_filelist_is_directory(tmp_path, logging_handler):
+	"""The output path already existing as a directory triggers IsADirectoryError → filelist_is_directory → fail."""
+	(tmp_path / "run.isdir.f").mkdir()
+	test = _make_test("isdir", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
+
+
+def test_write_filelist_write_oserror(tmp_path, logging_handler):
+	"""An over-long output filename triggers a generic OSError (ENAMETOOLONG) on write → filelist_write_error → fail."""
+	test = _make_test("x" * 5000, tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
 	assert len(results) == 1
 	port, val = results[0]
 	assert port == "fail"

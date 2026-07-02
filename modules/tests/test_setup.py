@@ -97,6 +97,18 @@ async def test_discover_permission_error(tmp_path, monkeypatch, logging_handler)
 		)
 
 
+async def test_discover_reaches_filesystem_root(tmp_path, monkeypatch, logging_handler):
+	monkeypatch.chdir(tmp_path)
+	monkeypatch.setattr(Path, "is_file", lambda self: False)  # never found → ascend until d == d.parent (root)
+	with pytest.raises(typer.Exit):
+		await run_module_scenario(
+			DiscoverConfigFileMod,
+			input_sequence=[{}],
+			expected_emissions={},
+			config=DiscoverConfigFileMod.Config(filename="root_config.yaml", max_levels=50),
+		)
+
+
 # ---------------------------------------------------------------------------
 # PrependCwdPathMod
 # ---------------------------------------------------------------------------
@@ -288,6 +300,16 @@ def test_select_platform_uname_not_found(monkeypatch, logging_handler):
 	def raise_fnf(*a, **kw):
 		raise FileNotFoundError("no uname binary")
 	monkeypatch.setattr(subprocess, "run", raise_fnf)
+	mod = SelectPlatformMod()
+	with pytest.raises(typer.Exit):
+		mod.run(root_cfg=root_cfg)
+
+
+def test_select_platform_uname_failed(monkeypatch, logging_handler):
+	root_cfg = _root_cfg(["Darwin"])
+	def raise_called_process(*a, **kw):
+		raise subprocess.CalledProcessError(1, ["uname"])
+	monkeypatch.setattr(subprocess, "run", raise_called_process)
 	mod = SelectPlatformMod()
 	with pytest.raises(typer.Exit):
 		mod.run(root_cfg=root_cfg)
@@ -639,6 +661,33 @@ def test_parse_suite_config_is_directory(tmp_path, logging_handler):
 def test_parse_suite_config_invalid_unicode(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
+	mod = ParseSuiteConfigMod()
+	with pytest.raises(typer.Exit):
+		mod.run(test_config=str(bad))
+
+
+def test_parse_suite_config_permission_denied(tmp_path, logging_handler):
+	bad = tmp_path / "tests.yaml"
+	bad.write_text("rtl-buddy-filetype: test_config\ntestbenches: []\ntests: []\n")
+	bad.chmod(0o000)
+	mod = ParseSuiteConfigMod()
+	try:
+		with pytest.raises(typer.Exit):
+			mod.run(test_config=str(bad))
+	finally:
+		bad.chmod(0o644)
+
+
+def test_parse_suite_config_os_error(tmp_path, logging_handler):
+	too_long = tmp_path / ("x" * 5000 + ".yaml")  # ENAMETOOLONG on read → generic OSError
+	mod = ParseSuiteConfigMod()
+	with pytest.raises(typer.Exit):
+		mod.run(test_config=str(too_long))
+
+
+def test_parse_suite_config_yaml_unreadable(tmp_path, logging_handler):
+	bad = tmp_path / "tests.yaml"
+	bad.write_bytes(b"\x00")  # valid UTF-8 but a non-printable char → yaml ReaderError
 	mod = ParseSuiteConfigMod()
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))

@@ -168,6 +168,12 @@ def test_plusargs_merge():
 	assert t.pa == {"X": 0, "A": 1, "B": 2}
 
 
+def test_plusargs_merge_lazy_init():
+	t = make_test(pa=None)
+	t.set_plusargs({"A": 1, "B": 2})
+	assert t.pa == {"A": 1, "B": 2}
+
+
 def test_plusarg_readback():
 	t = make_test(pa={"K": 42})
 	assert t.get_plusarg("K") == 42
@@ -205,6 +211,12 @@ def test_plusdefines_merge():
 	t = make_test(pd={"X": 0})
 	t.set_plusdefines({"A": 1, "B": 2})
 	assert t.pd == {"X": 0, "A": 1, "B": 2}
+
+
+def test_plusdefines_merge_lazy_init():
+	t = make_test(pd=None)
+	t.set_plusdefines({"A": 1, "B": 2})
+	assert t.pd == {"A": 1, "B": 2}
 
 
 def test_plusdefine_readback():

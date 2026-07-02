@@ -64,6 +64,11 @@ def test_get_compile_time_opts_debug():
 	assert cfg.get_compile_time_opts("debug") == ["-Wall", "-Wextra"]
 
 
+def test_get_modes():
+	cfg = make_builder_config()
+	assert cfg.get_modes() == ["debug", "release"]
+
+
 def test_get_run_time_opts_no_seed():
 	cfg = make_builder_config()
 	assert cfg.get_run_time_opts("debug") == ["-debug_access"]

@@ -287,6 +287,27 @@ def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+def test_resolve_seed_replay_permission_error(tmp_path, logging_handler):
+	test = _make_test()
+	run_id = _make_run_id_kv(test.key)
+	simv = _make_simv(test.key)
+	builder_cfg = _make_builder_cfg_rs()
+	seed_path = tmp_path / f"{test.get_name()}.randseed"
+	seed_path.write_text("12345\n")
+	seed_path.chmod(0o000)
+	mod = ResolveSeedMod()
+	try:
+		results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
+	finally:
+		seed_path.chmod(0o644)
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
+
+
 # ---------------------------------------------------------------------------
 # BuildSimCmdMod (spec 08c)
 # ---------------------------------------------------------------------------
