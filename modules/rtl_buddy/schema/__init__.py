@@ -5,21 +5,21 @@ from .run_depth import RunDepth
 from .payloads import KeyedValue, Command, Proc, RandSeed, RandSeedDone
 
 try:
-    from .builder import RtlBuilderConfig, RtlBuilderConfigOpts
+	from .builder import RtlBuilderConfig, RtlBuilderConfigOpts
 except ImportError:
-    pass
+	pass
 
 try:
-    from .suite import SuiteConfig, TestConfig, TestbenchConfig
+	from .suite import SuiteConfig, TestConfig, TestbenchConfig
 except ImportError:
-    pass
+	pass
 
 try:
-    from .uvm import UVMConfig
+	from .uvm import UVMConfig
 except ImportError:
-    pass
+	pass
 
 try:
-    from .model import ModelConfig
+	from .model import ModelConfig
 except ImportError:
-    pass
+	pass

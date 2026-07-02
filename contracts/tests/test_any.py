@@ -13,7 +13,7 @@ from rtl_comrade.testing import run_contract_scenario, PortTestInput
 
 from contracts.any import AnyContract
 
-End = EndSentinel("src")
+END = EndSentinel("src")
 
 
 def _make_contract_ports(ports:dict[str, Port]) -> dict[str, ContractPort]:
@@ -28,32 +28,32 @@ def _make_contract_ports(ports:dict[str, Port]) -> dict[str, ContractPort]:
 async def test_single_item_one_port_active():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [1, End], "b": [End], "c": [End]},
-		expected_outputs=[{"default": 1}, End],
+		port_inputs={"a": [1, END], "b": [END], "c": [END]},
+		expected_outputs=[{"default": 1}, END],
 	)
 
 
 async def test_three_ports_all_deliver():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [1, End], "b": [2, End], "c": [3, End]},
-		expected_outputs=[{"default": 1}, {"default": 2}, {"default": 3}, End],
+		port_inputs={"a": [1, END], "b": [2, END], "c": [3, END]},
+		expected_outputs=[{"default": 1}, {"default": 2}, {"default": 3}, END],
 	)
 
 
 async def test_early_end_on_one_port():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [End], "b": [2, End], "c": [3, End]},
-		expected_outputs=[{"default": 2}, {"default": 3}, End],
+		port_inputs={"a": [END], "b": [2, END], "c": [3, END]},
+		expected_outputs=[{"default": 2}, {"default": 3}, END],
 	)
 
 
 async def test_all_ports_ended_immediately():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [End], "b": [End], "c": [End]},
-		expected_outputs=[End],
+		port_inputs={"a": [END], "b": [END], "c": [END]},
+		expected_outputs=[END],
 	)
 
 
@@ -62,16 +62,16 @@ async def test_no_loss_simultaneous_completion():
 	# the contract must return exactly one dict per call and not lose the other.
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [1, End], "b": [2, End]},
-		expected_outputs=[{"default": 1}, {"default": 2}, End],
+		port_inputs={"a": [1, END], "b": [2, END]},
+		expected_outputs=[{"default": 1}, {"default": 2}, END],
 	)
 
 
 async def test_drainage_fifo():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [10, 20, End], "b": [End], "c": [End]},
-		expected_outputs=[{"default": 10}, {"default": 20}, End],
+		port_inputs={"a": [10, 20, END], "b": [END], "c": [END]},
+		expected_outputs=[{"default": 10}, {"default": 20}, END],
 	)
 
 
@@ -81,10 +81,10 @@ async def test_blocking_await():
 	await run_contract_scenario(
 		AnyContract,
 		port_inputs={
-			"a": [End],
-			"b": [PortTestInput(9, delay=1), PortTestInput(End, delay=2)],
+			"a": [END],
+			"b": [PortTestInput(9, delay=1), PortTestInput(END, delay=2)],
 		},
-		expected_outputs=[{"default": 9}, End],
+		expected_outputs=[{"default": 9}, END],
 	)
 
 
@@ -93,8 +93,8 @@ async def test_blocking_await():
 async def test_named_n_to_1_output():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [1, End], "b": [2, End]},
-		expected_outputs=[{"merged": 1}, {"merged": 2}, End],
+		port_inputs={"a": [1, END], "b": [2, END]},
+		expected_outputs=[{"merged": 1}, {"merged": 2}, END],
 		config=AnyContract.Config(mapping="merged"),
 	)
 
@@ -102,8 +102,8 @@ async def test_named_n_to_1_output():
 async def test_m_to_n_grouping():
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [1, End], "b": [2, End], "c": [3, End]},
-		expected_outputs=[{"x": 1}, {"x": 2}, {"y": 3}, End],
+		port_inputs={"a": [1, END], "b": [2, END], "c": [3, END]},
+		expected_outputs=[{"x": 1}, {"x": 2}, {"y": 3}, END],
 		config=AnyContract.Config(mapping={"x": ["a", "b"], "y": ["c"]}),
 	)
 
@@ -114,8 +114,8 @@ async def test_default_config_omitted():
 	# Omitting contract_config defaults to n→1 onto "default".
 	await run_contract_scenario(
 		AnyContract,
-		port_inputs={"a": [1, End], "b": [End]},
-		expected_outputs=[{"default": 1}, End],
+		port_inputs={"a": [1, END], "b": [END]},
+		expected_outputs=[{"default": 1}, END],
 	)
 
 
@@ -123,7 +123,7 @@ async def test_unknown_input_port_is_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		await run_contract_scenario(
 			AnyContract,
-			port_inputs={"a": [End], "b": [End], "c": [End]},
+			port_inputs={"a": [END], "b": [END], "c": [END]},
 			expected_outputs=[],
 			config=AnyContract.Config(mapping={"x": ["nope"]}),
 		)
@@ -133,7 +133,7 @@ async def test_ambiguous_output_mapping_is_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		await run_contract_scenario(
 			AnyContract,
-			port_inputs={"a": [End], "b": [End], "c": [End]},
+			port_inputs={"a": [END], "b": [END], "c": [END]},
 			expected_outputs=[],
 			config=AnyContract.Config(mapping={"x": ["a"], "y": ["a"]}),
 		)
@@ -143,7 +143,7 @@ async def test_unmapped_input_port_is_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		await run_contract_scenario(
 			AnyContract,
-			port_inputs={"a": [End], "b": [End], "c": [End]},
+			port_inputs={"a": [END], "b": [END], "c": [END]},
 			expected_outputs=[],
 			config=AnyContract.Config(mapping={"x": ["a", "b"]}),
 		)

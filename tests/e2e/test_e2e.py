@@ -368,10 +368,10 @@ def test_concurrency_hole_documented():
     On non-verilator (fixed-simv) builders, concurrent multi-test runs can silently
     overwrite one test's binary with another's. There is no built-in serialisation
     ([07 deferred 17]). Validate such builders one test per invocation (operational
-    workaround). This test simply asserts the limitation is recorded in divergences.md.
+    workaround). This test simply asserts the limitation is recorded in docs/divergences.md.
     """
-    divergences = _PROJECT_ROOT / "divergences.md"
-    assert divergences.exists(), "divergences.md must exist at repo root"
+    divergences = _PROJECT_ROOT / "docs" / "divergences.md"
+    assert divergences.exists(), "docs/divergences.md must exist"
     text = divergences.read_text()
     assert "fixed-simv" in text or "concurrency" in text.lower(), (
         "divergences.md must document the fixed-simv concurrency hole ([07 deferred 17])"

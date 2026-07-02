@@ -7,8 +7,8 @@ from modules.rtl_buddy.schema import RootConfig, RootRtlField, TestResult, Keyed
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
 _spec = importlib.util.spec_from_file_location(
-    "modules_rtl_buddy_build",
-    Path(__file__).parent.parent / "rtl_buddy" / "build.py",
+	"modules_rtl_buddy_build",
+	Path(__file__).parent.parent / "rtl_buddy" / "build.py",
 )
 assert _spec is not None
 assert _spec.loader is not None
@@ -19,36 +19,36 @@ WriteFilelistMod = _mod.WriteFilelistMod
 
 
 def _make_tb():
-    return TestbenchConfig(name="tb_top", filelist=["rtl/top.sv"])
+	return TestbenchConfig(name="tb_top", filelist=["rtl/top.sv"])
 
 
 def _make_test(name, **overrides):
-    defaults = dict(
-        name=name,
-        desc=f"{name} test",
-        model="sandbox",
-        model_path="models.yaml",
-        suite_dir=Path("/design/verif"),
-        reglvl=None,
-        pa=None,
-        pd=None,
-        uvm=None,
-        preproc_path=None,
-        postproc_path=None,
-        sweep_path=None,
-        tb=_make_tb(),
-        timeout=None,
-    )
-    defaults.update(overrides)
-    return TestConfig(**defaults)
+	defaults = {
+		"name": name,
+		"desc": f"{name} test",
+		"model": "sandbox",
+		"model_path": "models.yaml",
+		"suite_dir": Path("/design/verif"),
+		"reglvl": None,
+		"pa": None,
+		"pd": None,
+		"uvm": None,
+		"preproc_path": None,
+		"postproc_path": None,
+		"sweep_path": None,
+		"tb": _make_tb(),
+		"timeout": None,
+	}
+	defaults.update(overrides)
+	return TestConfig(**defaults)
 
 
 def _make_model(key:str, name:str = "sandbox"):
-    return KeyedValue(key, ModelConfig(name=name, filelist=["rtl/model.sv"]))
+	return KeyedValue(key, ModelConfig(name=name, filelist=["rtl/model.sv"]))
 
 
 def _make_root_cfg():
-    return RootConfig(platforms=[], rtl_builder_cfgs={}, cfg_rtl_reg=RootRtlField(path=""))
+	return RootConfig(platforms=[], rtl_builder_cfgs={}, cfg_rtl_reg=RootRtlField(path=""))
 
 
 # ---------------------------------------------------------------------------
@@ -57,87 +57,87 @@ def _make_root_cfg():
 
 
 def test_run_preproc_no_script():
-    test = _make_test("t1")  # preproc_path=None by default
-    model = _make_model(test.key)
-    root_cfg = _make_root_cfg()
-    mod = RunPreprocMod()
-    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-    assert len(results) == 2
-    assert results[0] == ("test", test)
-    assert results[1] == ("model", model)
+	test = _make_test("t1")  # preproc_path=None by default
+	model = _make_model(test.key)
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 2
+	assert results[0] == ("test", test)
+	assert results[1] == ("model", model)
 
 
 def test_run_preproc_mutations(tmp_path):
-    script = tmp_path / "preproc.py"
-    script.write_text(
-        "test_cfg.set_plusarg('SEED', 42)\n"
-        "test_cfg.set_plusdefine('DEBUG', 1)\n"
-        "test_cfg.set_timeout(300)\n"
-    )
-    test = _make_test("t1", preproc_path=str(script))
-    model = _make_model(test.key)
-    root_cfg = _make_root_cfg()
-    mod = RunPreprocMod()
-    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-    assert len(results) == 2
-    port_t, emitted_test = results[0]
-    port_m, emitted_model = results[1]
-    assert port_t == "test"
-    assert port_m == "model"
-    assert emitted_test is test
-    assert emitted_test.pa == {"SEED": 42}
-    assert emitted_test.pd == {"DEBUG": 1}
-    assert emitted_test.timeout == 300
-    assert emitted_test.model == "sandbox"  # name string restored after exec
-    assert emitted_model is model
+	script = tmp_path / "preproc.py"
+	script.write_text(
+		"test_cfg.set_plusarg('SEED', 42)\n"
+		"test_cfg.set_plusdefine('DEBUG', 1)\n"
+		"test_cfg.set_timeout(300)\n"
+	)
+	test = _make_test("t1", preproc_path=str(script))
+	model = _make_model(test.key)
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 2
+	port_t, emitted_test = results[0]
+	port_m, emitted_model = results[1]
+	assert port_t == "test"
+	assert port_m == "model"
+	assert emitted_test is test
+	assert emitted_test.pa == {"SEED": 42}
+	assert emitted_test.pd == {"DEBUG": 1}
+	assert emitted_test.timeout == 300
+	assert emitted_test.model == "sandbox"  # name string restored after exec
+	assert emitted_model is model
 
 
 def test_run_preproc_script_sees_resolved_model(tmp_path):
-    script = tmp_path / "preproc.py"
-    script.write_text(
-        "test_cfg.set_plusdefine('MODEL', test_cfg.model.get_model_name())\n"
-    )
-    test = _make_test("t1", preproc_path=str(script))
-    model = _make_model(test.key, name="sandbox")
-    root_cfg = _make_root_cfg()
-    mod = RunPreprocMod()
-    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-    assert len(results) == 2
-    port_t, emitted_test = results[0]
-    assert port_t == "test"
-    assert emitted_test.pd == {"MODEL": "sandbox"}  # mutation from resolved model persists
-    assert emitted_test.model == "sandbox"  # name string restored
+	script = tmp_path / "preproc.py"
+	script.write_text(
+		"test_cfg.set_plusdefine('MODEL', test_cfg.model.get_model_name())\n"
+	)
+	test = _make_test("t1", preproc_path=str(script))
+	model = _make_model(test.key, name="sandbox")
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 2
+	port_t, emitted_test = results[0]
+	assert port_t == "test"
+	assert emitted_test.pd == {"MODEL": "sandbox"}  # mutation from resolved model persists
+	assert emitted_test.model == "sandbox"  # name string restored
 
 
 def test_run_preproc_script_raises(tmp_path, logging_handler):
-    script = tmp_path / "preproc.py"
-    script.write_text("raise ValueError('boom')\n")
-    test = _make_test("t1", preproc_path=str(script))
-    model = _make_model(test.key)
-    root_cfg = _make_root_cfg()
-    mod = RunPreprocMod()
-    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-    assert len(results) == 1
-    port, val = results[0]
-    assert port == "fail"
-    assert isinstance(val, TestResult)
-    assert val.result == "FAIL"
-    assert logging_handler.failure is True
-    assert test.model == "sandbox"  # restored synchronously before the fail yield
+	script = tmp_path / "preproc.py"
+	script.write_text("raise ValueError('boom')\n")
+	test = _make_test("t1", preproc_path=str(script))
+	model = _make_model(test.key)
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
+	assert test.model == "sandbox"  # restored synchronously before the fail yield
 
 
 def test_run_preproc_script_not_found(tmp_path, logging_handler):
-    test = _make_test("t1", preproc_path=str(tmp_path / "nonexistent.py"))
-    model = _make_model(test.key)
-    root_cfg = _make_root_cfg()
-    mod = RunPreprocMod()
-    results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-    assert len(results) == 1
-    port, val = results[0]
-    assert port == "fail"
-    assert isinstance(val, TestResult)
-    assert val.result == "FAIL"
-    assert logging_handler.failure is True
+	test = _make_test("t1", preproc_path=str(tmp_path / "nonexistent.py"))
+	model = _make_model(test.key)
+	root_cfg = _make_root_cfg()
+	mod = RunPreprocMod()
+	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert isinstance(val, TestResult)
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
 
 
 # ---------------------------------------------------------------------------
@@ -146,116 +146,116 @@ def test_run_preproc_script_not_found(tmp_path, logging_handler):
 
 
 def _make_model_kv(key:str, filelist=None, path=None, name="sandbox"):
-    return KeyedValue(key, ModelConfig(name=name, filelist=filelist or [], path=path))
+	return KeyedValue(key, ModelConfig(name=name, filelist=filelist or [], path=path))
 
 
 def test_write_filelist_success(tmp_path):
-    """Writes .f under work_dir, yields test then filelist; entries are work_dir-relative."""
-    (tmp_path / "rtl").mkdir()
-    (tmp_path / "rtl" / "model.sv").write_text("// model")
-    (tmp_path / "tb").mkdir()
-    (tmp_path / "tb" / "top.sv").write_text("// tb")
-    test = _make_test("basic", tb=TestbenchConfig(name="tb_top", filelist=["tb/top.sv"]))
-    model = _make_model_kv(test.key, filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
-    results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-    assert len(results) == 2
-    assert results[0] == ("test", test)
-    port, kv = results[1]
-    assert port == "filelist"
-    assert kv == KeyedValue(test.key, tmp_path / "run.basic.f")
-    content = (tmp_path / "run.basic.f").read_text()
-    assert content.startswith("// rtl-buddy generated model filelist\n")
-    assert "rtl/model.sv\n" in content
-    assert "tb/top.sv\n" in content
+	"""Writes .f under work_dir, yields test then filelist; entries are work_dir-relative."""
+	(tmp_path / "rtl").mkdir()
+	(tmp_path / "rtl" / "model.sv").write_text("// model")
+	(tmp_path / "tb").mkdir()
+	(tmp_path / "tb" / "top.sv").write_text("// tb")
+	test = _make_test("basic", tb=TestbenchConfig(name="tb_top", filelist=["tb/top.sv"]))
+	model = _make_model_kv(test.key, filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	assert len(results) == 2
+	assert results[0] == ("test", test)
+	port, kv = results[1]
+	assert port == "filelist"
+	assert kv == KeyedValue(test.key, tmp_path / "run.basic.f")
+	content = (tmp_path / "run.basic.f").read_text()
+	assert content.startswith("// rtl-buddy generated model filelist\n")
+	assert "rtl/model.sv\n" in content
+	assert "tb/top.sv\n" in content
 
 
 def test_write_filelist_location_follows_work_dir(tmp_path, monkeypatch):
-    """The .f is written under work_dir regardless of the process CWD."""
-    other = tmp_path / "other"
-    other.mkdir()
-    monkeypatch.chdir(other)
-    (tmp_path / "rtl").mkdir()
-    (tmp_path / "rtl" / "model.sv").write_text("// model")
-    test = _make_test("loc", tb=TestbenchConfig(name="tb_top", filelist=[]))
-    model = _make_model_kv(test.key, filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
-    list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-    assert (tmp_path / "run.loc.f").exists()
-    assert not (other / "run.loc.f").exists()
+	"""The .f is written under work_dir regardless of the process CWD."""
+	other = tmp_path / "other"
+	other.mkdir()
+	monkeypatch.chdir(other)
+	(tmp_path / "rtl").mkdir()
+	(tmp_path / "rtl" / "model.sv").write_text("// model")
+	test = _make_test("loc", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
+	list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	assert (tmp_path / "run.loc.f").exists()
+	assert not (other / "run.loc.f").exists()
 
 
 def test_write_filelist_contents_follow_work_dir(tmp_path, monkeypatch):
-    """Entry paths are relpath from work_dir, not from the process CWD."""
-    other = tmp_path / "other"
-    other.mkdir()
-    monkeypatch.chdir(other)
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "a.sv").write_text("// a")
-    test = _make_test("ct", tb=TestbenchConfig(name="tb_top", filelist=[]))
-    model = _make_model_kv(test.key, filelist=["src/a.sv"], path=str(tmp_path / "models.yaml"))
-    list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-    content = (tmp_path / "run.ct.f").read_text()
-    assert "src/a.sv\n" in content
-    assert ".." not in content  # no CWD-relative escape
+	"""Entry paths are relpath from work_dir, not from the process CWD."""
+	other = tmp_path / "other"
+	other.mkdir()
+	monkeypatch.chdir(other)
+	(tmp_path / "src").mkdir()
+	(tmp_path / "src" / "a.sv").write_text("// a")
+	test = _make_test("ct", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, filelist=["src/a.sv"], path=str(tmp_path / "models.yaml"))
+	list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	content = (tmp_path / "run.ct.f").read_text()
+	assert "src/a.sv\n" in content
+	assert ".." not in content  # no CWD-relative escape
 
 
 def test_write_filelist_tag_sanitization(tmp_path):
-    """Shell-unsafe characters in the test name are replaced with underscores in the filename."""
-    test = _make_test("a/b:c", tb=TestbenchConfig(name="tb_top", filelist=[]))
-    model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
-    results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-    f_path = tmp_path / "run.a_b_c.f"
-    assert f_path.exists()
-    port, kv = results[1]
-    assert port == "filelist"
-    assert kv.value == f_path
+	"""Shell-unsafe characters in the test name are replaced with underscores in the filename."""
+	test = _make_test("a/b:c", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	f_path = tmp_path / "run.a_b_c.f"
+	assert f_path.exists()
+	port, kv = results[1]
+	assert port == "filelist"
+	assert kv.value == f_path
 
 
 def test_write_filelist_resolve_error(tmp_path, logging_handler):
-    """Unresolvable -F include (KeyError) or missing testbench (AttributeError) emits fail."""
-    # -F include that does not exist → KeyError → filelist_resolve_error
-    test1 = _make_test("re1", tb=TestbenchConfig(name="tb_top", filelist=[]))
-    model1 = _make_model_kv(test1.key, filelist=["-F nonexistent.f"], path=str(tmp_path / "models.yaml"))
-    results1 = list(WriteFilelistMod().run(test=test1, model=model1, work_dir=tmp_path))
-    assert len(results1) == 1
-    assert results1[0][0] == "fail"
-    assert isinstance(results1[0][1], TestResult)
-    assert results1[0][1].result == "FAIL"
-    # missing testbench (tb=None) → AttributeError → filelist_resolve_error
-    test2 = _make_test("re2", tb=None)
-    model2 = _make_model_kv(test2.key, path=str(tmp_path / "models.yaml"))
-    results2 = list(WriteFilelistMod().run(test=test2, model=model2, work_dir=tmp_path))
-    assert len(results2) == 1
-    assert results2[0][0] == "fail"
-    assert results2[0][1].result == "FAIL"
-    assert logging_handler.failure is True
+	"""Unresolvable -F include (KeyError) or missing testbench (AttributeError) emits fail."""
+	# -F include that does not exist → KeyError → filelist_resolve_error
+	test1 = _make_test("re1", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model1 = _make_model_kv(test1.key, filelist=["-F nonexistent.f"], path=str(tmp_path / "models.yaml"))
+	results1 = list(WriteFilelistMod().run(test=test1, model=model1, work_dir=tmp_path))
+	assert len(results1) == 1
+	assert results1[0][0] == "fail"
+	assert isinstance(results1[0][1], TestResult)
+	assert results1[0][1].result == "FAIL"
+	# missing testbench (tb=None) → AttributeError → filelist_resolve_error
+	test2 = _make_test("re2", tb=None)
+	model2 = _make_model_kv(test2.key, path=str(tmp_path / "models.yaml"))
+	results2 = list(WriteFilelistMod().run(test=test2, model=model2, work_dir=tmp_path))
+	assert len(results2) == 1
+	assert results2[0][0] == "fail"
+	assert results2[0][1].result == "FAIL"
+	assert logging_handler.failure is True
 
 
 def test_write_filelist_permission_error(tmp_path, logging_handler):
-    """A read-only work_dir triggers PermissionError → filelist_permission_denied → fail."""
-    work_dir = tmp_path / "readonly"
-    work_dir.mkdir()
-    work_dir.chmod(0o555)
-    test = _make_test("perm", tb=TestbenchConfig(name="tb_top", filelist=[]))
-    model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
-    try:
-        results = list(WriteFilelistMod().run(test=test, model=model, work_dir=work_dir))
-    finally:
-        work_dir.chmod(0o755)
-    assert len(results) == 1
-    port, val = results[0]
-    assert port == "fail"
-    assert val.result == "FAIL"
-    assert logging_handler.failure is True
+	"""A read-only work_dir triggers PermissionError → filelist_permission_denied → fail."""
+	work_dir = tmp_path / "readonly"
+	work_dir.mkdir()
+	work_dir.chmod(0o555)
+	test = _make_test("perm", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+	try:
+		results = list(WriteFilelistMod().run(test=test, model=model, work_dir=work_dir))
+	finally:
+		work_dir.chmod(0o755)
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
 
 
 def test_write_filelist_dir_not_found(tmp_path, logging_handler):
-    """A non-existent work_dir parent causes FileNotFoundError → filelist_dir_not_found → fail."""
-    missing = tmp_path / "nonexistent" / "subdir"
-    test = _make_test("dnf", tb=TestbenchConfig(name="tb_top", filelist=[]))
-    model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
-    results = list(WriteFilelistMod().run(test=test, model=model, work_dir=missing))
-    assert len(results) == 1
-    port, val = results[0]
-    assert port == "fail"
-    assert val.result == "FAIL"
-    assert logging_handler.failure is True
+	"""A non-existent work_dir parent causes FileNotFoundError → filelist_dir_not_found → fail."""
+	missing = tmp_path / "nonexistent" / "subdir"
+	test = _make_test("dnf", tb=TestbenchConfig(name="tb_top", filelist=[]))
+	model = _make_model_kv(test.key, path=str(tmp_path / "models.yaml"))
+	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=missing))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "fail"
+	assert val.result == "FAIL"
+	assert logging_handler.failure is True
