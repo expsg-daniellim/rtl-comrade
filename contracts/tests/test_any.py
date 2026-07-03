@@ -75,6 +75,23 @@ async def test_drainage_fifo():
 	)
 
 
+async def test_pending_task_skipped_when_not_done():
+	# Port "a" (inserted first) has nothing queued while port "b" already holds an item,
+	# so the first asyncio.wait wake finds "b" done and "a" still pending. Iterating
+	# pending in insertion order reaches "a" first and skips it (task not in done) — the
+	# branch a same-tick completion of every task never reaches.
+	ports = {"a": Port(name="a"), "b": Port(name="b")}
+	contract = AnyContract(id="skip", ports=_make_contract_ports(ports))
+	ports["b"].queue.put_nowait(Payload(source="test", n=0, payload=2))
+	assert (await contract.get_inputs())["default"].payload == 2
+	# Drain "a" and both ends to a clean termination.
+	ports["a"].queue.put_nowait(Payload(source="test", n=0, payload=1))
+	ports["a"].queue.put_nowait(END)
+	ports["b"].queue.put_nowait(END)
+	assert (await contract.get_inputs())["default"].payload == 1
+	assert isinstance(await contract.get_inputs(), EndSentinel)
+
+
 async def test_blocking_await():
 	# Port a ends immediately; port b delivers its payload after one event loop yield,
 	# exercising the await asyncio.wait branch that blocks until an item arrives.

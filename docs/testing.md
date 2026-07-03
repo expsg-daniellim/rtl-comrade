@@ -79,14 +79,32 @@ uv run pytest modules/tests/ --cov=modules --cov-report=term-missing
 
 Expected result: 100% on all files except the `RunProcessMod` race-guards listed under [Accepted coverage misses](#accepted-coverage-misses). When adding a new module, add a corresponding test file under `modules/tests/`. Use `run_module_scenario` from `rtl_comrade.testing` for straightforward input/output cases.
 
+### Graphs (`graphs/`)
+
+Graph-local Python — currently `graphs/log/summary.py` (the `SummaryProcessor` logging plugin) — is tested under `graphs/tests/`.
+
+**Stage 1 — correctness:**
+
+```bash
+uv run pytest graphs/tests/
+```
+
+**Stage 2 — coverage:**
+
+```bash
+uv run pytest graphs/tests/ --cov=graphs --cov-report=term-missing
+```
+
+Expected result: 100% on all files. `graphs/` is not an importable package, so the tests load the module directly from its file path via `importlib` rather than importing it. When adding graph-local Python, add a corresponding test file under `graphs/tests/`.
+
 ---
 
 ## Full suite
 
-To run every test at once with no coverage (useful as a final sanity check across all three sections):
+To run every test at once with no coverage (useful as a final sanity check across all four sections):
 
 ```bash
-uv run pytest tests/ contracts/tests/ modules/tests/
+uv run pytest tests/ contracts/tests/ modules/tests/ graphs/tests/
 ```
 
 ---

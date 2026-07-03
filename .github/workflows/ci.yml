@@ -22,4 +22,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - run: uv run --group dev pytest tests/ --cov --cov-report=term-missing
+      # Per-section coverage from docs/testing.md; every section must reach 100%
+      # (accepted misses are suppressed at source, so the target is exactly 100).
+      - name: Harness coverage (src/rtl_comrade)
+        run: uv run --group dev pytest tests/ contracts/tests/ --cov=src/rtl_comrade --cov-report=term-missing --cov-fail-under=100
+      - name: Contracts coverage
+        run: uv run --group dev pytest contracts/tests/ --cov=contracts --cov-report=term-missing --cov-fail-under=100
+      - name: Modules coverage
+        run: uv run --group dev pytest modules/tests/ --cov=modules --cov-report=term-missing --cov-fail-under=100
+      - name: Graphs coverage
+        run: uv run --group dev pytest graphs/tests/ --cov=graphs --cov-report=term-missing --cov-fail-under=100
