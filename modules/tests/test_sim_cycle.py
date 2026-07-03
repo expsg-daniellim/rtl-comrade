@@ -287,6 +287,7 @@ def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 def test_resolve_seed_replay_permission_error(tmp_path, logging_handler):
 	test = _make_test()
 	run_id = _make_run_id_kv(test.key)

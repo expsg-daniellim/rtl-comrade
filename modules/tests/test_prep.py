@@ -1,6 +1,7 @@
 """Tests for modules/rtl_buddy/build.py — RunPreprocMod."""
 
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -143,6 +144,7 @@ def test_run_preproc_script_not_found(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 def test_run_preproc_script_permission_error(tmp_path, logging_handler):
 	script = tmp_path / "preproc.py"
 	script.write_text("test_cfg.set_plusarg('X', 1)\n")
@@ -269,6 +271,7 @@ def test_write_filelist_resolve_error(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o555 grants no denial")
 def test_write_filelist_permission_error(tmp_path, logging_handler):
 	"""A read-only work_dir triggers PermissionError → filelist_permission_denied → fail."""
 	work_dir = tmp_path / "readonly"

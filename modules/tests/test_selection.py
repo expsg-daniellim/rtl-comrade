@@ -1,6 +1,7 @@
 """Tests for modules/rtl_buddy/setup.py selection/expansion modules."""
 
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -370,6 +371,7 @@ def test_load_model_is_directory(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 def test_load_model_permission_denied(tmp_path, logging_handler):
 	bad = tmp_path / "models.yaml"
 	bad.write_text("rtl-buddy-filetype: model_config\nmodels: []\n")
@@ -511,6 +513,7 @@ def test_expand_sweep_script_not_found(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 def test_expand_sweep_script_permission_error(tmp_path, logging_handler):
 	script = tmp_path / "sweep.py"
 	script.write_text("pass\n")

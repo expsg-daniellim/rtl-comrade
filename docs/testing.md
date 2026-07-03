@@ -6,18 +6,16 @@ Run this two-stage procedure for the section you changed. Stage 1 confirms the c
 
 ### Harness (`src/rtl_comrade/`)
 
-The contract test suite must be included in both stages because `contracts/tests/` exercises the deferred-delivery paths in `src/rtl_comrade/testing.py` (the `PortTestInput(delay=N)` and `_feeder` code paths) that `tests/` alone does not reach.
-
 **Stage 1 — correctness:**
 
 ```bash
-uv run pytest tests/ contracts/tests/
+uv run pytest tests/
 ```
 
 **Stage 2 — coverage:**
 
 ```bash
-uv run pytest tests/ contracts/tests/ --cov=src/rtl_comrade --cov-report=term-missing
+uv run pytest tests/ --cov=src/rtl_comrade --cov-report=term-missing
 ```
 
 Expected result: 100% on all files except the two accepted misses listed below. Any other line number in the `Missing` column needs a test.

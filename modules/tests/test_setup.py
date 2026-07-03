@@ -666,6 +666,7 @@ def test_parse_suite_config_invalid_unicode(tmp_path, logging_handler):
 		mod.run(test_config=str(bad))
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 def test_parse_suite_config_permission_denied(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_text("rtl-buddy-filetype: test_config\ntestbenches: []\ntests: []\n")
