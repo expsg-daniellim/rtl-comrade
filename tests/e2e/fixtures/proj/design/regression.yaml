@@ -1,0 +1,7 @@
+# RTL-Buddy Regression Configuration File
+rtl-buddy-filetype: reg_config
+
+# List test configuration files contained in this regression
+test-configs:
+  - "../verif/sandbox/tests.yaml"
+

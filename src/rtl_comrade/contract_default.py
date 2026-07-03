@@ -1,5 +1,6 @@
 """Built-in default scheduling contract for runtime nodes."""
 
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import cast
 
@@ -104,18 +105,17 @@ class DefaultContract:
 				port.state['last_value'] = val
 			inputs[name] = val
 
-		# Evaluate end sentinels of required ports first
-		has_end_sentinels = []
-		has_data = []
+		# A branch may legitimately end one arm while another stays live, so a data/end split is only a
+		# mismatch within a single control-dependence partition (ports sharing the same branch labels).
+		ended:dict[frozenset, set[str]] = defaultdict(set)
+		live:dict[frozenset, set[str]] = defaultdict(set)
 		for (name, i) in inputs.items():
-			if isinstance(i, EndSentinel):
-				has_end_sentinels.append(name)
-			else:
-				has_data.append(name)
+			(ended if isinstance(i, EndSentinel) else live)[self.ports[name].branch_labels].add(name)
 
-		if len(has_end_sentinels) > 0:
-			if len(has_data) > 0:
-				log.error('mismatched_end', has_data=has_data, has_end_sentinels=has_end_sentinels)
+		if len(ended) > 0:
+			conflicted = ended.keys() & live.keys() # partitions holding both an ended and a live port
+			if len(conflicted) > 0:
+				log.error('mismatched_end', has_data=sorted(n for labels in conflicted for n in live[labels]), has_end_sentinels=sorted(n for labels in conflicted for n in ended[labels]))
 			return EndSentinel(self.id)
 
 		# Get special inputs

@@ -5,12 +5,12 @@ import inspect
 import logging
 from pathlib import Path
 import textwrap
-from collections.abc import MutableMapping
 from unittest.mock import patch
 
 import pytest
 import structlog
 import typer
+from serde.compat import UserError
 
 from rtl_comrade.loader_logger import LoggingPlugin, LoggingHandlerConfig, LoggingConfig
 
@@ -265,7 +265,6 @@ def test_load_class_init_raises_fatal(logging_handler, tmp_path):
 
 def test_load_class_config_user_error_fatal(logging_handler, tmp_path):
 	# A serde UserError raised while processing the Config type is fatal.
-	from serde.compat import UserError
 	f = _write(tmp_path, "p.py", """\
 		from dataclasses import dataclass
 		from serde import serde
@@ -517,7 +516,7 @@ def test_load_logging_returns_processor_specs(logging_handler, tmp_path):
 	f = _processor_file(tmp_path)
 	cfg = LoggingConfig(handlers=[_handler_config(f, "proc")], include_default=True)
 	processors, handlers = cfg.load()
-	assert handlers == []
+	assert len(handlers) == 0
 	# One processor spec, not yet constructed; the terminal ConsoleRenderer is added later by setup_logging.
 	assert len(processors) == 1
 	assert all(isinstance(p, LoggingPlugin) for p in processors)
@@ -532,7 +531,7 @@ def test_load_logging_include_default_false_last_processor_terminal(logging_hand
 		include_default=False,
 	)
 	processors, handlers = cfg.load()
-	assert handlers == []
+	assert len(handlers) == 0
 	# Two processor specs in order; validation accepted the str-returning terminal under include_default false.
 	assert len(processors) == 2
 
@@ -549,15 +548,15 @@ def test_load_logging_classifies_handler(logging_handler, tmp_path):
 	# The Handler subclass is classified as a handler spec; no processors.
 	assert len(handlers) == 1
 	assert issubclass(handlers[0].plugin, logging.Handler)
-	assert processors == []
+	assert len(processors) == 0
 
 
 def test_load_logging_no_renderers_warn_empty(logging_handler, tmp_path):
 	# include_default false, no processors, no handlers → warn no_renderers.
 	cfg = LoggingConfig(handlers=[], include_default=False)
 	processors, handlers = cfg.load()
-	assert processors == []
-	assert handlers == []
+	assert len(processors) == 0
+	assert len(handlers) == 0
 	# A warning is not an error.
 	assert logging_handler.failure is False
 
@@ -572,7 +571,5 @@ def test_load_logging_include_default_false_handler_only_no_warn(logging_handler
 	""")
 	cfg = LoggingConfig(handlers=[_handler_config(hf, "H")], include_default=False)
 	processors, handlers = cfg.load()
-	assert processors == []
+	assert len(processors) == 0
 	assert len(handlers) == 1
-
-

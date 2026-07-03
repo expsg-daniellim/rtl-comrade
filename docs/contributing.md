@@ -19,7 +19,8 @@ After tests pass, update docs for everything that changed:
 - New harness module → add a file to `docs/harness/` following the structure in `docs/harness/doc-structure.md`, and add it to the file map in `docs/harness/README.md`.
 - Harness behaviour change affecting plugin authoring → update the relevant file in `docs/harness/`.
 - New contract → add a file to `docs/contracts/` following `docs/contracts/doc-structure.md`, and add it to `docs/contracts/index.md`.
-- New module → update `docs/modules/implementation.md` if authoring rules changed.
+- New authoring rule for modules → update `docs/module-implementation/implementation.md`.
+- New `rtl_buddy` `test`-flow module → add its page under `docs/modules/` and list it in `docs/modules/index.md`.
 - Config shape, port semantics, or plugin loading change → update `docs/harness_configs/` and the sample graph and manifests in the same commit.
 - New invariant → add it to `docs/invariants.md`.
 - Known gap resolved → remove it from `docs/todo.md`.

@@ -1,0 +1,14 @@
+# RTL-Buddy RTL Model Configuration File
+#
+# INTENTIONALLY BROKEN — fixture for the lazy load-model scenario (spec 12).
+# The *skipped* `skip_broken_model` test in ../../verif/lazy_model/tests.yaml
+# points its model_path here. Because rtl-comrade loads models lazily, a
+# filtered-out test never reads this file and the run completes; rtl_buddy,
+# which loads all models eagerly at suite-parse, would trip on it — hence the
+# separate suite. The unterminated flow sequence below is invalid YAML, so any
+# attempt to load this file fails hard.
+rtl-buddy-filetype: model_config
+
+models:
+  - name: "broken_model"
+    filelist: [ "-F does_not_exist.f"

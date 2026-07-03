@@ -1,0 +1,90 @@
+# RTL-Buddy Test Configuration File
+rtl-buddy-filetype: test_config
+
+# List testbenches contained in this verif dir
+testbenches :
+  - name: "tb_top"
+    filelist:
+      - "+incdir+../../common"
+      - "tb_top.sv"
+  # deliberately-broken TB: validates compile-fail parity (spec 12)
+  - name: "tb_compile_fail"
+    filelist:
+      - "+incdir+../../common"
+      - "tb_compile_fail.sv"
+  # never-finishing TB: validates sim-timeout parity (spec 12)
+  - name: "tb_timeout"
+    filelist:
+      - "+incdir+../../common"
+      - "tb_timeout.sv"
+
+# List tests supported in this verif dir
+tests:
+  - name: "basic"
+    desc: "basic testcase"
+    # reglevel: priority for reg. use with --reg-level
+    # 0 (always run), 9999 (lowest priority), 10000 (disabled)
+    reglvl: 0
+    # plusargs: vlog runtime arguments
+    plusargs:
+      a : "8"
+      b : null
+      # verbosity 0 (most verbose), 2 (error and above)
+      lvm_verbosity : 2
+    # specify which RTL module to run with
+    model: "test_module"
+    model_path: "../../design/sandbox/models.yaml"
+    # specify which TB module to use as top
+    testbench: "tb_top"
+
+  - name: "extra"
+    desc: "extra testcase"
+    reglvl: 1000
+    plusargs:
+      a: "8"
+      b: "10"
+      test_cycles: "20"
+      # verbosity 0 (most verbose), 2 (error and above)
+      lvm_verbosity : 0
+    plusdefines:
+      DEFINE_WO_VALUE: null
+      DEFINE_WITH_VALUE: "1"
+    model: "test_module"
+    model_path: "../../design/sandbox/models.yaml"
+    testbench: "tb_top"
+
+  - name: "extra1"
+    desc: "extra testcase"
+    reglvl: 10000
+    plusargs:
+      a: "8"
+      b: "10"
+      test_cycles: "20"
+    plusdefines:
+      DEFINE_WITH_VALUE: "1"
+    model: "test_module"
+    model_path: "../../design/sandbox/models.yaml"
+    testbench: "tb_top"
+
+  # spec 12 negative fixtures. reglvl 10000 (disabled) keeps them out of
+  # regression sweeps; the e2e drives each by name. Both fail under rtl_buddy
+  # and rtl-comrade identically (compile FAIL / SimTimeout), so they back the
+  # compile-fail and sim-timeout parity scenarios.
+  - name: "compile_fail"
+    desc: "intentional compile failure"
+    reglvl: 10000
+    model: "test_module"
+    model_path: "../../design/sandbox/models.yaml"
+    testbench: "tb_compile_fail"
+
+  - name: "sim_timeout"
+    desc: "intentional sim timeout"
+    reglvl: 10000
+    # sim_timeout: wall-clock seconds before run-process kills the sim
+    sim_timeout: 5
+    plusargs:
+      lvm_verbosity : 2
+    model: "test_module"
+    model_path: "../../design/sandbox/models.yaml"
+    testbench: "tb_timeout"
+

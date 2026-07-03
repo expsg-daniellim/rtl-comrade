@@ -41,7 +41,7 @@ contract_config:
 
 ## Termination
 
-Ends when any keyed port ends. Buffered items whose key is incomplete at that point are logged as an error. Persistent ports do not drive termination.
+Ends when all keyed ports have ended. The module fires only for keys every keyed port delivered; an incomplete key is dropped, never folded into a partial invocation. Branch awareness affects only error reporting: of the keys still incomplete at termination, one is logged as an error only when a control-dependence partition (keyed ports sharing the same `branch_labels`) holds it on some co-fated ports but not all; a key a whole partition never received is dropped silently. Persistent ports do not drive termination. See [branch_labels.md](../harness/branch_labels.md). To instead omit a not-taken arm's ports and invoke the module with whichever arms delivered, use [branch\_aware\_join](branch_aware_join.md).
 
 ## Example use cases
 

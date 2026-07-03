@@ -1,0 +1,179 @@
+# RTL-Buddy Project Root Configuration File
+rtl-buddy-filetype: project_root_config
+
+# Supported platform configuration
+cfg-platforms:
+
+  - os: "osx"
+    unames: ["Darwin"]
+    builder: "verilator" # default rtl-builder
+    verible: "verible-macos"
+
+  - os: "server"
+    unames: ["Linux"]
+    builder: "verilator" # default rtl-builder
+    verible: "verible-x86_64"
+
+# End supported platform configuration
+
+# RTL builder configuration
+
+rtl-builder-template: &rtl-builder-template
+  - sim-rand-seed: 31310
+
+# multiple builders can be specified
+cfg-rtl-builder: 
+  - <<: *rtl-builder-template
+    name: "verilator"
+    builder: "verilator" # executable name
+    sim-rand-seed-prefix: "+verilator+seed+"
+    builder-opts:
+      # debug-mode with tracing
+      # TODO: >=vrltr5.040 will require -Wno-SPECIFYIGN
+      debug: 
+        compile-time: >-
+          --binary --timescale 1ns/10ps 
+          +1800-2023ext+sv
+          -sv
+          --compiler clang 
+          --x-initial unique
+          --assert 
+          --assert-case
+          -Wall
+          -Wwarn-lint
+          -Wno-DECLFILENAME
+          -Wno-PINCONNECTEMPTY
+          -Wno-UNUSEDPARAM
+          -Wno-UNUSEDSIGNAL
+          -Wno-WIDTHEXPAND
+          -Wno-WIDTHTRUNC
+          -o simv
+          +define+DUMP
+          --trace-fst 
+          --trace-params
+          --trace-structs
+          --trace-max-array 32
+          --trace-max-width 64
+        # run-time 
+        # rand-reset (2: rand, 1:ones, 0:zeros)
+        run-time: &vrl_run_time >-
+          +verilator+rand+reset+2
+          -x-initial unique
+      # regression-mode w/o trace
+      reg: 
+        compile-time: >-
+          --binary --timescale 1ns/10ps 
+          +1800-2023ext+sv
+          -sv
+          --compiler clang 
+          --x-initial unique 
+          --assert 
+          --assert-case
+          -Wall
+          -Wwarn-lint
+          -Wno-DECLFILENAME
+          -Wno-PINCONNECTEMPTY
+          -Wno-UNUSEDPARAM
+          -Wno-UNUSEDSIGNAL
+          -Wno-WIDTHEXPAND
+          -Wno-WIDTHTRUNC
+          -o simv
+        run-time: *vrl_run_time
+      # coverage-mode for merged coverage collection and HTML export
+      cov:
+        compile-time: >-
+          --binary --timescale 1ns/10ps
+          +1800-2023ext+sv
+          -sv
+          --compiler clang
+          --x-initial unique
+          --assert
+          --assert-case
+          --coverage
+          -Wall
+          -Wwarn-lint
+          -Wno-DECLFILENAME
+          -Wno-PINCONNECTEMPTY
+          -Wno-UNUSEDPARAM
+          -Wno-UNUSEDSIGNAL
+          -Wno-WIDTHEXPAND
+          -Wno-WIDTHTRUNC
+          -o simv
+        run-time: *vrl_run_time
+    # sim executable
+    builder-simv: "obj_dir/simv"
+  - <<: *rtl-builder-template
+    name: "vcs"
+    builder: "vcs" # executable name
+    sim-rand-seed-prefix: "+ntb_random_seed="
+    builder-opts:
+      # debug-mode with tracing
+      debug: 
+        compile-time: >-
+          -sverilog -full64 +vpi 
+          -timescale=1ns/10ps
+          -l simv_compile.log
+          +define+DUMP
+          -debug_access+all+class
+          -debug_acc+all+class+pp+dmptf
+          -debug_region+cell+encrypt
+          +lint=TFIPC-L
+          +dump_vpd
+        run-time: >-
+          -l simv.log 
+          -xlrm hier_inst_seed -diag hier_seed
+      # regression-mode w/o trace
+      reg:  
+        compile-time: >- 
+          -sverilog -full64 +vpi 
+          -timescale=1ns/10ps
+          -l simv_compile.log
+        run-time: >-
+          -l simv.log 
+          -xlrm hier_inst_seed -diag hier_seed
+    builder-simv: "simv" 
+    # vcs
+    # TODO in case we need platform specific builder, can use -platform in builder name
+# cfg-rtl-builder
+# End RTL builder configuration
+
+# Verible configuration
+cfg-verible:
+  - name: "verible-macos"
+    path: "tools/verible/macos/active/bin"
+    extra_args: &verible_extra_args
+      # extra verible lint args
+      # see lint help for --rules, comma-sep lint rules, (-) excl, (+) incl
+      lint:
+        - >-
+          --rules=
+          -explicit-parameter-storage-type,
+          -unpacked-dimensions-range-ordering,
+          -module-filename,
+          -no-trailing-spaces,
+          -parameter-name-style
+  - name: "verible-x86_64"
+    path: "tools/verible/x86_64/active/bin"
+    extra_args:
+      <<: *verible_extra_args
+# End verible configuration
+
+# Coverage post-processing configuration
+cfg-coverage:
+  - name: "verilator"
+    use-lcov: true
+# End coverage configuration
+
+
+# Regression config
+cfg-rtl-reg:
+  {
+    # regression config yaml, discover full list of reg from this root
+    reg-cfg-path: "design/regression.yaml" 
+  }
+
+# TODO cfg-rtl-lint : RTL Code Linter
+# cfg-rtl-lint : support spyglass
+
+# TODO cfg-rtl-cust-rel : RTL Customer Release Flow
+# cfg-rtl-cust-rel : support obfu, encryption

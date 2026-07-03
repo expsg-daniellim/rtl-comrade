@@ -12,6 +12,8 @@ For the harness internals behind logging plugins, see:
 
 For the YAML schema of the `logging` block, see [docs/harness_configs/graph.md](../harness_configs/graph.md).
 
+For a worked example of a stateful processor (accumulate in `__call__`, flush in `finalise()`), see [summary-processor.md](summary-processor.md).
+
 ## What A Logging Plugin Is
 
 A logging plugin is a per-graph customisation of harness logging. The harness already installs its own root handler (`LoggingFatalHandler`) with a terminal `ConsoleRenderer`; a logging plugin extends or replaces parts of that pipeline for one graph run.

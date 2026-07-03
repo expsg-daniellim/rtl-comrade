@@ -6,18 +6,16 @@ Run this two-stage procedure for the section you changed. Stage 1 confirms the c
 
 ### Harness (`src/rtl_comrade/`)
 
-The contract test suite must be included in both stages because `contracts/tests/` exercises the deferred-delivery paths in `src/rtl_comrade/testing.py` (the `PortTestInput(delay=N)` and `_feeder` code paths) that `tests/` alone does not reach.
-
 **Stage 1 — correctness:**
 
 ```bash
-uv run pytest tests/ contracts/tests/
+uv run pytest tests/
 ```
 
 **Stage 2 — coverage:**
 
 ```bash
-uv run pytest tests/ contracts/tests/ --cov=src/rtl_comrade --cov-report=term-missing
+uv run pytest tests/ --cov=src/rtl_comrade --cov-report=term-missing
 ```
 
 Expected result: 100% on all files except the two accepted misses listed below. Any other line number in the `Missing` column needs a test.
@@ -77,17 +75,67 @@ uv run pytest modules/tests/
 uv run pytest modules/tests/ --cov=modules --cov-report=term-missing
 ```
 
-Expected result: 100% on all files. When adding a new module, add a corresponding test file under `modules/tests/`. Use `run_module_scenario` from `rtl_comrade.testing` for straightforward input/output cases.
+Expected result: 100% on all files except the `RunProcessMod` race-guards listed under [Accepted coverage misses](#accepted-coverage-misses). When adding a new module, add a corresponding test file under `modules/tests/`. Use `run_module_scenario` from `rtl_comrade.testing` for straightforward input/output cases.
+
+### Graphs (`graphs/`)
+
+Graph-local Python — currently `graphs/log/summary.py` (the `SummaryProcessor` logging plugin) — is tested under `graphs/tests/`.
+
+**Stage 1 — correctness:**
+
+```bash
+uv run pytest graphs/tests/
+```
+
+**Stage 2 — coverage:**
+
+```bash
+uv run pytest graphs/tests/ --cov=graphs --cov-report=term-missing
+```
+
+Expected result: 100% on all files. `graphs/` is not an importable package, so the tests load the module directly from its file path via `importlib` rather than importing it. When adding graph-local Python, add a corresponding test file under `graphs/tests/`.
 
 ---
 
 ## Full suite
 
-To run every test at once with no coverage (useful as a final sanity check across all three sections):
+To run every test at once with no coverage (useful as a final sanity check across all four sections):
 
 ```bash
-uv run pytest tests/ contracts/tests/ modules/tests/
+uv run pytest tests/ contracts/tests/ modules/tests/ graphs/tests/
 ```
+
+---
+
+## End-to-end tests (`tests/e2e/`)
+
+`tests/e2e/test_e2e.py` drives the assembled `test` graph against a real SystemVerilog suite and compares `rtl-comrade test …` to snapshotted `rtl_buddy test …` reference output (see `implementation-test/specs/12-end-to-end.md`). They are collected by a bare `uv run pytest` along with the rest of the suite.
+
+### Committed fixtures
+
+The suite fixtures live under `tests/e2e/fixtures/proj/` and are committed. Their directory layout makes the `tests.yaml` / `models.yaml` relative paths (`+incdir+../../common`, `../../design/sandbox/models.yaml`, `-F test_modules.f`) resolve unchanged. Only source fixtures are tracked; the `.gitignore` under that tree excludes everything a run generates in the suite dirs (`logs/`, `obj_dir*/`, `run.*.f`, `test.log`/`.err`/`.randseed`, `dump.fst`, `rtl_buddy.log`). The graph itself is resolved via the repo-root `rtl_comrade_config.yaml`; `root_config.yaml` is committed inside the fixture because config discovery ascends from the suite dir to find it.
+
+### Required binaries
+
+These tests **compile and simulate real RTL**, so `verilator` must be installed; the suite-driving cases fail (not skip) if it is absent. The `rtl_buddy` reference is **not** invoked at test time — its output is snapshotted under `tests/e2e/captures/` (see below), so `verilator` is the only binary the suite needs.
+
+| Binary | Version | Role |
+|---|---|---|
+| `verilator` | `v5.042` | the configured builder (`root_config.yaml`) — actually compiles and simulates each test |
+
+The `ParseLogMod` correction tests and the concurrency-note test in the same file are self-contained (no suite, no binary) and always run.
+
+### Snapshotted `rtl_buddy` reference (`tests/e2e/captures/`)
+
+The parity scenarios (`--list`, compile-fail, sim-timeout, and the three `--early-stop` phases) compare `rtl-comrade` against **`rtl_buddy` v1.4.0**. Rather than run that binary live — it is installed only from the gitignored `rtl_buddy/` package and is unavailable in CI — its output is captured once and committed, keyed by scenario:
+
+- `<scenario>.rc` — the reference exit code.
+- `<scenario>.err` — the reference **stderr**, with ANSI colour codes stripped. This holds the deterministic payload the tests read: the verdict summary rows and, for compile-fail, verilator's error dump.
+- `list_names.txt` — the `--list` stdout (the one scenario whose stdout is the asserted result).
+
+`_ref(name)` in `test_e2e.py` loads these; `rtl_buddy` is only re-run against the fixtures when a capture must be refreshed for a new version.
+
+**Why stdout is not captured for the run scenarios.** For `test <name>` invocations `rtl_buddy` writes its verdict summary to stderr and reserves stdout for a per-run banner — `git: <branch> | commit <sha> | mod <n> | staged <n>` — followed by `… vlog compile time N secs` / `run time N secs` progress lines. Both are non-deterministic (they vary with the checkout's git state and with wall-clock timing) and neither is asserted by the tests, so snapshotting stdout would commit machine- and run-specific noise for no gain. `--list` is the exception: it prints no banner and its stdout *is* the result, so that one stdout is captured (`list_names.txt`).
 
 ---
 
@@ -100,7 +148,7 @@ uv run pytest tests/ contracts/tests/ modules/tests/
 
 ## Accepted coverage misses
 
-Five locations in the harness are intentionally excluded from coverage. All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
+Six locations are intentionally excluded from coverage: five in the harness (below) and one in the modules (`RunProcessMod`, last). All are suppressed at source so the report reads 100% with no `Missing` entries — do not write tests to cover them.
 
 ### `src/rtl_comrade/__main__.py` — entire file, excluded via `omit`
 
@@ -137,3 +185,7 @@ def run(self):  # pragma: no cover
 `missing_runs` (lines 73–74): the guard `not (hasattr(mod.Module, 'run') and callable(...))` can never be True at runtime — `GraphModule.from_module` is called on every module before this check and always raises (`AttributeError` for a missing `run`, `typer.Exit` for a non-callable one) before returning an entry to `module_mappings`.
 
 `dst_name = edge.dst.port` (line 131): the fallback for a non-definite-input node addressed by a string port that was not found in `get_canonical_port`. Since graph assembly pre-builds every incoming string port into `node.ports` at line 97, `get_canonical_port` always finds them and this branch is never reached.
+
+### `modules/rtl_buddy/build.py` — `RunProcessMod` `except ProcessLookupError` arms, excluded via `# pragma: no cover`
+
+The four `except ProcessLookupError: pass` arms (SIGQUIT and escalated SIGKILL, on both the timeout and cancellation paths) swallow the case where the process group is already dead when we signal it (`killpg` → `ESRCH`). Unlike the harness misses above, these are *reachable* in production — but only via a genuine OS race: the branch runs solely because `proc.wait()` had not completed at the timeout/cancel, so the process would have to exit in the window between that and the `killpg` call. There is no way to win that race deterministically with a real subprocess, and a test that forces `killpg` to raise merely injects the exception the arm already catches (proving nothing about the race while disabling the real kill). Covering them is therefore synthetic-only; they are pragma-excluded rather than tested.

@@ -1,0 +1,10 @@
+# RTL-Buddy RTL Model Configuration File
+rtl-buddy-filetype: model_config
+
+models:
+  - name      : "test_module"
+    filelist  : [ "-F test_modules.f" ]
+
+  - name      : "test_module_2"
+    filelist  : [ "-F test_modules.f" ]
+

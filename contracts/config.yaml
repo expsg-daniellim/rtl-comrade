@@ -25,3 +25,6 @@ files:
   plugins:
   - name: branch_aware_join
     class_name: BranchAwareJoinContract
+- file: any.py
+  plugins:
+  - { name: any, class_name: AnyContract }

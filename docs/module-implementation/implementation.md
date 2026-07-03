@@ -95,6 +95,18 @@ The current implementation preserves declaration order, and destination edges ma
 
 That means changing parameter order is a graph-facing API change.
 
+### Avoiding builtin/keyword clashes
+
+If a parameter would shadow a Python builtin or keyword (`list`, `type`, `id`, `class`, …), give it a single trailing underscore (`list_`). The harness exposes the input port under the underscore-dropped name, so the graph and CLI use the bare name while your code keeps the safe one:
+
+```python
+class RouteListModeMod:
+    def run(self, suite_cfg, list_: bool = False):
+        return ("list", suite_cfg) if list_ else ("run", suite_cfg)
+```
+
+Here the input port is `list` (so an edge writes `port: list` and a CLI edge writes `cli: list`), and the value arrives as the `list_` argument. Two parameters that collapse to the same external name (e.g. both `list` and `list_`) are a fatal error. Avoid `help_` — its `--help` collides with the auto-generated help flag.
+
 ## Default Input Values
 
 If a `run(...)` parameter has a Python default value, that input port becomes default-capable.
@@ -409,6 +421,15 @@ nodes:
 - id: add
   module: add
 ```
+
+## Cross-File Imports
+
+A plugin file may import from sibling files. For sibling imports to resolve, the loader puts the right directory on `sys.path` — but it treats a folder as a package only when that folder contains an `__init__.py`. Add an empty `__init__.py` to any folder you want to import through:
+
+- A plain folder (no `__init__.py`) is put on `sys.path` directly, so `import sibling` works but `from folder.sibling import X` does not.
+- A package folder (with `__init__.py`) has its parent put on `sys.path` instead, so absolute imports like `from modules.rtl_buddy.schema import X` resolve. The loader walks the whole `__init__.py` chain, so every folder in a multi-level package (e.g. both `modules/` and `modules/rtl_buddy/`) needs its own `__init__.py`; a gap anywhere in the chain stops the walk and the absolute import fails.
+
+See [docs/harness/loader_utils.md](../harness/loader_utils.md) for the exact `sys.path` rule.
 
 ## Design Advice
 

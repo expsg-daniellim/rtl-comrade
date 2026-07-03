@@ -11,7 +11,6 @@ Some contracts use domain-specific sentinel values emitted as payload values (di
 | Sentinel | Imported from | Used by |
 |---|---|---|
 | `GroupEnd` | `contracts.sentinels` | `group_until_end` — signals the end of one group while keeping the port open |
-| `BranchSkip(key=k)` | `contracts.sentinels` | `branch_aware_join` — signals that a branch was not taken for a given correlation key |
 
 For the expected structure of per-contract files, see [doc-structure.md](doc-structure.md).
 
@@ -25,4 +24,5 @@ For the expected structure of per-contract files, see [doc-structure.md](doc-str
 | [keyed\_join](keyed_join.md) | Joins items from all ports by a correlation key — the `key_field` attribute or dict entry of each payload (default `"key"`) |
 | [latest](latest.md) | Caches the most-recent value from state ports; triggers on each item from trigger ports |
 | [group\_until\_end](group_until_end.md) | Accumulates items into a list until a `GroupEnd` sentinel; passes the full batch to the module |
-| [branch\_aware\_join](branch_aware_join.md) | Like `keyed_join` but handles control-flow branches that intentionally skip some ports via `BranchSkip` |
+| [branch\_aware\_join](branch_aware_join.md) | Like `keyed_join` but uses each port's `branch_labels` to exclude ports whose control-flow arm was not selected for a key |
+| [any](any.md) | Fires on whichever input port is ready first, one delivery per call; ends when all ports end. General-purpose fan-in; reusable across graphs |

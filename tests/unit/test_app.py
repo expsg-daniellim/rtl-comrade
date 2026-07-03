@@ -12,6 +12,7 @@ import structlog
 import typer
 from click.exceptions import NoArgsIsHelpError
 from serde import SerdeError
+from structlog.stdlib import ProcessorFormatter
 from typer.testing import CliRunner
 from yaml.error import Mark, MarkedYAMLError
 from yaml.reader import ReaderError
@@ -365,7 +366,6 @@ def _spec(plugin):
 
 
 def test_setup_logging_processors_sets_render_and_formatter():
-	from structlog.stdlib import ProcessorFormatter
 	app = _make_app()
 	app.handler.render = False  # start from the opposite state
 	app.setup_logging([_spec(structlog.dev.ConsoleRenderer())], [], include_default=False)
@@ -422,6 +422,9 @@ class _FinaliseHandler(logging.Handler):
 		super().__init__()
 		self.finalised = False
 
+	def emit(self, record):
+		pass
+
 	def finalise(self):
 		self.finalised = True
 
@@ -460,6 +463,8 @@ def test_cleanup_skips_non_callable_finalise():
 			return event_dict
 	class _BadHandler(logging.Handler):
 		finalise = "not_a_function"
+		def emit(self, record):
+			pass
 	app.setup_logging([_spec(_BadProcessor())], [_spec(_BadHandler())], include_default=True)
 	app.cleanup()  # a non-callable finalise attribute is ignored, not invoked
 

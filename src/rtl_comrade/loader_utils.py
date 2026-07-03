@@ -64,6 +64,19 @@ def load_config_file(Config, path:Path, parent:Path=Path()):
 
 	return Never  # pragma: no cover
 
+def package_root_dir(file_dir:Path) -> Path | None:
+	"""Highest ancestor of file_dir still joined by an unbroken __init__.py chain, or None if file_dir is a plain directory.
+
+	Walks the whole chain rather than one level so multi-level packages (e.g. modules.rtl_buddy) resolve their top-level name: the parent of the returned directory is the sys.path entry that makes `from modules.rtl_buddy import ...` work.
+	"""
+
+	if not (file_dir / '__init__.py').exists():
+		return None
+	top = file_dir
+	while (top.parent / '__init__.py').exists():
+		top = top.parent
+	return top
+
 def import_plugin_file(file:Path, name:str | None, namespace:str) -> ModuleType:
 	"""Dynamically import one plugin Python file and return its module object.
 
@@ -81,7 +94,8 @@ def import_plugin_file(file:Path, name:str | None, namespace:str) -> ModuleType:
 
 	# Allow plugin files to import siblings via Python's normal import machinery
 	file_dir = file.parent.resolve()
-	sys_path_entry = str(file_dir.parent if (file_dir / '__init__.py').exists() else file_dir)
+	top_pkg = package_root_dir(file_dir)  # parent of the top-most package dir, so multi-level absolute imports resolve
+	sys_path_entry = str(top_pkg.parent if top_pkg is not None else file_dir)
 	if sys_path_entry not in sys.path:
 		sys.path.insert(0, sys_path_entry)
 
@@ -104,10 +118,9 @@ def import_plugin_file(file:Path, name:str | None, namespace:str) -> ModuleType:
 		log.fatal('spec.no_loader')
 
 	# Canonical name Python's machinery assigns; packages only — plain-dir stems collide with stdlib (e.g. "io").
-	plugin_file_dir = file.parent.resolve()
-	if (plugin_file_dir / '__init__.py').exists():
+	if top_pkg is not None:
 		try:
-			canonical_name = file.resolve().relative_to(str(plugin_file_dir.parent)).with_suffix('').as_posix().replace('/', '.')
+			canonical_name = file.resolve().relative_to(str(top_pkg.parent)).with_suffix('').as_posix().replace('/', '.')
 		except ValueError:
 			canonical_name = None
 	else:

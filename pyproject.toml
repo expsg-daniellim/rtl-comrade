@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=80.9.0", "setuptools-scm[simple]>=9.2.0"]
+requires = ["setuptools>=80.9.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -78,7 +78,7 @@ omit = [
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests", "contracts/tests", "modules/tests"]
+testpaths = ["tests", "contracts/tests", "modules/tests", "graphs/tests"]
 
 [dependency-groups]
 dev = [

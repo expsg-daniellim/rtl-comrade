@@ -1,8 +1,12 @@
 from pathlib import Path
+from typing import cast
+
 from serde import serde
 import structlog
 
-log = structlog.get_logger()
+from rtl_comrade.logging import HarnessLogger
+
+log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 
 class FileReadMod:

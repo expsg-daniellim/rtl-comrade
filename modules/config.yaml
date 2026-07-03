@@ -11,3 +11,47 @@ files:
     class_name: AddMod
   - name: alu
     class_name: ALUMod
+- file: rtl_buddy/build.py
+  plugins:
+  - { name: run-preproc, class_name: RunPreprocMod }
+  - { name: write-filelist, class_name: WriteFilelistMod }
+  - { name: run-process, class_name: RunProcessMod }
+  - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
+  - { name: interpret-compile, class_name: InterpretCompileMod }
+- file: rtl_buddy/setup.py
+  plugins:
+  - { name: discover-config-file, class_name: DiscoverConfigFileMod }
+  - { name: prepend-cwd-path, class_name: PrependCwdPathMod }
+  - { name: parse-root-config, class_name: ParseRootConfigMod }
+  - { name: select-platform, class_name: SelectPlatformMod }
+  - { name: resolve-builder, class_name: ResolveBuilderMod }
+  - { name: work-dir, class_name: WorkDirMod }
+  - { name: ensure-logs-dir, class_name: EnsureLogsDirMod }
+  - { name: parse-suite-config, class_name: ParseSuiteConfigMod }
+  - { name: derive-seed-mode, class_name: DeriveSeedModeMod }
+  - { name: route-list-mode, class_name: RouteListModeMod }
+  - { name: list-test-names, class_name: ListTestNamesMod }
+  - { name: select-tests, class_name: SelectTestsMod }
+  - { name: filter-reglvl, class_name: FilterRegLvlMod }
+  - { name: load-model, class_name: LoadModelMod }
+  - { name: expand-sweep, class_name: ExpandSweepMod }
+  - { name: git-status, class_name: GitStatusMod }
+- file: rtl_buddy/control.py
+  plugins:
+  - { name: early-stop-gate, class_name: EarlyStopGateMod }
+- file: rtl_buddy/sim.py
+  plugins:
+  - { name: expand-runs, class_name: ExpandRunsMod }
+  - { name: resolve-seed, class_name: ResolveSeedMod }
+  - { name: build-sim-cmd, class_name: BuildSimCmdMod }
+  - { name: write-randseed, class_name: WriteRandseedMod }
+  - { name: link-latest, class_name: LinkLatestMod }
+  - { name: interpret-sim, class_name: InterpretSimMod }
+  - { name: route-post, class_name: RoutePostMod }
+  - { name: parse-log, class_name: ParseLogMod }
+  - { name: parse-uvm-log, class_name: ParseUvmLogMod }
+- file: rtl_buddy/summarise_results.py
+  plugins:
+  - { name: summarise-results, class_name: SummariseResultsMod }
+  - { name: print-summary, class_name: PrintSummaryMod }
+  - { name: write-summary-log, class_name: WriteSummaryLogMod }

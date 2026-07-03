@@ -44,6 +44,8 @@ def foo(self) -> int:
 
 Do not prefix names with a leading underscore — not functions, methods, module-level names, or `self.` attributes. Dunders (`__init__`, `__post_init__`, …) are the only exception.
 
+**Discarded names.** When unpacking a tuple and a bound name is never used, name it `_` (Rust style) rather than inventing a descriptive name you then ignore. This is a discard, not a leading-underscore prefix, so it is exempt from the rule above. Rename only the unused element: `_, table = mod.finalise()` when the port is discarded, `port, _ = mod.finalise()` when the payload is.
+
 ## Expressions
 
 Prefer single-line expressions where they fit readably. Chained method calls and list comprehensions with a filter clause do not need to be broken across multiple lines just because they are long. The existing codebase puts the `plugin_name` derivation and the `to_get` list comprehension on one line each — follow that precedent.

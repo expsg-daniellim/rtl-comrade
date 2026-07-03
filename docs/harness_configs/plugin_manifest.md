@@ -58,4 +58,4 @@ If a plugin directory has no `config.yaml`, the loader auto-discovers all `.py` 
 
 ## Cross-file imports
 
-Before loading any file the loader inserts the plugin directory into `sys.path` so files can import siblings normally. For package directories (containing `__init__.py`) the parent is inserted instead so `from pkg.sibling import X` resolves correctly.
+Before loading any file the loader inserts the plugin directory into `sys.path` so files can import siblings normally. For package directories (containing `__init__.py`) the loader walks the whole `__init__.py` chain to the top-most package and inserts *its* parent instead, so both `from pkg.sibling import X` and multi-level absolute imports like `from modules.rtl_buddy.schema import X` resolve correctly.

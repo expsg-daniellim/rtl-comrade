@@ -1,6 +1,10 @@
+from typing import cast
+
 import structlog
 
-log = structlog.get_logger()
+from rtl_comrade.logging import HarnessLogger
+
+log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 
 class AddMod:

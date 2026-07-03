@@ -1,7 +1,7 @@
 """Tests for ZipContract."""
 
 from rtl_comrade.api import EndSentinel
-from rtl_comrade.testing import run_contract_scenario
+from rtl_comrade.testing import run_contract_scenario, PortMeta
 
 from contracts.zip import ZipContract
 
@@ -51,3 +51,17 @@ async def test_mismatched_ends_logs_error_and_returns_sentinel(logging_handler):
 		expected_outputs=[EndSentinel("test")],
 	)
 	assert logging_handler.failure is True
+
+
+async def test_branch_divergence_across_partitions_no_error(logging_handler):
+	# "a" belongs to a branch arm that ended while co-independent "b" stays live; a data/end split across partitions is a legitimate branch outcome, not a desync.
+	await run_contract_scenario(
+		ZipContract,
+		port_inputs={
+			"a": [EndSentinel("src")],
+			"b": [99],
+		},
+		expected_outputs=[EndSentinel("test")],
+		port_meta={"a": PortMeta(branch_labels=frozenset({("origin", frozenset({"a"}))}))},
+	)
+	assert logging_handler.failure is False

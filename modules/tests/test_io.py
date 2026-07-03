@@ -1,6 +1,7 @@
 """Tests for modules/io.py using the module testing harness."""
 
 import importlib.util
+import os
 from pathlib import Path
 from unittest.mock import patch
 
@@ -101,6 +102,7 @@ async def test_fileread_os_error(logging_handler, tmp_path):
 			)
 
 
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 async def test_fileread_permission_denied(logging_handler, tmp_path):
 	f = tmp_path / "secret.txt"
 	f.write_text("secret data")

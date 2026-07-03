@@ -6,7 +6,7 @@ import copy
 from dataclasses import dataclass, field
 from pathlib import Path
 import inspect
-from typing import Any, cast
+from typing import Any, cast, Self
 
 from serde import from_dict, SerdeError
 from serde.compat import UserError
@@ -24,46 +24,52 @@ log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 @dataclass(frozen=True, slots=True)
 class Connection:
-	"""One outgoing connection from a source output port to a destination input.
+	"""One outgoing edge in id space, from a source output port to a destination input port.
+
+	A construction-time value: it carries node identity (``other_node``) so deadlock validation and label propagation can
+	work over ids, and it names the destination port so the runtime ``self_port -> [Port]`` map can be materialised from it.
 
 	Attributes:
-		self_port: The source output port name on the emitting node.
-		other_node: The downstream destination node instance.
-		other_port: The destination input port name on the downstream node.
+		self_port: Source output port name on the emitting node.
+		other_node: Destination node id.
+		other_port: Canonical destination input port name.
 	"""
 
 	self_port: str
-	other_node: Node
+	other_node: str
 	other_port: str
 
 @dataclass(slots=True)
-class Node:  # pylint: disable=too-many-instance-attributes
-	"""A live runtime node binding together a module, contract, and input ports.
+class PreNode:  # pylint: disable=too-many-instance-attributes
+	"""A node under construction: everything needed to validate edges and to build the runtime Node, minus its outgoing edges.
+
+	Built in one pass from a config node. Its ``ports`` are the same objects that flow into the runtime Node, so an
+	upstream ``Connection`` targeting one of them reaches the exact queue the node reads.
 
 	Attributes:
 		id: Runtime node id from graph configuration.
 		module: Instantiated module object.
 		structure: Parsed module structure derived from the module class.
 		ports: Ordered input ports keyed by port name.
-		contract: Instantiated contract object controlling scheduling.
-		definite_inputs: Whether the node's input surface is a known finite set. Defaults to the module's own ``structure.definite_inputs``, but a ``contract_port_mappings`` node is definite even over a ``**kwargs`` module.
-		dsts: Outgoing downstream connections; ``None`` until ``set_dsts`` is called.
-		dst_counts: Running message count per ``(node_id, port)`` destination pair.
+		definite_inputs: Whether the node's input surface is a known finite set.
 		required_ports: Canonical names of input ports marked required in the graph config.
+		Contract: Contract plugin class, instantiated when the Node is built.
+		contract_config: Contract-specific configuration dictionary.
+		relative_path: Base path used to resolve ``{graph}``-relative config paths.
 	"""
 
 	id: str
 	module: type[Any]
 	structure: ModuleStructure
 	ports: OrderedDict[str, Port]
-	contract: type[Any]
-	definite_inputs: bool = True
-	dsts: list[Connection]|None = None
-	dst_counts: dict[tuple[str, str], int] = field(default_factory=dict)
-	required_ports: set[str] = field(default_factory=set)
+	definite_inputs: bool
+	required_ports: set[str]
+	Contract: type[Any]
+	contract_config: dict
+	relative_path: Path
 
 	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], *, contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None, required_ports:list[int|str]|None=None, definite_inputs_override:bool=False):  # pylint: disable=redefined-builtin,too-many-arguments
-		"""Instantiate one runtime node from a GraphModule descriptor and a contract class.
+		"""Build the module and input ports, and retain the contract recipe for later.
 
 		Args:
 			id: Runtime node id from graph configuration.
@@ -81,9 +87,9 @@ class Node:  # pylint: disable=too-many-instance-attributes
 		"""
 
 		self.id = id
-
-		if contract_config is None:
-			contract_config = {}
+		self.Contract = Contract
+		self.contract_config = contract_config if contract_config is not None else {}
+		self.relative_path = relative_path
 
 		# Initialise Module (with config/id if available/supported)
 		module_init_args:dict[str, Any] = {}
@@ -113,7 +119,6 @@ class Node:  # pylint: disable=too-many-instance-attributes
 		except Exception as e:
 			log.fatal('init', context='harness.node.module', node=self.id, module=module.name, exc_info=e)
 
-		# Initialise ports
 		self.structure = module.structure # It's a reference, should be fine
 		self.definite_inputs = definite_inputs_override or module.structure.definite_inputs
 
@@ -122,64 +127,6 @@ class Node:  # pylint: disable=too-many-instance-attributes
 
 		# Resolve config-declared required refs to canonical names; edge validation later reports unresolvable refs.
 		self.required_ports = { name for ref in required_ports or [] if (name := self.get_canonical_port(ref)) is not None }
-
-		# Initialise Contract with available init params
-		try:
-			contract_init_sig = inspect.signature(Contract.__init__)
-		except (TypeError, ValueError) as e:
-			log.fatal('unavailable_signature', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
-
-		contract_init_args = {}
-
-		if 'config' in contract_init_sig.parameters:
-			if hasattr(Contract, 'Config'):
-				try:
-					contract_config = from_dict(Contract.Config, contract_config)
-
-					# Relativise config paths (if not absolute)
-					for (attr, val) in [ (attr, getattr(contract_config, attr)) for attr in dir(contract_config) if not callable(getattr(contract_config, attr)) and not (attr.startswith('__') and attr.endswith('__')) ]:
-						if isinstance(val, Path) and not val.is_absolute() and val.parts[0] == '{graph}':
-							setattr(contract_config, attr, relative_path / Path(*val.parts[1:]))
-				except SerdeError as e:
-					log.fatal('config.deserialise.serde_error', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
-				except UserError as e:
-					log.fatal('config.deserialise.user_error', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
-			else:
-				log.warn('config.mismatch', context='harness.node.contract', node=self.id, contract=Contract.__name__)
-
-			contract_init_args['config'] = contract_config
-
-		if 'id' in contract_init_sig.parameters:
-			contract_init_args['id'] = self.id + '.contract'
-
-		if 'ports' in contract_init_sig.parameters:
-			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, required=name in self.required_ports) for (name, port) in self.ports.items() }
-		else:
-			# Warn for this one because it's a pretty pointless contract that has no input ports
-			log.warn('init.no_ports', context='harness.node.contract', node=self.id, contract=Contract.__name__)
-
-		try:
-			self.contract = Contract(**contract_init_args)
-		except typer.Exit:
-			raise
-		except Exception as e:
-			log.fatal('init', context='harness.node.contract', node=self.id, contract=Contract.__name__, exc_info=e)
-
-		# Initialise output targets (for future setting in set_dsts after edges are validated (which requires Node)
-		self.dsts = None
-		self.dst_counts = {}
-
-	def set_dsts(self, dsts:list[Connection]):
-		"""Assign this node's validated downstream connections.
-
-		Args:
-			dsts: Validated outgoing connections from this node.
-
-		Returns:
-			None.
-		"""
-
-		self.dsts = dsts
 
 	def get_canonical_port(self, port:int|str) -> str|None:
 		"""Resolve a destination port reference to its canonical string name.
@@ -199,22 +146,93 @@ class Node:  # pylint: disable=too-many-instance-attributes
 
 		return None
 
-	async def accept(self, val:Payload|EndSentinel, port:str):
-		"""Enqueue an inbound runtime message onto one input port.
+@dataclass(frozen=True, slots=True)
+class Node:  # pylint: disable=too-many-instance-attributes
+	"""A live runtime node binding together a module, contract, input ports, and outgoing connections.
+
+	Constructed complete via ``from_prenode``; its structure is immutable (only ``dst_counts`` entries mutate at runtime).
+
+	Attributes:
+		id: Runtime node id from graph configuration.
+		module: Instantiated module object.
+		structure: Parsed module structure derived from the module class.
+		ports: Ordered input ports keyed by port name.
+		contract: Instantiated contract object controlling scheduling.
+		definite_inputs: Whether the node's input surface is a known finite set.
+		required_ports: Canonical names of input ports marked required in the graph config.
+		dsts: Destination Ports grouped by the source output port name that feeds them.
+		dst_counts: Sent-payload counters parallel to each ``dsts`` port list, keyed the same way.
+	"""
+
+	id: str
+	module: type[Any]
+	structure: ModuleStructure
+	ports: OrderedDict[str, Port]
+	contract: type[Any]
+	definite_inputs: bool
+	required_ports: set[str]
+	dsts: dict[str, list[Port]]
+	dst_counts: dict[str, list[int]] = field(default_factory=dict)
+
+	@classmethod
+	def from_prenode(cls, pre:PreNode, dsts:dict[str, list[Port]], input_labels:dict[str, frozenset]) -> Self:
+		"""Couple a PreNode with its edge information to produce the finished runtime Node.
+
+		Constructs the contract from the PreNode's ports — now that their control-dependence labels are known — so the
+		contract owns its ContractPorts outright, with ``branch_labels`` injected from ``input_labels``.
 
 		Args:
-			val: Incoming runtime message for this node.
-			port: Canonical destination input-port name.
+			pre: The constructed PreNode.
+			dsts: Destination Ports grouped by the source output port name that feeds them.
+			input_labels: Control-dependence labels per input-port name, from graph propagation.
 
 		Returns:
-			None.
+			The finished Node.
 		"""
 
-		if port not in self.ports:
-			log.error('no_port', context='harness.module.accept', node=self.id, port=port)
-			return
+		try:
+			contract_init_sig = inspect.signature(pre.Contract.__init__)
+		except (TypeError, ValueError) as e:
+			log.fatal('unavailable_signature', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
 
-		await self.ports[port].queue.put(val)
+		contract_config = pre.contract_config
+		contract_init_args:dict[str, Any] = {}
+
+		if 'config' in contract_init_sig.parameters:
+			if hasattr(pre.Contract, 'Config'):
+				try:
+					contract_config = from_dict(pre.Contract.Config, contract_config)
+
+					# Relativise config paths (if not absolute)
+					for (attr, val) in [ (attr, getattr(contract_config, attr)) for attr in dir(contract_config) if not callable(getattr(contract_config, attr)) and not (attr.startswith('__') and attr.endswith('__')) ]:
+						if isinstance(val, Path) and not val.is_absolute() and val.parts[0] == '{graph}':
+							setattr(contract_config, attr, pre.relative_path / Path(*val.parts[1:]))
+				except SerdeError as e:
+					log.fatal('config.deserialise.serde_error', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
+				except UserError as e:
+					log.fatal('config.deserialise.user_error', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
+			else:
+				log.warn('config.mismatch', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__)
+
+			contract_init_args['config'] = contract_config
+
+		if 'id' in contract_init_sig.parameters:
+			contract_init_args['id'] = pre.id + '.contract'
+
+		if 'ports' in contract_init_sig.parameters:
+			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, required=name in pre.required_ports, branch_labels=input_labels.get(name, frozenset())) for (name, port) in pre.ports.items() }
+		else:
+			# Warn for this one because it's a pretty pointless contract that has no input ports
+			log.warn('init.no_ports', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__)
+
+		try:
+			contract = pre.Contract(**contract_init_args)
+		except typer.Exit:
+			raise
+		except Exception as e:
+			log.fatal('init', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
+
+		return cls(id=pre.id, module=pre.module, structure=pre.structure, ports=pre.ports, contract=contract, definite_inputs=pre.definite_inputs, required_ports=pre.required_ports, dsts=dsts, dst_counts={ port: [ 0 for _ in ports ] for port, ports in dsts.items() })
 
 	async def process_result(self, res:tuple[str, Any]|Any):
 		"""Normalize one module output and forward it to matching downstream edges.
@@ -245,19 +263,15 @@ class Node:  # pylint: disable=too-many-instance-attributes
 		else:
 			return
 
-		if self.dsts is None:
-			log.error('dsts.not_initialised', context='harness.module.res')
-			return
-
-		dsts = [ dst for dst in self.dsts if dst.self_port == port ]
-		if len(dsts) <= 0 and len(self.dsts) > 0:
+		matched = self.dsts.get(port, [])
+		if len(matched) == 0 and len(self.dsts) > 0:
 			log.info('no_destination', context='harness.module.res', port=port, data_type=type(value).__name__, data_repr=repr(value))
 
-		for dst in dsts:
-			key = (dst.other_node.id, dst.other_port)
-			self.dst_counts[key] = self.dst_counts.get(key, -1) + 1
-			payload = Payload(self.id, self.dst_counts[key], value)
-			await dst.other_node.accept(val=payload, port=dst.other_port)
+		counts = self.dst_counts.get(port, [])
+		for (i, dst_port) in enumerate(matched):
+			payload = Payload(self.id, counts[i], value)
+			counts[i] += 1
+			await dst_port.queue.put(payload)
 
 	async def run(self):
 		"""Execute this node until its contract indicates termination.
@@ -288,8 +302,8 @@ class Node:  # pylint: disable=too-many-instance-attributes
 			if isinstance(inputs, EndSentinel):
 				break
 
-			# Break out input Payloads into straight kwargs
-			inputs = { name: i.payload for (name, i) in inputs.items() }
+			# Break out input Payloads into straight kwargs, keyed by the real run parameter name.
+			inputs = { self.ports[name].param if name in self.ports else name: i.payload for (name, i) in inputs.items() }
 
 			# Run module based on async/non-async
 			bind_contextvars(context='harness.node.module', node=self.id, module=type(self.module).__name__)
@@ -320,10 +334,6 @@ class Node:  # pylint: disable=too-many-instance-attributes
 			if len(inputs) == 0:
 				break
 
-		if self.dsts is None:
-			log.error('dsts.not_initialised', context='harness.module.res', node=self.id)
-			return
-
 		# Run module.finalise (if present)
 		if hasattr(self.module, "finalise") and callable(self.module.finalise):
 			bind_contextvars(context="harness.node.module", node=self.id, module=type(self.module).__name__)
@@ -349,6 +359,7 @@ class Node:  # pylint: disable=too-many-instance-attributes
 			finally:
 				unbind_contextvars('context', 'node', 'module')
 
-		# Propagate EndSentinel
-		for dst in self.dsts:
-			await dst.other_node.accept(val=EndSentinel(self.id), port=dst.other_port)
+		# Propagate EndSentinel to each destination port
+		for ports in self.dsts.values():
+			for dst_port in ports:
+				await dst_port.queue.put(EndSentinel(self.id))

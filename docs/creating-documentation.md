@@ -28,8 +28,10 @@ Everything else belongs in `docs/`. Do not put authoring rules, config details, 
 ```
 docs/
   harness/          one file per harness source module
-  modules/          implementation.md + testing.md
+  module-implementation/  implementation.md + testing.md (how to write and test modules)
+  modules/          index.md + one file per module (reference for the rtl_buddy test-flow modules)
   contracts/        implementation.md + testing.md + index.md + one file per contract
+  graphs/           one file per graph, documenting the flow as a whole
   harness_configs/  index.md + one file per config file format
 ```
 

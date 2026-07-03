@@ -8,7 +8,7 @@ from .config import GraphConfigSrcPort
 
 from typing import TYPE_CHECKING  # pylint: disable=wrong-import-order
 if TYPE_CHECKING:
-	from .graph import Graph
+	from .node import Connection, PreNode
 	from .config import GraphConfigNode, GraphConfigEdge
 
 
@@ -76,38 +76,39 @@ class StaticDeadlockValidationResults:
 
 		return (len(self.edgeless_inputs) > 0) or (not self.has_source_capable) or (len(self.non_reachable_nodes) > 0)
 
-def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
-	"""Perform conservative first-run deadlock screening on a constructed graph.
+def validate_no_static_deadlock(prenodes:dict[str, PreNode], node_dsts:dict[str, list[Connection]]) -> StaticDeadlockValidationResults:
+	"""Perform conservative first-run deadlock screening over the wired-but-unbuilt graph.
 
 	Args:
-		graph: Constructed runtime graph with nodes and validated edges.
+		prenodes: Constructed PreNodes keyed by node id, carrying port metadata.
+		node_dsts: Outgoing connections keyed by source node id.
 
 	Returns:
 		Structured results describing detected deadlock-prone conditions.
 	"""
 
 	# Build incoming-port and adjacency maps once.
-	incoming:dict[str, set[str]] = {node_id: set() for node_id in graph.nodes}
-	adjacency:dict[str, list[str]] = {node_id: [] for node_id in graph.nodes}
+	incoming:dict[str, set[str]] = {node_id: set() for node_id in prenodes}
+	adjacency:dict[str, list[str]] = {node_id: [] for node_id in prenodes}
 
-	for node_id, node in graph.nodes.items():
-		for conn in node.dsts or []:
-			incoming[conn.other_node.id].add(conn.other_port)
-			adjacency[node_id].append(conn.other_node.id)
+	for src_id, conns in node_dsts.items():
+		for conn in conns:
+			incoming[conn.other_node].add(conn.other_port)
+			adjacency[src_id].append(conn.other_node)
 
 	res = StaticDeadlockValidationResults()
 
 	# 1. Every first-run-required input must have an incoming edge.
 	# Persistent without default is required on first run; default-bearing ports are satisfiable locally, including persistent + default.
 	# A config-required port always blocks, so it counts as first-run-required even when it has a default.
-	for node_id, node in graph.nodes.items():
-		for port_name, port in node.ports.items():
-			if (not port.has_default or port_name in node.required_ports) and port_name not in incoming[node_id]:
+	for node_id, pre in prenodes.items():
+		for port_name, port in pre.ports.items():
+			if (not port.has_default or port_name in pre.required_ports) and port_name not in incoming[node_id]:
 				res.edgeless_inputs.append(node_id)
 
 	# 2. At least one node must be source-capable.
 	# A source-capable node has no first-run-required inputs; a config-required port is not satisfiable locally.
-	sources = { node_id for node_id, node in graph.nodes.items() if all(port.has_default and port_name not in node.required_ports for port_name, port in node.ports.items()) }
+	sources = { node_id for node_id, pre in prenodes.items() if all(port.has_default and port_name not in pre.required_ports for port_name, port in pre.ports.items()) }
 	res.has_source_capable = bool(sources)
 
 	# 3. Every node must be reachable from some source-capable node.
@@ -122,6 +123,6 @@ def validate_no_static_deadlock(graph:Graph) -> StaticDeadlockValidationResults:
 		seen.add(node_id)
 		stack.extend(adjacency[node_id])
 
-	res.non_reachable_nodes = [ node_id for node_id in graph.nodes if node_id not in seen ]
+	res.non_reachable_nodes = [ node_id for node_id in prenodes if node_id not in seen ]
 
 	return res

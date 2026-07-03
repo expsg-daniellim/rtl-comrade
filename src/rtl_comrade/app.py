@@ -74,6 +74,9 @@ class App:
 		# Look for config
 		config = search_for_config(args.config_file, Path(os.getcwd()))
 		if config is None:
+			# Fallback: ascend from the harness source folder itself. FRAGILE — assumes a dev/editable checkout where rtl_comrade_config.yaml and graphs/ sit above src/rtl_comrade/; breaks for a real wheel install (assets are not package data) and where __file__ is unavailable (zip/frozen). Dev-only stopgap until plugins are discovered as installed packages.
+			config = search_for_config(args.config_file, Path(__file__).resolve().parent)
+		if config is None:
 			log.fatal('invalid_config', context='harness.app.config', config_name=args.config_file)
 
 		# Initialise CLI app

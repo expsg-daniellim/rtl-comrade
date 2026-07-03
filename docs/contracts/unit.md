@@ -12,7 +12,7 @@ None.
 
 ## Termination
 
-After the single invocation, every subsequent `get_inputs()` call returns `EndSentinel`. If any port ends before delivering a value, an error is logged and the node shuts down without invoking the module. If a port sends a second item after the first was consumed, the duplicate is logged as an error.
+After the single invocation, every subsequent `get_inputs()` call returns `EndSentinel`. If any port ends before delivering a value the node shuts down without invoking the module. That shutdown is logged as a `missing_required_inputs` error only for the ports that are genuinely missing: a port with no `branch_labels` (an unconditional required input), or one whose labels match a co-fated port that did deliver. A labelled port that ends with no co-fated port having delivered is a branch arm legitimately not selected and is not flagged. If a port sends a second item after the first was consumed, the duplicate is logged as an error. See [branch_labels.md](../harness/branch_labels.md).
 
 ## Example use cases
 

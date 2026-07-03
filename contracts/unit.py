@@ -36,7 +36,11 @@ class UnitContract:
 				inputs[name] = val
 
 		if missing:
-			log.error("missing_required_inputs", contract=self.id, ports=missing)
+			# An ended port is a legitimate unselected branch arm only when it carries branch labels and no co-fated port (same labels) delivered; an unbranched port ending without data is a genuinely missing required input.
+			delivered_labels = {port.branch_labels for name, port in self.ports.items() if name in inputs}
+			conflicted = [name for name in missing if len(self.ports[name].branch_labels) == 0 or self.ports[name].branch_labels in delivered_labels]
+			if conflicted:
+				log.error("missing_required_inputs", contract=self.id, ports=conflicted)
 			return EndSentinel(self.id)
 
 		self._invoked = True

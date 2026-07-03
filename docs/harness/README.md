@@ -26,6 +26,7 @@ The harness is distinct from the modular building blocks:
 - [node.md](node.md): runtime execution unit that binds modules, contracts, ports, and downstream connections together.
 - [structure.md](structure.md): signature and AST analysis for module inputs and emitted output ports.
 - [contract_default.md](contract_default.md): built-in default scheduling contract.
+- [branch_labels.md](branch_labels.md): control-dependence labelling — how branch structure is determined, propagated, and consumed.
 - [loader_utils.md](loader_utils.md): shared YAML config loading and dynamic plugin-file import.
 - [loader_plugin.md](loader_plugin.md): plugin discovery and class import from configured paths.
 - [loader_logger.md](loader_logger.md): per-graph logging-plugin resolution and signature validation.

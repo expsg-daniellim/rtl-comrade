@@ -1,0 +1,261 @@
+modules:
+- "../modules"
+contracts:
+- "../contracts"
+
+nodes:
+# --- setup: root config (run once, reimplemented) ---
+- id: discover-root
+  module: discover-config-file
+  contract: default
+  config: { filename: root_config.yaml }
+- { id: prepend-path,    module: prepend-cwd-path,  contract: default }
+- { id: parse-root,      module: parse-root-config, contract: unit }
+- { id: select-platform, module: select-platform,   contract: unit }
+- { id: resolve-builder, module: resolve-builder,   contract: unit }
+# --- setup: suite + seed mode ---
+- { id: work-dir,     module: work-dir,           contract: default }
+- { id: ensure-logs,  module: ensure-logs-dir,    contract: unit }
+- { id: parse-suite,  module: parse-suite-config, contract: unit }
+- { id: seed-mode,    module: derive-seed-mode,   contract: unit }
+- { id: git-status,   module: git-status,         contract: default }
+
+# --- list mode vs run ---
+- { id: route-list, module: route-list-mode, contract: unit }
+- { id: list-names, module: list-test-names, contract: default }
+
+# --- selection / expansion ---
+- { id: select, module: select-tests, contract: default }
+- id: filter
+  module: filter-reglvl
+  contract: default
+  contract_config: { persistent_inputs: [ builder_cfg, reg_level, start_level ] }
+- { id: load-model, module: load-model, contract: default }
+- id: sweep
+  module: expand-sweep
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ root_cfg ] }
+
+# --- per-test prep ---
+- id: preproc
+  module: run-preproc
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ root_cfg ] }
+- id: gate-pre
+  module: early-stop-gate
+  contract: keyed_join
+  config: { phase: pre }
+  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
+- id: filelist
+  module: write-filelist
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
+
+# --- compile (run-process #1) ---
+- id: cc-build
+  module: build-compile-cmd
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ] }
+- id: cc-run
+  module: run-process
+  contract: default
+  contract_config: { persistent_inputs: [ env_ready, work_dir ] }
+- id: cc-int
+  module: interpret-compile
+  contract: keyed_join
+  contract_config: { key_field: key }
+- id: gate-comp
+  module: early-stop-gate
+  contract: keyed_join
+  config: { phase: comp }
+  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
+
+# --- run-id fan-out + sim (run-process #2) ---
+- id: runs
+  module: expand-runs
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ run_ids ] }
+- id: seed
+  module: resolve-seed
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ] }
+- id: sim-build
+  module: build-sim-cmd
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ] }
+- id: sim-run
+  module: run-process
+  config: { grace_s: 5.0 }
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ env_ready, work_dir ] }
+- id: randseed
+  module: write-randseed
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
+- id: link-latest
+  module: link-latest
+  contract: keyed_join
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
+- id: sim-int
+  module: interpret-sim
+  contract: keyed_join
+  contract_config: { key_field: key }
+- id: gate-sim
+  module: early-stop-gate
+  contract: keyed_join
+  config: { phase: sim }
+  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
+
+# --- post (terminal nodes; result ports fan into results-summary, see below) ---
+- id: route-post
+  module: route-post
+  contract: keyed_join
+  contract_config: { key_field: key }
+- id: parse-log
+  module: parse-log
+  contract: keyed_join
+  contract_config: { key_field: key }
+- id: parse-uvm-log
+  module: parse-uvm-log
+  contract: keyed_join
+  contract_config: { key_field: key }
+# --- results summary (in-graph): the 13 terminal TestResult ports fan in via the any contract ---
+- id: results-summary
+  module: summarise-results
+  contract: any
+  contract_config: { mapping: result }
+  contract_port_mappings:
+    compile_fail: [result]
+    sim_timeout:  [result]
+    load_model:   [result]
+    filelist:     [result]
+    sweep:        [result]
+    preproc:      [result]
+    seed:         [result]
+    parse_plain:  [result]
+    parse_uvm:    [result]
+    skip:         [result]
+    stop_pre:     [result]
+    stop_comp:    [result]
+    stop_sim:     [result]
+# --- summary sinks: results-summary emits the rendered table on `table`, fanned to two sinks ---
+- { id: print-summary,     module: print-summary,     contract: default }
+- { id: write-summary-log, module: write-summary-log, contract: default }
+
+edges:
+# ---- CLI edges (subcommand options) ----
+- { src: { cli: test_config, type: str,  default: "tests.yaml" }, dst: { node: parse-suite,     port: test_config } }
+- { src: { cli: logs_dir,    type: str,  default: "logs" },       dst: { node: ensure-logs,     port: logs_dir } }
+- { src: { cli: builder,     type: str,  default: "" },           dst: { node: resolve-builder, port: builder } }
+- { src: { cli: test_name, option: false, type: str, default: "" }, dst: { node: select,        port: test_name } }
+- { src: { cli: list,        type: bool, default: false },        dst: { node: route-list,      port: list } }
+- { src: { cli: rnd_new,     type: bool, default: false },        dst: { node: seed-mode,       port: rnd_new } }
+- { src: { cli: rnd_last,    type: bool, default: false },        dst: { node: seed-mode,       port: rnd_last } }
+- { src: { cli: builder_mode, type: str, default: "debug" },      dst: { node: cc-build,        port: builder_mode } }
+- { src: { cli: builder_mode, type: str, default: "debug" },      dst: { node: sim-build,       port: builder_mode } }
+- { src: { cli: early_stop,  type: str,  default: "post" },       dst: { node: gate-pre,        port: early_stop } }
+- { src: { cli: early_stop,  type: str,  default: "post" },       dst: { node: gate-comp,       port: early_stop } }
+- { src: { cli: early_stop,  type: str,  default: "post" },       dst: { node: gate-sim,        port: early_stop } }
+
+# ---- setup chain ----
+- { src: { node: discover-root },     dst: { node: parse-root,      port: path } }
+- { src: { node: parse-root },        dst: { node: select-platform, port: root_cfg } }
+- { src: { node: parse-root },        dst: { node: resolve-builder, port: root_cfg } }
+- { src: { node: select-platform },   dst: { node: resolve-builder, port: platform_cfg } }
+
+# ---- env setup: PATH prepend (token, direct) + logs/ bootstrap (data) ----
+- { src: { node: prepend-path }, dst: { node: cc-run,  port: env_ready, required: true } }
+- { src: { node: prepend-path }, dst: { node: sim-run, port: env_ready, required: true } }
+- { src: { node: work-dir },   dst: { node: ensure-logs, port: work_dir } }
+- { src: { node: work-dir },   dst: { node: filelist,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: cc-build,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: cc-run,      port: work_dir } }
+- { src: { node: work-dir },   dst: { node: sim-run,     port: work_dir } }
+- { src: { node: work-dir },   dst: { node: randseed,    port: work_dir } }
+- { src: { node: work-dir },   dst: { node: link-latest, port: work_dir } }
+- { src: { node: ensure-logs, port: logs_dir }, dst: { node: cc-build,  port: logs_dir } }
+- { src: { node: ensure-logs, port: logs_dir }, dst: { node: sim-build, port: logs_dir } }
+- { src: { node: ensure-logs, port: logs_dir }, dst: { node: seed,      port: logs_dir } }
+
+# ---- config fan-out (persistent inputs; one output → many inputs is allowed) ----
+- { src: { node: parse-root },      dst: { node: sweep,     port: root_cfg } }
+- { src: { node: parse-root },      dst: { node: preproc,   port: root_cfg } }
+- { src: { node: resolve-builder }, dst: { node: filter,    port: builder_cfg } }
+- { src: { node: resolve-builder }, dst: { node: cc-build,  port: builder_cfg } }
+- { src: { node: resolve-builder }, dst: { node: seed,      port: builder_cfg } }
+- { src: { node: resolve-builder }, dst: { node: sim-build, port: builder_cfg } }
+- { src: { node: seed-mode },       dst: { node: seed,      port: seed_mode } }
+
+# ---- list mode vs run ----
+- { src: { node: parse-suite },            dst: { node: route-list, port: suite_cfg } }
+- { src: { node: route-list, port: list }, dst: { node: list-names, port: suite_cfg } }
+- { src: { node: route-list, port: run },  dst: { node: select,     port: suite_cfg } }
+
+# ---- main line: split per-test / per-run keyed edges ----
+- { src: { node: select,     port: test }, dst: { node: filter,     port: test } }
+- { src: { node: filter,     port: test }, dst: { node: load-model, port: test } }
+- { src: { node: load-model, port: test },  dst: { node: sweep, port: test } }
+- { src: { node: load-model, port: model }, dst: { node: sweep, port: model } }
+- { src: { node: sweep,      port: test },  dst: { node: preproc, port: test } }
+- { src: { node: sweep,      port: model }, dst: { node: preproc, port: model } }
+- { src: { node: preproc,    port: test },  dst: { node: gate-pre, port: test } }
+- { src: { node: preproc,    port: model }, dst: { node: gate-pre, port: model } }
+- { src: { node: gate-pre,   port: test },  dst: { node: filelist, port: test } }
+- { src: { node: gate-pre,   port: model }, dst: { node: filelist, port: model } }
+- { src: { node: filelist,   port: test },     dst: { node: cc-build, port: test } }
+- { src: { node: filelist,   port: filelist }, dst: { node: cc-build, port: filelist } }
+# Compile
+- { src: { node: cc-build, port: command }, dst: { node: cc-run, port: command } }
+- { src: { node: cc-build, port: test },    dst: { node: cc-int, port: test } }
+- { src: { node: cc-build, port: simv },    dst: { node: cc-int, port: simv } }
+- { src: { node: cc-run },                  dst: { node: cc-int, port: proc } }
+- { src: { node: cc-int,   port: test }, dst: { node: gate-comp, port: test } }
+- { src: { node: cc-int,   port: simv }, dst: { node: gate-comp, port: simv } }
+- { src: { node: gate-comp, port: test }, dst: { node: runs, port: test } }
+- { src: { node: gate-comp, port: simv }, dst: { node: runs, port: simv } }
+# Run fan-out
+- { src: { node: runs, port: test },   dst: { node: seed, port: test } }
+- { src: { node: runs, port: run_id }, dst: { node: seed, port: run_id } }
+- { src: { node: runs, port: simv },   dst: { node: seed, port: simv } }
+- { src: { node: seed, port: test },   dst: { node: sim-build, port: test } }
+- { src: { node: seed, port: run_id }, dst: { node: sim-build, port: run_id } }
+- { src: { node: seed, port: simv },   dst: { node: sim-build, port: simv } }
+- { src: { node: seed, port: seed },   dst: { node: sim-build, port: seed } }
+# Sim build
+- { src: { node: sim-build, port: command },  dst: { node: sim-run,     port: command } }
+- { src: { node: sim-build, port: timeout },  dst: { node: sim-run,     port: timeout } }
+- { src: { node: sim-build, port: randseed }, dst: { node: randseed,    port: randseed } }
+- { src: { node: sim-build, port: randseed }, dst: { node: link-latest, port: randseed } }
+- { src: { node: sim-build, port: test },     dst: { node: sim-int,     port: test } }
+- { src: { node: sim-run },                   dst: { node: randseed,    port: proc } }
+- { src: { node: sim-run },                   dst: { node: link-latest, port: proc } }
+- { src: { node: sim-run },                   dst: { node: sim-int,     port: proc } }
+# Post-sim — side-effect branch
+- { src: { node: randseed, port: randseed_done }, dst: { node: link-latest, port: randseed_done } }
+# Post-sim — classification branch
+- { src: { node: sim-int,  port: test }, dst: { node: gate-sim, port: test } }
+- { src: { node: sim-int,  port: proc }, dst: { node: gate-sim, port: proc } }
+- { src: { node: gate-sim, port: test }, dst: { node: route-post, port: test } }
+- { src: { node: gate-sim, port: proc }, dst: { node: route-post, port: proc } }
+- { src: { node: route-post, port: uvm_test },   dst: { node: parse-uvm-log, port: test } }
+- { src: { node: route-post, port: uvm_proc },   dst: { node: parse-uvm-log, port: proc } }
+- { src: { node: route-post, port: plain_test }, dst: { node: parse-log, port: test } }
+- { src: { node: route-post, port: plain_proc }, dst: { node: parse-log, port: proc } }
+
+# ---- terminal result ports → results-summary (the `any` contract fans them in) ----
+- { src: { node: cc-int,        port: fail },    dst: { node: results-summary, port: compile_fail } }
+- { src: { node: sim-int,       port: timeout }, dst: { node: results-summary, port: sim_timeout } }
+- { src: { node: load-model,    port: fail },    dst: { node: results-summary, port: load_model } }
+- { src: { node: filelist,      port: fail },    dst: { node: results-summary, port: filelist } }
+- { src: { node: sweep,         port: fail },    dst: { node: results-summary, port: sweep } }
+- { src: { node: preproc,       port: fail },    dst: { node: results-summary, port: preproc } }
+- { src: { node: seed,          port: fail },    dst: { node: results-summary, port: seed } }
+- { src: { node: parse-log,     port: default }, dst: { node: results-summary, port: parse_plain } }
+- { src: { node: parse-uvm-log, port: default }, dst: { node: results-summary, port: parse_uvm } }
+- { src: { node: filter,        port: skip },    dst: { node: results-summary, port: skip } }
+- { src: { node: gate-pre,      port: stop },    dst: { node: results-summary, port: stop_pre } }
+- { src: { node: gate-comp,     port: stop },    dst: { node: results-summary, port: stop_comp } }
+- { src: { node: gate-sim,      port: stop },    dst: { node: results-summary, port: stop_sim } }
+# ---- results-summary.table → the two summary sinks ----
+- { src: { node: results-summary, port: table }, dst: { node: print-summary,     port: table } }
+- { src: { node: results-summary, port: table }, dst: { node: write-summary-log, port: table } }
