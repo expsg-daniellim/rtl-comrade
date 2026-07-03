@@ -4,7 +4,7 @@ Defines the nodes, edges, and plugin sources for a single graph. Passed to `Grap
 
 <!-- TODO: author a dedicated authoritative example graph that covers all config features -->
 
-`graphs/graph2.yaml` is used as a working example below.
+`graphs/test.yaml` is the reference graph; a minimal illustrative example is shown below.
 
 ## Top-level keys
 

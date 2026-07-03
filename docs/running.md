@@ -48,8 +48,8 @@ The config file maps subcommand names to graph paths:
 
 ```yaml
 commands:
-  add:
-    path: "graphs/graph2.yaml"
+  test:
+    path: "graphs/test.yaml"
     help: "optional help string"
 ```
 
