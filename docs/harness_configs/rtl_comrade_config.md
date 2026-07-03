@@ -21,14 +21,12 @@ commands:
 
 ```yaml
 commands:
-  alu:
-    path: "graphs/graph.yaml"
-  add:
-    path: "graphs/graph2.yaml"
-    help: "Adds two numbers pairwise from a file."
+  test:
+    path: "graphs/test.yaml"
+    help: "Compile and simulate a SystemVerilog/UVM test suite."
 ```
 
-Running `uv run rtl-comrade add` loads `graphs/graph2.yaml` and executes it.
+Running `uv run rtl-comrade test` loads `graphs/test.yaml` and executes it.
 
 ## Notes
 

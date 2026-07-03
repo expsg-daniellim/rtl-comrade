@@ -37,10 +37,8 @@ The CLI is driven by a YAML config file that maps subcommand names to graph path
 
 ```yaml
 commands:
-  alu:
-    path: "graphs/graph.yaml"
-  add:
-    path: "graphs/graph2.yaml"
+  test:
+    path: "graphs/test.yaml"
     help: "optional help string"
 ```
 
