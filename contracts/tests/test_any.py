@@ -16,6 +16,12 @@ from contracts.any import AnyContract
 END = EndSentinel("src")
 
 
+def _make_ports(names:list[str]) -> dict[str, Port]:
+	# Reads stay enabled for the port's lifetime; the tests below drive get_inputs() directly rather than
+	# reproducing Node.run's read window, which run_contract_scenario does for the scenario-based cases.
+	return { name: Port(name=name, get_enabled=True) for name in names }
+
+
 def _make_contract_ports(ports:dict[str, Port]) -> dict[str, ContractPort]:
 	return {
 		name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, required=False)
@@ -80,7 +86,7 @@ async def test_pending_task_skipped_when_not_done():
 	# so the first asyncio.wait wake finds "b" done and "a" still pending. Iterating
 	# pending in insertion order reaches "a" first and skips it (task not in done) — the
 	# branch a same-tick completion of every task never reaches.
-	ports = {"a": Port(name="a"), "b": Port(name="b")}
+	ports = _make_ports(["a", "b"])
 	contract = AnyContract(id="skip", ports=_make_contract_ports(ports))
 	ports["b"].queue.put_nowait(Payload(source="test", n=0, payload=2))
 	assert (await contract.get_inputs())["default"].payload == 2
@@ -202,7 +208,7 @@ async def _collect_stress_results(contract:AnyContract, total_expected:int) -> l
 
 async def test_stress_n_to_1():
 	port_names = [f"p{i}" for i in range(_N_STRESS_PORTS)]
-	ports = {name: Port(name=name) for name in port_names}
+	ports = _make_ports(port_names)
 	contract = AnyContract(id="stress", ports=_make_contract_ports(ports))
 	feeders = [ asyncio.create_task(_stress_feeder(ports[name], _N_STRESS_ITEMS, i)) for i, name in enumerate(port_names) ]
 	delivered = await _collect_stress_results(contract, _N_STRESS_PORTS * _N_STRESS_ITEMS)
@@ -216,7 +222,7 @@ async def test_stress_n_to_1():
 
 async def test_stress_dict_mapping():
 	port_names = [name for names in _STRESS_PARTITION.values() for name in names]
-	ports = {name: Port(name=name) for name in port_names}
+	ports = _make_ports(port_names)
 	contract = AnyContract(id="stress_dict", ports=_make_contract_ports(ports), config=AnyContract.Config(mapping=_STRESS_PARTITION))
 	feeders = [ asyncio.create_task(_stress_feeder(ports[name], _N_STRESS_ITEMS, i)) for i, name in enumerate(port_names) ]
 	delivered = await _collect_stress_results(contract, _N_STRESS_PORTS * _N_STRESS_ITEMS)
@@ -260,7 +266,7 @@ async def test_property_based(seed:int):
 		mapping = groups
 		port_to_output = {name: g for g, names in groups.items() for name in names}
 
-	ports = {name: Port(name=name) for name in port_names}
+	ports = _make_ports(port_names)
 	# Pre-enqueue all items and end sentinels.
 	for i, name in enumerate(port_names):
 		for j in range(items_per_port):

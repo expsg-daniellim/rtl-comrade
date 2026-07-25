@@ -44,7 +44,7 @@ def walk_ast(node):
 
 		yield n
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class StructureInvalidTupleError(Exception):
 	"""Raised when a returned or yielded tuple has an invalid shape.
 
@@ -58,7 +58,7 @@ class StructureInvalidTupleError(Exception):
 	lineno: int
 	tuple_: tuple
 
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class StructureNonStrPortNameError(Exception):
 	"""Raised when a static emitted port name is not a string.
 

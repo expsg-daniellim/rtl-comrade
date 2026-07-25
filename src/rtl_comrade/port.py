@@ -12,13 +12,26 @@ from .structure import ModuleStructureArg
 T = TypeVar('T')
 
 # Error when an item in the queue is not a Payload or EndSentinel.
-@dataclass(frozen=True, slots=True)
+@dataclass(slots=True)
 class InvalidEnqueuedError(Exception):
 	"""Raised when a port queue contains an unsupported runtime message type.
 
 	Attributes:
 		name: The affected port name.
 		type_: The unexpected type name encountered in the queue.
+	"""
+
+	name: str
+	type_: str
+
+# Error when a port is read outside the get_inputs() call it is enabled for.
+@dataclass(slots=True)
+class IllegalGetAccessError(Exception):
+	"""Raised when a port is read while its reads are disabled.
+
+	Attributes:
+		name: The affected port name.
+		type_: The read that was attempted, ``"get"`` or ``"try_get"``.
 	"""
 
 	name: str
@@ -34,6 +47,7 @@ class Port(Generic[T]):
 		queue: Async queue carrying Payload and EndSentinel messages.
 		has_default: Whether the corresponding module input has a default value.
 		ended: Whether this port has already observed an EndSentinel.
+		get_enabled: Whether reads are currently permitted. The Node sets this only for the duration of a ``get_inputs()`` call, so an output contract — or an input contract holding onto a port past its call — cannot consume from the queue.
 	"""
 
 	name: str
@@ -41,6 +55,7 @@ class Port(Generic[T]):
 	queue: Queue[Payload[T]|EndSentinel] = field(default_factory=Queue)
 	has_default: bool = False
 	ended: bool = False
+	get_enabled: bool = False
 
 	def __post_init__(self):
 		if self.param == '':
@@ -64,7 +79,14 @@ class Port(Generic[T]):
 
 		Returns:
 			The next Payload or EndSentinel queued for this port.
+
+		Raises:
+			IllegalGetAccessError: Reads are not currently enabled on this port.
+			InvalidEnqueuedError: The dequeued item is neither a Payload nor an EndSentinel.
 		"""
+
+		if not self.get_enabled:
+			raise IllegalGetAccessError(self.name, 'get')
 
 		val = await self.queue.get()
 		if not isinstance(val, (Payload, EndSentinel)):
@@ -80,7 +102,14 @@ class Port(Generic[T]):
 
 		Returns:
 			The next queued Payload or EndSentinel, or ``None`` if the queue is empty.
+
+		Raises:
+			IllegalGetAccessError: Reads are not currently enabled on this port.
+			InvalidEnqueuedError: The dequeued item is neither a Payload nor an EndSentinel.
 		"""
+
+		if not self.get_enabled:
+			raise IllegalGetAccessError(self.name, 'try_get')
 
 		val = None
 		try:

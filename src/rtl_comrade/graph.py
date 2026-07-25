@@ -12,6 +12,7 @@ import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config_graph import GraphConfig
+from .contract import ContractDefinitions, InvalidContractParameterTypeError, MissingContractError, MissingContractFunctionError, MissingContractParameterError
 from .contract_default import DefaultContract
 from .loader_plugin import load_plugins
 from .logging import HarnessLogger
@@ -38,11 +39,13 @@ class Graph:
 	sig: inspect.Signature
 
 	@classmethod
-	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:  # pylint: disable=too-many-locals,too-many-branches
+	def from_config(cls, config:GraphConfig, cli_kwargs:dict[str, Any]|None=None) -> Self:  # pylint: disable=too-many-locals,too-many-branches,too-many-statements
 		"""Construct a runnable graph from an already-parsed GraphConfig.
 
 		Args:
 			config: Normalised graph configuration.
+			cli_kwargs: Parsed CLI parameter values keyed by CLI name, written into each node's module and contract
+				config blocks where a ``cli_*_config`` descriptor claims them. ``None`` is treated as empty.
 
 		Returns:
 			The constructed Graph instance.
@@ -67,62 +70,85 @@ class Graph:
 		if len(missing_runs) > 0:  # pragma: no cover
 			log.fatal("missing_functions", context='harness.load.module', plugins=missing_runs)  # pragma: no cover
 
-		# Validate contracts have get_inputs functions
-		missing_get_inputs = [ name for (name, contract) in contract_mappings.items() if not hasattr(contract, 'get_inputs') ]
-		if len(missing_get_inputs) > 0:
-			log.fatal("missing_functions", context='harness.load.contract', plugins=missing_get_inputs)
-
 		# Initialise the initialise set of contractless prenodes
 		prenodes:dict[str, PreNode] = {}
 		cli_ids:list[str] = []
 		errors = False
 		for i, node in enumerate(config.nodes):
-			has_error = False
 			if node.module not in module_mappings:
 				log.error('invalid_module', context='harness.graph.node', index=i, id=node.id, mod=node.module)
-				has_error = True
-
-			if node.contract != '' and node.contract not in contract_mappings:
-				log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, contract=node.contract)
-				has_error = True
+				errors = True
+				continue
 
 			# Determine the node's input-port surface and definiteness.
 			ports = None
 			definite_inputs_override = node.contract_port_mappings is not None
-			if not has_error:
-				mod = module_mappings[node.module]
-				if node.contract_port_mappings is not None:
-					# A module's inputs need to be definite in order to assert facts about them. Gate the list comprehension to avoid unnecessary computation.
-					invalid_targets = [ target for targets in node.contract_port_mappings.values() for target in targets if target not in mod.ports ] if mod.structure.definite_inputs else []
-					if len(invalid_targets) > 0:
-						log.error('invalid_mapping_target', context='harness.graph.node', index=i, id=node.id, targets=invalid_targets)
-						has_error = True
+			mod = module_mappings[node.module]
+			if node.contract_port_mappings is not None:
+				# An invalid target is an indefinite input with no contract_port_mapping which cannot be statically validated
+				invalid_targets = [ target for targets in node.contract_port_mappings.values() for target in targets if target not in mod.ports ] if mod.structure.definite_inputs else []
+				if len(invalid_targets) > 0:
+					log.error('invalid_mapping_target', context='harness.graph.node', index=i, id=node.id, targets=invalid_targets)
+					errors = True
+					continue
 
-					# An empty target list forwards to nothing, so it cannot inherit a default and stays first-run-required.
-					ports = OrderedDict({ cport: Port(cport, has_default=len(targets) > 0 and all(name in mod.ports and mod.ports[name].has_default for name in targets)) for cport, targets in node.contract_port_mappings.items() })
-				elif not mod.structure.definite_inputs:
-					# A positional port cannot be resolved against a non-definite surface that has no declared port order, so reject it before building the surface.
-					positional_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and not isinstance(edge.dst.port, str) ]
-					if len(positional_ports) > 0:
-						log.fatal('non_definite_positional_destination_port', context='harness.graph.node', index=i, id=node.id, ports=positional_ports)
-					# Assemble port mappings from incoming edges for non-definite-input modules.
-					ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id and isinstance(edge.dst.port, str) })
+				# An empty target list forwards to nothing, so it cannot inherit a default
+				ports = OrderedDict({ cport: Port(cport, has_default=len(targets) > 0 and all(name in mod.ports and mod.ports[name].has_default for name in targets)) for cport, targets in node.contract_port_mappings.items() })
+			elif not mod.structure.definite_inputs:
+				# A positional port cannot be resolved against a non-definite surface that has no declared port order, so reject it before building the surface.
+				positional_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and not isinstance(edge.dst.port, str) ]
+				if len(positional_ports) > 0:
+					log.error('non_definite_positional_destination_port', context='harness.graph.node', index=i, id=node.id, ports=positional_ports)
+					errors = True
+					continue
 
-			if not has_error:
-				required_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and edge.dst.required ]
+				# Assemble port mappings from incoming edges for non-definite-input modules.
+				ports = OrderedDict({ edge.dst.port: Port(edge.dst.port) for edge in config.edges if edge.dst.node == node.id and isinstance(edge.dst.port, str) })
 
-				for name, param in node.cli_config.items():
-					if param.cli in cli_kwargs:
-						node.config[name] = cli_kwargs[param.cli]
+			# Consolidate contract definitions
+			# Check for obsolete contract - contract smothered by input_contract and output_contract on top
+			if node.contract != '' and node.input_contract != '' and node.output_contract != '':
+				log.warn('obsolete_contract', context='harness.graph.node', index=i, id=node.id)
 
-				for name, param in node.cli_contract_config.items():
-					if param.cli in cli_kwargs:
-						node.contract_config[name] = cli_kwargs[param.cli]
-
-				contract = contract_mappings[node.contract] if node.contract != '' else DefaultContract
-				prenodes[node.id] = PreNode(id=node.id, module=mod, config=node.config, Contract=contract, contract_config=node.contract_config, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
-			else:
+			try:
+				contract_definitions = ContractDefinitions.from_node_config(node, contract_mappings)
+			except MissingContractError as e:
+				log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, field=e.field, contract=e.name, available=e.available)
 				errors = True
+				continue
+			except MissingContractFunctionError as e:
+				log.error('missing_contract_function', context='harness.graph.node', index=i, id=node.id, field=e.field, contract=e.name, method=e.method, available_functions=e.available_functions)
+				errors = True
+				continue
+			except MissingContractParameterError as e:
+				log.error('missing_contract_parameter', context='harness.graph.node', index=i, id=node.id, field=e.field, contract=e.name, function=e.function, parameter=e.parameter)
+				errors = True
+				continue
+			except InvalidContractParameterTypeError as e:
+				log.error('invalid_contract_parameter_type', context='harness.graph.node', index=i, id=node.id, field=e.field, contract=e.name, function=e.function, parameter=e.parameter, type_=e.type_)
+				errors = True
+				continue
+
+			required_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and edge.dst.required ]
+
+			# Populate configs with CLI args
+			for name, param in node.cli_config.items():
+				if param.cli in cli_kwargs:
+					node.config[name] = cli_kwargs[param.cli]
+
+			for name, param in node.cli_contract_config.items():
+				if param.cli in cli_kwargs:
+					node.contract_config[name] = cli_kwargs[param.cli]
+
+			for name, param in node.cli_input_contract_config.items():
+				if param.cli in cli_kwargs:
+					node.input_contract_config[name] = cli_kwargs[param.cli]
+
+			for name, param in node.cli_output_contract_config.items():
+				if param.cli in cli_kwargs:
+					node.output_contract_config[name] = cli_kwargs[param.cli]
+
+			prenodes[node.id] = PreNode(id=node.id, module=mod, config=node.config, contract_definitions=contract_definitions, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
 
 		if errors:
 			log.fatal('invalid_nodes', context='harness.graph.validation')
@@ -130,7 +156,7 @@ class Graph:
 		# Initialise the (virtual) cli prenodes in the graph
 		module_cli = GraphModule.from_module(ModuleCLI)
 		for (port_name, src) in config.cli_srcs:
-			prenodes[port_name] = PreNode(id=port_name, module=module_cli, config={ 'cli': src.cli }, Contract=DefaultContract)
+			prenodes[port_name] = PreNode(id=port_name, module=module_cli, config={ 'cli': src.cli }, contract_definitions=ContractDefinitions.default())
 			cli_ids.append(port_name)
 
 		# Consolidate and validate graph edges

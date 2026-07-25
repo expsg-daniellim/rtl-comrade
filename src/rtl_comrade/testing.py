@@ -107,6 +107,10 @@ async def run_contract_scenario(
 	to their delay, instantiates the contract, then calls get_inputs() once per
 	entry in expected_outputs and asserts the result matches.
 
+	Ports are readable only for the duration of each get_inputs() call, mirroring
+	Node.run: a contract that reads a port outside that window raises
+	IllegalGetAccessError here exactly as it would under the real harness.
+
 	Args:
 		contract_cls: The contract class to test.
 		port_inputs: Maps each port name to a list of values to deliver. Each
@@ -127,6 +131,7 @@ async def run_contract_scenario(
 	Raises:
 		AssertionError: When an actual get_inputs() result does not match expected.
 		asyncio.TimeoutError: When a get_inputs() call exceeds timeout.
+		IllegalGetAccessError: When the contract reads a port outside a get_inputs() call.
 	"""
 	meta = port_meta or {}
 	_default_meta = PortMeta()
@@ -177,11 +182,11 @@ async def run_contract_scenario(
 
 	if deferred:
 		await asyncio.gather(
-			_contract_loop(contract, expected_outputs, timeout),
+			_contract_loop(contract, ports, expected_outputs, timeout),
 			_feeder(ports, deferred),
 		)
 	else:
-		await _contract_loop(contract, expected_outputs, timeout)
+		await _contract_loop(contract, ports, expected_outputs, timeout)
 
 
 def _wrap_item(val: Any, name: str, n_counters: dict[str, int]) -> Payload | EndSentinel:
@@ -194,14 +199,23 @@ def _wrap_item(val: Any, name: str, n_counters: dict[str, int]) -> Payload | End
 
 async def _contract_loop(
 	contract: Any,
+	ports: dict[str, Port],
 	expected_outputs: list[Any],
 	timeout: float,
 ) -> None:
 	for step, expected in enumerate(expected_outputs):
+		# Mirror Node.run: ports are only readable for the duration of a get_inputs() call.
+		for port in ports.values():
+			port.get_enabled = True
+
 		if inspect.iscoroutinefunction(contract.get_inputs):
 			actual = await asyncio.wait_for(contract.get_inputs(), timeout=timeout)
 		else:
 			actual = contract.get_inputs()
+
+		for port in ports.values():
+			port.get_enabled = False
+
 		_assert_step(step, actual, expected)
 
 

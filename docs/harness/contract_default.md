@@ -4,7 +4,7 @@ Source: [src/rtl_comrade/contract_default.py](../../src/rtl_comrade/contract_def
 
 ## Role
 
-This file provides the built-in default contract used when a node does not name a custom contract.
+This file provides the built-in default contract used when a node does not name a custom contract. It is input-side only: it implements `get_inputs` and no `process_outputs`, so a node falling back to it does no output processing.
 
 ## See Also
 
@@ -12,6 +12,7 @@ This file provides the built-in default contract used when a node does not name 
 - [node.md](node.md)
 - [api.md](api.md)
 - [port.md](port.md)
+- [contract.md](contract.md) — how `DefaultContract` is selected as the fallback
 - [validation.md](validation.md)
 
 ## Main Responsibilities

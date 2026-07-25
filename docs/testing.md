@@ -34,6 +34,7 @@ When adding a new harness module, add a corresponding test file under `tests/uni
 | `logging.py` | `tests/unit/test_logging.py` |
 | `validation.py` | `tests/unit/test_validation.py` |
 | `contract_default.py` | `tests/unit/test_contract_default.py` |
+| `contract.py` | `tests/unit/test_contract.py` |
 | `module.py` | `tests/unit/test_module.py` |
 | `node.py` | `tests/unit/test_node.py` |
 | `graph.py` | `tests/unit/test_graph.py` |

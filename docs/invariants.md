@@ -30,6 +30,12 @@ Do not demote a `CRITICAL` to `ERROR` or vice versa without understanding the ex
 
 The graph addresses inputs by **external port name**; the module is called by its **Python parameter name**. They differ only when a parameter carries a builtin/keyword-avoiding trailing underscore (`list_` → port `list`). `structure.py` records both, and `node.py` re-keys inbound payloads from external name to `param` immediately before `run(**inputs)` — the single translation point. Everything graph-facing (edges, CLI, `contract_port_mappings`, validation) must use external names; only the final module call uses parameter names. Do not introduce a second translation site.
 
+## Input ports are readable only during `get_inputs()`
+
+`Node.run` enables reads on every input port immediately before calling the input contract and disables them immediately after. Outside that window `Port.get()` and `Port.try_get()` raise `IllegalGetAccessError` without touching the queue, and the node treats it as fatal.
+
+The window exists because a deferred read is silent data loss: a `ContractPort` captured during one `get_inputs()` and awaited later — from a background task, or from an output contract's `process_outputs` — would consume a payload the *next* invocation was owed, desyncing the stream far from the code that caused it. An output contract can read `port.state`, `has_ended()`, and `branch_labels`, but never the queue. Do not widen the window to "while the node is running"; that reintroduces exactly the race it rules out. See [harness/port.md](harness/port.md).
+
 ## Input ports are single-source
 
 Multiple upstream edges feeding the same input port on a node is a configuration error, not a merge. The harness rejects this at validation time with an "overloaded input" error.

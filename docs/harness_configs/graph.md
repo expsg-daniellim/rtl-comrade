@@ -25,14 +25,24 @@ nodes:
 - id: <str>                  # required — unique node identifier
   module: <str>              # required — plugin name from a modules manifest
   contract: <str>            # optional — plugin name from a contracts manifest; defaults to "default"
+  input_contract: <str>      # optional — overrides contract for input scheduling (see below)
+  output_contract: <str>     # optional — overrides contract for output processing (see below)
   config:                    # optional — passed to module __init__ as config
     key: value
   contract_config:           # optional — passed to contract __init__ as config
+    key: value
+  input_contract_config:     # optional — passed to input_contract __init__ as config
+    key: value
+  output_contract_config:    # optional — passed to output_contract __init__ as config
     key: value
   cli_config:                # optional — CLI-supplied module config fields
     <field>: <cli-param>     # field name maps to a CLI parameter descriptor
   cli_contract_config:       # optional — CLI-supplied contract config fields
     <field>: <cli-param>     # field name maps to a CLI parameter descriptor
+  cli_input_contract_config:   # optional — CLI-supplied input_contract config fields
+    <field>: <cli-param>
+  cli_output_contract_config:  # optional — CLI-supplied output_contract config fields
+    <field>: <cli-param>
   contract_port_mappings:    # optional — declares the contract-port input surface (see below)
     <contract-port>: [<module-param>, ...]  # contract port name → module run(...) params it forwards to
 ```
@@ -47,11 +57,30 @@ default: <value>  # optional — default value; if absent the parameter is requi
 help: <str>       # optional — help text shown in --help output
 ```
 
-Each `<field>` under `cli_config` or `cli_contract_config` is the name of the corresponding field in the module's or contract's `Config` dataclass. The harness injects the CLI-supplied value into the config dict before calling the node constructor, so the module or contract receives it through the normal serde deserialization path.
+Each `<field>` under a `cli_*_config` block is the name of the corresponding field in that target's `Config` dataclass. The harness injects the CLI-supplied value into the config dict before calling the node constructor, so the module or contract receives it through the normal serde deserialization path. Each block feeds the config dict of the same name: `cli_config` → `config`, `cli_contract_config` → `contract_config`, and likewise for the input and output contract blocks.
 
-If a field name appears in both `config` and `cli_config` (or both `contract_config` and `cli_contract_config`), the CLI value takes precedence and the harness emits a warning at startup.
+If a field name appears in both a static config dict and its `cli_*_config` block, the CLI value takes precedence and the harness emits a warning at startup.
 
-A `cli` name may be reused across edges, `cli_config`, and `cli_contract_config` entries to wire one CLI parameter to several destinations — every reuse must declare an identical descriptor (same `option`, `type`, `default`, and `help`). The name is surfaced as a single subcommand parameter regardless of how many times it appears. Two occurrences of the same `cli` name with differing descriptor fields are a fatal error.
+A `cli` name may be reused across edges and any of the four `cli_*_config` blocks to wire one CLI parameter to several destinations — every reuse must declare an identical descriptor (same `option`, `type`, `default`, and `help`). The name is surfaced as a single subcommand parameter regardless of how many times it appears. Two occurrences of the same `cli` name with differing descriptor fields are a fatal error.
+
+### Input and output contracts
+
+A contract wraps both ends of a module. `contract` is the general one: it supplies the module's inputs through `get_inputs`, and it processes the module's outputs too if it defines `process_outputs`. `input_contract` and `output_contract` each override it on one end.
+
+| Declared | Input end (`get_inputs`) | Output end (`process_outputs`) |
+|---|---|---|
+| nothing | `default` | none |
+| `contract` only | `contract` | `contract`, only if it defines `process_outputs` |
+| `contract` + `output_contract` | `contract` | `output_contract` |
+| `input_contract` + `output_contract` | `input_contract` | `output_contract` |
+
+Output processing is opt-in: a node naming only `contract: zip` does none, because `zip` has no `process_outputs`.
+
+Each contract is checked against the role it fills, so a plugin used only as an `output_contract` needs `process_outputs` but not `get_inputs`. Naming a contract that is missing the method its role requires is a fatal configuration error, as is a `process_outputs` that does not declare both `port` and `value`, or that annotates `port` as anything other than `str`.
+
+Declaring all three of `contract`, `input_contract`, and `output_contract` leaves `contract` with no end to serve. The harness warns (`obsolete_contract`) and proceeds.
+
+Contracts on the same node share one set of contract ports, and therefore one set of per-port `state` dicts — that is how an output contract can see what the input contract consumed. An output contract may accept `ports` but cannot read from them: input ports are readable only during a `get_inputs()` call, and reading outside that window is a fatal error. See [docs/contracts/implementation.md](../contracts/implementation.md).
 
 Do not use `help` as a `cli` name (or as the port name a CLI parameter feeds): the resulting `--help` collides with the auto-generated help flag. A module `run(...)` argument that names a builtin/keyword can carry a trailing underscore to avoid shadowing it in Python (`list_`); the underscore is dropped for the external port name, so `dst.port` and any `cli` targeting it use the bare name (`list`) — see [structure.md](../harness/structure.md).
 

@@ -61,15 +61,16 @@ Produced by `GraphConfig.from_file_config(file_config)`. Not serde-backed; const
 - **Duplicate node IDs**: two `nodes` entries share the same `id`
 - **Blank CLI name**: a `GraphConfigSrcCLI` edge has `cli: ""`
 - **CLI name conflicts with node ID**: the synthetic id `cli-{name}` would collide with an existing node id
-- **Blank CLI name in node config**: a `cli_config` or `cli_contract_config` entry has `cli: ""`
-- **Conflicting CLI definition** (`cli_def_mismatch`): the same `cli` name appears more than once — across edges, `cli_config`, and `cli_contract_config` — with differing descriptor fields (`option`, `type`, `default`, `help`). A name is registered the first time it is seen; later occurrences are compared against that registration. An identical re-declaration is allowed and deduplicated (this is how one CLI parameter fans out to multiple destinations); a differing one is fatal
-- **CLI config field shadows static config** (warning, non-fatal): a key in `cli_config` also appears in the node's static `config` dict; the CLI value will override at construction time
-- **CLI contract config field shadows static config** (warning, non-fatal): same as above for `cli_contract_config` vs `contract_config`
+- **Blank CLI name in node config**: an entry in any of the node's four `cli_*_config` blocks has `cli: ""`
+- **Conflicting CLI definition** (`cli_def_mismatch`): the same `cli` name appears more than once — across edges and all four `cli_*_config` blocks — with differing descriptor fields (`option`, `type`, `default`, `help`). A name is registered the first time it is seen; later occurrences are compared against that registration. An identical re-declaration is allowed and deduplicated (this is how one CLI parameter fans out to multiple destinations); a differing one is fatal
+- **CLI config field shadows static config** (`cli_config_override`, warning, non-fatal): a key in a `cli_*_config` block also appears in the corresponding static config dict; the CLI value will override at construction time
 - **Unused edge source** (warning, non-fatal): `edge.src.node` does not match any known node id; the edge is retained in `GraphConfig.edges` but emits `unused_edges`
 - **Invalid edge destination**: `edge.dst.node` does not match any known node id
 - **Cycle**: calls `validate_acyclic(nodes, edges)` on the node and edge lists; see [validation.md](validation.md)
 
-Edge CLI sources and node config CLI parameters share a single name registry (a `dict` keyed by `cli` name). The first occurrence of a name registers its descriptor and appends one parameter to the shared `params` list; identical later occurrences are skipped, so the combined list — which produces the `sig` consumed by `Graph.construct_run` — holds exactly one parameter per distinct name. The `cli_config` / `cli_contract_config` dicts remain on the `GraphConfigNode` objects in `GraphConfig.nodes`; no separate collection field is added to `GraphConfig`.
+Edge CLI sources and node config CLI parameters share a single name registry (a `dict` keyed by `cli` name). The first occurrence of a name registers its descriptor and appends one parameter to the shared `params` list; identical later occurrences are skipped, so the combined list — which produces the `sig` consumed by `Graph.construct_run` — holds exactly one parameter per distinct name. The `cli_*_config` dicts remain on the `GraphConfigNode` objects in `GraphConfig.nodes`; no separate collection field is added to `GraphConfig`.
+
+The per-block work is factored into the `validate_cli_config(clis, params, cli_config, config)` static method, called once per node for each of the four blocks. It mutates `clis` and `params` in place — that shared registry is what makes a `cli` name reusable across blocks and edges — and returns whether it logged an error. The caller binds `index`, `node`, and a `config_type` contextvar (`config`, `contract_config`, `input_contract_config`, `output_contract_config`) around each call, so every log line identifies which block it came from; the log events themselves (`blank_cli`, `cli_def_mismatch`, `cli_config_override`) are shared across all four.
 
 Checks that require loaded plugin classes (invalid module/contract names, invalid port names, deadlock) are deferred to `Graph.from_config`; see [graph.md](graph.md).
 

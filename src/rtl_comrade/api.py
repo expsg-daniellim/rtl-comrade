@@ -46,6 +46,10 @@ REST = RestSentinel()
 class ContractPort(Generic[T]):  # pylint: disable=too-many-instance-attributes
 	"""A contract-facing adapter around one node input port.
 
+	A node's input and output contracts share one adapter per port, and so share its ``state``. Reads are only legal
+	for the duration of a ``get_inputs()`` call: ``get`` and ``try_get`` raise IllegalGetAccessError anywhere else,
+	including from ``process_outputs``.
+
 	Attributes:
 		name: The input-port name as seen by the module and contract.
 		get: Async blocking read for the next queued Payload or EndSentinel.

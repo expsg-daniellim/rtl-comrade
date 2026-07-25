@@ -10,7 +10,9 @@ from rtl_comrade.testing import PortMeta, PortTestInput, run_contract_scenario
 
 
 def _make_port(name, has_default=False):
-	return Port(name=name, has_default=has_default)
+	# Reads stay enabled for the port's lifetime; these tests drive get_inputs() directly rather than
+	# reproducing Node.run's read window, which run_contract_scenario covers below.
+	return Port(name=name, has_default=has_default, get_enabled=True)
 
 
 def _make_contract_port(port: Port, required=False):

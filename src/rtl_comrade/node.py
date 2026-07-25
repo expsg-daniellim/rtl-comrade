@@ -14,10 +14,11 @@ import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 import typer
 
-from .api import Payload, EndSentinel, ContractPort
+from .api import Payload, EndSentinel
+from .contract import ContractDefinitions
 from .logging import HarnessLogger
 from .module import GraphModule
-from .port import Port, InvalidEnqueuedError
+from .port import Port, InvalidEnqueuedError, IllegalGetAccessError
 from .structure import ModuleStructure
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
@@ -53,8 +54,7 @@ class PreNode:  # pylint: disable=too-many-instance-attributes
 		ports: Ordered input ports keyed by port name.
 		definite_inputs: Whether the node's input surface is a known finite set.
 		required_ports: Canonical names of input ports marked required in the graph config.
-		Contract: Contract plugin class, instantiated when the Node is built.
-		contract_config: Contract-specific configuration dictionary.
+		contract_definitions: Resolved contract classes and their configs, instantiated when the Node is built.
 		relative_path: Base path used to resolve ``{graph}``-relative config paths.
 	"""
 
@@ -64,19 +64,17 @@ class PreNode:  # pylint: disable=too-many-instance-attributes
 	ports: OrderedDict[str, Port]
 	definite_inputs: bool
 	required_ports: set[str]
-	Contract: type[Any]
-	contract_config: dict
+	contract_definitions: ContractDefinitions
 	relative_path: Path
 
-	def __init__(self, id:str, module:GraphModule, config:dict, Contract:type[Any], *, contract_config:dict|None=None, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None, required_ports:list[int|str]|None=None, definite_inputs_override:bool=False):  # pylint: disable=redefined-builtin,too-many-arguments
-		"""Build the module and input ports, and retain the contract recipe for later.
+	def __init__(self, id:str, module:GraphModule, config:dict, contract_definitions:ContractDefinitions, *, relative_path:Path=Path(), ports:OrderedDict[str, Port]|None=None, required_ports:list[int|str]|None=None, definite_inputs_override:bool=False):  # pylint: disable=redefined-builtin,too-many-arguments
+		"""Build the module and input ports, and retain the contract recipes for later.
 
 		Args:
 			id: Runtime node id from graph configuration.
 			module: Pre-validated GraphModule descriptor wrapping the module class.
 			config: Module-specific configuration dictionary.
-			Contract: Contract plugin class controlling this node's scheduling.
-			contract_config: Optional contract-specific configuration dictionary.
+			contract_definitions: Resolved contract classes and their configs, governing this node's scheduling and output processing.
 			relative_path: Base path used to resolve ``{graph}``-relative config paths.
 			ports: Replacement input-port surface; when given, it becomes the node's ports outright instead of the module's own. Used for non-definite-input modules (built from incoming edges) and for ``contract_port_mappings`` nodes (the contract-port surface).
 			required_ports: Destination-port references (name or 1-based index) marked required in the graph config.
@@ -87,8 +85,7 @@ class PreNode:  # pylint: disable=too-many-instance-attributes
 		"""
 
 		self.id = id
-		self.Contract = Contract
-		self.contract_config = contract_config if contract_config is not None else {}
+		self.contract_definitions = contract_definitions
 		self.relative_path = relative_path
 
 		# Initialise Module (with config/id if available/supported)
@@ -148,16 +145,22 @@ class PreNode:  # pylint: disable=too-many-instance-attributes
 
 @dataclass(frozen=True, slots=True)
 class Node:  # pylint: disable=too-many-instance-attributes
-	"""A live runtime node binding together a module, contract, input ports, and outgoing connections.
+	"""A live runtime node binding together a module, its contracts, input ports, and outgoing connections.
 
 	Constructed complete via ``from_prenode``; its structure is immutable (only ``dst_counts`` entries mutate at runtime).
+
+	A contract wraps both ends of the module. ``contract`` serves whichever end has no override: it supplies inputs
+	through ``get_inputs``, and processes outputs too if it defines ``process_outputs``. ``input_contract`` and
+	``output_contract`` displace it on their own end when set.
 
 	Attributes:
 		id: Runtime node id from graph configuration.
 		module: Instantiated module object.
 		structure: Parsed module structure derived from the module class.
 		ports: Ordered input ports keyed by port name.
-		contract: Instantiated contract object controlling scheduling.
+		contract: Instantiated general contract object, used on each end that is not overridden.
+		input_contract: Instantiated contract supplying inputs in place of ``contract``, or ``None``.
+		output_contract: Instantiated contract processing outputs in place of ``contract``, or ``None``.
 		definite_inputs: Whether the node's input surface is a known finite set.
 		required_ports: Canonical names of input ports marked required in the graph config.
 		dsts: Destination Ports grouped by the source output port name that feeds them.
@@ -165,10 +168,12 @@ class Node:  # pylint: disable=too-many-instance-attributes
 	"""
 
 	id: str
-	module: type[Any]
+	module: Any
 	structure: ModuleStructure
 	ports: OrderedDict[str, Port]
-	contract: type[Any]
+	contract: Any
+	input_contract: Any
+	output_contract: Any
 	definite_inputs: bool
 	required_ports: set[str]
 	dsts: dict[str, list[Port]]
@@ -178,8 +183,8 @@ class Node:  # pylint: disable=too-many-instance-attributes
 	def from_prenode(cls, pre:PreNode, dsts:dict[str, list[Port]], input_labels:dict[str, frozenset]) -> Self:
 		"""Couple a PreNode with its edge information to produce the finished runtime Node.
 
-		Constructs the contract from the PreNode's ports — now that their control-dependence labels are known — so the
-		contract owns its ContractPorts outright, with ``branch_labels`` injected from ``input_labels``.
+		Constructs the node's contracts from the PreNode's ports — now that their control-dependence labels are known —
+		so they own their ContractPorts outright, with ``branch_labels`` injected from ``input_labels``.
 
 		Args:
 			pre: The constructed PreNode.
@@ -190,52 +195,15 @@ class Node:  # pylint: disable=too-many-instance-attributes
 			The finished Node.
 		"""
 
-		try:
-			contract_init_sig = inspect.signature(pre.Contract.__init__)
-		except (TypeError, ValueError) as e:
-			log.fatal('unavailable_signature', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
+		contract, input_contract, output_contract = pre.contract_definitions.construct(pre.id, pre.ports, input_labels, pre.required_ports, pre.relative_path)
 
-		contract_config = pre.contract_config
-		contract_init_args:dict[str, Any] = {}
-
-		if 'config' in contract_init_sig.parameters:
-			if hasattr(pre.Contract, 'Config'):
-				try:
-					contract_config = from_dict(pre.Contract.Config, contract_config)
-
-					# Relativise config paths (if not absolute)
-					for (attr, val) in [ (attr, getattr(contract_config, attr)) for attr in dir(contract_config) if not callable(getattr(contract_config, attr)) and not (attr.startswith('__') and attr.endswith('__')) ]:
-						if isinstance(val, Path) and not val.is_absolute() and val.parts[0] == '{graph}':
-							setattr(contract_config, attr, pre.relative_path / Path(*val.parts[1:]))
-				except SerdeError as e:
-					log.fatal('config.deserialise.serde_error', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
-				except UserError as e:
-					log.fatal('config.deserialise.user_error', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
-			else:
-				log.warn('config.mismatch', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__)
-
-			contract_init_args['config'] = contract_config
-
-		if 'id' in contract_init_sig.parameters:
-			contract_init_args['id'] = pre.id + '.contract'
-
-		if 'ports' in contract_init_sig.parameters:
-			contract_init_args['ports'] = { name: ContractPort(name=name, get=port.get, try_get=port.try_get, has_ended=port.has_ended, has_default=port.has_default, required=name in pre.required_ports, branch_labels=input_labels.get(name, frozenset())) for (name, port) in pre.ports.items() }
-		else:
-			# Warn for this one because it's a pretty pointless contract that has no input ports
-			log.warn('init.no_ports', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__)
-
-		try:
-			contract = pre.Contract(**contract_init_args)
-		except typer.Exit:
-			raise
-		except Exception as e:
-			log.fatal('init', context='harness.node.contract', node=pre.id, contract=pre.Contract.__name__, exc_info=e)
-
-		return cls(id=pre.id, module=pre.module, structure=pre.structure, ports=pre.ports, contract=contract, definite_inputs=pre.definite_inputs, required_ports=pre.required_ports, dsts=dsts, dst_counts={ port: [ 0 for _ in ports ] for port, ports in dsts.items() })
+		return cls(id=pre.id, module=pre.module, structure=pre.structure, ports=pre.ports, contract=contract, input_contract=input_contract, output_contract=output_contract, definite_inputs=pre.definite_inputs, required_ports=pre.required_ports, dsts=dsts, dst_counts={ port: [ 0 for _ in ports ] for port, ports in dsts.items() })
 
 	async def process_result(self, res:tuple[str, Any]|Any):
-		"""Normalize one module output and forward it to matching downstream edges.
+		"""Normalize one module output, pass it through the output contract, and forward it to matching downstream edges.
+
+		The output contract's ``process_outputs`` sees the resolved port name and value and returns the value actually
+		sent downstream. It cannot read the node's input ports: they are disabled outside ``get_inputs``.
 
 		Args:
 			res: One module return or yielded value in any supported output form.
@@ -263,6 +231,25 @@ class Node:  # pylint: disable=too-many-instance-attributes
 		else:
 			return
 
+		# Apply output contract processing
+		active_contract = self.output_contract if self.output_contract is not None else self.contract if hasattr(self.contract, 'process_outputs') and callable(getattr(self.contract, 'process_outputs')) else None
+		if active_contract is not None:
+			bind_contextvars(context='harness.node.contract', node=self.id, contract=type(active_contract).__name__)
+			try:
+				if inspect.iscoroutinefunction(active_contract.process_outputs):
+					value = await active_contract.process_outputs(port, value)
+				else:
+					value = active_contract.process_outputs(port, value)
+			except IllegalGetAccessError as e:
+				log.fatal('illegal_get_access', context='harness.node.port', port=e.name, type_=e.type_)
+			except typer.Exit:
+				raise
+			except Exception as e:
+				# exc_info to make use of structlog's native exception handling
+				log.fatal('exception', exc_info=e)
+			finally:
+				unbind_contextvars('context', 'node', 'contract')
+
 		matched = self.dsts.get(port, [])
 		if len(matched) == 0 and len(self.dsts) > 0:
 			log.info('no_destination', context='harness.module.res', port=port, data_type=type(value).__name__, data_repr=repr(value))
@@ -274,7 +261,10 @@ class Node:  # pylint: disable=too-many-instance-attributes
 			await dst_port.queue.put(payload)
 
 	async def run(self):
-		"""Execute this node until its contract indicates termination.
+		"""Execute this node until its input contract indicates termination.
+
+		Input ports are readable only for the duration of each ``get_inputs()`` call, so a contract that stashes a port
+		and reads it later fails loudly rather than stealing a payload from the next invocation.
 
 		Returns:
 			None.
@@ -282,12 +272,19 @@ class Node:  # pylint: disable=too-many-instance-attributes
 
 		while True: # Fancy method to ensure that nodes with no inputs only run once
 			# Get inputs according to contract
-			bind_contextvars(context='harness.node.contract', node=self.id, contract=type(self.contract).__name__)
+			active_contract = self.input_contract if self.input_contract is not None else self.contract
+			bind_contextvars(context='harness.node.contract', node=self.id, contract=type(active_contract).__name__)
 			try:
-				if inspect.iscoroutinefunction(self.contract.get_inputs):
-					inputs = await self.contract.get_inputs()
+				for port in self.ports.values():
+					port.get_enabled = True
+
+				if inspect.iscoroutinefunction(active_contract.get_inputs):
+					inputs = await active_contract.get_inputs()
 				else:
-					inputs = self.contract.get_inputs()
+					inputs = active_contract.get_inputs()
+
+				for port in self.ports.values():
+					port.get_enabled = False
 			except InvalidEnqueuedError as e:
 				log.fatal('invalid_enqueued', context='harness.node.port', port=e.name, type_=e.type_)
 			except typer.Exit:

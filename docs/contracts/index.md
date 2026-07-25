@@ -1,6 +1,6 @@
 # Available Contracts
 
-A contract is the scheduling policy for a node. It decides when the node is allowed to run and which input payloads to supply. The module sees only raw values; all stream coordination happens in the contract.
+A contract is the policy wrapped around a node's module. On the input end it decides when the node is allowed to run and which input payloads to supply; on the output end it may transform each emitted value before it travels downstream. The module sees only raw values; all stream coordination happens in the contract.
 
 For background on the contract interface and how to write your own, see [implementation.md](implementation.md).
 

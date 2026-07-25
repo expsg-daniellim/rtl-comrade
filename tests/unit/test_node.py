@@ -11,6 +11,7 @@ from serde import SerdeError
 from serde.compat import UserError
 
 from rtl_comrade.api import Payload, EndSentinel
+from rtl_comrade.contract import ContractDefinition, ContractDefinitions
 from rtl_comrade.contract_default import DefaultContract
 from rtl_comrade.module import GraphModule
 from rtl_comrade.node import Node, PreNode
@@ -229,6 +230,67 @@ class _ModuleWithFinaliseExitModule:
 		raise typer.Exit(1)
 
 
+class DoubleOutputContract:
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	def process_outputs(self, port:str, value):
+		return value * 2
+
+
+class AsyncSuffixOutputContract:
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	async def process_outputs(self, port:str, value):
+		return f"{value}:{port}"
+
+
+class GeneralOutputContract:
+	"""Serves both ends: terminates the node and rewrites its outputs."""
+
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	async def get_inputs(self):
+		return EndSentinel(self.id)
+
+	def process_outputs(self, port:str, value):
+		return value + 1
+
+
+class PortReadingOutputContract:
+	"""Reads an input port from process_outputs, which the read window forbids."""
+
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	def process_outputs(self, port:str, value):
+		return self.ports["a"].try_get()
+
+
+class ExitOutputContract:
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	def process_outputs(self, port:str, value):
+		raise typer.Exit(1)
+
+
+class CrashOutputContract:
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	def process_outputs(self, port:str, value):
+		raise RuntimeError("deliberate process_outputs crash")
+
+
 # Module-scope: ModuleStructure calls inspect.getsource, so these must be top-level.
 class _InvalidTupleModule:
 	def run(self):
@@ -299,19 +361,20 @@ class _ContractWithPathConfig:
 		return EndSentinel(self.id)
 
 
-def _make_prenode(Module, config=None, Contract=None, contract_config=None, relative_path=Path()):
+def _make_prenode(Module, config=None, Contract=None, contract_config=None, relative_path=Path(), output_contract=None):
+	definition = ContractDefinition('contract', Contract if Contract is not None else DefaultContract, contract_config if contract_config is not None else {})
+	output_definition = ContractDefinition('output_contract', output_contract, {}) if output_contract is not None else None
 	return PreNode(
 		id="test_node",
 		module=GraphModule.from_module(Module),
 		config=config if config is not None else {},
-		Contract=Contract if Contract is not None else DefaultContract,
-		contract_config=contract_config if contract_config is not None else {},
+		contract_definitions=ContractDefinitions(definition, None, output_definition),
 		relative_path=relative_path,
 	)
 
 
-def _make_node(Module, config=None, Contract=None, contract_config=None, relative_path=Path(), dsts=None):
-	pre = _make_prenode(Module, config, Contract, contract_config, relative_path)
+def _make_node(Module, config=None, Contract=None, contract_config=None, relative_path=Path(), dsts=None, output_contract=None):
+	pre = _make_prenode(Module, config, Contract, contract_config, relative_path, output_contract)
 	return Node.from_prenode(pre, dsts if dsts is not None else {}, {})
 
 
@@ -482,6 +545,54 @@ async def test_process_result_payload_n_sequence(logging_handler):
 	assert items[1].n == 1
 
 
+# --- process_result — output contract ---
+
+
+async def test_process_result_output_contract_transforms_value(logging_handler):
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, output_contract=DoubleOutputContract, dsts={"default": [recv]})
+	await node.process_result(21)
+	item = await recv.queue.get()
+	assert item.payload == 42
+
+
+async def test_process_result_async_output_contract_transforms_value(logging_handler):
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, output_contract=AsyncSuffixOutputContract, dsts={"out": [recv]})
+	await node.process_result(("out", "v"))
+	item = await recv.queue.get()
+	assert item.payload == "v:out"
+
+
+async def test_process_result_general_contract_processes_outputs(logging_handler):
+	# No output_contract, so the general contract serves the output end because it defines process_outputs.
+	recv = Port(name="a")
+	node = _make_node(_MinimalModule, Contract=GeneralOutputContract, dsts={"default": [recv]})
+	await node.process_result(1)
+	item = await recv.queue.get()
+	assert item.payload == 2
+
+
+async def test_process_result_output_contract_port_read_is_fatal(logging_handler):
+	node = _make_node(_ModuleOneInput, output_contract=PortReadingOutputContract, dsts={})
+	node.ports["a"].queue.put_nowait(Payload("src", 0, 1))
+	with pytest.raises(typer.Exit):
+		await node.process_result(1)
+	assert node.ports["a"].queue.qsize() == 1  # the rejected read stole nothing from the next invocation
+
+
+async def test_process_result_output_contract_typer_exit_propagates(logging_handler):
+	node = _make_node(_MinimalModule, output_contract=ExitOutputContract, dsts={})
+	with pytest.raises(typer.Exit):
+		await node.process_result(1)
+
+
+async def test_process_result_output_contract_exception_fatal(logging_handler):
+	node = _make_node(_MinimalModule, output_contract=CrashOutputContract, dsts={})
+	with pytest.raises(typer.Exit):
+		await node.process_result(1)
+
+
 async def test_process_result_no_destination_logs_info(logging_handler):
 	recv = Port(name="a")
 	# Wire from "other" but emit on "default" — no matching dst.
@@ -622,22 +733,6 @@ def test_contract_config_serde_error_fatal(logging_handler):
 	# _ContractConfigNoClass accepts config but has no Config class → only warn, no from_dict.
 	# Use a contract WITH Config to trigger from_dict for contract.
 	from serde import serde as _serde  # pylint: disable=import-outside-toplevel
-	from dataclasses import dataclass as _dc  # pylint: disable=import-outside-toplevel
-
-	@_serde
-	@_dc
-	class _ContractWithConfig:
-		class Config:
-			pass
-
-		def __init__(self, id, ports, config):  # type: ignore[override]  # pylint: disable=redefined-builtin
-			self.id = id
-			self.ports = ports
-
-		async def get_inputs(self):
-			return EndSentinel(self.id)
-
-		_ContractWithConfig = None  # placeholder (overridden below)
 
 	class _ContractWithSerdeCfg:
 		@_serde
@@ -651,7 +746,7 @@ def test_contract_config_serde_error_fatal(logging_handler):
 		async def get_inputs(self):
 			return EndSentinel(self.id)
 
-	with patch("rtl_comrade.node.from_dict", side_effect=SerdeError("contract serde error")):
+	with patch("rtl_comrade.contract.from_dict", side_effect=SerdeError("contract serde error")):
 		with pytest.raises(typer.Exit):
 			_make_node(_MinimalModule, Contract=_ContractWithSerdeCfg)
 
@@ -672,7 +767,7 @@ def test_contract_config_user_error_fatal(logging_handler):
 			return EndSentinel(self.id)
 
 	with patch(
-		"rtl_comrade.node.from_dict",
+		"rtl_comrade.contract.from_dict",
 		side_effect=UserError("contract user error"),  # ty: ignore[invalid-argument-type] — ty misreads the class-level annotation `inner: Exception` as a constructor parameter; UserError has no custom __init__ and inherits Exception(*args)
 	):
 		with pytest.raises(typer.Exit):

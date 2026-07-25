@@ -6,6 +6,8 @@ from unittest.mock import patch
 import pytest
 import typer
 
+from serde import serde
+
 from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
@@ -51,6 +53,46 @@ class _BasicContract:
 		from rtl_comrade.api import EndSentinel  # pylint: disable=import-outside-toplevel
 
 		return EndSentinel(self.id)
+
+
+class OutputOnlyContract:
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	def process_outputs(self, port:str, value):
+		return value
+
+
+class NoPortParamContract:
+	def process_outputs(self, value):
+		return value
+
+
+class NonStrPortParamContract:
+	def process_outputs(self, port:int, value):
+		return value
+
+
+class ConfigurableContract:
+	"""Serves either end, and carries a config the CLI can write into."""
+
+	@serde
+	class Config:
+		limit:int = 0
+
+	def __init__(self, id, ports, config):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+		self.config = config
+
+	async def get_inputs(self):
+		from rtl_comrade.api import EndSentinel  # pylint: disable=import-outside-toplevel
+
+		return EndSentinel(self.id)
+
+	def process_outputs(self, port:str, value):
+		return value
 
 
 class _CycleModule:
@@ -100,6 +142,10 @@ _MODULE_MAP = {
 }
 _CONTRACT_MAP = {
 	"basic_contract": _BasicContract,
+	"output_contract": OutputOnlyContract,
+	"no_port_contract": NoPortParamContract,
+	"non_str_port_contract": NonStrPortParamContract,
+	"configurable_contract": ConfigurableContract,
 }
 
 
@@ -135,7 +181,7 @@ def _from_config(config):
 		return Graph.from_config(config)
 
 
-def _from_config_with_contracts(config):
+def _from_config_with_contracts(config, cli_kwargs=None):
 	"""Load with both module and contract mappings."""
 	call_count = [0]
 
@@ -146,7 +192,7 @@ def _from_config_with_contracts(config):
 		return _CONTRACT_MAP
 
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
-		return Graph.from_config(config)
+		return Graph.from_config(config, cli_kwargs)
 
 
 # --- Node construction errors ---
@@ -455,6 +501,42 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
 		with pytest.raises(typer.Exit):
 			Graph.from_config(config)
+
+
+# --- Contract resolution ---
+
+
+def test_all_three_contract_fields_warns_obsolete(logging_handler):
+	# Both ends overridden leaves the general contract unreachable — a warning, not an error.
+	config = _make_config([GraphConfigNode(id="n1", module="source_mod", contract="basic_contract", input_contract="basic_contract", output_contract="output_contract")], [])
+	graph = _from_config_with_contracts(config)
+	assert isinstance(graph.nodes["n1"].input_contract, _BasicContract)
+	assert isinstance(graph.nodes["n1"].output_contract, OutputOnlyContract)
+	assert logging_handler.failure is False
+
+
+def test_output_contract_missing_port_parameter_fatal(logging_handler):
+	config = _make_config([GraphConfigNode(id="n1", module="source_mod", output_contract="no_port_contract")], [])
+	with pytest.raises(typer.Exit):
+		_from_config_with_contracts(config)
+
+
+def test_output_contract_non_str_port_annotation_fatal(logging_handler):
+	config = _make_config([GraphConfigNode(id="n1", module="source_mod", output_contract="non_str_port_contract")], [])
+	with pytest.raises(typer.Exit):
+		_from_config_with_contracts(config)
+
+
+def test_cli_input_contract_config_override(logging_handler):
+	config = _make_config([GraphConfigNode(id="n1", module="source_mod", input_contract="configurable_contract", input_contract_config={"limit": 0}, cli_input_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")})], [])
+	graph = _from_config_with_contracts(config, cli_kwargs={"n": 3})
+	assert graph.nodes["n1"].input_contract.config.limit == 3
+
+
+def test_cli_output_contract_config_override(logging_handler):
+	config = _make_config([GraphConfigNode(id="n1", module="source_mod", output_contract="configurable_contract", output_contract_config={"limit": 0}, cli_output_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")})], [])
+	graph = _from_config_with_contracts(config, cli_kwargs={"n": 5})
+	assert graph.nodes["n1"].output_contract.config.limit == 5
 
 
 # --- Graph-level structural validation (using _CycleModule for valid edges) ---

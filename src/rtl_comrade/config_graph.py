@@ -6,9 +6,9 @@ YAML schema (config.py) and the runtime graph constructor (graph.py).
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from inspect import Signature
+from inspect import Signature, Parameter
 from pathlib import Path
-from typing import cast, Self
+from typing import cast, Any, Self
 
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
@@ -66,6 +66,45 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 		except InvalidCLIParameterError as e:
 			log.fatal('cli_invalid_parameter_name', context='harness.graph.validation_config', name=e.name)
 			return None  # pragma: no cover
+
+	@staticmethod
+	def validate_cli_config(clis:dict[str, GraphConfigSrcCLI], params:list[Parameter], cli_config:dict[str, GraphConfigSrcCLI], config:dict[str, Any]) -> bool:
+		"""Validate one node's CLI-sourced config block and register its parameters on the graph's CLI signature.
+
+		Called once per config block a node can carry — ``config``, ``contract_config``, ``input_contract_config`` and
+		``output_contract_config`` — so a single CLI parameter may legitimately be declared by several blocks, as long as
+		every declaration agrees. Callers bind the node and block identity into the log context beforehand.
+
+		Args:
+			clis: CLI parameters already registered for this graph, keyed by CLI name. Extended in place.
+			params: Signature parameters accumulated for the graph's typer command. Appended to in place.
+			cli_config: The block's CLI parameter descriptors, keyed by the config field each one supplies.
+			config: The corresponding literal config block, checked so a field CLI-supplied and literally set is warned about.
+
+		Returns:
+			``True`` if any error was logged for this block, otherwise ``False``.
+		"""
+
+		errors = False
+		for (name, param) in cli_config.items():
+			if param.cli == '':
+				log.error('blank_cli', context='harness.graph_config.validation', field=name)
+				errors = True
+				continue
+
+			if param.cli in clis:
+				if param != clis[param.cli]:
+					log.error('cli_def_mismatch', context='harness.graph_config.validation', cli=param.cli)
+					errors = True
+					continue
+			else:
+				clis[param.cli] = param
+				params.append(param.as_param())
+
+			if name in config:
+				log.warn('cli_config_override', context='harness.graph_config.validation', field=name)
+
+		return errors
 
 	@classmethod
 	def from_file_config(cls, config:GraphFileConfig, relative_path:Path=Path()) -> Self:
@@ -126,41 +165,21 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 
 		# Process node config CLI params
 		for (i, node) in enumerate(config.nodes):
-			for (name, param) in node.cli_config.items():
-				if param.cli == '':
-					log.error('blank_cli', context='harness.graph_config.validation', index=i, node=node.id, field=name)
-					errors = True
-					continue
+			bind_contextvars(index=i, node=node.id)
+			bind_contextvars(config_type='config')
+			node_errors = cls.validate_cli_config(clis, params, node.cli_config, node.config)
 
-				if param.cli in clis:
-					if param != clis[param.cli]:
-						log.error('cli_def_mismatch', context='harness.graph_config.validation', cli=param.cli, index=i)
-						errors = True
-						continue
-				else:
-					clis[param.cli] = param
-					params.append(param.as_param())
+			bind_contextvars(config_type='contract_config')
+			contract_errors = cls.validate_cli_config(clis, params, node.cli_contract_config, node.contract_config)
 
-				if name in node.config:
-					log.warn('cli_config_override', context='harness.graph_config.validation', node=node.id, field=name)
+			bind_contextvars(config_type='input_contract_config')
+			input_contract_errors = cls.validate_cli_config(clis, params, node.cli_input_contract_config, node.input_contract_config)
 
-			for (name, param) in node.cli_contract_config.items():
-				if param.cli == '':
-					log.error('blank_cli', context='harness.graph_config.validation', index=i, node=node.id, field=name)
-					errors = True
-					continue
+			bind_contextvars(config_type='output_contract_config')
+			output_contract_errors = cls.validate_cli_config(clis, params, node.cli_output_contract_config, node.output_contract_config)
 
-				if param.cli in clis:
-					if param != clis[param.cli]:
-						log.error('cli_def_mismatch', context='harness.graph_config.validation', cli=param.cli, index=i)
-						errors = True
-						continue
-				else:
-					clis[param.cli] = param
-					params.append(param.as_param())
-
-				if name in node.contract_config:
-					log.warn('cli_contract_config_override', context='harness.graph_config.validation', node=node.id, field=name)
+			unbind_contextvars('index', 'node', 'config_type')
+			errors |= node_errors or contract_errors or input_contract_errors or output_contract_errors
 
 		if errors:
 			log.fatal('invalid_cli_config', context='harness.graph_config.validation')

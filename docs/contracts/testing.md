@@ -4,6 +4,8 @@ For implementation details, see [implementation.md](implementation.md).
 
 `rtl_comrade.testing` provides `run_contract_scenario()` for testing contract scheduling logic in isolation — no graph, no module, no runtime required.
 
+It covers the **input** end only: it drives `get_inputs()` and asserts what comes back. There is no equivalent harness for `process_outputs()` — an output contract is tested by calling the method directly, since it takes its port name and value as plain arguments and needs no queue setup.
+
 ```python
 from rtl_comrade.api import EndSentinel
 from rtl_comrade.testing import run_contract_scenario, PortMeta, PortTestInput
@@ -28,6 +30,8 @@ await run_contract_scenario(
 ```
 
 The harness creates one `Port` per key in `port_inputs`, enqueues items according to their delay, instantiates the contract, then calls `get_inputs()` once per entry in `expected_outputs` and asserts the result matches.
+
+It also reproduces the harness's port read window: ports are enabled immediately before each `get_inputs()` call and disabled immediately after, exactly as `Node.run` does. A contract that stashes a `ContractPort` and reads it after its call returned raises `IllegalGetAccessError` under test just as it would in a real graph, so that bug is caught here rather than at runtime. See [../harness/port.md](../harness/port.md).
 
 ## `port_inputs`
 
@@ -107,11 +111,13 @@ await run_contract_scenario(
 
 `run_contract_scenario` asserts the same structural rules the harness enforces:
 
-- the contract exposes `get_inputs` (mirrors `graph.py` load-time check)
-- `__init__` is inspectable (mirrors `node.py` instantiation guard)
-- `__init__` declares `ports` (mirrors `node.py` no-ports warning, promoted to an assertion)
+- the contract exposes `get_inputs` (mirrors the input-role check in `contract.py`)
+- `__init__` is inspectable (mirrors the `contract.py` instantiation guard)
+- `__init__` declares `ports` (mirrors the `contract.py` no-ports warning, promoted to an assertion)
 
 These fire as `AssertionError` before any `get_inputs()` calls, so a mis-wired contract class fails at test collection time rather than silently at runtime.
+
+The scenario harness is input-side, so these assertions describe an input contract. A class intended only as an `output_contract` legitimately has no `get_inputs` and no `ports` parameter and will fail them — test it by calling `process_outputs` directly instead.
 
 ## Coverage Target
 
@@ -149,3 +155,7 @@ Pre-loading all items before `get_inputs()` is called means queues are never emp
 **State edge cases**
 
 Cover every distinct state a port can be in at call time — no-last-value persistent port, a default port whose upstream has ended (key is omitted from the result), a port that transitions from live to ended mid-sequence.
+
+**Output processing**
+
+If your contract implements `process_outputs`, call it directly — it takes a port name and a value and needs no ports or queues. Cover every branch that varies by `port` name, and the sync/async form you declared. If the method depends on state written during `get_inputs()`, note that `run_contract_scenario` constructs the contract internally, so a test needing both ends usually builds the contract by hand and calls `get_inputs()` itself.
