@@ -18,6 +18,8 @@ contract_config:
 |---|---|---|
 | `key_field` | `str` | Name of the field — an object attribute or a dict entry — used as the correlation key. Optional; defaults to `"key"` |
 | `persistent_inputs` | `list[str]` | Input-port names whose latest value is cached and replayed on every keyed assembly. Optional; omit if no persistent ports are needed |
+| `unwrap` | `bool` | Hand the module the inner `value` of each wrapper-shaped payload and rewrap every emitted value with the assembled key. Optional; defaults to `false` |
+| `ignore` | `list[str]` | Output-port names left untouched when `unwrap` is set. Optional; defaults to `[]` |
 
 Each keyed payload must either expose `key_field` as an attribute or be a `dict` containing `key_field`. The attribute takes precedence when both are present. The key type must support `<` comparison (e.g. `int`, `str`) because ties between simultaneously complete keys are broken by minimum value.
 
@@ -38,6 +40,28 @@ contract_config:
   key_field: test_id
   persistent_inputs: [builder_cfg, logs_dir]
 ```
+
+## Unwrapping and rewrapping
+
+With `unwrap: true` the contract serves both ends of the node: the module receives bare values and emits bare values, and the correlation key never enters module code.
+
+```yaml
+contract: keyed_join
+contract_config:
+  unwrap: true
+  ignore: [ run_id ]
+```
+
+On the input end, a payload is unwrapped only when it exposes **both** `key_field` and a `value` beside it — a [`KeyedValue`](../../contracts/sentinels.py) from `contracts.sentinels`, or a dict such as `{"key": 1, "value": 5}`. A self-keyed record (a payload whose other fields *are* the data, like `Command` or `Proc`) has no `value` and is delivered whole, so keyed ports carrying a mix of both need no per-port configuration. Persistent inputs follow the same rule.
+
+On the output end, every value the module emits is rewrapped as `KeyedValue(key, value)`, where `key` is the key of the assembly that produced it. Ports named in `ignore` are passed through untouched: use that for a port the module keys itself, notably a fan-out node that mints *new* keys — rewrapping those with the incoming key would undo the fan-out.
+
+Two consequences to design around:
+
+- **Both ends must be the same contract instance**, so set `unwrap` on `contract` / `contract_config`. The assembled key lives on the contract object; separate `input_contract` and `output_contract` slots are separate instances, and the output one never assembles anything.
+- **`finalise()` output has no key.** It is emitted after the last assembly, so the value travels downstream as the module made it and the contract logs a `no_active_key` warning. A node whose `finalise()` emits an unkeyed summary should list that port in `ignore` to silence it.
+
+Naming `keyed_join` as a node's `contract` always routes its outputs through `process_outputs`. With `unwrap` at its default that is an exact pass-through.
 
 ## Termination
 

@@ -76,7 +76,7 @@ Off the main line, every failure or short-circuit emits a `TestResult` on a dedi
 
 ## Shared value types
 
-The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/schema/`:
+The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/schema/`. `KeyedValue` is the exception: it belongs to the contract layer (`contracts/sentinels.py`), since [`keyed_join`](../contracts/keyed_join.md) both reads and constructs it, and the schema package re-exports it so the import path is unchanged.
 
 | Type | Fields | Role |
 |---|---|---|

@@ -126,6 +126,15 @@ These tests **compile and simulate real RTL**, so `verilator` must be installed;
 
 The `ParseLogMod` correction tests and the concurrency-note test in the same file are self-contained (no suite, no binary) and always run.
 
+**verilator 5.050 under Homebrew: lz4 is off `cc`'s search path.** 5.050 adds an lz4 dependency for `--trace-fst` (the builder passes it, so `verilated_fst_c.cpp` is always compiled and it includes `<lz4.h>`). Homebrew installs lz4 into its own prefix, and neither `/opt/homebrew/include` nor `/opt/homebrew/lib` is on `cc`'s default include or library search path, so the compile dies with `fatal error: 'lz4.h' file not found`. Install `lz4` (`brew install lz4`) and put the prefix on both paths through the environment, for the e2e suite and for a manual graph run alike:
+
+```bash
+CPPFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib -llz4" uv run pytest tests/e2e/
+CPPFLAGS="-I/opt/homebrew/include" LDFLAGS="-L/opt/homebrew/lib -llz4" uv run rtl-comrade test basic
+```
+
+If a suite directory was last built against a differently-installed `verilator`, its `obj_dir*/` also holds `.d` files naming the old kit path, and make fails earlier with `No rule to make target '<old-prefix>/include/verilated.cpp'`. Delete the stale `obj_dir*/` and rebuild.
+
 ### Snapshotted `rtl_buddy` reference (`tests/e2e/captures/`)
 
 The parity scenarios (`--list`, compile-fail, sim-timeout, and the three `--early-stop` phases) compare `rtl-comrade` against **`rtl_buddy` v1.4.0**. Rather than run that binary live — it is installed only from the gitignored `rtl_buddy/` package and is unavailable in CI — its output is captured once and committed, keyed by scenario:

@@ -1,14 +1,8 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generic, TypeVar
 
-T = TypeVar("T")
-
-
-@dataclass(frozen=True)
-class KeyedValue(Generic[T]):
-	key:str
-	value:T
+# KeyedValue is owned by the contract layer: keyed_join both reads and constructs it.
+from contracts.sentinels import KeyedValue  # noqa: F401  # pylint: disable=unused-import
 
 
 @dataclass(frozen=True)

@@ -236,6 +236,8 @@ class MyContract:
 
 One class may fill both roles: define `get_inputs` and `process_outputs` on it and name it as the node's `contract`. The two methods share `self` and the same `ContractPort` objects, so the input end can leave a note for the output end — but remember that `process_outputs` runs outside the read window, so state saved on `self` or in `port.state` is reachable there while `get()` and `try_get()` are not.
 
+[contracts/keyed_join.py](../../contracts/keyed_join.py) is the shipped example: under `unwrap` it strips each payload's `KeyedValue` wrapper for the module, remembers the assembled key on `self`, and rewraps every emitted value with it. Note that this only works from the single `contract` slot — filling `input_contract` and `output_contract` with the same class gives two instances that share no `self`.
+
 ## Contract With Config
 
 If you need contract configuration, define a nested `Config` type and accept `config` in `__init__`.
