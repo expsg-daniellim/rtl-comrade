@@ -4,6 +4,8 @@
 
 Run this two-stage procedure for the section you changed. Stage 1 confirms the code works; stage 2 confirms all of it is tested.
 
+**The two stages are exhaustive.** A change is verified once they pass for every section it touched — there is no type-checking step and no third tool. If a check is not on this page it is not required; do not reach for one ad hoc. CI adds exactly one gate on top, `pylint src/ modules/ contracts/ tests` (`.github/workflows/ci.yml`), which every push and pull request must also pass.
+
 ### Harness (`src/rtl_comrade/`)
 
 **Stage 1 — correctness:**
@@ -169,16 +171,16 @@ The file is excluded entirely via `[tool.coverage.run] omit` in `pyproject.toml`
 ### `src/rtl_comrade/logging.py` — `HarnessLogger.fatal` and `.critical` bodies, excluded via `# pragma: no cover`
 
 ```python
-def fatal(self, event=None, *args, **kw) -> NoReturn:  # pragma: no cover
+def fatal(self, *args:Any, event:str|None = None, **kw:Any) -> NoReturn:  # pragma: no cover
     super().fatal(event, *args, **kw)
     raise AssertionError('unreachable')
 
-def critical(self, event=None, *args, **kw) -> NoReturn:  # pragma: no cover
+def critical(self, *args:Any, event:str|None = None, **kw:Any) -> NoReturn:  # pragma: no cover
     super().critical(event, *args, **kw)
     raise AssertionError('unreachable')
 ```
 
-`LoggingFatalHandler.emit()` raises `typer.Exit(1)` on every `CRITICAL` record before control can return to `super().fatal()`. These method bodies exist solely to satisfy `ty`'s control-flow analysis, which requires `NoReturn`-annotated methods to contain a syntactically reachable termination. Covering them would require suppressing the very handler that implements the harness failure model.
+`LoggingFatalHandler.emit()` raises `typer.Exit(1)` on every `CRITICAL` record before control can return to `super().fatal()`. These method bodies exist solely to satisfy static `NoReturn` control-flow analysis, which requires a `NoReturn`-annotated method to contain a syntactically reachable termination. Covering them would require suppressing the very handler that implements the harness failure model.
 
 ### `src/rtl_comrade/graph.py` — `Graph.run()` body, excluded via `# pragma: no cover`
 

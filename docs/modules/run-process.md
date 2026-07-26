@@ -12,7 +12,7 @@ The reusable subprocess star. Launches a `Command`'s `argv` in its own process g
 |---|---|---|---|
 | `command` | `Command` | — | the subprocess to run (`argv` + log paths + key) |
 | `work_dir` | `Path` | — | subprocess `cwd` |
-| `timeout` | `KeyedValue[float \| None] \| None` | `None` | wall-clock limit; `None` means wait indefinitely |
+| `timeout` | `float \| None` | `None` | wall-clock limit; `None` means wait indefinitely |
 | `env_ready` | `bool` | `True` | gate token from [prepend-cwd-path](prepend-cwd-path.md) ensuring `$PATH` is set before any launch |
 
 ## Config
@@ -42,4 +42,4 @@ A missing or non-executable binary (`FileNotFoundError`, `PermissionError` at la
 
 ## Graph node
 
-`cc-run` (contract `default`, `persistent_inputs: [env_ready, work_dir]`) and `sim-run` (contract `keyed_join`, `key_field: key`, `persistent_inputs: [env_ready, work_dir]`, `config: { grace_s: 5.0 }`).
+`cc-run` (contract `default`, `persistent_inputs: [env_ready, work_dir]`) and `sim-run` (contract `keyed_join`, `key_field: key`, `persistent_inputs: [env_ready, work_dir]`, `unwrap: true`, `ignore: [default]`, `config: { grace_s: 5.0 }`). `sim-run`'s `timeout` edge rides the wire as a `KeyedValue` and is unwrapped by the contract; the emitted `Proc` keys itself off the `Command`, so `default` is left untouched. `cc-run` has no `timeout` edge, so the Python default applies there.

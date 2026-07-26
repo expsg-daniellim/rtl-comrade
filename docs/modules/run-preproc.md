@@ -11,7 +11,7 @@ If the test declares a preproc script, executes it (with `test_cfg`, `root_cfg`,
 | Port | Type | Meaning |
 |---|---|---|
 | `test` | `TestConfig` | the test |
-| `model` | `KeyedValue[ModelConfig]` | its resolved model |
+| `model` | `ModelConfig` | its resolved model |
 | `root_cfg` | `RootConfig` | passed into the script namespace |
 
 ## Outputs
@@ -24,4 +24,4 @@ File-not-found / permission / read errors and script exceptions are caught, logg
 
 ## Graph node
 
-`preproc`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [root_cfg]`). The `fail` port fans into [summarise-results](summarise-results.md).
+`preproc`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [root_cfg]`, `unwrap: true`, `ignore: [test, fail]`). The `model` edge rides the wire as a `KeyedValue`; the contract unwraps it on the way in and rewraps the forwarded `model` on the way out, so the module never handles the key. The `fail` port fans into [summarise-results](summarise-results.md).

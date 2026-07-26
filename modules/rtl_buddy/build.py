@@ -10,14 +10,14 @@ from serde import serde
 
 from rtl_comrade.logging import HarnessLogger
 
-from modules.rtl_buddy.schema import RootConfig, TestResult, KeyedValue, ModelConfig, Command, Proc, RtlBuilderConfig
+from modules.rtl_buddy.schema import RootConfig, TestResult, ModelConfig, Command, Proc, RtlBuilderConfig
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 
 class RunPreprocMod:
-	def run(self, test:TestConfig, model:KeyedValue[ModelConfig], root_cfg:RootConfig):
+	def run(self, test:TestConfig, model:ModelConfig, root_cfg:RootConfig):
 		preproc = test.get_preproc_path()
 		if preproc is None:
 			yield ("test", test)
@@ -42,7 +42,7 @@ class RunPreprocMod:
 			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read preproc script {preproc}"))
 			return
 
-		test.model = model.value  # expose resolved ModelConfig to the script; restored on both exits below
+		test.model = model  # expose resolved ModelConfig to the script; restored on both exits below
 		try:
 			exec(compile(code, preproc, "exec"), ns)  # pylint: disable=exec-used  # runs user preproc script, rtl_buddy parity
 		except Exception as e:
@@ -117,21 +117,20 @@ def filelist_process(entries, work_dir, deduplicate):
 
 
 class WriteFilelistMod:
-	def run(self, test:TestConfig, model:KeyedValue[ModelConfig], work_dir:Path):
+	def run(self, test:TestConfig, model:ModelConfig, work_dir:Path):
 		test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
 		path = Path(work_dir) / f"run.{test_tag}.f"
 		try:
-			model_cfg = model.value
-			model_path = model_cfg.get_model_path()
+			model_path = model.get_model_path()
 			model_dir = os.path.dirname(os.path.abspath(model_path)) if model_path else str(work_dir)
-			entries = filelist_extract(model_cfg.get_filelist(), True, os.path.join(model_dir, "models.yaml"))
+			entries = filelist_extract(model.get_filelist(), True, os.path.join(model_dir, "models.yaml"))
 			entries.extend(filelist_extract(test.get_testbench().get_filelist(), True, str(Path(work_dir) / "tests.yaml")))
 			lines = filelist_process(entries, str(work_dir), True)
 			with open(path, "w", encoding="utf-8") as f:
 				f.write("// rtl-buddy generated model filelist\n")
 				f.writelines(lines)
 			yield ("test", test)
-			yield ("filelist", KeyedValue(test.key, path))
+			yield ("filelist", path)
 		except FileNotFoundError:
 			log.error("filelist_dir_not_found", key=test.key, test_name=test.get_name(), path=str(path))
 			yield ("fail", TestResult.prep(test.key, test.get_name(), f"output directory missing for {path}"))
@@ -157,7 +156,7 @@ class RunProcessMod:
 	def __init__(self, config):
 		self.grace_s = config.grace_s
 
-	async def run(self, command:Command, work_dir:Path, timeout:KeyedValue[float | None] | None = None, env_ready:bool = True):
+	async def run(self, command:Command, work_dir:Path, timeout:float | None = None, env_ready:bool = True):
 		with open(command.stdout_path, "wb") as out, open(command.stderr_path, "wb") as err:
 			try:
 				proc = await asyncio.create_subprocess_exec(
@@ -170,7 +169,7 @@ class RunProcessMod:
 			except (FileNotFoundError, PermissionError) as e:
 				log.fatal("launch_failed", argv0=command.argv[0], exc_info=e)
 			try:
-				await asyncio.wait_for(proc.wait(), timeout.value if timeout else None)
+				await asyncio.wait_for(proc.wait(), timeout)
 				rc = proc.returncode
 			except asyncio.TimeoutError:
 				try:
@@ -204,7 +203,7 @@ class RunProcessMod:
 
 
 class BuildCompileCmdMod:
-	def run(self, test:TestConfig, filelist:KeyedValue[Path], builder_cfg:RtlBuilderConfig, logs_dir:Path, work_dir:Path, builder_mode:str = "debug"):
+	def run(self, test:TestConfig, filelist:Path, builder_cfg:RtlBuilderConfig, logs_dir:Path, work_dir:Path, builder_mode:str = "debug"):
 		test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
 		exe = builder_cfg.get_exe()
 		is_verilator = os.path.basename(exe).startswith("verilator")
@@ -218,14 +217,14 @@ class BuildCompileCmdMod:
 		if pd is not None:
 			for k, v in pd.items():
 				plusdefines.append(f"+define+{k}={v}" if v is not None else f"+define+{k}")
-		argv += [*plusdefines, "-f", str(filelist.value)]
+		argv += [*plusdefines, "-f", str(filelist)]
 		yield ("test", test)
-		yield ("simv", KeyedValue(test.key, simv))
+		yield ("simv", simv)
 		yield ("command", Command(test.key, argv=argv, stdout_path=str(logs_dir / f"{test_tag}.compile.log"), stderr_path=str(logs_dir / f"{test_tag}.compile.err")))
 
 
 class InterpretCompileMod:
-	def run(self, test:TestConfig, simv:KeyedValue[str], proc:Proc):
+	def run(self, test:TestConfig, simv:str, proc:Proc):
 		if proc.rc == 0:
 			yield ("test", test)
 			yield ("simv", simv)

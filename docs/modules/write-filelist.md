@@ -4,19 +4,19 @@
 
 [Back to index](index.md)
 
-Builds the compile filelist for the test: extracts entries from the model's filelist and the testbench's filelist (unrolling `-F` includes, honouring `+incdir+`/`+libext+`/`-v`/`-y`/`-f` options), rewrites paths relative to the working directory, deduplicates, and writes `run.<test>.f`. Emits the filelist path keyed to the test.
+Builds the compile filelist for the test: extracts entries from the model's filelist and the testbench's filelist (unrolling `-F` includes, honouring `+incdir+`/`+libext+`/`-v`/`-y`/`-f` options), rewrites paths relative to the working directory, deduplicates, and writes `run.<test>.f`. Emits the path of the written filelist.
 
 ## Inputs
 
 | Port | Type | Meaning |
 |---|---|---|
 | `test` | `TestConfig` | the test (supplies the testbench filelist) |
-| `model` | `KeyedValue[ModelConfig]` | resolved model (supplies the model filelist) |
+| `model` | `ModelConfig` | resolved model (supplies the model filelist) |
 | `work_dir` | `Path` | run working directory (output location + relpath base) |
 
 ## Outputs
 
-`test` — forwarded; `filelist` — `KeyedValue(test.key, Path)` to the written file; `fail` — a `TestResult.prep` on a write/resolve error.
+`test` — forwarded; `filelist` — the `Path` of the written file; `fail` — a `TestResult.prep` on a write/resolve error.
 
 ## Failure routing
 
@@ -28,4 +28,4 @@ A lower-case `-f` include is a hard `log.fatal` (`filelist_lower_f_not_allowed`)
 
 ## Graph node
 
-`filelist`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [work_dir]`). The `fail` port fans into [summarise-results](summarise-results.md).
+`filelist`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [work_dir]`, `unwrap: true`, `ignore: [test, fail]`). The `model` and `filelist` edges ride the wire as `KeyedValue`s; the contract unwraps `model` on the way in and keys the emitted `filelist` path on the way out, so the module never handles the key. The `fail` port fans into [summarise-results](summarise-results.md).

@@ -10,7 +10,7 @@ import pytest
 import typer
 
 from rtl_comrade.testing import run_module_scenario
-from modules.rtl_buddy.schema import Command, KeyedValue, Proc
+from modules.rtl_buddy.schema import Command, Proc
 
 _spec = importlib.util.spec_from_file_location(
 	"modules_rtl_buddy_build",
@@ -121,7 +121,7 @@ async def test_external_kill(tmp_path):
 async def test_timeout_partial_output(tmp_path):
 	cmd = _cmd("k1", ["sh", "-c", "echo partial; sleep 5"], tmp_path)
 	mod = RunProcessMod(RunProcessMod.Config(grace_s=1.0))
-	result = await mod.run(command=cmd, work_dir=tmp_path, timeout=KeyedValue("k1", 0.1))
+	result = await mod.run(command=cmd, work_dir=tmp_path, timeout=0.1)
 	assert isinstance(result, Proc)
 	assert result.rc is None
 	assert b"partial" in cmd.stdout_path.read_bytes()
@@ -140,7 +140,7 @@ async def test_timeout_partial_output(tmp_path):
 async def test_timeout_sigkill_escalation(tmp_path):
 	cmd = _cmd("k1", ["sh", "-c", "trap '' QUIT; sleep 30"], tmp_path)
 	mod = RunProcessMod(RunProcessMod.Config(grace_s=0.5))
-	result = await mod.run(command=cmd, work_dir=tmp_path, timeout=KeyedValue("k1", 0.1))
+	result = await mod.run(command=cmd, work_dir=tmp_path, timeout=0.1)
 	assert isinstance(result, Proc)
 	assert result.rc is None
 
@@ -220,7 +220,7 @@ async def test_process_group_reach(tmp_path):
 	cmd = Command(key="k1", argv=["sh", "-c", script], stdout_path=out, stderr_path=err)
 	mod = RunProcessMod(RunProcessMod.Config(grace_s=0.5))
 
-	result = await mod.run(command=cmd, work_dir=tmp_path, timeout=KeyedValue("k1", 0.1))
+	result = await mod.run(command=cmd, work_dir=tmp_path, timeout=0.1)
 	assert result.rc is None
 
 	assert gc_pid_file.exists(), "grandchild did not write pid before timeout"

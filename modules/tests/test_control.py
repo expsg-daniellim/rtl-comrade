@@ -9,7 +9,7 @@ import pytest
 import structlog.testing
 import typer
 
-from modules.rtl_buddy.schema import TestResult, RunDepth, KeyedValue, ModelConfig, Proc
+from modules.rtl_buddy.schema import TestResult, RunDepth, ModelConfig, Proc
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -46,12 +46,12 @@ def _make_test(name="t1"):
 	)
 
 
-def _make_model(key):
-	return KeyedValue(key, ModelConfig(name="sandbox", filelist=["rtl/model.sv"]))
+def _make_model():
+	return ModelConfig(name="sandbox", filelist=["rtl/model.sv"])
 
 
-def _make_simv(key):
-	return KeyedValue(key, "/build/obj_dir_t1/simv")
+def _make_simv():
+	return "/build/obj_dir_t1/simv"
 
 
 def _make_proc(key, tmp_path):
@@ -76,9 +76,9 @@ _ORDER = [d.value for d in RunDepth]  # ["pre", "comp", "sim", "post"]
 def test_matrix(phase, early_stop, tmp_path):
 	test = _make_test()
 	if phase == "pre":
-		edges = {"test": test, "model": _make_model(test.key)}
+		edges = {"test": test, "model": _make_model()}
 	elif phase == "comp":
-		edges = {"test": test, "simv": _make_simv(test.key)}
+		edges = {"test": test, "simv": _make_simv()}
 	else:
 		edges = {"test": test, "proc": _make_proc(test.key, tmp_path)}
 
@@ -105,7 +105,7 @@ def test_matrix(phase, early_stop, tmp_path):
 
 def test_cogate_pre_go():
 	test = _make_test()
-	model = _make_model(test.key)
+	model = _make_model()
 	mod = _make_mod("pre")
 	results = list(mod.run(early_stop="comp", test=test, model=model))
 	assert len(results) == 2
@@ -115,7 +115,7 @@ def test_cogate_pre_go():
 
 def test_cogate_pre_stop():
 	test = _make_test()
-	model = _make_model(test.key)
+	model = _make_model()
 	mod = _make_mod("pre")
 	results = list(mod.run(early_stop="pre", test=test, model=model))
 	assert len(results) == 1
@@ -131,7 +131,7 @@ def test_cogate_pre_stop():
 
 def test_cogate_comp_go():
 	test = _make_test()
-	simv = _make_simv(test.key)
+	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="sim", test=test, simv=simv))
 	assert len(results) == 2
@@ -141,7 +141,7 @@ def test_cogate_comp_go():
 
 def test_cogate_comp_stop():
 	test = _make_test()
-	simv = _make_simv(test.key)
+	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="comp", test=test, simv=simv))
 	assert len(results) == 1
@@ -183,7 +183,7 @@ def test_cogate_sim_stop(tmp_path):
 
 def test_own_phase_stops():
 	test = _make_test()
-	simv = _make_simv(test.key)
+	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="comp", test=test, simv=simv))
 	assert len(results) == 1
@@ -198,7 +198,7 @@ def test_own_phase_stops():
 
 def test_default_post_never_stops_pre():
 	test = _make_test()
-	model = _make_model(test.key)
+	model = _make_model()
 	mod = _make_mod("pre")
 	results = list(mod.run(test=test, model=model))
 	assert all(port != "stop" for port, _ in results)
@@ -207,7 +207,7 @@ def test_default_post_never_stops_pre():
 
 def test_default_post_never_stops_comp():
 	test = _make_test()
-	simv = _make_simv(test.key)
+	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(test=test, simv=simv))
 	assert all(port != "stop" for port, _ in results)
@@ -230,7 +230,7 @@ def test_default_post_never_stops_sim(tmp_path):
 
 def test_stop_no_failure(logging_handler):
 	test = _make_test()
-	simv = _make_simv(test.key)
+	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="comp", test=test, simv=simv))
 	assert len(results) == 1
@@ -244,7 +244,7 @@ def test_stop_no_failure(logging_handler):
 
 def test_invalid_early_stop(logging_handler):
 	test = _make_test()
-	simv = _make_simv(test.key)
+	simv = _make_simv()
 	mod = _make_mod("comp")
 	with pytest.raises(typer.Exit):
 		list(mod.run(early_stop="bogus", test=test, simv=simv))

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import KeyedValue, TestResult, Proc
+from modules.rtl_buddy.schema import TestResult, Proc
 from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -65,20 +65,19 @@ def _make_builder_cfg(exe="vcs", simv="simv", compile_opts=None):
 
 def test_non_verilator_no_plusdefines(tmp_path):
 	test = _make_test("basic")
-	filelist = KeyedValue(test.key, tmp_path / "run.basic.f")
+	filelist = tmp_path / "run.basic.f"
 	builder_cfg = _make_builder_cfg()
 	logs_dir = tmp_path / "logs"
 	mod = BuildCompileCmdMod()
 	results = list(mod.run(test=test, filelist=filelist, builder_cfg=builder_cfg, logs_dir=logs_dir, work_dir=tmp_path))
 	assert len(results) == 3
 	assert results[0] == ("test", test)
-	port_simv, kv_simv = results[1]
+	port_simv, emitted_simv = results[1]
 	assert port_simv == "simv"
-	assert kv_simv.key == test.key
-	assert kv_simv.value == builder_cfg.get_simv()
+	assert emitted_simv == builder_cfg.get_simv()
 	port_cmd, cmd = results[2]
 	assert port_cmd == "command"
-	assert cmd.argv == ["vcs", "-Wall", "-f", str(filelist.value)]
+	assert cmd.argv == ["vcs", "-Wall", "-f", str(filelist)]
 	assert "--Mdir" not in cmd.argv
 
 
@@ -89,7 +88,7 @@ def test_non_verilator_no_plusdefines(tmp_path):
 
 def test_verilator_build_dir_and_simv(tmp_path):
 	test = _make_test("basic")
-	filelist = KeyedValue(test.key, tmp_path / "run.basic.f")
+	filelist = tmp_path / "run.basic.f"
 	builder_cfg = _make_builder_cfg(exe="verilator")
 	logs_dir = tmp_path / "logs"
 	mod = BuildCompileCmdMod()
@@ -98,9 +97,9 @@ def test_verilator_build_dir_and_simv(tmp_path):
 	test_tag = "basic"
 	expected_build_dir = str(tmp_path / f"obj_dir_{test_tag}")
 	expected_simv = f"{expected_build_dir}/simv"
-	port_simv, kv_simv = results[1]
+	port_simv, emitted_simv = results[1]
 	assert port_simv == "simv"
-	assert kv_simv.value == expected_simv
+	assert emitted_simv == expected_simv
 	_, cmd = results[2]
 	assert "--Mdir" in cmd.argv
 	mdir_idx = cmd.argv.index("--Mdir")
@@ -117,15 +116,15 @@ def test_work_dir_rooting(tmp_path, monkeypatch):
 	other.mkdir()
 	monkeypatch.chdir(other)
 	test = _make_test("root_test")
-	filelist = KeyedValue(test.key, tmp_path / "run.root_test.f")
+	filelist = tmp_path / "run.root_test.f"
 	builder_cfg = _make_builder_cfg(exe="verilator")
 	logs_dir = tmp_path / "logs"
 	mod = BuildCompileCmdMod()
 	results = list(mod.run(test=test, filelist=filelist, builder_cfg=builder_cfg, logs_dir=logs_dir, work_dir=tmp_path))
 	test_tag = "root_test"
 	expected_build_dir = str(tmp_path / f"obj_dir_{test_tag}")
-	_, kv_simv = results[1]
-	assert kv_simv.value == f"{expected_build_dir}/simv"
+	_, emitted_simv = results[1]
+	assert emitted_simv == f"{expected_build_dir}/simv"
 	_, cmd = results[2]
 	mdir_idx = cmd.argv.index("--Mdir")
 	assert cmd.argv[mdir_idx + 1] == expected_build_dir
@@ -139,7 +138,7 @@ def test_work_dir_rooting(tmp_path, monkeypatch):
 
 def test_plusdefines_formatting(tmp_path):
 	test = _make_test("pd", pd={"FOO": 1, "BAR": None})
-	filelist = KeyedValue(test.key, tmp_path / "run.pd.f")
+	filelist = tmp_path / "run.pd.f"
 	builder_cfg = _make_builder_cfg()
 	logs_dir = tmp_path / "logs"
 	mod = BuildCompileCmdMod()
@@ -158,7 +157,7 @@ def test_plusdefines_formatting(tmp_path):
 def test_custom_logs_dir(tmp_path):
 	logs_dir = Path("/work/custom")
 	test = _make_test("basic")
-	filelist = KeyedValue(test.key, tmp_path / "run.basic.f")
+	filelist = tmp_path / "run.basic.f"
 	builder_cfg = _make_builder_cfg()
 	mod = BuildCompileCmdMod()
 	results = list(mod.run(test=test, filelist=filelist, builder_cfg=builder_cfg, logs_dir=logs_dir, work_dir=tmp_path))
@@ -174,15 +173,15 @@ def test_custom_logs_dir(tmp_path):
 
 def test_test_tag_sanitization(tmp_path):
 	test = _make_test("a/b:c")
-	filelist = KeyedValue(test.key, tmp_path / "run.a_b_c.f")
+	filelist = tmp_path / "run.a_b_c.f"
 	builder_cfg = _make_builder_cfg(exe="verilator")
 	logs_dir = tmp_path / "logs"
 	mod = BuildCompileCmdMod()
 	results = list(mod.run(test=test, filelist=filelist, builder_cfg=builder_cfg, logs_dir=logs_dir, work_dir=tmp_path))
 	test_tag = "a_b_c"
 	expected_build_dir = str(tmp_path / f"obj_dir_{test_tag}")
-	_, kv_simv = results[1]
-	assert kv_simv.value == f"{expected_build_dir}/simv"
+	_, emitted_simv = results[1]
+	assert emitted_simv == f"{expected_build_dir}/simv"
 	_, cmd = results[2]
 	assert cmd.stdout_path.endswith(f"{test_tag}.compile.log")
 	assert cmd.stderr_path.endswith(f"{test_tag}.compile.err")
@@ -197,7 +196,7 @@ def test_test_tag_sanitization(tmp_path):
 
 def test_bad_builder_mode(tmp_path, logging_handler):
 	test = _make_test("basic")
-	filelist = KeyedValue(test.key, tmp_path / "run.basic.f")
+	filelist = tmp_path / "run.basic.f"
 	builder_cfg = _make_builder_cfg()
 	logs_dir = tmp_path / "logs"
 	mod = BuildCompileCmdMod()
@@ -220,7 +219,7 @@ def _make_proc(key, rc, tmp_path, stderr_content=None):
 
 def test_interpret_compile_success(tmp_path):
 	test = _make_test("t1")
-	simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+	simv = "/build/obj_dir_t1/simv"
 	proc = _make_proc(test.key, rc=0, tmp_path=tmp_path, stderr_content="")
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))
@@ -229,7 +228,7 @@ def test_interpret_compile_success(tmp_path):
 
 def test_interpret_compile_fail_rc2_with_stderr(tmp_path, logging_handler):
 	test = _make_test("t1")
-	simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+	simv = "/build/obj_dir_t1/simv"
 	proc = _make_proc(test.key, rc=2, tmp_path=tmp_path, stderr_content="Error: syntax error near 'module'\n")
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))
@@ -242,7 +241,7 @@ def test_interpret_compile_fail_rc2_with_stderr(tmp_path, logging_handler):
 
 def test_interpret_compile_signal_fail(tmp_path, logging_handler):
 	test = _make_test("t1")
-	simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+	simv = "/build/obj_dir_t1/simv"
 	proc = _make_proc(test.key, rc=-11, tmp_path=tmp_path, stderr_content="Segmentation fault\n")
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))
@@ -256,7 +255,7 @@ def test_interpret_compile_signal_fail(tmp_path, logging_handler):
 
 def test_interpret_compile_missing_stderr(tmp_path, logging_handler):
 	test = _make_test("t1")
-	simv = KeyedValue(test.key, "/build/obj_dir_t1/simv")
+	simv = "/build/obj_dir_t1/simv"
 	proc = Proc(key=test.key, rc=1, stdout_path=str(tmp_path / "compile.log"), stderr_path=str(tmp_path / "missing.err"))
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))

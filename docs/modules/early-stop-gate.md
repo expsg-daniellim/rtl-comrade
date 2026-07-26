@@ -36,4 +36,4 @@ An `early_stop` value outside the `RunDepth` order (`pre`/`comp`/`sim`/`post`) i
 
 ## Graph nodes
 
-`gate-pre` (`phase: pre`), `gate-comp` (`phase: comp`), `gate-sim` (`phase: sim`), each contract `keyed_join` (`key_field: key`, `persistent_inputs: [early_stop]`). Each `stop` port fans into [summarise-results](summarise-results.md) (`stop_pre` / `stop_comp` / `stop_sim`).
+`gate-pre` (`phase: pre`), `gate-comp` (`phase: comp`), `gate-sim` (`phase: sim`), each contract `keyed_join` (`key_field: key`, `persistent_inputs: [early_stop]`). `gate-pre` and `gate-comp` add `unwrap: true`, `ignore: [test, stop]` because they forward a `KeyedValue` edge (`model` and `simv` respectively) — the contract unwraps it in and rewraps it out, so the gate passes bare values through. `gate-sim` forwards only self-keyed payloads (`test` + `proc`) and needs neither. Each `stop` port fans into [summarise-results](summarise-results.md) (`stop_pre` / `stop_comp` / `stop_sim`).

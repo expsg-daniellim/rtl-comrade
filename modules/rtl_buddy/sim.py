@@ -29,13 +29,13 @@ def run_suffix(run_id) -> str:
 
 
 class ResolveSeedMod:
-	def run(self, test:TestConfig, run_id:KeyedValue, simv:KeyedValue, seed_mode:SeedMode, builder_cfg:RtlBuilderConfig, logs_dir:Path):
+	def run(self, test:TestConfig, run_id:int | None, simv:str, seed_mode:SeedMode, builder_cfg:RtlBuilderConfig, logs_dir:Path):
 		if seed_mode == SeedMode.NEW:
 			seed = random.randrange(1_000_000)
 		elif seed_mode == SeedMode.DEFAULT:
 			seed = builder_cfg.get_seed()
 		else:  # REPLAY
-			path = logs_dir / f"{test.get_name()}{run_suffix(run_id.value)}.randseed"
+			path = logs_dir / f"{test.get_name()}{run_suffix(run_id)}.randseed"
 			try:
 				with Path(path).open(encoding="utf-8") as f:
 					seed = int(f.readline().strip())
@@ -54,11 +54,11 @@ class ResolveSeedMod:
 		yield ("test", test)
 		yield ("run_id", run_id)
 		yield ("simv", simv)
-		yield ("seed", KeyedValue(test.key, seed))
+		yield ("seed", seed)
 
 
 class BuildSimCmdMod:
-	def run(self, test:TestConfig, run_id:KeyedValue[int | None], simv:KeyedValue[str], seed:KeyedValue[int], builder_cfg:RtlBuilderConfig, builder_mode:str, logs_dir:Path):
+	def run(self, test:TestConfig, run_id:int | None, simv:str, seed:int, builder_cfg:RtlBuilderConfig, builder_mode:str, logs_dir:Path):
 		plusdefines = []
 		pd = test.get_plusdefines()
 		if pd is not None:
@@ -69,16 +69,16 @@ class BuildSimCmdMod:
 		if pa is not None:
 			for k, v in pa.items():
 				plusargs.append(f"+{k}={v}" if v is not None else f"+{k}")
-		argv = [simv.value, *builder_cfg.get_run_time_opts(builder_mode, seed=seed.value), *plusdefines, *plusargs]
+		argv = [simv, *builder_cfg.get_run_time_opts(builder_mode, seed=seed), *plusdefines, *plusargs]
 		timeout, is_custom = test.get_timeout()
 		if is_custom:
 			log.warning("custom_sim_timeout", key=test.key, timeout=timeout)
-		stem = logs_dir / f"{test.get_name()}{run_suffix(run_id.value)}"
+		stem = logs_dir / f"{test.get_name()}{run_suffix(run_id)}"
 		log_path, err_path, rs_path = f"{stem}.log", f"{stem}.err", f"{stem}.randseed"
 		yield ("test", test)
 		yield ("command", Command(test.key, argv=argv, stdout_path=log_path, stderr_path=err_path))
-		yield ("timeout", KeyedValue(test.key, float(timeout)))
-		yield ("randseed", RandSeed(test.key, seed=seed.value, randseed_path=rs_path, argv=argv))
+		yield ("timeout", float(timeout))
+		yield ("randseed", RandSeed(test.key, seed=seed, randseed_path=rs_path, argv=argv))
 
 
 class WriteRandseedMod:

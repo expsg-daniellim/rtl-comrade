@@ -40,22 +40,22 @@ nodes:
 - id: preproc
   module: run-preproc
   contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ root_cfg ] }
+  contract_config: { key_field: key, persistent_inputs: [ root_cfg ], unwrap: true, ignore: [ test, fail ] }
 - id: gate-pre
   module: early-stop-gate
   contract: keyed_join
   config: { phase: pre }
-  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
+  contract_config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] }
 - id: filelist
   module: write-filelist
   contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
+  contract_config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true, ignore: [ test, fail ] }
 
 # --- compile (run-process #1) ---
 - id: cc-build
   module: build-compile-cmd
   contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ] }
+  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ], unwrap: true, ignore: [ test, command ] }
 - id: cc-run
   module: run-process
   contract: default
@@ -63,12 +63,12 @@ nodes:
 - id: cc-int
   module: interpret-compile
   contract: keyed_join
-  contract_config: { key_field: key }
+  contract_config: { key_field: key, unwrap: true, ignore: [ test, fail ] }
 - id: gate-comp
   module: early-stop-gate
   contract: keyed_join
   config: { phase: comp }
-  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
+  contract_config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] }
 
 # --- run-id fan-out + sim (run-process #2) ---
 - id: runs
@@ -78,16 +78,16 @@ nodes:
 - id: seed
   module: resolve-seed
   contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ] }
+  contract_config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ], unwrap: true, ignore: [ test, fail ] }
 - id: sim-build
   module: build-sim-cmd
   contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ] }
+  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ], unwrap: true, ignore: [ test, command, randseed ] }
 - id: sim-run
   module: run-process
   config: { grace_s: 5.0 }
   contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ env_ready, work_dir ] }
+  contract_config: { key_field: key, persistent_inputs: [ env_ready, work_dir ], unwrap: true, ignore: [ default ] }
 - id: randseed
   module: write-randseed
   contract: keyed_join

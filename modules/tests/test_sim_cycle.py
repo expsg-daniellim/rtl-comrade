@@ -177,14 +177,10 @@ def _make_builder_cfg_rs(seed=99999):
 	)
 
 
-def _make_run_id_kv(key, value=None):
-	return KeyedValue(key, value)
-
-
 def test_resolve_seed_new(monkeypatch):
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
+	run_id = None
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs()
 	monkeypatch.setattr(random, "randrange", lambda n: 42000)
 	mod = ResolveSeedMod()
@@ -193,17 +189,16 @@ def test_resolve_seed_new(monkeypatch):
 	assert results[0] == ("test", test)
 	assert results[1] == ("run_id", run_id)
 	assert results[2] == ("simv", simv)
-	port, kv = results[3]
+	port, emitted_seed = results[3]
 	assert port == "seed"
-	assert kv.key == test.key
-	assert kv.value == 42000
-	assert 0 <= kv.value < 1_000_000
+	assert emitted_seed == 42000
+	assert 0 <= emitted_seed < 1_000_000
 
 
 def test_resolve_seed_default():
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
+	run_id = None
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs(seed=77777)
 	mod = ResolveSeedMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.DEFAULT, builder_cfg=builder_cfg, logs_dir=Path("/unused")))
@@ -211,16 +206,15 @@ def test_resolve_seed_default():
 	assert results[0] == ("test", test)
 	assert results[1] == ("run_id", run_id)
 	assert results[2] == ("simv", simv)
-	port, kv = results[3]
+	port, emitted_seed = results[3]
 	assert port == "seed"
-	assert kv.key == test.key
-	assert kv.value == 77777
+	assert emitted_seed == 77777
 
 
 def test_resolve_seed_replay_round_trip(tmp_path):
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key, value=3)
-	simv = _make_simv(test.key)
+	run_id = 3
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs()
 	seed_path = tmp_path / f"{test.get_name()}_0003.randseed"
 	seed_path.write_text("55555\n")
@@ -230,33 +224,32 @@ def test_resolve_seed_replay_round_trip(tmp_path):
 	assert results[0] == ("test", test)
 	assert results[1] == ("run_id", run_id)
 	assert results[2] == ("simv", simv)
-	port, kv = results[3]
+	port, emitted_seed = results[3]
 	assert port == "seed"
-	assert kv.key == test.key
-	assert kv.value == 55555
+	assert emitted_seed == 55555
 
 
 def test_resolve_seed_replay_custom_logs_dir(tmp_path):
 	custom_dir = tmp_path / "custom_logs"
 	custom_dir.mkdir()
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)  # value=None → no suffix
-	simv = _make_simv(test.key)
+	run_id = None  # value=None → no suffix
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs()
 	seed_path = custom_dir / f"{test.get_name()}.randseed"
 	seed_path.write_text("12345\n")
 	mod = ResolveSeedMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=custom_dir))
 	assert len(results) == 4
-	port, kv = results[3]
+	port, emitted_seed = results[3]
 	assert port == "seed"
-	assert kv.value == 12345
+	assert emitted_seed == 12345
 
 
 def test_resolve_seed_replay_missing_file(tmp_path, logging_handler):
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
+	run_id = None
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs()
 	mod = ResolveSeedMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
@@ -272,8 +265,8 @@ def test_resolve_seed_replay_missing_file(tmp_path, logging_handler):
 
 def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
+	run_id = None
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs()
 	seed_path = tmp_path / f"{test.get_name()}.randseed"
 	seed_path.write_text("not_an_int\n")
@@ -290,8 +283,8 @@ def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
 @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
 def test_resolve_seed_replay_permission_error(tmp_path, logging_handler):
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
+	run_id = None
+	simv = "/build/obj_dir/simv"
 	builder_cfg = _make_builder_cfg_rs()
 	seed_path = tmp_path / f"{test.get_name()}.randseed"
 	seed_path.write_text("12345\n")
@@ -316,9 +309,9 @@ def test_resolve_seed_replay_permission_error(tmp_path, logging_handler):
 
 def test_build_sim_cmd_default():
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
-	seed = KeyedValue(test.key, 42)
+	run_id = None
+	simv = "/build/obj_dir/simv"
+	seed = 42
 	builder_cfg = _make_builder_cfg_rs()
 	mod = BuildSimCmdMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
@@ -326,14 +319,14 @@ def test_build_sim_cmd_default():
 	assert results[0] == ("test", test)
 	port_c, cmd = results[1]
 	assert port_c == "command"
-	expected_argv = [simv.value, *builder_cfg.get_run_time_opts("debug", seed=seed.value)]
+	expected_argv = [simv, *builder_cfg.get_run_time_opts("debug", seed=seed)]
 	assert cmd.argv == expected_argv
-	port_to, kv_to = results[2]
+	port_to, emitted_timeout = results[2]
 	assert port_to == "timeout"
-	assert kv_to.value == 60.0
+	assert emitted_timeout == 60.0
 	port_rs, rs = results[3]
 	assert port_rs == "randseed"
-	assert rs.seed == seed.value
+	assert rs.seed == seed
 	assert rs.argv == expected_argv
 	assert rs.randseed_path.endswith(".randseed")
 	assert cmd.stdout_path.endswith(".log")
@@ -342,23 +335,23 @@ def test_build_sim_cmd_default():
 
 def test_build_sim_cmd_custom_timeout(logging_handler):
 	test = _make_test(timeout=300)
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
-	seed = KeyedValue(test.key, 42)
+	run_id = None
+	simv = "/build/obj_dir/simv"
+	seed = 42
 	builder_cfg = _make_builder_cfg_rs()
 	mod = BuildSimCmdMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
 	assert len(results) == 4
-	port_to, kv_to = results[2]
+	port_to, emitted_timeout = results[2]
 	assert port_to == "timeout"
-	assert kv_to.value == 300.0
+	assert emitted_timeout == 300.0
 
 
 def test_build_sim_cmd_plusargs_plusdefines():
 	test = _make_test(pa={"X": 5, "Y": None}, pd={"D": None})
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
-	seed = KeyedValue(test.key, 42)
+	run_id = None
+	simv = "/build/obj_dir/simv"
+	seed = 42
 	builder_cfg = _make_builder_cfg_rs()
 	mod = BuildSimCmdMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
@@ -372,9 +365,9 @@ def test_build_sim_cmd_plusargs_plusdefines():
 
 def test_build_sim_cmd_custom_logs_dir():
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
-	seed = KeyedValue(test.key, 42)
+	run_id = None
+	simv = "/build/obj_dir/simv"
+	seed = 42
 	builder_cfg = _make_builder_cfg_rs()
 	mod = BuildSimCmdMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/work/custom")))
@@ -387,9 +380,9 @@ def test_build_sim_cmd_custom_logs_dir():
 
 def test_build_sim_cmd_run_id_suffix():
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key, value=5)
-	simv = _make_simv(test.key)
-	seed = KeyedValue(test.key, 42)
+	run_id = 5
+	simv = "/build/obj_dir/simv"
+	seed = 42
 	builder_cfg = _make_builder_cfg_rs()
 	mod = BuildSimCmdMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed=seed, builder_cfg=builder_cfg, builder_mode="debug", logs_dir=Path("/logs")))
@@ -403,9 +396,9 @@ def test_build_sim_cmd_run_id_suffix():
 
 def test_build_sim_cmd_bad_builder_mode(logging_handler):
 	test = _make_test()
-	run_id = _make_run_id_kv(test.key)
-	simv = _make_simv(test.key)
-	seed = KeyedValue(test.key, 42)
+	run_id = None
+	simv = "/build/obj_dir/simv"
+	seed = 42
 	builder_cfg = _make_builder_cfg_rs()
 	mod = BuildSimCmdMod()
 	with pytest.raises(typer.Exit):

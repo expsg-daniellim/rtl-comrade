@@ -11,7 +11,7 @@ Reads the finished compile `Proc`. On `rc == 0` forwards test + `simv` to the si
 | Port | Type | Meaning |
 |---|---|---|
 | `test` | `TestConfig` | the test |
-| `simv` | `KeyedValue[str]` | the sim binary path from [build-compile-cmd](build-compile-cmd.md) |
+| `simv` | `str` | the sim binary path from [build-compile-cmd](build-compile-cmd.md) |
 | `proc` | `Proc` | finished compile process from [run-process](run-process.md) |
 
 ## Outputs
@@ -24,4 +24,4 @@ Compile failure is business logic, not an exception — it routes to `fail`. The
 
 ## Graph node
 
-`cc-int`, contract `keyed_join` (`key_field: key`). The `fail` port fans into [summarise-results](summarise-results.md) as `compile_fail`.
+`cc-int`, contract `keyed_join` (`key_field: key`, `unwrap: true`, `ignore: [test, fail]`). The `simv` edge rides the wire as a `KeyedValue`; the contract unwraps it on the way in and rewraps the forwarded `simv` on the way out, so the module never handles the key. The `fail` port fans into [summarise-results](summarise-results.md) as `compile_fail`.
