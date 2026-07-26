@@ -46,7 +46,7 @@ async def test_get_returns_payload():
 	await p.queue.put(payload)
 	result = await p.get()
 	assert result == payload
-	assert p.ended is False
+	assert p.has_ended() is False
 
 
 async def test_get_end_sentinel_sets_ended():
@@ -55,7 +55,7 @@ async def test_get_end_sentinel_sets_ended():
 	await p.queue.put(sentinel)
 	result = await p.get()
 	assert result == sentinel
-	assert p.ended is True
+	assert p.has_ended() is True
 
 
 async def test_get_invalid_type_raises():
@@ -87,7 +87,7 @@ async def test_try_get_returns_payload():
 	await p.queue.put(payload)
 	result = p.try_get()
 	assert result == payload
-	assert p.ended is False
+	assert p.has_ended() is False
 
 
 async def test_try_get_end_sentinel_sets_ended():
@@ -96,14 +96,14 @@ async def test_try_get_end_sentinel_sets_ended():
 	await p.queue.put(sentinel)
 	result = p.try_get()
 	assert result == sentinel
-	assert p.ended is True
+	assert p.has_ended() is True
 
 
 async def test_try_get_after_ended_returns_none():
 	p = Port(name="a", get_enabled=True)
 	await p.queue.put(EndSentinel("src"))
-	p.try_get()  # consume sentinel, sets ended=True
-	# Now try_get on an ended port returns None without touching queue
+	p.try_get()  # consume sentinel, ends the port
+	# An ended port's sources have all sent their last message, so its queue is empty from here on
 	result = p.try_get()
 	assert result is None
 
@@ -115,6 +115,55 @@ async def test_try_get_invalid_raises():
 		p.try_get()
 	assert exc_info.value.name == "bad"
 	assert exc_info.value.type_ == "int"
+
+
+# --- Multi-source ports ---
+
+
+async def test_get_ends_only_on_the_last_source():
+	p = Port(name="a", source_n=2, get_enabled=True)
+	last = EndSentinel("src2")
+	await p.queue.put(EndSentinel("src1"))
+	await p.queue.put(last)
+	result = await p.get()
+	assert result == last
+	assert p.has_ended() is True
+
+
+async def test_get_delivers_payload_after_one_source_ends():
+	p = Port(name="a", source_n=2, get_enabled=True)
+	payload = Payload("src2", 0, "late")
+	await p.queue.put(EndSentinel("src1"))
+	await p.queue.put(payload)
+	assert await p.get() == payload
+	assert p.has_ended() is False
+
+
+async def test_get_waits_while_a_source_is_still_live():
+	p = Port(name="a", source_n=2, get_enabled=True)
+	await p.queue.put(EndSentinel("src1"))
+	with pytest.raises(asyncio.TimeoutError):
+		await asyncio.wait_for(p.get(), timeout=0.05)
+	assert p.has_ended() is False
+
+
+async def test_try_get_returns_none_on_a_non_final_sentinel():
+	p = Port(name="a", source_n=2, get_enabled=True)
+	await p.queue.put(EndSentinel("src1"))
+	assert p.try_get() is None
+	assert p.has_ended() is False
+	await p.queue.put(EndSentinel("src2"))
+	assert p.try_get() == EndSentinel("src2")
+	assert p.has_ended() is True
+
+
+async def test_try_get_drains_past_a_non_final_sentinel():
+	p = Port(name="a", source_n=2, get_enabled=True)
+	payload = Payload("src2", 0, "late")
+	await p.queue.put(EndSentinel("src1"))
+	await p.queue.put(payload)
+	assert p.try_get() == payload
+	assert p.has_ended() is False
 
 
 # --- Port.has_ended ---

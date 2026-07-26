@@ -18,7 +18,7 @@ This file implements the queue-backed input ports owned by each runtime node.
 
 - hold inbound `Payload` and `EndSentinel` objects
 - expose blocking and non-blocking reads, gated by the node's read window (`get_enabled`)
-- track whether a port has ended
+- track whether every source feeding the port has ended (`source_n`, `ends_seen`)
 - record whether the corresponding module parameter has a Python default (`has_default`)
 - carry the module `run(...)` parameter name (`param`) the port feeds, defaulting to `name` for edge-built and contract-surface ports
 
@@ -32,7 +32,8 @@ This file implements the queue-backed input ports owned by each runtime node.
 - `node.py` re-keys inbound payloads from external port `name` to `param` immediately before `run(**inputs)`, so the module receives its literal parameter names
 - `get()` awaits the next queued item
 - `try_get()` performs a non-blocking queue read
-- reading an `EndSentinel` marks the port as ended
+- `source_n` is the port's incoming edge count, set from the wired graph and defaulting to 1; each of those edges sends its own `EndSentinel`
+- reading an `EndSentinel` marks the port as ended only once one has arrived from every source. Both reads swallow the earlier ones — `get()` keeps awaiting, `try_get()` keeps draining and reports `None` if nothing else is there — so a port whose other sources are still live neither ends nor reports a false quiet
 - unexpected enqueued object types raise `InvalidEnqueuedError`
 - reading while `get_enabled` is `False` raises `IllegalGetAccessError`, before the queue is touched
 

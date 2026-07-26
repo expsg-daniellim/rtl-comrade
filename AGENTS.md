@@ -71,7 +71,7 @@ These matter across all three workstreams:
   - `ERROR` is deferred failure and allows best-effort completion before a failing exit
   - `CRITICAL` is immediate failure
 - Static output-port inference in `structure.py` is intentionally conservative. Dynamic output names are allowed, but they weaken what validation can prove.
-- Destination input ports are single-source in the current model. Multiple upstream edges into the same input are treated as an overloaded input.
+- Destination input ports take multiple upstream edges only as alternatives — the sources must be provably mutually-exclusive branch arms. Anything else is an overloaded input.
 
 ## Module Conventions
 

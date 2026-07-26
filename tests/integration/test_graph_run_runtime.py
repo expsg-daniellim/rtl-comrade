@@ -623,3 +623,66 @@ def test_it27_required_default_input(logging_handler, tmp_path):
 	_run_graph(config)
 	assert SIDE_CHANNEL == [11, 22, 33]
 	assert logging_handler.failure is False
+
+
+def test_it28_exclusive_arms_converge_on_one_port(logging_handler, tmp_path):
+	# The two arms rejoin on collect.x through separate nodes, one of them slow enough to still be
+	# working when the other has already ended, so the merged port must outlive its first EndSentinel.
+	_write_plugin(
+		tmp_path,
+		"mods.py",
+		"""\
+        import asyncio
+
+        class Gen:
+            def run(self):
+                yield 1
+                yield 2
+                yield 3
+                yield 4
+
+        class Router:
+            def run(self, x):
+                if x % 2 == 0:
+                    yield ("even", x)
+                else:
+                    yield ("odd", x)
+
+        class Slow:
+            async def run(self, x):
+                await asyncio.sleep(0.05)
+                return x
+
+        class Fast:
+            def run(self, x):
+                return x
+
+        class Collect:
+            def run(self, x):
+                import tests.integration.graph_run_common as t
+                t.SIDE_CHANNEL.append(x)
+                return None
+    """,
+	)
+
+	config = GraphConfig(
+		nodes=[
+			_node("gen", "gen"),
+			_node("router", "router"),
+			_node("slow", "slow"),
+			_node("fast", "fast"),
+			_node("collect", "collect"),
+		],
+		edges=[
+			_edge("gen", "router"),
+			_edge("router", "slow", src_port="even"),
+			_edge("router", "fast", src_port="odd"),
+			_edge("slow", "collect"),
+			_edge("fast", "collect"),
+		],
+		modules=[_pfc(tmp_path / "mods.py")],
+		contracts=[],
+	)
+	_run_graph(config)
+	assert sorted(SIDE_CHANNEL) == [1, 2, 3, 4]
+	assert logging_handler.failure is False

@@ -95,13 +95,13 @@ class EmitInfo(NamedTuple):
 		emits: Named output ports in emit order.
 		definite: Whether the output-port set is believed to be complete.
 		default: Whether a ``"default"``-port emit was found.
-		arms: Branch-arm partition over the named ports.
+		arm_paths: Branch-arm partition over the named ports, each arm mapped to its guarding branch-path.
 	"""
 
 	emits: list[str]
 	definite: bool
 	default: bool
-	arms: list[frozenset[str]]
+	arm_paths: dict[frozenset[str], tuple]
 
 @dataclass(slots=True)
 class ModuleStructure:
@@ -113,8 +113,8 @@ class ModuleStructure:
 		emits: Statically known output-port names.
 		definite_emits: Whether ``emits`` is believed to be complete.
 		definite_inputs: Whether ``args`` is believed to be complete.
-		arms: Branch-arm partition over statically-named output ports — each arm is the set of
-			ports sharing one guarding branch-path; unconditional ports appear in no arm.
+		arm_paths: Branch-arm partition over statically-named output ports — each arm is the set of
+			ports sharing one guarding branch-path, mapped to that path; unconditional ports appear in no arm.
 	"""
 
 	name: str
@@ -122,7 +122,7 @@ class ModuleStructure:
 	emits: list[str]
 	definite_emits: bool
 	definite_inputs: bool
-	arms: list[frozenset[str]]
+	arm_paths: dict[frozenset[str], tuple]
 
 	def __init__(self, Module):
 		"""Analyze one module class and infer its runtime structure.
@@ -160,7 +160,7 @@ class ModuleStructure:
 		run_info = self.parse_emits(Module.__name__, Module.run)
 		self.emits = run_info.emits
 		self.definite_emits = run_info.definite
-		self.arms = run_info.arms
+		self.arm_paths = run_info.arm_paths
 		default = run_info.default
 
 		if hasattr(Module, 'finalise') and callable(Module.finalise):
@@ -181,8 +181,8 @@ class ModuleStructure:
 			method: The ``run`` or ``finalise`` function whose source is analysed.
 
 		Returns:
-			An ``EmitInfo``. Each arm groups the ports emitted under one guarding branch-path; ports
-			emitted unconditionally or under several guards are in no arm.
+			An ``EmitInfo``. Each arm groups the ports emitted under one guarding branch-path and is mapped
+			to it; ports emitted unconditionally or under several guards are in no arm.
 		"""
 
 		# Make sure method is callable first
@@ -288,9 +288,14 @@ class ModuleStructure:
 			(only,) = tuple(paths)
 			arms_map.setdefault(only, set()).add(port)
 
-		return EmitInfo(emits, definite, default, [ frozenset(ports) for ports in arms_map.values() ])
+		arm_paths:dict[frozenset[str], tuple] = {}
+		stmt_ids:dict[int, int] = {} # AST object ids are only meaningful within this parse, so renumber them in first-seen order
+		for path, ports in arms_map.items():
+			arm_paths[frozenset(ports)] = tuple((stmt_ids.setdefault(stmt, len(stmt_ids)), selector) for (stmt, selector) in path)
 
-	def resolve_arms(self, full_outputs:set[str], output_groups:dict|None) -> dict[str, frozenset[str]]:
+		return EmitInfo(emits, definite, default, arm_paths)
+
+	def resolve_arms(self, full_outputs:set[str], output_groups:dict|None) -> tuple[dict[str, frozenset[str]], bool]:
 		"""Combine this module's AST-derived arms with an optional ``output_groups`` declaration.
 
 		Args:
@@ -298,18 +303,19 @@ class ModuleStructure:
 			output_groups: Declared arm mapping from the module class, or ``None``.
 
 		Returns:
-			Mapping from each conditional output port to its arm; unconditional ports are absent.
+			A ``(mapping from each conditional output port to its arm, whether those arms came from the
+			declaration)`` pair; unconditional ports are absent from the mapping.
 		"""
 
-		ast_map = { port: arm for arm in self.arms for port in arm }
+		ast_map = { port: arm for arm in self.arm_paths for port in arm }
 
 		if output_groups is None:
 			if self.definite_emits:
-				return ast_map
+				return ast_map, False
 			# Dynamic emitter with no declaration: arms are undeterminable, so treat all outputs as one shared arm.
 			log.warn('undetermined_arms', context='harness.module.arms', module=self.name)
 			shared = frozenset(full_outputs)
-			return { port: shared for port in full_outputs }
+			return { port: shared for port in full_outputs }, False
 
 		og_map = { port: arm for arm in expand_output_groups(output_groups, full_outputs, self.name) for port in arm }
 
@@ -317,7 +323,30 @@ class ModuleStructure:
 		if partition_over(set(self.emits), ast_map) != partition_over(set(self.emits), og_map):
 			log.fatal('output_groups_mismatch', context='harness.module.arms', module=self.name)
 
-		return ast_map if self.definite_emits else og_map
+		return (ast_map, False) if self.definite_emits else (og_map, True)
+
+	def exclusive_arms(self, a:frozenset[str], b:frozenset[str], declared:bool=False) -> bool:
+		"""Report whether two of this module's arms are mutually exclusive — at most one is ever selected.
+
+		Args:
+			a: One arm, as its set of member output ports.
+			b: The other arm.
+			declared: Whether these arms came from an ``output_groups`` declaration.
+
+		Returns:
+			``True`` if the two arms cannot both be selected in one invocation, otherwise ``False``.
+		"""
+
+		if declared: # a declaration asserts its groups are alternatives, and the AST cannot cross-check dynamic ports
+			return a != b
+
+		path_a, path_b = self.arm_paths.get(a), self.arm_paths.get(b)
+		if path_a is None or path_b is None:
+			return False
+
+		divergence = next((i for i in range(min(len(path_a), len(path_b))) if path_a[i] != path_b[i]), None)
+		# Neither path may be a prefix of the other, since that arm fires whenever the deeper one does; otherwise the two are separated by one branching statement choosing between them.
+		return divergence is not None and path_a[divergence][0] == path_b[divergence][0]
 
 def expand_output_groups(output_groups:dict, full_outputs:set[str], name:str) -> list[frozenset[str]]:
 	"""Resolve a declared ``output_groups`` mapping into concrete arm port-sets.

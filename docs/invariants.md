@@ -6,6 +6,8 @@ These apply across the entire harness. Violating any of them produces deadlocks,
 
 `EndSentinel` is the graph's termination signal. Every node that consumes inputs must propagate it downstream after stopping. Wrong behavior here either deadlocks the graph (node never stops) or prematurely terminates it (sentinel fires too early).
 
+One sentinel is sent per incoming edge, so a port fed by several edges ends only once it has seen one from every one of them. `Port` counts them against `source_n`; a port that ended on the first would drop everything its other sources had yet to send.
+
 ## Graph validation is fail-fast
 
 Malformed graphs must be rejected before `Graph.run()` is called. Runtime surprises from config errors are not acceptable. All structural checks belong in `validation.py`.
@@ -36,9 +38,9 @@ The graph addresses inputs by **external port name**; the module is called by it
 
 The window exists because a deferred read is silent data loss: a `ContractPort` captured during one `get_inputs()` and awaited later — from a background task, or from an output contract's `process_outputs` — would consume a payload the *next* invocation was owed, desyncing the stream far from the code that caused it. An output contract can read `port.state`, `has_ended()`, and `branch_labels`, but never the queue. Do not widen the window to "while the node is running"; that reintroduces exactly the race it rules out. See [harness/port.md](harness/port.md).
 
-## Input ports are single-source
+## Input ports take several edges only as alternatives
 
-Multiple upstream edges feeding the same input port on a node is a configuration error, not a merge. The harness rejects this at validation time with an "overloaded input" error.
+Multiple upstream edges may feed one input port only when their sources are mutually exclusive — proven by `branch_labels`, some arm of a common origin ruling out every pair at once. That is an alternation, not a merge: at most one source ever carries data. Anything else is a configuration error, rejected at validation time with `overloaded_srcs`. Exclusivity comes from `if`/`else` and `match`-case siblings that the AST can prove, or from an `output_groups` declaration; distinct arms are not enough, since two independent `if`s produce two arms that both fire — see [harness/branch_labels.md](harness/branch_labels.md).
 
 ## Branch-legitimate termination is not a mismatch
 

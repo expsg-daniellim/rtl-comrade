@@ -129,6 +129,26 @@ class _BranchModule:
 			yield ("q", 2)
 
 
+class _TwoGuardModule:
+	"""Source whose p and q sit under independent guards, so both can fire in one invocation."""
+
+	def run(self):
+		if True:  # pylint: disable=using-constant-test
+			yield ("p", 1)
+		if True:  # pylint: disable=using-constant-test
+			yield ("q", 2)
+
+
+class _InputBranchModule:
+	"""Branches on its input, so its arms inherit the label of whatever feeds it."""
+
+	def run(self, a):
+		if a:
+			yield ("p", 1)
+		else:
+			yield ("q", 2)
+
+
 # Mapping helpers
 _MODULE_MAP = {
 	"source_mod": _SourceModule,
@@ -139,6 +159,9 @@ _MODULE_MAP = {
 	"kwargs_mod": _KwargsModule,
 	"mixed_mod": _MixedDefaultModule,
 	"branch_mod": _BranchModule,
+	"two_guard_mod": _TwoGuardModule,
+	"input_branch_mod": _InputBranchModule,
+	"pass_mod": _CycleModule,
 }
 _CONTRACT_MAP = {
 	"basic_contract": _BasicContract,
@@ -258,6 +281,7 @@ def test_invalid_src_port_fatal(logging_handler):
 
 
 def test_overloaded_srcs_fatal(logging_handler):
+	# Two unconditional sources into one input port: nothing rules out both arriving.
 	config = _make_config(
 		[
 			_node("src1", "source_mod"),
@@ -268,6 +292,16 @@ def test_overloaded_srcs_fatal(logging_handler):
 			_edge("src1", "default", "sink", 1),
 			_edge("src2", "default", "sink", 1),
 		],
+	)
+	with pytest.raises(typer.Exit):
+		_from_config(config)
+
+
+def test_overloaded_srcs_independent_guards_fatal(logging_handler):
+	# p and q sit under separate guards of one origin, so they are distinct arms but not alternatives.
+	config = _make_config(
+		[_node("g", "two_guard_mod"), _node("sink", "sink_mod")],
+		[_edge("g", "p", "sink", "a"), _edge("g", "q", "sink", "a")],
 	)
 	with pytest.raises(typer.Exit):
 		_from_config(config)
@@ -706,6 +740,47 @@ def test_branch_labels_propagate_distinct_arms(logging_handler):
 	label_b = graph.nodes["n"].contract.ports["b"].branch_labels
 	assert label_a == frozenset({("b", frozenset({"p"}))})
 	assert label_b == frozenset({("b", frozenset({"q"}))})
+
+
+def test_exclusive_arms_may_share_one_input_port(logging_handler):
+	config = _make_config(
+		nodes=[_node("b", "branch_mod"), _node("sink", "sink_mod")],
+		edges=[_edge("b", "p", "sink", "a"), _edge("b", "q", "sink", "a")],
+	)
+	graph = _from_config(config)
+	assert logging_handler.failure is False
+	# One of the two arms always fires, so neither arm's non-selection can end the merged port.
+	assert graph.nodes["sink"].contract.ports["a"].branch_labels == frozenset()
+	# Both edges send their own EndSentinel, and the port ends only once it has seen both.
+	assert graph.nodes["sink"].ports["a"].source_n == 2
+
+
+def test_exclusive_arms_may_share_one_input_port_through_intermediates(logging_handler):
+	# The arms are carried by two separate passthrough nodes, so the merged port has two distinct source nodes.
+	config = _make_config(
+		nodes=[_node("b", "branch_mod"), _node("x", "pass_mod"), _node("y", "pass_mod"), _node("sink", "sink_mod")],
+		edges=[
+			_edge("b", "p", "x", "a"),
+			_edge("b", "q", "y", "a"),
+			_edge("x", "default", "sink", "a"),
+			_edge("y", "default", "sink", "a"),
+		],
+	)
+	graph = _from_config(config)
+	assert logging_handler.failure is False
+	assert graph.nodes["sink"].contract.ports["a"].branch_labels == frozenset()
+	assert graph.nodes["sink"].ports["a"].source_n == 2
+
+
+def test_merged_port_keeps_the_labels_its_sources_share(logging_handler):
+	# 'c' branches under 'b's p arm, so both of its own arms carry that label and only they cancel out.
+	config = _make_config(
+		nodes=[_node("b", "branch_mod"), _node("c", "input_branch_mod"), _node("sink", "sink_mod")],
+		edges=[_edge("b", "p", "c", "a"), _edge("c", "p", "sink", "a"), _edge("c", "q", "sink", "a")],
+	)
+	graph = _from_config(config)
+	assert logging_handler.failure is False
+	assert graph.nodes["sink"].contract.ports["a"].branch_labels == frozenset({("b", frozenset({"p"}))})
 
 
 def test_branch_labels_empty_for_unbranched_edge(logging_handler):

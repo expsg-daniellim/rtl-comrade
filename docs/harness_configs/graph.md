@@ -150,6 +150,8 @@ A CLI edge injects a value supplied on the command line directly into a destinat
 
 The destination `port` field accepts either a string name matching a `run(...)` parameter name or a 1-based integer index into the parameter list.
 
+An output port may feed as many destinations as you like. An input port is the restricted direction: it normally takes one edge, and takes several only when the harness can prove at most one of them ever carries data — the sources must sit on mutually-exclusive branch arms, such as the two output ports of an `if`/`else` in one module, or two ports downstream of them. That wiring is an alternation rejoining, and the harness delivers whichever arm ran and waits for every source before treating the port as ended. Wiring two sources that could both produce is rejected at startup with `overloaded_srcs`; use a join contract for a real merge. See `docs/harness/branch_labels.md`.
+
 The optional `required` field overrides the default contract's treatment of a default-bearing input. Normally an input with a Python default value never blocks: if no value is queued, the contract omits it and the module's default applies. Marking the destination `required: true` forces the contract to await a real value on that port before each invocation, ignoring the input's default. This is a per-wiring property of the edge's destination, not of the module signature. (A port that has no default is always awaited regardless.)
 
 ## Logging configuration

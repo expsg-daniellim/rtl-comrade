@@ -540,6 +540,22 @@ class _MultiPath:
 			yield ("a", 2)
 
 
+class _TwoIfs:
+	def run(self, x, y):
+		if x:
+			yield ("a", 1)
+		if y:
+			yield ("b", 2)
+
+
+class _NestedIf:
+	def run(self, x, y):
+		if x:
+			yield ("a", 1)
+			if y:
+				yield ("b", 2)
+
+
 class _DynBranch:
 	"""Dynamic emitter: a named 'stop' arm versus a dynamic passthrough arm."""
 
@@ -553,44 +569,91 @@ class _DynBranch:
 
 def test_arms_if_else_exclusive():
 	s = ModuleStructure(_IfElse)
-	assert set(s.arms) == {frozenset({"a"}), frozenset({"b"})}
+	assert set(s.arm_paths) == {frozenset({"a"}), frozenset({"b"})}
 
 
 def test_arms_for_loop_conditional():
 	s = ModuleStructure(_ForLoop)
-	assert set(s.arms) == {frozenset({"a"})}
+	assert set(s.arm_paths) == {frozenset({"a"})}
 
 
 def test_arms_while_loop_conditional():
 	s = ModuleStructure(_WhileLoop)
-	assert set(s.arms) == {frozenset({"a"})}
+	assert set(s.arm_paths) == {frozenset({"a"})}
 
 
 def test_arms_match_cases_exclusive():
 	s = ModuleStructure(_MatchCase)
-	assert set(s.arms) == {frozenset({"a"}), frozenset({"b"})}
+	assert set(s.arm_paths) == {frozenset({"a"}), frozenset({"b"})}
 
 
 def test_arms_try_except_independent_singletons():
 	s = ModuleStructure(_TryExcept)
-	assert set(s.arms) == {frozenset({"a"}), frozenset({"b"})}
+	assert set(s.arm_paths) == {frozenset({"a"}), frozenset({"b"})}
 
 
 def test_arms_with_block_unconditional():
 	s = ModuleStructure(_WithBlock)
 	assert s.emits == ["a"]
-	assert s.arms == []  # pylint: disable=use-implicit-booleaness-not-comparison
+	assert s.arm_paths == {}  # pylint: disable=use-implicit-booleaness-not-comparison
 
 
 def test_arms_mixed_conditional_and_unconditional():
 	s = ModuleStructure(_MixedCond)
-	assert set(s.arms) == {frozenset({"cond"})}  # 'always' is unconditional, so in no arm
+	assert set(s.arm_paths) == {frozenset({"cond"})}  # 'always' is unconditional, so in no arm
 
 
 def test_arms_multi_path_port_is_unconditional():
 	s = ModuleStructure(_MultiPath)
 	assert s.emits == ["a"]
-	assert s.arms == []  # 'a' emitted under two guards, so it belongs to no single arm  # pylint: disable=use-implicit-booleaness-not-comparison
+	assert s.arm_paths == {}  # 'a' emitted under two guards, so it belongs to no single arm  # pylint: disable=use-implicit-booleaness-not-comparison
+
+
+# --- ModuleStructure.exclusive_arms ---
+
+
+def test_exclusive_arms_if_else_siblings():
+	s = ModuleStructure(_IfElse)
+	assert s.exclusive_arms(frozenset({"a"}), frozenset({"b"}))
+
+
+def test_exclusive_arms_match_cases():
+	s = ModuleStructure(_MatchCase)
+	assert s.exclusive_arms(frozenset({"a"}), frozenset({"b"}))
+
+
+def test_exclusive_arms_independent_ifs():
+	# Two separate guards, so both arms can fire in one invocation.
+	s = ModuleStructure(_TwoIfs)
+	assert not s.exclusive_arms(frozenset({"a"}), frozenset({"b"}))
+
+
+def test_exclusive_arms_nested_arm_shares_its_guard():
+	# 'a' is emitted on the path 'b' is nested under, so 'a' fires whenever 'b' does.
+	s = ModuleStructure(_NestedIf)
+	assert not s.exclusive_arms(frozenset({"a"}), frozenset({"b"}))
+
+
+def test_exclusive_arms_try_sections_conservative():
+	# Each try-region emit is its own arm with no shared branching statement, so exclusivity is not claimed.
+	s = ModuleStructure(_TryExcept)
+	assert not s.exclusive_arms(frozenset({"a"}), frozenset({"b"}))
+
+
+def test_exclusive_arms_unknown_arm():
+	s = ModuleStructure(_IfElse)
+	assert not s.exclusive_arms(frozenset({"a"}), frozenset({"absent"}))
+
+
+def test_exclusive_arms_same_arm():
+	s = ModuleStructure(_IfElse)
+	assert not s.exclusive_arms(frozenset({"a"}), frozenset({"a"}))
+
+
+def test_exclusive_arms_declared_groups_are_alternatives():
+	s = ModuleStructure(_DynBranch)
+	assert s.exclusive_arms(frozenset({"stop"}), frozenset({"x", "y"}), True)
+	assert not s.exclusive_arms(frozenset({"stop"}), frozenset({"stop"}), True)
 
 
 # --- expand_output_groups ---
@@ -636,23 +699,26 @@ def test_partition_over_groups_and_always():
 
 def test_resolve_arms_definite_no_declaration():
 	# _IfElse: 'a' and 'b' are exclusive arms.
-	assert ModuleStructure(_IfElse).resolve_arms({"a", "b"}, None) == {"a": frozenset({"a"}), "b": frozenset({"b"})}
+	assert ModuleStructure(_IfElse).resolve_arms({"a", "b"}, None) == ({"a": frozenset({"a"}), "b": frozenset({"b"})}, False)
 
 
 def test_resolve_arms_nondefinite_no_declaration_shared_arm():
 	# _ReturnDynamic emits nothing statically, so the fallback treats all outputs as one shared arm.
-	result = ModuleStructure(_ReturnDynamic).resolve_arms({"a", "b"}, None)
+	result, declared = ModuleStructure(_ReturnDynamic).resolve_arms({"a", "b"}, None)
 	assert result == {"a": frozenset({"a", "b"}), "b": frozenset({"a", "b"})}
+	assert not declared
 
 
 def test_resolve_arms_definite_declaration_agrees():
-	assert ModuleStructure(_IfElse).resolve_arms({"a", "b"}, {"g1": ["a"], "g2": ["b"]}) == {"a": frozenset({"a"}), "b": frozenset({"b"})}
+	# The AST can prove the arms itself, so the declaration is only cross-checked, not adopted.
+	assert ModuleStructure(_IfElse).resolve_arms({"a", "b"}, {"g1": ["a"], "g2": ["b"]}) == ({"a": frozenset({"a"}), "b": frozenset({"b"})}, False)
 
 
 def test_resolve_arms_nondefinite_declaration_fills_dynamic():
-	result = ModuleStructure(_DynBranch).resolve_arms({"stop", "x", "y"}, {"stop": ["stop"], "pass": REST})
+	result, declared = ModuleStructure(_DynBranch).resolve_arms({"stop", "x", "y"}, {"stop": ["stop"], "pass": REST})
 	assert result["stop"] == frozenset({"stop"})
 	assert result["x"] == frozenset({"x", "y"})
+	assert declared
 
 
 def test_resolve_arms_declaration_contradicts_ast_fatal(logging_handler):

@@ -46,7 +46,8 @@ class Port(Generic[T]):
 		param: The module ``run(...)`` parameter this port feeds; defaults to ``name`` for edge-built and contract-surface ports.
 		queue: Async queue carrying Payload and EndSentinel messages.
 		has_default: Whether the corresponding module input has a default value.
-		ended: Whether this port has already observed an EndSentinel.
+		source_n: How many incoming edges feed this port. Used for EndSentinel tracking.
+		ends_seen: How many EndSentinels have been observed.
 		get_enabled: Whether reads are currently permitted. The Node sets this only for the duration of a ``get_inputs()`` call, so an output contract — or an input contract holding onto a port past its call — cannot consume from the queue.
 	"""
 
@@ -54,7 +55,8 @@ class Port(Generic[T]):
 	param: str = ''
 	queue: Queue[Payload[T]|EndSentinel] = field(default_factory=Queue)
 	has_default: bool = False
-	ended: bool = False
+	source_n: int = 1
+	ends_seen: int = 0
 	get_enabled: bool = False
 
 	def __post_init__(self):
@@ -88,12 +90,14 @@ class Port(Generic[T]):
 		if not self.get_enabled:
 			raise IllegalGetAccessError(self.name, 'get')
 
-		val = await self.queue.get()
-		if not isinstance(val, (Payload, EndSentinel)):
-			raise InvalidEnqueuedError(self.name, type(val).__name__)
+		val = None
+		while val is None or (isinstance(val, EndSentinel) and not self.has_ended()):
+			val = await self.queue.get()
+			if not isinstance(val, (Payload, EndSentinel)):
+				raise InvalidEnqueuedError(self.name, type(val).__name__)
 
-		if isinstance(val, EndSentinel):
-			self.ended = True
+			if isinstance(val, EndSentinel):
+				self.ends_seen += 1
 
 		return val
 
@@ -112,25 +116,26 @@ class Port(Generic[T]):
 			raise IllegalGetAccessError(self.name, 'try_get')
 
 		val = None
-		try:
-			if not self.ended:
+		while val is None or (isinstance(val, EndSentinel) and not self.has_ended()):
+			try:
 				val = self.queue.get_nowait()
+			except asyncio.QueueEmpty:
+				val = None
+				break
 
-				if isinstance(val, EndSentinel):
-					self.ended = True
-		except asyncio.QueueEmpty: # An empty queue is a valid case
-			pass
+			if not isinstance(val, (Payload, EndSentinel)):
+				raise InvalidEnqueuedError(self.name, type(val).__name__)
 
-		if not (isinstance(val, (Payload, EndSentinel)) or val is None):
-			raise InvalidEnqueuedError(self.name, type(val).__name__)
+			if isinstance(val, EndSentinel):
+				self.ends_seen += 1
 
 		return val
 
 	def has_ended(self) -> bool:
-		"""Return whether this port has already seen an EndSentinel.
+		"""Return whether this port has ended because every src feeding it has ended.
 
 		Returns:
 			``True`` if this port has ended, otherwise ``False``.
 		"""
 
-		return self.ended
+		return self.ends_seen >= self.source_n

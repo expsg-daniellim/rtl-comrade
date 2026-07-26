@@ -45,16 +45,18 @@ A `run(...)` argument named `<builtin-or-keyword>_` — a single trailing unders
 
 ## Arm Determination
 
-`ModuleStructure.arms` partitions the statically-named output ports by their guarding branch-path: ports emitted in mutually-exclusive `if`/`else` or `match` arms land in distinct arms, a loop body forms one conditional arm, each emit inside a `try` region is its own optional arm, and ports emitted unconditionally or under several distinct guards belong to no arm. Nested scopes (`def`/`class`) are excluded, as before.
+`ModuleStructure.arm_paths` partitions the statically-named output ports by their guarding branch-path and maps each arm to that path: ports emitted in `if`/`else` or `match` arms land in distinct arms, a loop body forms one conditional arm, each emit inside a `try` region is its own optional arm, and ports emitted unconditionally or under several distinct guards belong to no arm. Nested scopes (`def`/`class`) are excluded, as before. Path elements are `(branching statement, selector)` pairs with the statements renumbered in first-seen order, so a path means nothing outside the parse that produced it.
 
-`resolve_arms` reconciles the AST arms with an optional module `output_groups` declaration (a group→ports mapping where a `REST` member list means "all remaining outputs"). The matrix:
+`resolve_arms` reconciles the AST arms with an optional module `output_groups` declaration (a group→ports mapping where a `REST` member list means "all remaining outputs"), and reports whether the arms it returned came from that declaration. The matrix:
 
-| `definite_emits` | `output_groups` | result |
-|---|---|---|
-| yes | no | AST arms |
-| yes | yes | AST arms, cross-checked against the declaration (fatal on mismatch) |
-| no | yes | declaration fills the dynamic ports; must agree with the AST on the named ports (fatal on mismatch) |
-| no | no | undeterminable — warn, and treat all outputs as one shared arm |
+| `definite_emits` | `output_groups` | result | declared |
+|---|---|---|---|
+| yes | no | AST arms | no |
+| yes | yes | AST arms, cross-checked against the declaration (fatal on mismatch) | no |
+| no | yes | declaration fills the dynamic ports; must agree with the AST on the named ports (fatal on mismatch) | yes |
+| no | no | undeterminable — warn, and treat all outputs as one shared arm | no |
+
+`exclusive_arms(a, b, declared)` answers whether two arms are alternatives. Declared arms are alternatives by assertion — the AST cannot cross-check ports it could not name. Otherwise it compares guarding paths: exclusive iff neither is a prefix of the other and the first element they differ at names the same branching statement, which only `if`/`else` and `match` cases can satisfy.
 
 The resolved arms are consumed by the propagation pass in [graph.md](graph.md). See [branch_labels.md](branch_labels.md).
 

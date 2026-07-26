@@ -275,7 +275,7 @@ async def test_default_port_ended_omitted_from_result():
 	contract, _ = _make_contract({"a": port_req, "b": port_def})
 
 	await port_def.queue.put(EndSentinel("upstream"))
-	port_def.try_get()  # consume sentinel → ended=True
+	port_def.try_get()  # consume sentinel → port ends
 	assert port_def.has_ended() is True
 
 	await port_req.queue.put(Payload("src", 0, 1))
