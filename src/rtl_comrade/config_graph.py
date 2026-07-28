@@ -6,9 +6,9 @@ YAML schema (config.py) and the runtime graph constructor (graph.py).
 
 from __future__ import annotations
 from dataclasses import dataclass, field
-from inspect import Signature, Parameter
+from inspect import Signature
 from pathlib import Path
-from typing import cast, Any, Self
+from typing import cast, Self
 
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
