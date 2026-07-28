@@ -44,7 +44,7 @@ A node declares up to three contracts in its graph config:
 
 Output processing is opt-in. A node with only `contract: zip` does none, because `zip` defines no `process_outputs` — values go straight downstream untouched. To get output processing, either name an `output_contract` or give the general contract a `process_outputs` method.
 
-Each slot has its own config dict (`contract_config`, `input_contract_config`, `output_contract_config`) and its own CLI config block. See [docs/harness_configs/graph.md](../harness_configs/graph.md).
+Each slot is a `GraphConfigNodePlugin` carrying its own `name`, `config`, and `cli` block. See [docs/harness_configs/graph.md](../harness_configs/graph.md).
 
 ## Required Interface
 
@@ -76,7 +76,7 @@ Possible injected arguments are:
 
 ### `config`
 
-If `__init__` accepts `config`, the harness passes the config dict belonging to that slot — `contract_config`, `input_contract_config`, or `output_contract_config` — from the graph YAML.
+If `__init__` accepts `config`, the harness passes that slot's `GraphConfigNodePlugin.config` dict from the graph YAML.
 
 If the contract defines a nested `Config` class, that config is deserialized through `serde.from_dict(...)` before construction. A `Config` field declared as `Path` (rather than `str`) supports the `{graph}` prefix as its first path component, which the harness resolves to the graph file's directory at construction time, the same as module and logger configs (see [graph.md](../harness_configs/graph.md)).
 

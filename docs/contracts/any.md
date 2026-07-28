@@ -18,25 +18,27 @@ In the `test` graph this contract backs `results-summary`, fanning the 13 termin
 ## Config
 
 ```yaml
-contract: any
-contract_config:
-  mapping: results
+contract:
+  name: any
+  config:
+    mapping: results
 ```
 
 | Field | Type | Purpose |
 |---|---|---|
 | `mapping` | `str` \| `dict[str, list[str]]` | n→1: a single output port name that every input funnels onto (default `"default"`). m→n: a map of output port name → list of input port names; every input port must appear in exactly one group |
 
-`contract_config` may be omitted entirely; the contract then behaves as n→1 onto `"default"`.
+The config may be omitted entirely (bare `contract: any`); the contract then behaves as n→1 onto `"default"`.
 
 ### m→n example
 
 ```yaml
-contract: any
-contract_config:
-  mapping:
-    fast: [stage_a, stage_b]
-    slow: [stage_c]
+contract:
+  name: any
+  config:
+    mapping:
+      fast: [stage_a, stage_b]
+      slow: [stage_c]
 ```
 
 Inputs `stage_a` and `stage_b` funnel onto output port `fast`; `stage_c` funnels onto `slow`. Every input port must appear in exactly one group — an unknown port, a port claimed by two groups, or a real port left out of all groups is a construction-time fatal.

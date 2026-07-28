@@ -8,7 +8,7 @@ import typer
 
 from serde import serde
 
-from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 
@@ -173,11 +173,11 @@ _CONTRACT_MAP = {
 
 
 def _node(id_, module, contract=""):
-	return GraphConfigNode(id=id_, module=module, contract=contract)
+	return GraphConfigNode(id=id_, module=GraphConfigNodePlugin(name=module), contract=GraphConfigNodePlugin(name=contract))
 
 
 def _mapping_node(id_, module, mappings, contract=""):
-	return GraphConfigNode(id=id_, module=module, contract=contract, contract_port_mappings=mappings)
+	return GraphConfigNode(id=id_, module=GraphConfigNodePlugin(name=module), contract=GraphConfigNodePlugin(name=contract), contract_port_mappings=mappings)
 
 
 def _edge(src_node, src_port, dst_node, dst_port):
@@ -236,7 +236,7 @@ def test_invalid_contract_fatal(logging_handler):
 def test_duplicate_node_id_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
-			nodes=[GraphConfigNode(id="n1", module="source_mod"), GraphConfigNode(id="n1", module="sink_mod")],
+			nodes=[GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="source_mod")), GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="sink_mod"))],
 			edges=[],
 		))
 
@@ -257,7 +257,7 @@ def test_from_file_config_default_relative_path_is_empty_path(logging_handler):
 def test_invalid_dst_node_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
-			nodes=[GraphConfigNode(id="src", module="source_mod")],
+			nodes=[GraphConfigNode(id="src", module=GraphConfigNodePlugin(name="source_mod"))],
 			edges=[GraphConfigEdge(src=GraphConfigSrcPort(node="src"), dst=GraphConfigDstPort(node="nonexistent"))],
 		))
 
@@ -323,7 +323,7 @@ def test_unused_edge_warns(logging_handler):
 		return module_map if call_count[0] == 1 else {}
 
 	graph_config = GraphConfig.from_file_config(GraphFileConfig(
-		nodes=[GraphConfigNode(id="sink", module="default_sink")],
+		nodes=[GraphConfigNode(id="sink", module=GraphConfigNodePlugin(name="default_sink"))],
 		edges=[GraphConfigEdge(src=GraphConfigSrcPort(node="nonexistent_src"), dst=GraphConfigDstPort(node="sink"))],
 	))
 	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
@@ -542,7 +542,7 @@ def test_contract_plugin_missing_get_inputs_fatal(logging_handler):
 
 def test_all_three_contract_fields_warns_obsolete(logging_handler):
 	# Both ends overridden leaves the general contract unreachable — a warning, not an error.
-	config = _make_config([GraphConfigNode(id="n1", module="source_mod", contract="basic_contract", input_contract="basic_contract", output_contract="output_contract")], [])
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="source_mod"), contract=GraphConfigNodePlugin(name="basic_contract"), input_contract=GraphConfigNodePlugin(name="basic_contract"), output_contract=GraphConfigNodePlugin(name="output_contract"))], [])
 	graph = _from_config_with_contracts(config)
 	assert isinstance(graph.nodes["n1"].input_contract, _BasicContract)
 	assert isinstance(graph.nodes["n1"].output_contract, OutputOnlyContract)
@@ -550,25 +550,25 @@ def test_all_three_contract_fields_warns_obsolete(logging_handler):
 
 
 def test_output_contract_missing_port_parameter_fatal(logging_handler):
-	config = _make_config([GraphConfigNode(id="n1", module="source_mod", output_contract="no_port_contract")], [])
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="source_mod"), output_contract=GraphConfigNodePlugin(name="no_port_contract"))], [])
 	with pytest.raises(typer.Exit):
 		_from_config_with_contracts(config)
 
 
 def test_output_contract_non_str_port_annotation_fatal(logging_handler):
-	config = _make_config([GraphConfigNode(id="n1", module="source_mod", output_contract="non_str_port_contract")], [])
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="source_mod"), output_contract=GraphConfigNodePlugin(name="non_str_port_contract"))], [])
 	with pytest.raises(typer.Exit):
 		_from_config_with_contracts(config)
 
 
 def test_cli_input_contract_config_override(logging_handler):
-	config = _make_config([GraphConfigNode(id="n1", module="source_mod", input_contract="configurable_contract", input_contract_config={"limit": 0}, cli_input_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")})], [])
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="source_mod"), input_contract=GraphConfigNodePlugin(name="configurable_contract", config={"limit": 0}, cli={"limit": GraphConfigSrcCLI(cli="n", type="int")}))], [])
 	graph = _from_config_with_contracts(config, cli_kwargs={"n": 3})
 	assert graph.nodes["n1"].input_contract.config.limit == 3
 
 
 def test_cli_output_contract_config_override(logging_handler):
-	config = _make_config([GraphConfigNode(id="n1", module="source_mod", output_contract="configurable_contract", output_contract_config={"limit": 0}, cli_output_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")})], [])
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="source_mod"), output_contract=GraphConfigNodePlugin(name="configurable_contract", config={"limit": 0}, cli={"limit": GraphConfigSrcCLI(cli="n", type="int")}))], [])
 	graph = _from_config_with_contracts(config, cli_kwargs={"n": 5})
 	assert graph.nodes["n1"].output_contract.config.limit == 5
 
@@ -579,7 +579,7 @@ def test_cli_output_contract_config_override(logging_handler):
 def test_cyclic_graph_detected_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
-			nodes=[GraphConfigNode(id="a", module="m"), GraphConfigNode(id="b", module="m")],
+			nodes=[GraphConfigNode(id="a", module=GraphConfigNodePlugin(name="m")), GraphConfigNode(id="b", module=GraphConfigNodePlugin(name="m"))],
 			edges=[
 				GraphConfigEdge(src=GraphConfigSrcPort(node="a"), dst=GraphConfigDstPort(node="b")),
 				GraphConfigEdge(src=GraphConfigSrcPort(node="b"), dst=GraphConfigDstPort(node="a")),
@@ -593,7 +593,7 @@ def test_cyclic_graph_detected_fatal(logging_handler):
 def test_cli_name_conflicts_with_node_fatal(logging_handler):
 	with pytest.raises(typer.Exit):
 		GraphConfig.from_file_config(GraphFileConfig(
-			nodes=[GraphConfigNode(id="cli-foo", module="m")],
+			nodes=[GraphConfigNode(id="cli-foo", module=GraphConfigNodePlugin(name="m"))],
 			edges=[GraphConfigEdge(src=GraphConfigSrcCLI(cli="foo"), dst=GraphConfigDstPort(node="cli-foo"))],
 		))
 

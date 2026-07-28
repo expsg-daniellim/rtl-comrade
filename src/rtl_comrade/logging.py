@@ -1,12 +1,26 @@
 """Logging setup and failure semantics for the harness runtime."""
 
+from dataclasses import dataclass
 import logging
-from typing import Any, NoReturn
+from typing import Any, Literal, NoReturn
 import structlog
-from structlog.contextvars import merge_contextvars
+from structlog.contextvars import get_contextvars, merge_contextvars
 from structlog.exceptions import DropEvent
 from structlog.stdlib import ProcessorFormatter, LoggerFactory, BoundLogger
 import typer
+
+@dataclass(slots=True, frozen=True)
+class LogEvent:
+	level: Literal['debug', 'info', 'warn', 'error', 'fatal']
+	event: str
+	fields: dict[str, Any]
+
+	def __post_init__(self):
+		object.__setattr__(self, 'fields', self.fields | get_contextvars())
+
+	def log(self, logger:BoundLogger) -> bool:
+		getattr(logger, self.level)(self.event, **self.fields)
+		return self.level in { 'error', 'fatal' }
 
 class HarnessLogger(BoundLogger):
 	"""BoundLogger subclass that declares fatal/critical as non-returning.

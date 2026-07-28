@@ -9,9 +9,10 @@ The general-purpose workhorse. On each invocation it blocks until every required
 ## Config
 
 ```yaml
-contract: default
-contract_config:
-  persistent_inputs: [config]   # optional; omit if no persistent ports are needed
+contract:
+  name: default
+  config:
+    persistent_inputs: [config]
 ```
 
 | Field | Type | Default | Purpose |
@@ -37,14 +38,15 @@ Ends when any required (non-special) port ends. If some required ports have alre
 nodes:
   - id: enrich
     module: enrich_record
-    contract: default
-    contract_config:
-      persistent_inputs: [settings]
+    contract:
+      name: default
+      config:
+        persistent_inputs: [settings]
 ```
 
 Port `settings` is persistent: the first value received is cached and replayed on every later invocation without blocking on the settings stream again.
 
-**Simple one-to-one stream processing.** No persistent inputs needed; omit `contract_config` entirely.
+**Simple one-to-one stream processing.** No persistent inputs needed; a bare string suffices.
 
 ```yaml
 nodes:

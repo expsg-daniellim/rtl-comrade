@@ -20,31 +20,27 @@ logging:    # optional — per-graph custom logging configuration
 
 ## Node definition
 
+Each plugin field (`module`, `contract`, `input_contract`, `output_contract`) accepts either a bare string (just the plugin name) or a mapping with `name`, `config`, and `cli` keys. A bare string is shorthand for `{ name: <str> }` with empty config and cli.
+
 ```yaml
 nodes:
 - id: <str>                  # required — unique node identifier
-  module: <str>              # required — plugin name from a modules manifest
-  contract: <str>            # optional — plugin name from a contracts manifest; defaults to "default"
-  input_contract: <str>      # optional — overrides contract for input scheduling (see below)
-  output_contract: <str>     # optional — overrides contract for output processing (see below)
-  config:                    # optional — passed to module __init__ as config
-    key: value
-  contract_config:           # optional — passed to contract __init__ as config
-    key: value
-  input_contract_config:     # optional — passed to input_contract __init__ as config
-    key: value
-  output_contract_config:    # optional — passed to output_contract __init__ as config
-    key: value
-  cli_config:                # optional — CLI-supplied module config fields
-    <field>: <cli-param>     # field name maps to a CLI parameter descriptor
-  cli_contract_config:       # optional — CLI-supplied contract config fields
-    <field>: <cli-param>     # field name maps to a CLI parameter descriptor
-  cli_input_contract_config:   # optional — CLI-supplied input_contract config fields
-    <field>: <cli-param>
-  cli_output_contract_config:  # optional — CLI-supplied output_contract config fields
-    <field>: <cli-param>
+  module: <str|plugin>       # required — module plugin reference
+  contract: <str|plugin>     # optional — contract plugin reference; defaults to "default"
+  input_contract: <str|plugin>  # optional — overrides contract for input scheduling (see below)
+  output_contract: <str|plugin> # optional — overrides contract for output processing (see below)
   contract_port_mappings:    # optional — declares the contract-port input surface (see below)
     <contract-port>: [<module-param>, ...]  # contract port name → module run(...) params it forwards to
+```
+
+A `<plugin>` mapping carries the plugin name, static config, and CLI-sourced config fields:
+
+```yaml
+name: <str>        # required — plugin name from the corresponding manifest
+config:            # optional — passed to __init__ as config
+  key: value
+cli:               # optional — CLI-supplied config fields
+  <field>: <cli-param>  # field name maps to a CLI parameter descriptor
 ```
 
 `<cli-param>` has the same fields as a CLI edge source:
@@ -57,11 +53,11 @@ default: <value>  # optional — default value; if absent the parameter is requi
 help: <str>       # optional — help text shown in --help output
 ```
 
-Each `<field>` under a `cli_*_config` block is the name of the corresponding field in that target's `Config` dataclass. The harness injects the CLI-supplied value into the config dict before calling the node constructor, so the module or contract receives it through the normal serde deserialization path. Each block feeds the config dict of the same name: `cli_config` → `config`, `cli_contract_config` → `contract_config`, and likewise for the input and output contract blocks.
+Each `<field>` under a plugin's `cli` block is the name of the corresponding field in that target's `Config` dataclass. The harness injects the CLI-supplied value into the plugin's config dict before calling the node constructor, so the module or contract receives it through the normal serde deserialisation path.
 
-If a field name appears in both a static config dict and its `cli_*_config` block, the CLI value takes precedence and the harness emits a warning at startup.
+If a field name appears in both a plugin's static `config` and its `cli` block, the CLI value takes precedence and the harness emits a warning at startup.
 
-A `cli` name may be reused across edges and any of the four `cli_*_config` blocks to wire one CLI parameter to several destinations — every reuse must declare an identical descriptor (same `option`, `type`, `default`, and `help`). The name is surfaced as a single subcommand parameter regardless of how many times it appears. Two occurrences of the same `cli` name with differing descriptor fields are a fatal error.
+A `cli` name may be reused across edges and any plugin's `cli` block to wire one CLI parameter to several destinations — every reuse must declare an identical descriptor (same `option`, `type`, `default`, and `help`). The name is surfaced as a single subcommand parameter regardless of how many times it appears. Two occurrences of the same `cli` name with differing descriptor fields are a fatal error.
 
 ### Input and output contracts
 
@@ -194,15 +190,17 @@ modules:
 - "modules"
 nodes:
 - id: file-1
-  module: fileread
+  module:
+    name: fileread
+    config:
+      file: "file1.txt"
   contract: "zip"
-  config:
-    file: "file1.txt"
 - id: file-2
-  module: fileread
+  module:
+    name: fileread
+    config:
+      file: "file2.txt"
   contract: "zip"
-  config:
-    file: "file2.txt"
 - id: add
   module: add
   contract: "zip"

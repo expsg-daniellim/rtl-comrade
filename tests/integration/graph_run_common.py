@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcPort
 from rtl_comrade.graph import Graph
 from rtl_comrade.loader_plugin import PluginFileConfig
 
@@ -24,10 +24,8 @@ def _pfc(path) -> PluginFileConfig:
 def _node(id_, module, config=None, contract="", contract_config=None):
 	return GraphConfigNode(
 		id=id_,
-		module=module,
-		config=config or {},
-		contract=contract,
-		contract_config=contract_config or {},
+		module=GraphConfigNodePlugin(name=module, config=config or {}),
+		contract=GraphConfigNodePlugin(name=contract, config=contract_config or {}),
 	)
 
 

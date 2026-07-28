@@ -9,9 +9,10 @@ Maintains the most-recent value from one or more state ports and invokes the mod
 ## Config
 
 ```yaml
-contract: latest
-contract_config:
-  trigger_ports: [document]
+contract:
+  name: latest
+  config:
+    trigger_ports: [document]
 ```
 
 | Field | Type | Purpose |
@@ -32,9 +33,10 @@ Ends when any trigger port ends. State port termination stops further state upda
 nodes:
   - id: infer
     module: run_inference
-    contract: latest
-    contract_config:
-      trigger_ports: [document]
+    contract:
+      name: latest
+      config:
+        trigger_ports: [document]
 ```
 
 Every time a `document` arrives the module is called with the current `model` value. If a new model arrives between documents (e.g. a hot-reload signal), the next document invocation picks it up automatically.

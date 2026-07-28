@@ -1,6 +1,6 @@
 """Integration tests: graph construction — config → GraphConfig → Graph assembly and CLI-source dedup/override."""
 
-from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 
@@ -86,8 +86,7 @@ def test_it21_cli_config_module(logging_handler, tmp_path):
 		nodes=[
 			GraphConfigNode(
 				id="src",
-				module="src",
-				cli_config={"value": GraphConfigSrcCLI(cli="val", type="int")},
+				module=GraphConfigNodePlugin(name="src", cli={"value": GraphConfigSrcCLI(cli="val", type="int")}),
 			)
 		],
 		edges=[],
@@ -147,12 +146,11 @@ def test_it22_cli_contract_config(logging_handler, tmp_path):
 
 	config = GraphFileConfig(
 		nodes=[
-			GraphConfigNode(id="src", module="src"),
+			GraphConfigNode(id="src", module=GraphConfigNodePlugin(name="src")),
 			GraphConfigNode(
 				id="collect",
-				module="collect",
-				contract="persist",
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")},
+				module=GraphConfigNodePlugin(name="collect"),
+				contract=GraphConfigNodePlugin(name="persist", cli={"limit": GraphConfigSrcCLI(cli="n", type="int")}),
 			),
 		],
 		edges=[
@@ -199,9 +197,7 @@ def test_it23_cli_config_overrides_static(logging_handler, tmp_path):
 		nodes=[
 			GraphConfigNode(
 				id="src",
-				module="src",
-				config={"value": 0},
-				cli_config={"value": GraphConfigSrcCLI(cli="val", type="int")},
+				module=GraphConfigNodePlugin(name="src", config={"value": 0}, cli={"value": GraphConfigSrcCLI(cli="val", type="int")}),
 			)
 		],
 		edges=[],
@@ -217,8 +213,7 @@ def test_it25_identical_cli_across_edge_and_config_dedups(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="collect",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")}),
 			)
 		],
 		edges=[
@@ -238,13 +233,11 @@ def test_it26_identical_cli_across_nodes_dedups(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")}),
 			),
 			GraphConfigNode(
 				id="n2",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")}),
 			),
 		],
 		edges=[],
@@ -259,13 +252,13 @@ def test_it29_identical_cli_across_contract_configs_dedups(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+				module=GraphConfigNodePlugin(name="m"),
+				contract=GraphConfigNodePlugin(cli={"limit": GraphConfigSrcCLI(cli="n")}),
 			),
 			GraphConfigNode(
 				id="n2",
-				module="m",
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+				module=GraphConfigNodePlugin(name="m"),
+				contract=GraphConfigNodePlugin(cli={"limit": GraphConfigSrcCLI(cli="n")}),
 			),
 		],
 		edges=[],
@@ -280,9 +273,8 @@ def test_it30_cli_contract_config_overrides_static(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				contract_config={"limit": 0},
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n", type="int")},
+				module=GraphConfigNodePlugin(name="m"),
+				contract=GraphConfigNodePlugin(config={"limit": 0}, cli={"limit": GraphConfigSrcCLI(cli="n", type="int")}),
 			)
 		],
 		edges=[],

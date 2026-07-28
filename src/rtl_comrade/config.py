@@ -7,12 +7,13 @@ the harness graph-construction logic.
 from dataclasses import dataclass
 from inspect import Parameter
 from pathlib import Path
-from typing import Any, Annotated, Literal
+from typing import Any, Annotated, Literal, Self
 
-from serde import serde, field, to_dict, Untagged
+from serde import serde, field, from_dict, to_dict, Untagged
 import typer
 
 from .loader_logger import LoggingConfig
+from .logging import LogEvent
 
 PRIMITIVE_TYPES = { 'int': int, 'float': float, 'str': str, 'bool': bool }
 
@@ -67,41 +68,114 @@ class GraphConfigSrcCLI:
 			raise InvalidCLIParameterError(self.cli) from e
 
 @serde
+@dataclass(slots=True)
+class GraphConfigNodePlugin:
+	"""A unified plugin reference carrying the plugin name, its static config, and any CLI-sourced config fields.
+
+	Used for both module and contract fields on ``GraphConfigNode``. In graph YAML a plugin can be written as a bare string (just the name) or as a mapping with ``name``, ``config``, and ``cli`` keys; the ``try_deserialise`` classmethod handles both forms.
+
+	Attributes:
+		name: The exported plugin name, or ``""`` when unset (the default contract).
+		config: Static configuration passed to the plugin constructor.
+		cli: CLI parameter descriptors that supply config fields at graph-invocation time, keyed by the config field name they populate.
+	"""
+
+	name:str = field(default='')
+	config:dict = field(default_factory=dict)
+	cli: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
+
+	def is_default(self) -> bool:
+		"""Return ``True`` when every field is at its zero value (no plugin configured)."""
+
+		return self.name == '' and len(self.config) == 0 and len(self.cli) == 0
+
+	def validate_cli_config(self, clis:dict[str, GraphConfigSrcCLI], params:list[Parameter]) -> list[LogEvent]:
+		"""Validate this plugin's CLI-sourced config and register its parameters on the graph's CLI signature.
+
+		A single CLI parameter may legitimately be declared by several plugins, as long as every declaration agrees.
+
+		Args:
+			clis: CLI parameters already registered for this graph, keyed by CLI name. Extended in place.
+			params: Signature parameters accumulated for the graph's typer command. Appended to in place.
+
+		Returns:
+			Log events for any errors or warnings encountered during validation.
+		"""
+		errors = []
+		for (name, param) in self.cli.items():
+			if param.cli == '':
+				errors.append(LogEvent('error', 'blank_cli', { 'field': name }))
+				continue
+
+			if param.cli in clis:
+				if param != clis[param.cli]:
+					errors.append(LogEvent('error', 'cli_def_mismatch', { 'cli': param.cli }))
+					continue
+			else:
+				clis[param.cli] = param
+				params.append(param.as_param())
+
+			if name in self.config:
+				errors.append(LogEvent('warn', 'cli_config_override', { 'field': name }))
+
+		return errors
+
+	def populate_config_with_cli(self, cli_kwargs:dict[str, Any]):
+		"""Inject CLI-supplied values into ``config``, overwriting any static defaults.
+
+		Args:
+			cli_kwargs: The resolved CLI keyword arguments from the graph's typer command invocation.
+		"""
+
+		for name, param in self.cli.items():
+			if param.cli in cli_kwargs:
+				self.config[name] = cli_kwargs[param.cli]
+
+	@classmethod
+	def try_deserialise(cls, val:Any) -> Self|Any:
+		"""Coerce a bare string or raw dict into a ``GraphConfigNodePlugin``, used as a pyserde field deserialiser.
+
+		Args:
+			val: The raw value from deserialisation — a ``str`` (plugin name shorthand), a ``dict`` (full mapping), or an already-constructed instance.
+
+		Returns:
+			A ``GraphConfigNodePlugin`` for string and dict inputs; ``val`` unchanged otherwise.
+		"""
+
+		return cls(name=val) if isinstance(val, str) else from_dict(cls, val) if isinstance(val, dict) else val
+
+@serde
 @dataclass(slots=True, frozen=True)
-class GraphConfigNode:  # pylint: disable=too-many-instance-attributes
+class GraphConfigNode:
 	"""One node definition from a graph YAML file.
 
 	Attributes:
 		id: The unique runtime id of the node within the graph.
-		module: The exported module plugin name to instantiate for this node.
-		config: Module-specific configuration passed to the module constructor when supported.
-		contract: The exported contract plugin name governing both ends of this node, or ``""`` for the default contract.
-		contract_config: Contract-specific configuration passed to the contract constructor when supported.
-		input_contract: The exported contract plugin name overriding ``contract`` for input scheduling, or ``""`` to leave the input end to ``contract``.
-		input_contract_config: Input-contract-specific configuration passed to the input contract's constructor when supported.
-		output_contract: The exported contract plugin name overriding ``contract`` for output processing, or ``""`` to leave the output end to ``contract`` (which processes outputs only if it defines ``process_outputs``).
-		output_contract_config: Output-contract-specific configuration passed to the output contract's constructor when supported.
-		cli_config: CLI parameter descriptors that supply module config fields at construction time.
-		cli_contract_config: CLI parameter descriptors that supply contract config fields at construction time.
-		cli_input_contract_config: CLI parameter descriptors that supply input-contract config fields at construction time.
-		cli_output_contract_config: CLI parameter descriptors that supply output-contract config fields at construction time.
+		module: The module plugin reference (name, static config, and CLI-sourced config fields).
+		contract: The general contract plugin reference governing both ends of this node.
+		input_contract: Contract plugin reference overriding ``contract`` for input scheduling only.
+		output_contract: Contract plugin reference overriding ``contract`` for output processing only.
 		contract_port_mappings: Declares the contract-port input surface the node presents to the validator. Keys are the contract-accepted port names (where edges deliver); values are the module ``run(...)`` signature ports each contract port forwards to. ``None`` (the default) means the surface is the module signature itself.
 	"""
 
 	id: str
-	module: str
-	config: dict = field(default_factory=dict)
-	contract: str = field(default="")
-	contract_config: dict = field(default_factory=dict)
-	input_contract: str = field(default="")
-	input_contract_config: dict = field(default_factory=dict)
-	output_contract: str = field(default="")
-	output_contract_config: dict = field(default_factory=dict)
-	cli_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
-	cli_contract_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
-	cli_input_contract_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
-	cli_output_contract_config: dict[str, GraphConfigSrcCLI] = field(default_factory=dict)
+	module:GraphConfigNodePlugin = field(default_factory=GraphConfigNodePlugin, deserializer=GraphConfigNodePlugin.try_deserialise)
+	contract:GraphConfigNodePlugin = field(default_factory=GraphConfigNodePlugin, deserializer=GraphConfigNodePlugin.try_deserialise)
+	input_contract:GraphConfigNodePlugin = field(default_factory=GraphConfigNodePlugin, deserializer=GraphConfigNodePlugin.try_deserialise)
+	output_contract:GraphConfigNodePlugin = field(default_factory=GraphConfigNodePlugin, deserializer=GraphConfigNodePlugin.try_deserialise)
 	contract_port_mappings: dict[str, list[str]]|None = field(default=None)
+
+	def populate_configs_with_cli(self, cli_kwargs:dict[str, Any]):
+		"""Propagate CLI-supplied values into every plugin's config on this node.
+
+		Args:
+			cli_kwargs: The resolved CLI keyword arguments from the graph's typer command invocation.
+		"""
+
+		self.module.populate_config_with_cli(cli_kwargs)
+		self.contract.populate_config_with_cli(cli_kwargs)
+		self.input_contract.populate_config_with_cli(cli_kwargs)
+		self.output_contract.populate_config_with_cli(cli_kwargs)
 
 @serde
 @dataclass(slots=True, frozen=True)

@@ -14,9 +14,10 @@ Joins inputs by correlation key like `keyed_join`, but uses each port's `branch_
 ## Config
 
 ```yaml
-contract: branch_aware_join
-contract_config:
-  key_field: request_id
+contract:
+  name: branch_aware_join
+  config:
+    key_field: request_id
 ```
 
 | Field | Type | Purpose |
@@ -61,9 +62,10 @@ Note that the `**kwargs` above makes this module non-definite-input: its ports c
 nodes:
   - id: aggregator
     module: merge_results
-    contract: branch_aware_join
-    contract_config:
-      key_field: request_id
+    contract:
+      name: branch_aware_join
+      config:
+        key_field: request_id
 ```
 
 For `request_id=7`, branch A delivers `{"request_id": 7, "result": "ok"}` and branch B delivers nothing for that key. The module receives `{"branch_a": <payload>}` — branch B is excluded, so the module's `branch_b=None` default applies.

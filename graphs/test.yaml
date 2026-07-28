@@ -6,9 +6,8 @@ contracts:
 nodes:
 # --- setup: root config (run once, reimplemented) ---
 - id: discover-root
-  module: discover-config-file
+  module: { name: discover-config-file, config: { filename: root_config.yaml } }
   contract: default
-  config: { filename: root_config.yaml }
 - { id: prepend-path,    module: prepend-cwd-path,  contract: default }
 - { id: parse-root,      module: parse-root-config, contract: unit }
 - { id: select-platform, module: select-platform,   contract: unit }
@@ -28,102 +27,77 @@ nodes:
 - { id: select, module: select-tests, contract: default }
 - id: filter
   module: filter-reglvl
-  contract: default
-  contract_config: { persistent_inputs: [ builder_cfg, reg_level, start_level ] }
+  contract: { name: default, config: { persistent_inputs: [ builder_cfg, reg_level, start_level ] } }
 - { id: load-model, module: load-model, contract: default }
 - id: sweep
   module: expand-sweep
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ root_cfg ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ root_cfg ] } }
 
 # --- per-test prep ---
 - id: preproc
   module: run-preproc
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ root_cfg ], unwrap: true, ignore: [ test, fail ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ root_cfg ], unwrap: true, ignore: [ test, fail ] } }
 - id: gate-pre
-  module: early-stop-gate
-  contract: keyed_join
-  config: { phase: pre }
-  contract_config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] }
+  module: { name: early-stop-gate, config: { phase: pre } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] } }
 - id: filelist
   module: write-filelist
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true, ignore: [ test, fail ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true, ignore: [ test, fail ] } }
 
 # --- compile (run-process #1) ---
 - id: cc-build
   module: build-compile-cmd
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ], unwrap: true, ignore: [ test, command ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir, work_dir ], unwrap: true, ignore: [ test, command ] } }
 - id: cc-run
   module: run-process
-  contract: default
-  contract_config: { persistent_inputs: [ env_ready, work_dir ] }
+  contract: { name: default, config: { persistent_inputs: [ env_ready, work_dir ] } }
 - id: cc-int
   module: interpret-compile
-  contract: keyed_join
-  contract_config: { key_field: key, unwrap: true, ignore: [ test, fail ] }
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true, ignore: [ test, fail ] } }
 - id: gate-comp
-  module: early-stop-gate
-  contract: keyed_join
-  config: { phase: comp }
-  contract_config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] }
+  module: { name: early-stop-gate, config: { phase: comp } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] } }
 
 # --- run-id fan-out + sim (run-process #2) ---
 - id: runs
   module: expand-runs
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ run_ids ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ run_ids ] } }
 - id: seed
   module: resolve-seed
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ], unwrap: true, ignore: [ test, fail ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ], unwrap: true, ignore: [ test, fail ] } }
 - id: sim-build
   module: build-sim-cmd
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ], unwrap: true, ignore: [ test, command, randseed ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ], unwrap: true, ignore: [ test, command, randseed ] } }
 - id: sim-run
-  module: run-process
-  config: { grace_s: 5.0 }
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ env_ready, work_dir ], unwrap: true, ignore: [ default ] }
+  module: { name: run-process, config: { grace_s: 5.0 } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ env_ready, work_dir ], unwrap: true, ignore: [ default ] } }
 - id: randseed
   module: write-randseed
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ] } }
 - id: link-latest
   module: link-latest
-  contract: keyed_join
-  contract_config: { key_field: key, persistent_inputs: [ work_dir ] }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ] } }
 - id: sim-int
   module: interpret-sim
-  contract: keyed_join
-  contract_config: { key_field: key }
+  contract: { name: keyed_join, config: { key_field: key } }
 - id: gate-sim
-  module: early-stop-gate
-  contract: keyed_join
-  config: { phase: sim }
-  contract_config: { key_field: key, persistent_inputs: [ early_stop ] }
+  module: { name: early-stop-gate, config: { phase: sim } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ] } }
 
 # --- post (terminal nodes; result ports fan into results-summary, see below) ---
 - id: route-post
   module: route-post
-  contract: keyed_join
-  contract_config: { key_field: key }
+  contract: { name: keyed_join, config: { key_field: key } }
 - id: parse-log
   module: parse-log
-  contract: keyed_join
-  contract_config: { key_field: key }
+  contract: { name: keyed_join, config: { key_field: key } }
 - id: parse-uvm-log
   module: parse-uvm-log
-  contract: keyed_join
-  contract_config: { key_field: key }
+  contract: { name: keyed_join, config: { key_field: key } }
 # --- results summary (in-graph): the 13 terminal TestResult ports fan in via the any contract ---
 - id: results-summary
   module: summarise-results
-  contract: any
-  contract_config: { mapping: result }
+  contract: { name: any, config: { mapping: result } }
   contract_port_mappings:
     compile_fail: [result]
     sim_timeout:  [result]

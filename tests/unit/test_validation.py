@@ -3,7 +3,7 @@
 from collections import OrderedDict
 from unittest.mock import MagicMock
 
-from rtl_comrade.config import GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort, GraphConfigDstPort
+from rtl_comrade.config import GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcPort, GraphConfigDstPort
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.node import Connection
 from rtl_comrade.port import Port
@@ -18,7 +18,7 @@ from rtl_comrade.validation import (
 
 
 def _node(id_):
-	return GraphConfigNode(id=id_, module="m")
+	return GraphConfigNode(id=id_, module=GraphConfigNodePlugin(name="m"))
 
 
 def _edge(src, dst):

@@ -67,45 +67,6 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 			log.fatal('cli_invalid_parameter_name', context='harness.graph.validation_config', name=e.name)
 			return None  # pragma: no cover
 
-	@staticmethod
-	def validate_cli_config(clis:dict[str, GraphConfigSrcCLI], params:list[Parameter], cli_config:dict[str, GraphConfigSrcCLI], config:dict[str, Any]) -> bool:
-		"""Validate one node's CLI-sourced config block and register its parameters on the graph's CLI signature.
-
-		Called once per config block a node can carry — ``config``, ``contract_config``, ``input_contract_config`` and
-		``output_contract_config`` — so a single CLI parameter may legitimately be declared by several blocks, as long as
-		every declaration agrees. Callers bind the node and block identity into the log context beforehand.
-
-		Args:
-			clis: CLI parameters already registered for this graph, keyed by CLI name. Extended in place.
-			params: Signature parameters accumulated for the graph's typer command. Appended to in place.
-			cli_config: The block's CLI parameter descriptors, keyed by the config field each one supplies.
-			config: The corresponding literal config block, checked so a field CLI-supplied and literally set is warned about.
-
-		Returns:
-			``True`` if any error was logged for this block, otherwise ``False``.
-		"""
-
-		errors = False
-		for (name, param) in cli_config.items():
-			if param.cli == '':
-				log.error('blank_cli', context='harness.graph_config.validation', field=name)
-				errors = True
-				continue
-
-			if param.cli in clis:
-				if param != clis[param.cli]:
-					log.error('cli_def_mismatch', context='harness.graph_config.validation', cli=param.cli)
-					errors = True
-					continue
-			else:
-				clis[param.cli] = param
-				params.append(param.as_param())
-
-			if name in config:
-				log.warn('cli_config_override', context='harness.graph_config.validation', field=name)
-
-		return errors
-
 	@classmethod
 	def from_file_config(cls, config:GraphFileConfig, relative_path:Path=Path()) -> Self:
 		"""Expand CLI edges into SrcPort replacements and collect cli_sources.
@@ -164,24 +125,24 @@ class GraphConfig:  # pylint: disable=too-many-instance-attributes
 			log.fatal('invalid_cli_edges', context='harness.graph_config.validation')
 
 		# Process node config CLI params
+		errors = []
 		for (i, node) in enumerate(config.nodes):
-			bind_contextvars(index=i, node=node.id)
+			bind_contextvars(context='harness.graph_config.validation', index=i, node=node.id)
 			bind_contextvars(config_type='config')
-			node_errors = cls.validate_cli_config(clis, params, node.cli_config, node.config)
+			errors += node.module.validate_cli_config(clis, params)
 
 			bind_contextvars(config_type='contract_config')
-			contract_errors = cls.validate_cli_config(clis, params, node.cli_contract_config, node.contract_config)
+			errors += node.contract.validate_cli_config(clis, params)
 
 			bind_contextvars(config_type='input_contract_config')
-			input_contract_errors = cls.validate_cli_config(clis, params, node.cli_input_contract_config, node.input_contract_config)
+			errors += node.input_contract.validate_cli_config(clis, params)
 
 			bind_contextvars(config_type='output_contract_config')
-			output_contract_errors = cls.validate_cli_config(clis, params, node.cli_output_contract_config, node.output_contract_config)
+			errors += node.output_contract.validate_cli_config(clis, params)
 
-			unbind_contextvars('index', 'node', 'config_type')
-			errors |= node_errors or contract_errors or input_contract_errors or output_contract_errors
+			unbind_contextvars('context', 'index', 'node', 'config_type')
 
-		if errors:
+		if any(map(lambda log_event: log_event.log(log), errors)):
 			log.fatal('invalid_cli_config', context='harness.graph_config.validation')
 
 		# Validate edges

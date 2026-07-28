@@ -3,7 +3,7 @@
 import pytest
 import typer
 
-from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcCLI, GraphFileConfig
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcCLI, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 
@@ -73,8 +73,7 @@ def test_it24_blank_cli_name_in_cli_config(logging_handler, tmp_path):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="")},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="")}),
 			)
 		],
 		edges=[],
@@ -88,8 +87,7 @@ def test_it25b_mismatched_cli_across_edge_and_config(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="collect",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="value", default=5)},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value", default=5)}),
 			)
 		],
 		edges=[
@@ -108,13 +106,11 @@ def test_it26b_mismatched_cli_across_nodes(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="value")},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")}),
 			),
 			GraphConfigNode(
 				id="n2",
-				module="m",
-				cli_config={"field": GraphConfigSrcCLI(cli="value", default=5)},
+				module=GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value", default=5)}),
 			),
 		],
 		edges=[],
@@ -128,8 +124,8 @@ def test_it28_blank_cli_name_in_cli_contract_config(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="")},
+				module=GraphConfigNodePlugin(name="m"),
+				contract=GraphConfigNodePlugin(cli={"limit": GraphConfigSrcCLI(cli="")}),
 			)
 		],
 		edges=[],
@@ -143,13 +139,13 @@ def test_it29b_mismatched_cli_across_contract_configs(logging_handler):
 		nodes=[
 			GraphConfigNode(
 				id="n1",
-				module="m",
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n")},
+				module=GraphConfigNodePlugin(name="m"),
+				contract=GraphConfigNodePlugin(cli={"limit": GraphConfigSrcCLI(cli="n")}),
 			),
 			GraphConfigNode(
 				id="n2",
-				module="m",
-				cli_contract_config={"limit": GraphConfigSrcCLI(cli="n", default=5)},
+				module=GraphConfigNodePlugin(name="m"),
+				contract=GraphConfigNodePlugin(cli={"limit": GraphConfigSrcCLI(cli="n", default=5)}),
 			),
 		],
 		edges=[],

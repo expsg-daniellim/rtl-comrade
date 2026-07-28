@@ -75,15 +75,15 @@ class Graph:
 		cli_ids:list[str] = []
 		errors = False
 		for i, node in enumerate(config.nodes):
-			if node.module not in module_mappings:
-				log.error('invalid_module', context='harness.graph.node', index=i, id=node.id, mod=node.module)
+			if node.module.name not in module_mappings:
+				log.error('invalid_module', context='harness.graph.node', index=i, id=node.id, mod=node.module.name)
 				errors = True
 				continue
 
 			# Determine the node's input-port surface and definiteness.
 			ports = None
 			definite_inputs_override = node.contract_port_mappings is not None
-			mod = module_mappings[node.module]
+			mod = module_mappings[node.module.name]
 			if node.contract_port_mappings is not None:
 				# An invalid target is an indefinite input with no contract_port_mapping which cannot be statically validated
 				invalid_targets = [ target for targets in node.contract_port_mappings.values() for target in targets if target not in mod.ports ] if mod.structure.definite_inputs else []
@@ -107,11 +107,11 @@ class Graph:
 
 			# Consolidate contract definitions
 			# Check for obsolete contract - contract smothered by input_contract and output_contract on top
-			if node.contract != '' and node.input_contract != '' and node.output_contract != '':
+			if not node.contract.is_default() and not node.input_contract.is_default() and not node.output_contract.is_default():
 				log.warn('obsolete_contract', context='harness.graph.node', index=i, id=node.id)
 
 			try:
-				contract_definitions = ContractDefinitions.from_node_config(node, contract_mappings)
+				contract_definitions = ContractDefinitions.from_config(node.contract, node.input_contract, node.output_contract, contract_mappings)
 			except MissingContractError as e:
 				log.error('invalid_contract', context='harness.graph.node', index=i, id=node.id, field=e.field, contract=e.name, available=e.available)
 				errors = True
@@ -130,25 +130,9 @@ class Graph:
 				continue
 
 			required_ports = [ edge.dst.port for edge in config.edges if edge.dst.node == node.id and edge.dst.required ]
+			node.populate_configs_with_cli(cli_kwargs)
 
-			# Populate configs with CLI args
-			for name, param in node.cli_config.items():
-				if param.cli in cli_kwargs:
-					node.config[name] = cli_kwargs[param.cli]
-
-			for name, param in node.cli_contract_config.items():
-				if param.cli in cli_kwargs:
-					node.contract_config[name] = cli_kwargs[param.cli]
-
-			for name, param in node.cli_input_contract_config.items():
-				if param.cli in cli_kwargs:
-					node.input_contract_config[name] = cli_kwargs[param.cli]
-
-			for name, param in node.cli_output_contract_config.items():
-				if param.cli in cli_kwargs:
-					node.output_contract_config[name] = cli_kwargs[param.cli]
-
-			prenodes[node.id] = PreNode(id=node.id, module=mod, config=node.config, contract_definitions=contract_definitions, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
+			prenodes[node.id] = PreNode(id=node.id, module=mod, config=node.module.config, contract_definitions=contract_definitions, relative_path=config.relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
 
 		if errors:
 			log.fatal('invalid_nodes', context='harness.graph.validation')

@@ -20,7 +20,7 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 import typer
 
 from .api import ContractPort
-from .config import GraphConfigNode
+from .config import GraphConfigNodePlugin
 from .contract_default import DefaultContract
 from .logging import HarnessLogger
 from .port import Port
@@ -280,11 +280,13 @@ class ContractDefinitions(Generic[C, IC, OC]):
 		return contract, input_contract, output_contract
 
 	@classmethod
-	def from_node_config(cls, node:GraphConfigNode, contract_mappings:dict[str, Any]) -> Self:
-		"""Resolve all three of a config node's contract fields.
+	def from_config(cls, contract:GraphConfigNodePlugin, input_contract:GraphConfigNodePlugin, output_contract:GraphConfigNodePlugin, contract_mappings:dict[str, Any]) -> Self:
+		"""Resolve all three of a node's contract configurations.
 
 		Args:
-			node: The graph config node whose contract fields are being resolved.
+			contract: The general contract configuration.
+			input_contract: The input-contract configuration override.
+			output_contract: The output-contract configuration override.
 			contract_mappings: Loaded contract plugin classes keyed by exported name.
 
 		Returns:
@@ -297,14 +299,14 @@ class ContractDefinitions(Generic[C, IC, OC]):
 			InvalidContractParameterTypeError: ``process_outputs`` annotates ``port`` as something other than ``str``.
 		"""
 
-		input_contract =ContractDefinition.from_config('input_contract', node.input_contract, contract_mappings, node.input_contract_config)
-		output_contract = ContractDefinition.from_config('output_contract', node.output_contract, contract_mappings, node.output_contract_config)
-		contract = ContractDefinition.from_config('contract', node.contract, contract_mappings, node.contract_config)
+		input_contract_def = ContractDefinition.from_config('input_contract', input_contract.name, contract_mappings, input_contract.config)
+		output_contract_def = ContractDefinition.from_config('output_contract', output_contract.name, contract_mappings, output_contract.config)
+		contract_def = ContractDefinition.from_config('contract', contract.name, contract_mappings, contract.config)
 
-		if contract is None: # To satisfy the type checker
+		if contract_def is None: # To satisfy the type checker
 			log.fatal('unreachable_error')
 
-		return cls(contract, input_contract, output_contract)
+		return cls(contract_def, input_contract_def, output_contract_def)
 
 	@classmethod
 	def default(cls) -> Self:

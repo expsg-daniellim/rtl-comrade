@@ -20,7 +20,7 @@ import typer
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from rtl_comrade.app import App, CommandConfig, RtlComradeConfig
-from rtl_comrade.config import GraphConfigNode
+from rtl_comrade.config import GraphConfigNode, GraphConfigNodePlugin
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 from rtl_comrade.loader_logger import LoggingHandlerConfig, LoggingConfig
@@ -104,7 +104,7 @@ def test_processor_function_runs_before_console_renderer(tmp_path):
 			return event_dict
 	""")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -135,7 +135,7 @@ def test_include_default_false_terminal_str_processor_renders(tmp_path):
 			return 'RENDERED:' + str(event_dict.get('event'))
 	""")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -171,7 +171,7 @@ def test_drop_event_suppresses_output(tmp_path):
 			return event_dict
 	""")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -200,7 +200,7 @@ def test_failure_preserved_when_render_false(tmp_path):
 	app = _make_app(stream)
 	mods = _logging_module(tmp_path, level="error", event="boom")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -234,7 +234,7 @@ def test_custom_handler_receives_records(tmp_path):
 				CaptureHandler.records.append(record.msg)
 	""")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -279,7 +279,7 @@ def test_custom_handler_never_sees_critical(tmp_path):
 				CritWatch.seen.append((record.levelno, record.msg))
 	""")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="fatal", module="fatal")],
+		nodes=[GraphConfigNode(id="fatal", module=GraphConfigNodePlugin(name="fatal"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -314,7 +314,7 @@ def test_merge_contextvars_on_foreign_stdlib_log(tmp_path):
 				return None
 	""")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],
@@ -341,7 +341,7 @@ def test_empty_handlers_include_default_false_warns_no_renderers(tmp_path):
 	app = _make_app(stream)
 	mods = _logging_module(tmp_path, event="quiet")
 	config = GraphConfig(
-		nodes=[GraphConfigNode(id="emit", module="emit")],
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
 		edges=[],
 		modules=[_pfc(mods)],
 		contracts=[],

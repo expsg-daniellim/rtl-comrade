@@ -7,7 +7,7 @@ import pytest
 import typer
 
 from rtl_comrade.api import EndSentinel
-from rtl_comrade.config import GraphConfigNode
+from rtl_comrade.config import GraphConfigNodePlugin
 from rtl_comrade.contract import ContractDefinition, ContractDefinitions, InvalidContractParameterTypeError, MissingContractFunctionError, MissingContractParameterError
 from rtl_comrade.contract_default import DefaultContract
 from rtl_comrade.port import Port
@@ -153,18 +153,18 @@ def test_construct_shares_one_port_surface_across_roles(logging_handler):
 	assert contract.ports["a"] is output_contract.ports["a"]
 
 
-# --- from_node_config ---
+# --- from_config ---
 
 
-def test_from_node_config_unset_fields_resolve_to_default_contract():
-	definitions = ContractDefinitions.from_node_config(GraphConfigNode(id="n1", module="m"), MAPPINGS)
+def test_from_config_unset_fields_resolve_to_default_contract():
+	definitions = ContractDefinitions.from_config(GraphConfigNodePlugin(), GraphConfigNodePlugin(), GraphConfigNodePlugin(), MAPPINGS)
 	assert definitions.contract.Contract is DefaultContract
 	assert definitions.input_contract is None
 	assert definitions.output_contract is None
 
 
-def test_from_node_config_unresolved_contract_fatal(logging_handler):
+def test_from_config_unresolved_contract_fatal(logging_handler):
 	# The general contract never resolves to None in practice; the guard exists to satisfy the type checker.
 	with patch.object(ContractDefinition, 'from_config', return_value=None):
 		with pytest.raises(typer.Exit):
-			ContractDefinitions.from_node_config(GraphConfigNode(id="n1", module="m"), MAPPINGS)
+			ContractDefinitions.from_config(GraphConfigNodePlugin(), GraphConfigNodePlugin(), GraphConfigNodePlugin(), MAPPINGS)

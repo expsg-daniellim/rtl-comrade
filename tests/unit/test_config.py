@@ -1,4 +1,4 @@
-"""Unit tests for config.py — GraphFileConfig deserialization."""
+"""Unit tests for config.py — GraphFileConfig deserialization and GraphConfigNodePlugin validation."""
 
 from pathlib import Path
 
@@ -9,6 +9,7 @@ from rtl_comrade.config import (
 	GraphConfigDstPort,
 	GraphConfigEdge,
 	GraphConfigNode,
+	GraphConfigNodePlugin,
 	GraphConfigSrcCLI,
 	GraphConfigSrcPort,
 )
@@ -20,12 +21,12 @@ from rtl_comrade.config import (
 def test_node_required_fields_only():
 	n = from_dict(GraphConfigNode, {"id": "foo", "module": "bar"})
 	assert n.id == "foo"
-	assert n.module == "bar"
-	assert n.config == {}
-	assert n.contract == ""
-	assert n.contract_config == {}
-	assert n.cli_config == {}
-	assert n.cli_contract_config == {}
+	assert n.module.name == "bar"
+	assert n.module.config == {}
+	assert n.contract.name == ""
+	assert n.contract.config == {}
+	assert n.module.cli == {}
+	assert n.contract.cli == {}
 
 
 def test_node_full():
@@ -33,15 +34,13 @@ def test_node_full():
 		GraphConfigNode,
 		{
 			"id": "n1",
-			"module": "m1",
-			"config": {"k": 1},
-			"contract": "c1",
-			"contract_config": {"x": 2},
+			"module": {"name": "m1", "config": {"k": 1}},
+			"contract": {"name": "c1", "config": {"x": 2}},
 		},
 	)
-	assert n.config == {"k": 1}
-	assert n.contract == "c1"
-	assert n.contract_config == {"x": 2}
+	assert n.module.config == {"k": 1}
+	assert n.contract.name == "c1"
+	assert n.contract.config == {"x": 2}
 
 
 def test_node_contract_port_mappings_absent_is_none():
@@ -66,21 +65,70 @@ def test_node_cli_config():
 		GraphConfigNode,
 		{
 			"id": "n1",
-			"module": "m1",
-			"cli_config": {
-				"file": {"cli": "input_file", "type": "str", "help": "Input file"},
-			},
-			"cli_contract_config": {
-				"persistent_inputs": {"cli": "persist", "type": "str"},
-			},
+			"module": {"name": "m1", "cli": {"file": {"cli": "input_file", "type": "str", "help": "Input file"}}},
+			"contract": {"cli": {"persistent_inputs": {"cli": "persist", "type": "str"}}},
 		},
 	)
-	assert "file" in n.cli_config
-	assert isinstance(n.cli_config["file"], GraphConfigSrcCLI)
-	assert n.cli_config["file"].cli == "input_file"
-	assert n.cli_config["file"].type == "str"
-	assert "persistent_inputs" in n.cli_contract_config
-	assert n.cli_contract_config["persistent_inputs"].cli == "persist"
+	assert "file" in n.module.cli
+	assert isinstance(n.module.cli["file"], GraphConfigSrcCLI)
+	assert n.module.cli["file"].cli == "input_file"
+	assert n.module.cli["file"].type == "str"
+	assert "persistent_inputs" in n.contract.cli
+	assert n.contract.cli["persistent_inputs"].cli == "persist"
+
+
+# --- GraphConfigNodePlugin.validate_cli_config ---
+
+
+def test_validate_cli_config_no_cli_params():
+	plugin = GraphConfigNodePlugin(name="m")
+	errors = plugin.validate_cli_config({}, [])
+	assert errors == []
+
+
+def test_validate_cli_config_registers_new_param():
+	plugin = GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")})
+	clis = {}
+	params = []
+	errors = plugin.validate_cli_config(clis, params)
+	assert errors == []
+	assert "value" in clis
+	assert len(params) == 1
+
+
+def test_validate_cli_config_blank_cli_name():
+	plugin = GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="")})
+	errors = plugin.validate_cli_config({}, [])
+	assert len(errors) == 1
+	assert errors[0].level == 'error'
+	assert errors[0].event == 'blank_cli'
+
+
+def test_validate_cli_config_duplicate_matching_dedup():
+	existing = GraphConfigSrcCLI(cli="value")
+	plugin = GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")})
+	clis = {"value": existing}
+	params = []
+	errors = plugin.validate_cli_config(clis, params)
+	assert errors == []
+	assert len(params) == 0
+
+
+def test_validate_cli_config_duplicate_mismatched():
+	existing = GraphConfigSrcCLI(cli="value", default=5)
+	plugin = GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="value")})
+	errors = plugin.validate_cli_config({"value": existing}, [])
+	assert len(errors) == 1
+	assert errors[0].level == 'error'
+	assert errors[0].event == 'cli_def_mismatch'
+
+
+def test_validate_cli_config_static_override_warns():
+	plugin = GraphConfigNodePlugin(name="m", config={"field": 0}, cli={"field": GraphConfigSrcCLI(cli="value")})
+	errors = plugin.validate_cli_config({}, [])
+	assert len(errors) == 1
+	assert errors[0].level == 'warn'
+	assert errors[0].event == 'cli_config_override'
 
 
 # --- GraphConfigSrcPort ---

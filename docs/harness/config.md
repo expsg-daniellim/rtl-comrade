@@ -20,6 +20,7 @@ This file defines the serde-backed graph configuration schema consumed by the ha
 
 - `GraphFileConfig` — serde-backed YAML schema; the direct output of deserialising a graph file
 - `GraphConfigNode`
+- `GraphConfigNodePlugin` — a unified plugin reference (name, config, CLI fields) used for both module and contract fields on `GraphConfigNode`
 - `GraphConfigEdge`
 - `GraphConfigSrcPort`
 - `GraphConfigSrcCLI`
@@ -33,19 +34,19 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 ## GraphFileConfig Schema
 
 - `modules`, `contracts`: `list[Path]` plugin paths from the YAML file
-- `nodes`: node definitions with `id`, `module`, `config`, the three contract-name fields and their config dicts (`contract`/`contract_config`, `input_contract`/`input_contract_config`, `output_contract`/`output_contract_config`), the four CLI config blocks (`cli_config`, `cli_contract_config`, `cli_input_contract_config`, `cli_output_contract_config`), and `contract_port_mappings`
+- `nodes`: node definitions with `id`, four `GraphConfigNodePlugin` fields (`module`, `contract`, `input_contract`, `output_contract`), and `contract_port_mappings`
 - `edges`: edges with `src` (either a `GraphConfigSrcPort` or `GraphConfigSrcCLI`) and `dst`
 - `logging`: `LoggingConfig` (defined in [loader_logger.md](loader_logger.md)) — optional per-graph custom logging configuration; defaults to an empty config. Carried through to `GraphConfig` unchanged. See [logging.md](logging.md) and the [config schema](../harness_configs/graph.md).
 
 `GraphConfigEdge.src` is a union deserialized with `Untagged` serde tagging; the schema is tried as `GraphConfigSrcPort` first, then `GraphConfigSrcCLI`.
 
-`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string). Used both as edge sources and as values in any of `GraphConfigNode`'s four `cli_*_config` blocks.
+`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string). Used both as edge sources and as values in each `GraphConfigNodePlugin`'s `cli` block.
 
-Each `cli_*_config` block is a `dict[str, GraphConfigSrcCLI]` where the dict key is the `Config` field name to inject into and the value is the CLI parameter descriptor. There is one block per config dict a node carries: `cli_config` → `config`, `cli_contract_config` → `contract_config`, `cli_input_contract_config` → `input_contract_config`, `cli_output_contract_config` → `output_contract_config`. The file defines `GraphConfigSrcCLI` before `GraphConfigNode` so the field type is directly resolvable at class definition time.
+Each `GraphConfigNodePlugin` carries a `cli: dict[str, GraphConfigSrcCLI]` block where the dict key is the `Config` field name to inject into and the value is the CLI parameter descriptor. The file defines `GraphConfigSrcCLI` before `GraphConfigNodePlugin` so the field type is directly resolvable at class definition time.
 
 ## Contract Fields
 
-`GraphConfigNode` carries three contract names, each with its own config dict. `contract` is the general one and serves whichever end is not overridden, defaulting to the built-in `DefaultContract` when left `""`. `input_contract` overrides it for input scheduling and `output_contract` for output processing; `""` on either means that end falls back to `contract`. All four config dicts default to empty. Resolution and the interface each role must satisfy are handled by [contract.md](contract.md).
+`GraphConfigNode` carries four `GraphConfigNodePlugin` fields: `module` for the module plugin and three for contracts (`contract`, `input_contract`, `output_contract`). Each plugin field accepts a bare string (just the name) or a full mapping with `name`, `config`, and `cli` keys; the `try_deserialise` classmethod handles both forms during deserialisation. `contract` is the general one and serves whichever end is not overridden, defaulting to the built-in `DefaultContract` when its name is `""`. `input_contract` overrides it for input scheduling and `output_contract` for output processing; an empty name on either means that end falls back to `contract`. Resolution and the interface each role must satisfy are handled by [contract.md](contract.md).
 
 `GraphConfigNode.contract_port_mappings` is `dict[str, list[str]] | None` (default `None`). It declares the contract-port input surface the node presents to the validator: keys are contract-accepted port names (where edges deliver), values are the module `run(...)` parameters each forwards to. `Graph.from_config` consumes it to build the node's port surface and definiteness; see [graph.md](graph.md) and the [config schema](../harness_configs/graph.md).
 

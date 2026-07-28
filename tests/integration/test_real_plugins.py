@@ -14,7 +14,7 @@ What this covers that other tests do not:
 import shutil
 from pathlib import Path
 
-from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigSrcPort
+from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcPort
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.graph import Graph
 from rtl_comrade.loader_plugin import load_plugin_config
@@ -46,10 +46,10 @@ def test_real_plugins_load_and_run(logging_handler, tmp_path):
 		modules=load_plugin_config(tmp_path / "modules"),
 		contracts=load_plugin_config(tmp_path / "contracts"),
 		nodes=[
-			GraphConfigNode(id="file-1", module="fileread", config={"file": str(tmp_path / "file1.txt")}, contract="zip", contract_config={}),
-			GraphConfigNode(id="file-2", module="fileread", config={"file": str(tmp_path / "file2.txt")}, contract="zip", contract_config={}),
-			GraphConfigNode(id="add",    module="add",      config={},                                    contract="zip", contract_config={}),
-			GraphConfigNode(id="output", module="stdout",   config={},                                    contract="zip", contract_config={}),
+			GraphConfigNode(id="file-1", module=GraphConfigNodePlugin(name="fileread", config={"file": str(tmp_path / "file1.txt")}), contract=GraphConfigNodePlugin(name="zip")),
+			GraphConfigNode(id="file-2", module=GraphConfigNodePlugin(name="fileread", config={"file": str(tmp_path / "file2.txt")}), contract=GraphConfigNodePlugin(name="zip")),
+			GraphConfigNode(id="add",    module=GraphConfigNodePlugin(name="add"),      contract=GraphConfigNodePlugin(name="zip")),
+			GraphConfigNode(id="output", module=GraphConfigNodePlugin(name="stdout"),   contract=GraphConfigNodePlugin(name="zip")),
 		],
 		edges=[
 			GraphConfigEdge(src=GraphConfigSrcPort(node="file-1", port="default"), dst=GraphConfigDstPort(node="add",    port=1)),

@@ -9,9 +9,10 @@ Groups incoming items by a correlation key and invokes the module when all requi
 ## Config
 
 ```yaml
-contract: keyed_join
-contract_config:
-  key_field: test_id
+contract:
+  name: keyed_join
+  config:
+    key_field: test_id
 ```
 
 | Field | Type | Purpose |
@@ -35,10 +36,11 @@ A port named in `persistent_inputs` is a singleton side-channel: its latest valu
 - A persistent port ending neither terminates the join nor participates in key completeness — termination is driven by the keyed ports.
 
 ```yaml
-contract: keyed_join
-contract_config:
-  key_field: test_id
-  persistent_inputs: [builder_cfg, logs_dir]
+contract:
+  name: keyed_join
+  config:
+    key_field: test_id
+    persistent_inputs: [builder_cfg, logs_dir]
 ```
 
 ## Unwrapping and rewrapping
@@ -46,10 +48,11 @@ contract_config:
 With `unwrap: true` the contract serves both ends of the node: the module receives bare values and emits bare values, and the correlation key never enters module code.
 
 ```yaml
-contract: keyed_join
-contract_config:
-  unwrap: true
-  ignore: [ run_id ]
+contract:
+  name: keyed_join
+  config:
+    unwrap: true
+    ignore: [run_id]
 ```
 
 On the input end, a payload is unwrapped only when it exposes **both** `key_field` and a `value` beside it — a [`KeyedValue`](../../contracts/sentinels.py) from `contracts.sentinels`, or a dict such as `{"key": 1, "value": 5}`. A self-keyed record (a payload whose other fields *are* the data, like `Command` or `Proc`) has no `value` and is delivered whole, so keyed ports carrying a mix of both need no per-port configuration. Persistent inputs follow the same rule.
@@ -58,7 +61,7 @@ On the output end, every value the module emits is rewrapped as `KeyedValue(key,
 
 Two consequences to design around:
 
-- **Both ends must be the same contract instance**, so set `unwrap` on `contract` / `contract_config`. The assembled key lives on the contract object; separate `input_contract` and `output_contract` slots are separate instances, and the output one never assembles anything.
+- **Both ends must be the same contract instance**, so set `unwrap` in the `contract` plugin's config. The assembled key lives on the contract object; separate `input_contract` and `output_contract` slots are separate instances, and the output one never assembles anything.
 - **`finalise()` output has no key.** It is emitted after the last assembly, so the value travels downstream as the module made it and the contract logs a `no_active_key` warning. A node whose `finalise()` emits an unkeyed summary should list that port in `ignore` to silence it.
 
 Naming `keyed_join` as a node's `contract` always routes its outputs through `process_outputs`. With `unwrap` at its default that is an exact pass-through.
@@ -75,9 +78,10 @@ Ends when all keyed ports have ended. The module fires only for keys every keyed
 nodes:
   - id: aggregate_results
     module: build_test_report
-    contract: keyed_join
-    contract_config:
-      key_field: test_id
+    contract:
+  name: keyed_join
+  config:
+    key_field: test_id
 ```
 
 Linter port delivers `{"test_id": 42, "lint_ok": true}`. Type-checker port delivers `{"test_id": 42, "type_ok": false}`. The module is invoked once with both, keyed on `42`.

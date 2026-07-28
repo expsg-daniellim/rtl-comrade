@@ -9,7 +9,7 @@ This file resolves a config node's contract names into constructed contract obje
 ## See Also
 
 - [README.md](README.md)
-- [graph.md](graph.md) — calls `ContractDefinitions.from_node_config` per node
+- [graph.md](graph.md) — calls `ContractDefinitions.from_config` per node
 - [node.md](node.md) — calls `ContractDefinitions.construct` and invokes the results
 - [config.md](config.md) — the `GraphConfigNode` contract fields being resolved
 - [api.md](api.md) — `ContractPort`, the surface handed to every constructed contract
@@ -33,7 +33,7 @@ The split is deliberate: `ContractDefinition.from_config` runs during graph asse
 
 - `ContractDefinition[T]` — one resolved contract class, its config dict, and the role it fills (`type_`). Produced by `from_config`, consumed by `construct`.
 - `ContractDefinitions[C, IC, OC]` — a node's three contract slots fully unravelled. `contract` is always present; `input_contract` and `output_contract` are `None` when that end is not overridden.
-- `MissingContractError`, `MissingContractFunctionError`, `MissingContractParameterError`, `InvalidContractParameterTypeError` — resolution failures, raised out of `from_node_config` and turned into `ERROR` logs by `graph.py`.
+- `MissingContractError`, `MissingContractFunctionError`, `MissingContractParameterError`, `InvalidContractParameterTypeError` — resolution failures, raised out of `from_config` and turned into `ERROR` logs by `graph.py`.
 
 ## Role Resolution
 
@@ -76,4 +76,4 @@ An input-side contract that does not declare `ports` gets an `init.no_ports` war
 - every constructed contract on a node shares one `ContractPort` mapping, so contracts that both write `port.state` under the same key will clobber each other; that sharing is the intended channel between them, not an accident
 - an output contract receives `ports` when it asks for them, but cannot read from them: reads are disabled outside `get_inputs`, so `get()`/`try_get()` raise `IllegalGetAccessError`. See [port.md](port.md)
 - the `id` injected is `<node-id>.contract` for all three roles, so a node's input and output contracts log under the same id
-- `from_node_config` raises rather than logging, so `graph.py` can attribute each failure to a node index and continue collecting errors across the rest of the graph; the fatal is deferred to the end of the node loop
+- `from_config` raises rather than logging, so `graph.py` can attribute each failure to a node index and continue collecting errors across the rest of the graph; the fatal is deferred to the end of the node loop
