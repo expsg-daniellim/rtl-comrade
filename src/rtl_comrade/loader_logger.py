@@ -34,7 +34,7 @@ class LoggingHandlerConfig:
 	name: str
 	config: dict = field(default_factory=dict)
 
-	def load(self) -> Any:
+	def load(self, relative_path:Path=Path()) -> Any:
 		"""Import this handler's file and return the selected object, classified but not constructed.
 
 		Returns:
@@ -42,7 +42,12 @@ class LoggingHandlerConfig:
 		"""
 
 		# import_plugin_file binds plugin/file context (and context='harness.load.plugin') for its own import-phase diagnostics.
-		module = import_plugin_file(self.path, None, 'logging')
+		if self.path.is_absolute():
+			resolved = self.path
+			module = import_plugin_file(resolved, None, 'logging')
+		else:
+			resolved = relative_path / self.path
+			module = import_plugin_file(resolved, self.path.with_suffix('').as_posix().replace('/', '.'), 'logging')
 		# Rebind context for the selection below; name tags every diagnostic.
 		bind_contextvars(context='harness.load.logging', name=self.name)
 		try:
@@ -97,7 +102,7 @@ class LoggingConfig:
 		processors:list[LoggingPlugin] = []
 		handlers:list[LoggingPlugin] = []
 		for handler_config in self.handlers:
-			plugin = handler_config.load()
+			plugin = handler_config.load(relative_path)
 			spec = LoggingPlugin(plugin=plugin, config=handler_config.config, relative_path=relative_path, name=handler_config.name)
 			if isinstance(plugin, type) and issubclass(plugin, logging.Handler):
 				handlers.append(spec)

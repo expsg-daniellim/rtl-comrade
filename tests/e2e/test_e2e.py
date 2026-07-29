@@ -295,7 +295,7 @@ def _make_proc(tmp_path, key, content):
 	return Proc(key=key, rc=0, stdout_path=log_file, stderr_path=tmp_path / f"{key}.err")
 
 
-def test_parselog_fail_wins_over_pass(tmp_path):
+def test_parselog_fail_wins_over_pass(tmp_path, logging_handler):
 	"""FAIL wins over PASS when both appear in the log ([07 settled 15] correction 2).
 
 	rtl_buddy's VlogPost uses two independent ``if`` blocks so PASS can override FAIL
@@ -304,12 +304,12 @@ def test_parselog_fail_wins_over_pass(tmp_path):
 	test = _make_test_cfg("t")
 	proc = _make_proc(tmp_path, test.key, "PASS result OK\nFAIL run ended\nERR: something wrong\n")
 	mod = ParseLogMod()
-	port, result = mod.run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL", f"Expected FAIL (FAIL wins over PASS), got {result.result}"
+	result = mod.run(test=test, proc=proc)
+	assert result is None
+	assert logging_handler.failure is True
 
 
-def test_parselog_passthrough_not_misclassified(tmp_path):
+def test_parselog_passthrough_not_misclassified(tmp_path, logging_handler):
 	"""PASSTHROUGH does not misclassify as PASS ([07 settled 15] correction 1).
 
 	rtl_buddy's VlogPost uses ``re.search(r'^PASS\\s*(.*)')`` which matches
@@ -319,14 +319,12 @@ def test_parselog_passthrough_not_misclassified(tmp_path):
 	test = _make_test_cfg("t")
 	proc = _make_proc(tmp_path, test.key, "PASSTHROUGH all checks\n")
 	mod = ParseLogMod()
-	port, result = mod.run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result != "PASS", (
-		f"PASSTHROUGH should not produce a PASS verdict, got {result.result}"
-	)
+	result = mod.run(test=test, proc=proc)
+	assert result is None
+	assert logging_handler.failure is True
 
 
-def test_parselog_fail_without_err_no_crash(tmp_path):
+def test_parselog_fail_without_err_no_crash(tmp_path, logging_handler):
 	"""FAIL without ERR:/FAT: does not crash ([07 settled 15] correction 3).
 
 	rtl_buddy's VlogPost does ``match_err.group(2)`` even when ``match_err`` is None,
@@ -335,10 +333,9 @@ def test_parselog_fail_without_err_no_crash(tmp_path):
 	test = _make_test_cfg("t")
 	proc = _make_proc(tmp_path, test.key, "FAIL test ended badly\n")
 	mod = ParseLogMod()
-	port, result = mod.run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert result.desc == "test ended badly"
+	result = mod.run(test=test, proc=proc)
+	assert result is None
+	assert logging_handler.failure is True
 
 
 # ---------------------------------------------------------------------------

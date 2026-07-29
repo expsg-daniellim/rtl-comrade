@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import TestResult, Proc
+from modules.rtl_buddy.schema import Proc
 from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -232,10 +232,7 @@ def test_interpret_compile_fail_rc2_with_stderr(tmp_path, logging_handler):
 	proc = _make_proc(test.key, rc=2, tmp_path=tmp_path, stderr_content="Error: syntax error near 'module'\n")
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert val == TestResult.compile_fail(test.key, test.get_name())
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -245,11 +242,7 @@ def test_interpret_compile_signal_fail(tmp_path, logging_handler):
 	proc = _make_proc(test.key, rc=-11, tmp_path=tmp_path, stderr_content="Segmentation fault\n")
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
-	assert val == TestResult.compile_fail(test.key, test.get_name())
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -259,9 +252,5 @@ def test_interpret_compile_missing_stderr(tmp_path, logging_handler):
 	proc = Proc(key=test.key, rc=1, stdout_path=str(tmp_path / "compile.log"), stderr_path=str(tmp_path / "missing.err"))
 	mod = InterpretCompileMod()
 	results = list(mod.run(test=test, simv=simv, proc=proc))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
-	assert val == TestResult.compile_fail(test.key, test.get_name())
+	assert len(results) == 0
 	assert logging_handler.failure is True

@@ -36,13 +36,13 @@ nodes:
 # --- per-test prep ---
 - id: preproc
   module: run-preproc
-  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ root_cfg ], unwrap: true, ignore: [ test, fail ] } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ root_cfg ], unwrap: true, ignore: [ test ] } }
 - id: gate-pre
   module: { name: early-stop-gate, config: { phase: pre } }
-  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test ] } }
 - id: filelist
   module: write-filelist
-  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true, ignore: [ test, fail ] } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true, ignore: [ test ] } }
 
 # --- compile (run-process #1) ---
 - id: cc-build
@@ -53,10 +53,10 @@ nodes:
   contract: { name: default, config: { persistent_inputs: [ env_ready, work_dir ] } }
 - id: cc-int
   module: interpret-compile
-  contract: { name: keyed_join, config: { key_field: key, unwrap: true, ignore: [ test, fail ] } }
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true, ignore: [ test ] } }
 - id: gate-comp
   module: { name: early-stop-gate, config: { phase: comp } }
-  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test, stop ] } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test ] } }
 
 # --- run-id fan-out + sim (run-process #2) ---
 - id: runs
@@ -64,7 +64,7 @@ nodes:
   contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ run_ids ] } }
 - id: seed
   module: resolve-seed
-  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ], unwrap: true, ignore: [ test, fail ] } }
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ seed_mode, builder_cfg, logs_dir ], unwrap: true, ignore: [ test ] } }
 - id: sim-build
   module: build-sim-cmd
   contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ builder_cfg, builder_mode, logs_dir ], unwrap: true, ignore: [ test, command, randseed ] } }
@@ -84,7 +84,7 @@ nodes:
   module: { name: early-stop-gate, config: { phase: sim } }
   contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ] } }
 
-# --- post (terminal nodes; result ports fan into results-summary, see below) ---
+# --- post (terminal nodes) ---
 - id: route-post
   module: route-post
   contract: { name: keyed_join, config: { key_field: key } }
@@ -94,27 +94,15 @@ nodes:
 - id: parse-uvm-log
   module: parse-uvm-log
   contract: { name: keyed_join, config: { key_field: key } }
-# --- results summary (in-graph): the 13 terminal TestResult ports fan in via the any contract ---
-- id: results-summary
-  module: summarise-results
-  contract: { name: any, config: { mapping: result } }
-  contract_port_mappings:
-    compile_fail: [result]
-    sim_timeout:  [result]
-    load_model:   [result]
-    filelist:     [result]
-    sweep:        [result]
-    preproc:      [result]
-    seed:         [result]
-    parse_plain:  [result]
-    parse_uvm:    [result]
-    skip:         [result]
-    stop_pre:     [result]
-    stop_comp:    [result]
-    stop_sim:     [result]
-# --- summary sinks: results-summary emits the rendered table on `table`, fanned to two sinks ---
-- { id: print-summary,     module: print-summary,     contract: default }
-- { id: write-summary-log, module: write-summary-log, contract: default }
+
+logging:
+  handlers:
+  - path: log/summary.py
+    name: FileSummaryProcessor
+    config:
+      out: "{graph}/summary.log"
+  - path: log/summary.py
+    name: ConsoleSummaryProcessor
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -215,21 +203,3 @@ edges:
 - { src: { node: route-post, port: uvm_proc },   dst: { node: parse-uvm-log, port: proc } }
 - { src: { node: route-post, port: plain_test }, dst: { node: parse-log, port: test } }
 - { src: { node: route-post, port: plain_proc }, dst: { node: parse-log, port: proc } }
-
-# ---- terminal result ports → results-summary (the `any` contract fans them in) ----
-- { src: { node: cc-int,        port: fail },    dst: { node: results-summary, port: compile_fail } }
-- { src: { node: sim-int,       port: timeout }, dst: { node: results-summary, port: sim_timeout } }
-- { src: { node: load-model,    port: fail },    dst: { node: results-summary, port: load_model } }
-- { src: { node: filelist,      port: fail },    dst: { node: results-summary, port: filelist } }
-- { src: { node: sweep,         port: fail },    dst: { node: results-summary, port: sweep } }
-- { src: { node: preproc,       port: fail },    dst: { node: results-summary, port: preproc } }
-- { src: { node: seed,          port: fail },    dst: { node: results-summary, port: seed } }
-- { src: { node: parse-log,     port: default }, dst: { node: results-summary, port: parse_plain } }
-- { src: { node: parse-uvm-log, port: default }, dst: { node: results-summary, port: parse_uvm } }
-- { src: { node: filter,        port: skip },    dst: { node: results-summary, port: skip } }
-- { src: { node: gate-pre,      port: stop },    dst: { node: results-summary, port: stop_pre } }
-- { src: { node: gate-comp,     port: stop },    dst: { node: results-summary, port: stop_comp } }
-- { src: { node: gate-sim,      port: stop },    dst: { node: results-summary, port: stop_sim } }
-# ---- results-summary.table → the two summary sinks ----
-- { src: { node: results-summary, port: table }, dst: { node: print-summary,     port: table } }
-- { src: { node: results-summary, port: table }, dst: { node: write-summary-log, port: table } }

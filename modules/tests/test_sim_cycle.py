@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import typer
 
-from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, Proc, RandSeed, RandSeedDone
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, Proc, RandSeed, RandSeedDone
 from modules.rtl_buddy.schema.builder import RtlBuilderConfig, RtlBuilderConfigOpts
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -253,13 +253,7 @@ def test_resolve_seed_replay_missing_file(tmp_path, logging_handler):
 	builder_cfg = _make_builder_cfg_rs()
 	mod = ResolveSeedMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
-	assert val.result == "FAIL"
-	expected_path = tmp_path / f"{test.get_name()}.randseed"
-	assert str(expected_path) in val.desc
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -272,11 +266,7 @@ def test_resolve_seed_replay_malformed(tmp_path, logging_handler):
 	seed_path.write_text("not_an_int\n")
 	mod = ResolveSeedMod()
 	results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
-	assert val.result == "FAIL"
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -294,11 +284,7 @@ def test_resolve_seed_replay_permission_error(tmp_path, logging_handler):
 		results = list(mod.run(test=test, run_id=run_id, simv=simv, seed_mode=SeedMode.REPLAY, builder_cfg=builder_cfg, logs_dir=tmp_path))
 	finally:
 		seed_path.chmod(0o644)
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
-	assert val.result == "FAIL"
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -636,10 +622,7 @@ def test_interpret_sim_timeout(logging_handler):
 	proc = Proc(key=test.key, rc=None, stdout_path=Path("/tmp/sim.log"), stderr_path=Path("/tmp/sim.err"))
 	mod = InterpretSimMod()
 	results = list(mod.run(test=test, proc=proc))
-	assert len(results) == 1
-	port, result = results[0]
-	assert port == "timeout"
-	assert result == TestResult.sim_timeout(test.key, test.get_name())
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 

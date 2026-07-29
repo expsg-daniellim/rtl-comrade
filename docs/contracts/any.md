@@ -6,7 +6,7 @@
 
 Fires on whichever input port delivers a value first, one value per `get_inputs()` call. Ends once every port has ended. General-purpose fan-in — reusable across any graph that needs to collect items from multiple upstream ports into a single downstream node without a fixed ordering or zipping constraint.
 
-In the `test` graph this contract backs `results-summary`, fanning the 13 terminal `TestResult` ports into one accumulating sink.
+General-purpose fan-in — reusable across any graph that needs to collect items from multiple upstream ports into a single downstream node without a fixed ordering or zipping constraint.
 
 ## Invariants
 
@@ -48,14 +48,5 @@ Inputs `stage_a` and `stage_b` funnel onto output port `fast`; `stage_c` funnels
 Ends when all input ports have ended and no pending tasks remain. Partial endings (some ports ended, others still live) are handled silently: the contract keeps delivering from the remaining live ports.
 
 ## Example use cases
-
-**Fan-in of terminal results.** Thirteen test-execution nodes each emit one `TestResult` on a dedicated output port. `results-summary` uses `any` to receive them one at a time, accumulating rows until all 13 streams end.
-
-```yaml
-nodes:
-  - id: results-summary
-    module: summarise_results
-    contract: any
-```
 
 **Merging parallel streams into one.** Two enrichment pipelines produce records at different rates. A downstream aggregator uses `any` (n→1 onto `"default"`) to receive whichever record arrives first, processing each immediately rather than waiting for both.

@@ -16,12 +16,12 @@ If the test declares a preproc script, executes it (with `test_cfg`, `root_cfg`,
 
 ## Outputs
 
-`test` + `model` — forwarded after the script runs; `fail` — a `TestResult.prep` if the script is missing/unreadable or raises.
+`test` + `model` — forwarded after the script runs. A failed preproc emits nothing.
 
 ## Failure routing
 
-File-not-found / permission / read errors and script exceptions are caught, logged at `ERROR`, and routed to `fail`. The resolved `ModelConfig` is swapped into `test.model` for the script's benefit and restored before forwarding, so the `test` edge always carries the model *name* string.
+File-not-found / permission / read errors and script exceptions are caught and logged at `ERROR`. The resolved `ModelConfig` is swapped into `test.model` for the script's benefit and restored before forwarding, so the `test` edge always carries the model *name* string.
 
 ## Graph node
 
-`preproc`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [root_cfg]`, `unwrap: true`, `ignore: [test, fail]`). The `model` edge rides the wire as a `KeyedValue`; the contract unwraps it on the way in and rewraps the forwarded `model` on the way out, so the module never handles the key. The `fail` port fans into [summarise-results](summarise-results.md).
+`preproc`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [root_cfg]`, `unwrap: true`, `ignore: [test]`). The `model` edge rides the wire as a `KeyedValue`; the contract unwraps it on the way in and rewraps the forwarded `model` on the way out, so the module never handles the key.

@@ -12,7 +12,7 @@ import structlog
 
 from rtl_comrade.logging import HarnessLogger
 
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode, TestResult, KeyedValue, ModelConfig
+from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, UVMConfig, TestbenchConfig, TestConfig, SuiteConfig, SeedMode, KeyedValue, ModelConfig
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -207,8 +207,7 @@ class FilterRegLvlMod:
 			desc = f"lvl {lvl} < cmd start_level {start_level}"
 		else:
 			return ("test", test)
-		result = TestResult.skip(test.key, test.get_name(), desc)
-		return ("skip", result)
+		log.info("test_skipped", key=test.key, test_name=test.get_name(), reason=desc)
 
 
 @serde
@@ -239,25 +238,18 @@ class LoadModelMod:
 			yield ("model", KeyedValue(test.key, model))
 		except FileNotFoundError:
 			log.error("model_file_not_found", key=test.key, test_name=test.get_name(), model_path=str(resolved))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"models.yaml not found: {resolved}"))
 		except IsADirectoryError:
 			log.error("model_is_directory", key=test.key, test_name=test.get_name(), model_path=str(resolved))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"{resolved} is a directory"))
 		except PermissionError as e:
 			log.error("model_permission_denied", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read {resolved}"))
 		except UnicodeDecodeError as e:
 			log.error("model_invalid_unicode", key=test.key, test_name=test.get_name(), model_path=str(resolved), reason=e.reason)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"{resolved} is not valid UTF-8"))
 		except (SerdeError, MarkedYAMLError, ReaderError) as e:
 			log.error("model_parse_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=str(e))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"malformed {resolved}: {e}"))
 		except LookupError:
 			log.error("model_not_found", key=test.key, test_name=test.get_name(), model_path=str(resolved), model=test.model)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"model {test.model!r} not in {resolved}"))
 		except OSError as e:
 			log.error("model_read_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror, errno=e.errno)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read {resolved}"))
 
 
 class ExpandSweepMod:
@@ -274,15 +266,12 @@ class ExpandSweepMod:
 				code = f.read()
 		except FileNotFoundError:
 			log.error("sweep_script_not_found", key=test.key, test_name=test.get_name(), sweep_path=str(sweep))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script not found: {sweep}"))
 			return
 		except PermissionError as e:
 			log.error("sweep_script_permission", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=e.strerror)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read sweep script {sweep}"))
 			return
 		except OSError as e:
 			log.error("sweep_script_read_error", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=e.strerror, errno=e.errno)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read sweep script {sweep}"))
 			return
 		test.model = model.value
 		try:
@@ -290,7 +279,6 @@ class ExpandSweepMod:
 		except Exception as e:
 			test.model = name
 			log.error("sweep_script_error", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), exc_info=e)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script raised: {e}"))
 			return
 		test.model = name
 		try:
@@ -301,7 +289,6 @@ class ExpandSweepMod:
 				yield ("model", KeyedValue(variant.key, model.value))
 		except (TypeError, AttributeError, KeyError) as e:
 			log.error("sweep_output_invalid", key=test.key, test_name=test.get_name(), sweep_path=str(sweep), err=str(e))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"sweep script produced malformed out_test_cfgs: {e}"))
 
 
 class GitStatusMod:

@@ -16,11 +16,11 @@ Builds the compile filelist for the test: extracts entries from the model's file
 
 ## Outputs
 
-`test` — forwarded; `filelist` — the `Path` of the written file; `fail` — a `TestResult.prep` on a write/resolve error.
+`test` — forwarded; `filelist` — the `Path` of the written file. A failed write emits nothing.
 
 ## Failure routing
 
-A lower-case `-f` include is a hard `log.fatal` (`filelist_lower_f_not_allowed`); a malformed line, a missing include file, or a `+incdir+` target that isn't a directory is `log.error` (best-effort, run continues); directory-missing / is-a-directory / permission / resolve / write errors are caught and routed to `fail`.
+A lower-case `-f` include is a hard `log.fatal` (`filelist_lower_f_not_allowed`); a malformed line, a missing include file, or a `+incdir+` target that isn't a directory is `log.error` (best-effort, run continues); directory-missing / is-a-directory / permission / resolve / write errors are caught and logged at `ERROR`.
 
 ## Filelist helpers
 
@@ -28,4 +28,4 @@ A lower-case `-f` include is a hard `log.fatal` (`filelist_lower_f_not_allowed`)
 
 ## Graph node
 
-`filelist`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [work_dir]`, `unwrap: true`, `ignore: [test, fail]`). The `model` and `filelist` edges ride the wire as `KeyedValue`s; the contract unwraps `model` on the way in and keys the emitted `filelist` path on the way out, so the module never handles the key. The `fail` port fans into [summarise-results](summarise-results.md).
+`filelist`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [work_dir]`, `unwrap: true`, `ignore: [test]`). The `model` and `filelist` edges ride the wire as `KeyedValue`s; the contract unwraps `model` on the way in and keys the emitted `filelist` path on the way out, so the module never handles the key.

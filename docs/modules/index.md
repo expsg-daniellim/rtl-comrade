@@ -16,7 +16,7 @@ These docs describe *what each module does* — its inputs, outputs, config, and
 
 ## Modules by stage
 
-The `test` flow is a linear pipeline that fans out per test (and per run), with every off-ramp converging on a single results summary. The stage groupings below are for navigation only — each module has its own file.
+The `test` flow is a linear pipeline that fans out per test (and per run). The stage groupings below are for navigation only — each module has its own file.
 
 **Setup** (`setup.py`) — bootstrap config, platform, builder, directories, suite, seed mode
 
@@ -42,17 +42,13 @@ The `test` flow is a linear pipeline that fans out per test (and per run), with 
 
 - [expand-runs](expand-runs.md) · [resolve-seed](resolve-seed.md) · [build-sim-cmd](build-sim-cmd.md) · [write-randseed](write-randseed.md) · [link-latest](link-latest.md) · [interpret-sim](interpret-sim.md)
 
-**Post** (`sim.py`) — route UVM vs plain, parse the log into a result
+**Post** (`sim.py`) — route UVM vs plain, parse the log into a verdict
 
 - [route-post](route-post.md) · [parse-log](parse-log.md) · [parse-uvm-log](parse-uvm-log.md)
 
 **Early-stop control** (`control.py`)
 
 - [early-stop-gate](early-stop-gate.md)
-
-**Results summary** (`summarise_results.py`) — accumulate results, render table, sink to console + log
-
-- [summarise-results](summarise-results.md) · [print-summary](print-summary.md) · [write-summary-log](write-summary-log.md)
 
 ## Data flow at a glance
 
@@ -67,12 +63,11 @@ parse-suite → route-list ──list──▶ list-test-names         │  fann
   cc-run ─proc▶ cc-int ▶ gate-comp ▶ expand-runs ▶ resolve-seed ▶ build-sim-cmd ─command▶ sim-run
                                                                               │
   sim-run ─proc▶ {write-randseed, link-latest, interpret-sim ▶ gate-sim ▶ route-post}
-  route-post ──uvm──▶ parse-uvm-log ┐
-             └─plain─▶ parse-log ───┼─▶ results-summary ─table▶ {print-summary, write-summary-log}
-  (every skip / fail / timeout / early-stop port also fans into results-summary)
+  route-post ──uvm──▶ parse-uvm-log
+             └─plain─▶ parse-log
 ```
 
-Off the main line, every failure or short-circuit emits a `TestResult` on a dedicated port. The 13 terminal result ports fan into `results-summary` via the [`any`](../contracts/any.md) contract, so a test that dies at any stage still lands one row in the final table.
+Every failure, skip, timeout, or early-stop emits a diagnostic log event (`log.error` or `log.info`). The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match these events by name, accumulate one row per test, and render the results table at end of run. See [docs/logger/summary-processor.md](../logger/summary-processor.md).
 
 ## Shared value types
 
@@ -84,10 +79,9 @@ The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/s
 | `Command` | `key`, `argv`, `stdout_path`, `stderr_path` | a subprocess to launch (compile or sim), consumed by `run-process` |
 | `Proc` | `key`, `rc`, `stdout_path`, `stderr_path` | a finished subprocess; `rc is None` means it was killed on timeout |
 | `RandSeed` / `RandSeedDone` | seed + paths / `key` | the resolved seed to persist, and an ordering token so `link-latest` runs after the seed is written |
-| `TestResult` | `key`, `test_name`, `type_`, `result`, `desc` | one row of the summary; `result` is `PASS` / `FAIL` / `SKIP` / `NA`. Constructed via the classmethods `compile_fail`, `sim_timeout`, `early_stop`, `skip`, `prep`, `parse` |
 | `SeedMode` | enum | `NEW` (fresh random), `REPLAY` (reuse last), `DEFAULT` (builder-configured) |
 | `RunDepth` | enum | ordered phases `pre` < `comp` < `sim` < `post`; drives `early-stop-gate` |
 
-## Note: the dormant `SummaryProcessor` plugin
+## Results reporting
 
-`graphs/log/summary.py` holds a `SummaryProcessor` logging plugin from an earlier design where the summary was assembled from log events rather than an in-graph node. It is **dormant** — superseded by [summarise-results](summarise-results.md) — and is not wired into the `test` graph, nor is it a manifest module. Left in place as a reference for the logging-plugin approach; see [docs/logger/summary-processor.md](../logger/summary-processor.md).
+The results summary is not an in-graph node — it is handled by the `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins (`graphs/log/summary.py`), wired in the `test` graph's `logging:` block. These match diagnostic log events by name (e.g. `compile_failed`, `parse_log_passed`, `test_skipped`, `test_stopped_early`), accumulate one row per test, and render the table at end of run. See [docs/logger/summary-processor.md](../logger/summary-processor.md).

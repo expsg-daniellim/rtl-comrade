@@ -4,7 +4,7 @@
 
 [Back to index](index.md)
 
-Reads the finished compile `Proc`. On `rc == 0` forwards test + `simv` to the sim stage; otherwise emits a `compile_fail` result and logs the tail of stderr for diagnosis.
+Reads the finished compile `Proc`. On `rc == 0` forwards test + `simv` to the sim stage; otherwise emits nothing and logs `compile_failed` at `ERROR`.
 
 ## Inputs
 
@@ -16,12 +16,12 @@ Reads the finished compile `Proc`. On `rc == 0` forwards test + `simv` to the si
 
 ## Outputs
 
-`test` + `simv` — forwarded on success; `fail` — a `TestResult.compile_fail` on non-zero return.
+`test` + `simv` — forwarded on success. A failed compile emits nothing.
 
 ## Failure routing
 
-Compile failure is business logic, not an exception — it routes to `fail`. The stderr tail (last 4 KiB) is attached to the `compile_failed` `ERROR` log when readable; an unreadable stderr file is tolerated (`OSError` swallowed).
+Compile failure is business logic, not an exception — it logs `compile_failed` at `ERROR`. The stderr tail (last 4 KiB) is attached to the log event when readable; an unreadable stderr file is tolerated (`OSError` swallowed).
 
 ## Graph node
 
-`cc-int`, contract `keyed_join` (`key_field: key`, `unwrap: true`, `ignore: [test, fail]`). The `simv` edge rides the wire as a `KeyedValue`; the contract unwraps it on the way in and rewraps the forwarded `simv` on the way out, so the module never handles the key. The `fail` port fans into [summarise-results](summarise-results.md) as `compile_fail`.
+`cc-int`, contract `keyed_join` (`key_field: key`, `unwrap: true`, `ignore: [test]`). The `simv` edge rides the wire as a `KeyedValue`; the contract unwraps it on the way in and rewraps the forwarded `simv` on the way out, so the module never handles the key.

@@ -8,7 +8,6 @@ from serde.yaml import from_yaml
 
 from modules.rtl_buddy.schema import (
 	RootConfig, RootRtlField, PlatformConfig,
-	TestResult, ResultType,
 	SeedMode, RunDepth,
 	KeyedValue, Command, Proc, RandSeed, RandSeedDone,
 )
@@ -79,121 +78,6 @@ def test_platform_config_builder_none():
 	)
 	obj = from_yaml(PlatformConfig, yaml_str)
 	assert obj.builder is None
-
-
-# ---------------------------------------------------------------------------
-# TestResult.is_pass()
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("verdict,expected", [
-	("PASS", True),
-	("SKIP", True),
-	("FAIL", False),
-	("NA", False),
-])
-def test_is_pass(verdict, expected):
-	r = TestResult(key="k", test_name="t", type_=ResultType.PARSE, result=verdict, desc="d")
-	assert r.is_pass() is expected
-
-
-# ---------------------------------------------------------------------------
-# TestResult is frozen and self-keyed
-# ---------------------------------------------------------------------------
-
-
-def test_test_result_frozen():
-	r = TestResult.compile_fail("k", "t")
-	with pytest.raises(dataclasses.FrozenInstanceError):
-		r.key = "other"
-
-
-def test_test_result_has_key():
-	r = TestResult.compile_fail("k1", "t")
-	assert r.key == "k1"
-
-
-# ---------------------------------------------------------------------------
-# TestResult @classmethod constructors
-# ---------------------------------------------------------------------------
-
-
-def test_compile_fail_constructor():
-	r = TestResult.compile_fail("k", "tname")
-	assert r.type_ == ResultType.COMPILE_FAIL
-	assert r.result == "FAIL"
-	assert r.desc == "Compile failed"
-	assert r.test_name == "tname"
-	assert r.is_pass() is False
-
-
-def test_sim_timeout_constructor():
-	r = TestResult.sim_timeout("k", "tname")
-	assert r.type_ == ResultType.SIM_TIMEOUT
-	assert r.result == "FAIL"
-	assert r.desc == "Sim hit timeout"
-	assert r.test_name == "tname"
-	assert r.is_pass() is False
-
-
-def test_early_stop_constructor():
-	r = TestResult.early_stop("k", "tname", "user requested")
-	assert r.type_ == ResultType.EARLY_STOP
-	assert r.result == "NA"
-	assert r.desc == "user requested"
-	assert r.test_name == "tname"
-	assert r.is_pass() is False
-
-
-def test_skip_constructor():
-	r = TestResult.skip("k", "tname", "filtered out")
-	assert r.type_ == ResultType.SKIP
-	assert r.result == "SKIP"
-	assert r.desc == "filtered out"
-	assert r.test_name == "tname"
-	assert r.is_pass() is True
-
-
-def test_prep_constructor():
-	r = TestResult.prep("k", "tname", "model load failed")
-	assert r.type_ == ResultType.PREP
-	assert r.result == "FAIL"
-	assert r.desc == "model load failed"
-	assert r.test_name == "tname"
-	assert r.is_pass() is False
-
-
-def test_parse_constructor_pass():
-	r = TestResult.parse("k", "tname", "PASS", "all checks ok")
-	assert r.type_ == ResultType.PARSE
-	assert r.result == "PASS"
-	assert r.desc == "all checks ok"
-	assert r.test_name == "tname"
-	assert r.is_pass() is True
-
-
-def test_parse_constructor_fail():
-	r = TestResult.parse("k", "tname", "FAIL", "mismatch")
-	assert r.type_ == ResultType.PARSE
-	assert r.result == "FAIL"
-	assert r.is_pass() is False
-
-
-def test_parse_constructor_na():
-	r = TestResult.parse("k", "tname", "NA", "no log found")
-	assert r.type_ == ResultType.PARSE
-	assert r.result == "NA"
-	assert r.is_pass() is False
-
-
-# ---------------------------------------------------------------------------
-# ResultType enum completeness
-# ---------------------------------------------------------------------------
-
-
-def test_result_type_members():
-	expected = {"PARSE", "COMPILE_FAIL", "SIM_TIMEOUT", "PREP", "EARLY_STOP", "SKIP"}
-	assert {m.name for m in ResultType} == expected
 
 
 # ---------------------------------------------------------------------------

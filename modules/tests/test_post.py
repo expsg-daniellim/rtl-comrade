@@ -3,7 +3,7 @@
 import importlib.util
 from pathlib import Path
 
-from modules.rtl_buddy.schema import Proc, TestResult
+from modules.rtl_buddy.schema import Proc
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 from modules.rtl_buddy.schema.uvm import UVMConfig
 
@@ -136,23 +136,13 @@ def _make_log_proc(key, log_path):
 	return Proc(key=key, rc=0, stdout_path=log_path, stderr_path=Path("/tmp/sim.err"))
 
 
-def test_parse_log_pass_emits_pass(tmp_path):
+def test_parse_log_pass(tmp_path, logging_handler):
 	log_file = tmp_path / "sim.log"
 	log_file.write_text("PASS test completed\n")
 	test = _make_test()
 	proc = _make_log_proc(test.key, log_file)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert isinstance(result, TestResult)
-	assert result.result == "PASS"
-
-
-def test_parse_log_pass_no_exit_driver(tmp_path, logging_handler):
-	log_file = tmp_path / "sim.log"
-	log_file.write_text("PASS test completed\n")
-	test = _make_test()
-	proc = _make_log_proc(test.key, log_file)
-	ParseLogMod().run(test=test, proc=proc)
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is False
 
 
@@ -161,10 +151,8 @@ def test_parse_log_fail_with_err(tmp_path, logging_handler):
 	log_file.write_text("FAIL sim failed\nERR: assertion at line 42\n")
 	test = _make_test()
 	proc = _make_log_proc(test.key, log_file)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert "assertion at line 42" in result.desc
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -173,9 +161,8 @@ def test_parse_log_fail_wins_over_pass(tmp_path, logging_handler):
 	log_file.write_text("PASS test ran\nFAIL assertion failed\n")
 	test = _make_test()
 	proc = _make_log_proc(test.key, log_file)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -184,33 +171,28 @@ def test_parse_log_fail_without_err_no_crash(tmp_path, logging_handler):
 	log_file.write_text("FAIL assertion at line 99\n")
 	test = _make_test()
 	proc = _make_log_proc(test.key, log_file)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert result.desc == "assertion at line 99"
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
-def test_parse_log_passthrough_is_na(tmp_path, logging_handler):
+def test_parse_log_passthrough_is_unknown(tmp_path, logging_handler):
 	log_file = tmp_path / "sim.log"
 	log_file.write_text("PASSTHROUGH message\n")
 	test = _make_test()
 	proc = _make_log_proc(test.key, log_file)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "NA"
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
-def test_parse_log_no_keywords_is_na(tmp_path, logging_handler):
+def test_parse_log_no_keywords_is_unknown(tmp_path, logging_handler):
 	log_file = tmp_path / "sim.log"
 	log_file.write_text("INFO: simulation running\nDEBUG: checkpoint\n")
 	test = _make_test()
 	proc = _make_log_proc(test.key, log_file)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "NA"
-	assert result.desc == "test result unknown"
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -218,10 +200,8 @@ def test_parse_log_unreadable_file(tmp_path, logging_handler):
 	missing = tmp_path / "nonexistent.log"
 	test = _make_test()
 	proc = _make_log_proc(test.key, missing)
-	port, result = ParseLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert str(missing) in result.desc
+	result = ParseLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -258,10 +238,8 @@ def test_parse_uvm_log_all_zero_pass(tmp_path, logging_handler):
 	test = _make_uvm_test(max_warns=5, max_errors=2)
 	log_file = _make_uvm_log(tmp_path, warns=0, errors=0, fatal=0)
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert isinstance(result, TestResult)
-	assert result.result == "PASS"
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is False
 
 
@@ -269,9 +247,8 @@ def test_parse_uvm_log_boundary_pass(tmp_path, logging_handler):
 	test = _make_uvm_test(max_warns=2, max_errors=1)
 	log_file = _make_uvm_log(tmp_path, warns=2, errors=1, fatal=0)
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "PASS"
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is False
 
 
@@ -279,10 +256,8 @@ def test_parse_uvm_log_error_over_threshold_fail(tmp_path, logging_handler):
 	test = _make_uvm_test(max_warns=5, max_errors=2)
 	log_file = _make_uvm_log(tmp_path, warns=0, errors=3, fatal=0)
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert "uvm error" in result.desc
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -290,10 +265,8 @@ def test_parse_uvm_log_warn_over_threshold_fail(tmp_path, logging_handler):
 	test = _make_uvm_test(max_warns=1, max_errors=5)
 	log_file = _make_uvm_log(tmp_path, warns=2, errors=0, fatal=0)
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert "uvm warning" in result.desc
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -301,9 +274,8 @@ def test_parse_uvm_log_fatal_nonzero_fail(tmp_path, logging_handler):
 	test = _make_uvm_test(max_warns=5, max_errors=5)
 	log_file = _make_uvm_log(tmp_path, warns=0, errors=0, fatal=1)
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -312,11 +284,8 @@ def test_parse_uvm_log_no_summary_block(tmp_path, logging_handler):
 	log_file.write_text("simulation running\ntest completed\n")
 	test = _make_uvm_test()
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert "No UVM Report Summary detected" in result.desc
-	assert str(log_file) in result.desc
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -331,11 +300,8 @@ def test_parse_uvm_log_invalid_summary_missing_severity(tmp_path, logging_handle
 	)
 	test = _make_uvm_test()
 	proc = _make_uvm_proc(test.key, log_file)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert "Invalid UVM Report Summary detected" in result.desc
-	assert str(log_file) in result.desc
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True
 
 
@@ -343,8 +309,6 @@ def test_parse_uvm_log_unreadable_file(tmp_path, logging_handler):
 	missing = tmp_path / "nonexistent_uvm.log"
 	test = _make_uvm_test()
 	proc = _make_uvm_proc(test.key, missing)
-	port, result = ParseUvmLogMod().run(test=test, proc=proc)
-	assert port == "default"
-	assert result.result == "FAIL"
-	assert str(missing) in result.desc
+	result = ParseUvmLogMod().run(test=test, proc=proc)
+	assert result is None
 	assert logging_handler.failure is True

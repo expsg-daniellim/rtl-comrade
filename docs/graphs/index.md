@@ -73,7 +73,7 @@ The `test` graph writes into the working directory and the logs subdirectory (`l
 | `logs/<test>.log` / `.err` | [build-sim-cmd](../modules/build-sim-cmd.md) + [run-process](../modules/run-process.md) | simulation stdout / stderr |
 | `logs/<test>.randseed` | [write-randseed](../modules/write-randseed.md) | the seed used, for `--rnd-last` replay |
 | `run.<test>.f` (working dir) | [write-filelist](../modules/write-filelist.md) | the generated compile filelist |
-| `rtl_buddy.log` (working dir) | [write-summary-log](../modules/write-summary-log.md) | the plain-text results summary table |
+| `summary.log` (graph dir) | `FileSummaryProcessor` logging plugin | the plain-text results summary table |
 
 When a test fans out into multiple runs, the sim/seed filenames gain a zero-padded `_NNNN` run suffix (e.g. `logs/<test>_0000.log`); with the single-run default the suffix is absent. Filenames are sanitised (non-alphanumeric characters become `_`).
 
@@ -83,7 +83,7 @@ For convenience, [link-latest](../modules/link-latest.md) maintains three symlin
 - `test.err` → `logs/<test>.err`
 - `test.randseed` → `logs/<test>.randseed`
 
-The colourised summary table is also printed to the console by [print-summary](../modules/print-summary.md).
+The colourised summary table is also printed to the console by the `ConsoleSummaryProcessor` logging plugin. See [docs/logger/summary-processor.md](../logger/summary-processor.md).
 
 ## Extensions
 

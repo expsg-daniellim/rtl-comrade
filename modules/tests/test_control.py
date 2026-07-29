@@ -9,7 +9,7 @@ import pytest
 import structlog.testing
 import typer
 
-from modules.rtl_buddy.schema import TestResult, RunDepth, ModelConfig, Proc
+from modules.rtl_buddy.schema import RunDepth, ModelConfig, Proc
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -87,10 +87,7 @@ def test_matrix(phase, early_stop, tmp_path):
 	should_stop = _ORDER.index(early_stop) <= _ORDER.index(phase)
 
 	if should_stop:
-		assert len(results) == 1
-		port, val = results[0]
-		assert port == "stop"
-		assert val == TestResult.early_stop(test.key, test.get_name(), f"Stopped early at {phase}")
+		assert len(results) == 0
 	else:
 		assert len(results) == len(edges)
 		result_dict = dict(results)
@@ -118,10 +115,7 @@ def test_cogate_pre_stop():
 	model = _make_model()
 	mod = _make_mod("pre")
 	results = list(mod.run(early_stop="pre", test=test, model=model))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "stop"
-	assert val == TestResult.early_stop(test.key, test.get_name(), "Stopped early at pre")
+	assert len(results) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -144,10 +138,7 @@ def test_cogate_comp_stop():
 	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="comp", test=test, simv=simv))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "stop"
-	assert val == TestResult.early_stop(test.key, test.get_name(), "Stopped early at comp")
+	assert len(results) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -170,10 +161,7 @@ def test_cogate_sim_stop(tmp_path):
 	proc = _make_proc(test.key, tmp_path)
 	mod = _make_mod("sim")
 	results = list(mod.run(early_stop="sim", test=test, proc=proc))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "stop"
-	assert val == TestResult.early_stop(test.key, test.get_name(), "Stopped early at sim")
+	assert len(results) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -186,9 +174,7 @@ def test_own_phase_stops():
 	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="comp", test=test, simv=simv))
-	assert len(results) == 1
-	port, _ = results[0]
-	assert port == "stop"
+	assert len(results) == 0
 
 
 # ---------------------------------------------------------------------------
@@ -233,7 +219,7 @@ def test_stop_no_failure(logging_handler):
 	simv = _make_simv()
 	mod = _make_mod("comp")
 	results = list(mod.run(early_stop="comp", test=test, simv=simv))
-	assert len(results) == 1
+	assert len(results) == 0
 	assert logging_handler.failure is False
 
 

@@ -3,17 +3,14 @@ from typing import cast
 import structlog
 from serde import serde
 
-from rtl_comrade.api import REST
 from rtl_comrade.logging import HarnessLogger
 
-from modules.rtl_buddy.schema import RunDepth, TestResult
+from modules.rtl_buddy.schema import RunDepth
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
 
 class EarlyStopGateMod:
-	output_groups = {"stop": ["stop"], "pass": REST}
-
 	@serde
 	class Config:
 		phase: str  # "pre" | "comp" | "sim"
@@ -27,7 +24,7 @@ class EarlyStopGateMod:
 			log.fatal("invalid_early_stop", early_stop=early_stop, valid=order)
 		test = edges["test"]
 		if order.index(early_stop) <= order.index(self.phase):
-			yield ("stop", TestResult.early_stop(test.key, test.get_name(), f"Stopped early at {self.phase}"))
+			log.info("test_stopped_early", key=test.key, test_name=test.get_name(), phase=self.phase)
 		else:
 			for name, payload in edges.items():
 				yield (name, payload)

@@ -16,12 +16,12 @@ If the test declares a sweep script, executes it to expand one test into N keyed
 
 ## Outputs
 
-`test` + `model` per variant (or the original pair if no sweep); `fail` — a `TestResult.prep` if the script is missing/unreadable, raises, or produces malformed `out_test_cfgs`.
+`test` + `model` per variant (or the original pair if no sweep). A failed sweep emits nothing.
 
 ## Failure routing
 
-Missing/permission/read errors, script exceptions, and malformed output are each caught, logged at `ERROR`, and routed to `fail`. The script runs with the resolved `ModelConfig` temporarily swapped into `test.model`, restored on every exit path.
+Missing/permission/read errors, script exceptions, and malformed output are each caught and logged at `ERROR`. The script runs with the resolved `ModelConfig` temporarily swapped into `test.model`, restored on every exit path.
 
 ## Graph node
 
-`sweep`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [root_cfg]`). The `fail` port fans into [summarise-results](summarise-results.md).
+`sweep`, contract `keyed_join` (`key_field: key`, `persistent_inputs: [root_cfg]`).

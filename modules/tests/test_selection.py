@@ -8,7 +8,7 @@ import pytest
 import typer
 from serde.yaml import from_yaml
 
-from modules.rtl_buddy.schema import SuiteConfig, TestResult, KeyedValue, ModelConfig, RootConfig, RootRtlField
+from modules.rtl_buddy.schema import SuiteConfig, KeyedValue, ModelConfig, RootConfig, RootRtlField
 from modules.rtl_buddy.schema.suite import TestbenchConfig, TestConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -247,10 +247,8 @@ def test_filter_reglvl_above_upper_bound(logging_handler):
 	test = _make_test("foo", reglvl=6)
 	builder_cfg = FakeBuilderCfg("b")
 	mod = FilterRegLvlMod()
-	port, result = mod.run(test=test, builder_cfg=builder_cfg, reg_level=5)
-	assert port == "skip"
-	assert result == TestResult.skip("foo", "foo", "lvl 6 > cmd end_level 5")
-	assert result.type_ == TestResult.skip("foo", "foo", "").type_
+	result = mod.run(test=test, builder_cfg=builder_cfg, reg_level=5)
+	assert result is None
 	assert logging_handler.failure is False
 
 
@@ -258,9 +256,9 @@ def test_filter_reglvl_below_lower_bound(logging_handler):
 	test = _make_test("foo", reglvl=0)
 	builder_cfg = FakeBuilderCfg("b")
 	mod = FilterRegLvlMod()
-	port, result = mod.run(test=test, builder_cfg=builder_cfg, start_level=1)
-	assert port == "skip"
-	assert result == TestResult.skip("foo", "foo", "lvl 0 < cmd start_level 1")
+	result = mod.run(test=test, builder_cfg=builder_cfg, start_level=1)
+	assert result is None
+	assert logging_handler.failure is False
 
 
 # ---------------------------------------------------------------------------
@@ -315,10 +313,7 @@ def test_load_model_not_in_file(logging_handler):
 	test = _make_model_test(model="nonexistent_model")
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -326,10 +321,7 @@ def test_load_model_file_not_found(logging_handler):
 	test = _make_model_test(model_path="nonexistent_models.yaml")
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -339,10 +331,7 @@ def test_load_model_parse_error(tmp_path, logging_handler):
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -352,22 +341,16 @@ def test_load_model_empty_models_list(tmp_path, logging_handler):
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
 def test_load_model_is_directory(tmp_path, logging_handler):
-	(tmp_path / "models.yaml").mkdir()  # resolved model path is a directory
+	(tmp_path / "models.yaml").mkdir()
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -382,10 +365,7 @@ def test_load_model_permission_denied(tmp_path, logging_handler):
 		results = list(mod.run(test=test))
 	finally:
 		bad.chmod(0o644)
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -395,21 +375,15 @@ def test_load_model_invalid_unicode(tmp_path, logging_handler):
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
 def test_load_model_os_error(tmp_path, logging_handler):
-	test = _make_model_test(model_path="x" * 5000 + ".yaml", suite_dir=tmp_path)  # ENAMETOOLONG → generic OSError
+	test = _make_model_test(model_path="x" * 5000 + ".yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
 	results = list(mod.run(test=test))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -492,12 +466,9 @@ def test_expand_sweep_script_raises(tmp_path, logging_handler):
 	root_cfg = _make_sweep_root_cfg()
 	mod = ExpandSweepMod()
 	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
-	assert test.model == "sandbox"  # restored synchronously in the except clause
+	assert test.model == "sandbox"
 
 
 def test_expand_sweep_script_not_found(tmp_path, logging_handler):
@@ -506,10 +477,7 @@ def test_expand_sweep_script_not_found(tmp_path, logging_handler):
 	root_cfg = _make_sweep_root_cfg()
 	mod = ExpandSweepMod()
 	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -517,7 +485,7 @@ def test_expand_sweep_script_not_found(tmp_path, logging_handler):
 def test_expand_sweep_script_permission_error(tmp_path, logging_handler):
 	script = tmp_path / "sweep.py"
 	script.write_text("pass\n")
-	script.chmod(0o000)  # unreadable → PermissionError
+	script.chmod(0o000)
 	test = _make_test("t1", sweep_path=str(script))
 	model = _make_sweep_model(test.key)
 	root_cfg = _make_sweep_root_cfg()
@@ -526,25 +494,19 @@ def test_expand_sweep_script_permission_error(tmp_path, logging_handler):
 		results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
 	finally:
 		script.chmod(0o644)
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
 def test_expand_sweep_script_read_oserror(tmp_path, logging_handler):
 	sweep_dir = tmp_path / "sweep_dir"
-	sweep_dir.mkdir()  # opening a directory raises IsADirectoryError (an OSError)
+	sweep_dir.mkdir()
 	test = _make_test("t1", sweep_path=str(sweep_dir))
 	model = _make_sweep_model(test.key)
 	root_cfg = _make_sweep_root_cfg()
 	mod = ExpandSweepMod()
 	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
@@ -561,29 +523,23 @@ def test_expand_sweep_empty_variants(tmp_path):
 
 def test_expand_sweep_non_iterable_out_test_cfgs(tmp_path, logging_handler):
 	script = tmp_path / "sweep.py"
-	script.write_text("out_test_cfgs = 42\n")  # TypeError when the fan-out iterates
+	script.write_text("out_test_cfgs = 42\n")
 	test = _make_test("t1", sweep_path=str(script))
 	model = _make_sweep_model(test.key)
 	root_cfg = _make_sweep_root_cfg()
 	mod = ExpandSweepMod()
 	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
 def test_expand_sweep_variant_rejects_key_assignment(tmp_path, logging_handler):
 	script = tmp_path / "sweep.py"
-	script.write_text("out_test_cfgs.append(object())\n")  # AttributeError on variant.key = ...
+	script.write_text("out_test_cfgs.append(object())\n")
 	test = _make_test("t1", sweep_path=str(script))
 	model = _make_sweep_model(test.key)
 	root_cfg = _make_sweep_root_cfg()
 	mod = ExpandSweepMod()
 	results = list(mod.run(test=test, model=model, root_cfg=root_cfg))
-	assert len(results) == 1
-	port, val = results[0]
-	assert port == "fail"
-	assert isinstance(val, TestResult)
+	assert len(results) == 0
 	assert logging_handler.failure is True

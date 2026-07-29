@@ -9,7 +9,7 @@ import structlog
 
 from rtl_comrade.logging import HarnessLogger
 
-from modules.rtl_buddy.schema import KeyedValue, SeedMode, TestResult, RtlBuilderConfig, Command, Proc, RandSeed, RandSeedDone
+from modules.rtl_buddy.schema import KeyedValue, SeedMode, RtlBuilderConfig, Command, Proc, RandSeed, RandSeedDone
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
@@ -41,15 +41,12 @@ class ResolveSeedMod:
 					seed = int(f.readline().strip())
 			except FileNotFoundError:
 				log.error("replay_seed_not_found", key=test.key, test_name=test.get_name(), path=str(path))
-				yield ("fail", TestResult.prep(test.key, test.get_name(), f"Replay seed missing or invalid at {path}"))
 				return
 			except ValueError as e:
 				log.error("replay_seed_malformed", key=test.key, test_name=test.get_name(), path=str(path), err=str(e))
-				yield ("fail", TestResult.prep(test.key, test.get_name(), f"Replay seed missing or invalid at {path}"))
 				return
 			except PermissionError as e:
 				log.error("replay_seed_permission", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror)
-				yield ("fail", TestResult.prep(test.key, test.get_name(), f"Replay seed missing or invalid at {path}"))
 				return
 		yield ("test", test)
 		yield ("run_id", run_id)
@@ -109,9 +106,7 @@ class LinkLatestMod:
 class InterpretSimMod:
 	def run(self, test:TestConfig, proc:Proc):
 		if proc.rc is None:
-			result = TestResult.sim_timeout(test.key, test.get_name())
-			log.error("sim_timeout", key=test.key, err=proc.stderr_path)
-			yield ("timeout", result)
+			log.error("sim_timeout", key=test.key, test_name=test.get_name(), err=proc.stderr_path)
 		else:
 			yield ("test", test)
 			yield ("proc", proc)
@@ -142,20 +137,14 @@ class ParseLogMod:
 				if match_err is None:
 					match_err = re.match(r"(ERR|FAT):\s*(.*)", line)
 			if match_fail is not None:
-				verdict = "FAIL"
 				desc = f'{match_fail.group(1)} {match_err.group(2).strip()}' if match_err is not None else match_fail.group(1)
+				log.error("parse_log_failed", key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc=desc)
 			elif match_pass is not None:
-				verdict, desc = "PASS", match_pass.group(1)
+				log.info("parse_log_passed", key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc=match_pass.group(1))
 			else:
-				verdict, desc = "NA", "test result unknown"
-			result = TestResult.parse(test.key, test.get_name(), verdict, desc)
-			event = {"FAIL": "parse_log_failed", "NA": "parse_log_unknown"}.get(verdict)
+				log.error("parse_log_unknown", key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc="test result unknown")
 		except OSError as e:
-			result = TestResult.parse(test.key, test.get_name(), "FAIL", str(e))
-			event = "parse_log_unreadable"
-		if event is not None:
-			log.error(event, key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc=result.desc)
-		return ("default", result)
+			log.error("parse_log_unreadable", key=test.key, test_name=test.get_name(), path=str(proc.stdout_path), desc=str(e))
 
 
 class ParseUvmLogMod:
@@ -169,16 +158,14 @@ class ParseUvmLogMod:
 				text,
 			)
 			if summary is None:
-				result = TestResult.parse(test.key, test.get_name(), "FAIL", f"No UVM Report Summary detected. See {path}.")
-				event = "parse_uvm_no_summary"
+				log.error("parse_uvm_no_summary", key=test.key, test_name=test.get_name(), path=str(path), desc=f"No UVM Report Summary detected. See {path}.")
 			else:
 				totals = dict(
 					(m.group(1), int(m.group(2)))
 					for m in re.finditer(r"^UVM_(INFO|WARNING|ERROR|FATAL)\s*:?\s*([0-9]+)", summary.group(1), re.MULTILINE)
 				)
 				if "WARNING" not in totals or "ERROR" not in totals or "FATAL" not in totals:
-					result = TestResult.parse(test.key, test.get_name(), "FAIL", f"Invalid UVM Report Summary detected. See {path}")
-					event = "parse_uvm_invalid_summary"
+					log.error("parse_uvm_invalid_summary", key=test.key, test_name=test.get_name(), path=str(path), desc=f"Invalid UVM Report Summary detected. See {path}")
 				else:
 					message_summary = ", ".join(
 						f"{v} uvm {k.lower()}{'s' if v != 1 else ''}"
@@ -186,14 +173,8 @@ class ParseUvmLogMod:
 					)
 					results_str = f"{message_summary} detected. max_warnings={uvm.max_warns}, max_err={uvm.max_errors}"
 					if totals["WARNING"] <= uvm.max_warns and totals["ERROR"] <= uvm.max_errors and totals["FATAL"] == 0:
-						result = TestResult.parse(test.key, test.get_name(), "PASS", results_str)
-						event = None
+						log.info("parse_uvm_passed", key=test.key, test_name=test.get_name(), path=str(path), desc=results_str)
 					else:
-						result = TestResult.parse(test.key, test.get_name(), "FAIL", f"{results_str}. See {path}")
-						event = "parse_uvm_failed"
+						log.error("parse_uvm_failed", key=test.key, test_name=test.get_name(), path=str(path), desc=f"{results_str}. See {path}")
 		except OSError as e:
-			result = TestResult.parse(test.key, test.get_name(), "FAIL", str(e))
-			event = "parse_uvm_unreadable"
-		if event is not None:
-			log.error(event, key=test.key, test_name=test.get_name(), path=str(path), desc=result.desc)
-		return ("default", result)
+			log.error("parse_uvm_unreadable", key=test.key, test_name=test.get_name(), path=str(path), desc=str(e))

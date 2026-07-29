@@ -14,12 +14,12 @@ Loads the test's RTL model from its `models.yaml`, looking up the entry named by
 
 ## Outputs
 
-`test` — the (unchanged) test; `model` — `KeyedValue(test.key, ModelConfig)`; `fail` — a `TestResult.prep` when the model can't be loaded.
+`test` — the (unchanged) test; `model` — `KeyedValue(test.key, ModelConfig)`. A failed load emits nothing.
 
 ## Failure routing
 
-Each of missing file, directory, permission, bad UTF-8, malformed YAML, and missing model entry is caught, logged at `ERROR` (distinct event per cause), and turned into a `fail` `TestResult` — the test is reported failed but the rest of the suite continues.
+Each of missing file, directory, permission, bad UTF-8, malformed YAML, and missing model entry is caught and logged at `ERROR` (distinct event per cause) — the test is reported failed but the rest of the suite continues.
 
 ## Graph node
 
-`load-model`, contract `default`. The `fail` port fans into [summarise-results](summarise-results.md).
+`load-model`, contract `default`.

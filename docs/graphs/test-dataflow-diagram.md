@@ -2,7 +2,7 @@
 
 [Back to the `test` graph](test.md) · [graphs index](index.md)
 
-The full dataflow of the `test` graph, rendered inline by GitHub. Node labels note the pairing contract in parentheses; edge labels show the payloads carried (`port:Type`, with `#124;` rendering as `|`). Colour key: solid blue = main line, teal = result / summary ports, amber dashed = persistent config, purple = env / work-dir, green = CLI inputs.
+The full dataflow of the `test` graph, rendered inline by GitHub. Node labels note the pairing contract in parentheses; edge labels show the payloads carried (`port:Type`, with `#124;` rendering as `|`). Colour key: solid blue = main line, amber dashed = persistent config, purple = env / work-dir, green = CLI inputs.
 
 ```mermaid
 flowchart TD
@@ -34,23 +34,6 @@ flowchart TD
   route_post m23@-->|"plain: test:TestConfig + proc:Proc"| parse_log["parse-log<br/>(keyed_join)"]
   route_post m24@-->|"uvm: test:TestConfig + proc:Proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
   route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
-
-  filter t1@-->|"skip:TestResult(SKIP)"| TERM["results-summary<br/>(any)"]
-  load_model t2@-->|"fail:TestResult(FAIL)"| TERM
-  sweep t3@-->|"fail:TestResult(FAIL)"| TERM
-  preproc t4@-->|"fail:TestResult(FAIL)"| TERM
-  gate_pre t5@-->|"stop:TestResult(EARLY_STOP)"| TERM
-  filelist t6@-->|"fail:TestResult(FAIL)"| TERM
-  cc_int t7@-->|"fail:TestResult(COMPILE_FAIL)"| TERM
-  gate_comp t8@-->|"stop:TestResult(EARLY_STOP)"| TERM
-  seed t9@-->|"fail:TestResult(FAIL)"| TERM
-  sim_int t10@-->|"timeout:TestResult(SIM_TIMEOUT)"| TERM
-  gate_sim t11@-->|"stop:TestResult(EARLY_STOP)"| TERM
-  parse_log t12@-->|"result:TestResult(PARSE)"| TERM
-  parse_uvm t13@-->|"result:TestResult(PARSE)"| TERM
-
-  TERM s1@-->|"table:str"| print_summary["print-summary"]
-  TERM s2@-->|"table:str"| write_summary_log["write-summary-log"]
 
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
@@ -94,25 +77,19 @@ flowchart TD
 
   classDef fanout fill:#e6f2ff,stroke:#1f6feb;
   classDef join fill:#fff3cd,stroke:#bf8700;
-  classDef sink fill:#eef5f5,stroke:#3a7d7d,stroke-width:2px;
   classDef cli fill:#eef7ee,stroke:#2da44e;
   class select,sweep,runs fanout;
   class filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
-  class TERM,print_summary,write_summary_log sink;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
   %% edge styling by class — each styled edge has a unique ID; per-type class lists below.
   %% Inserting/removing an edge: add/remove its ID in one list; no positional renumbering.
   classDef mainEdge stroke:#1f6feb,stroke-width:2px;
-  classDef resultEdge stroke:#3a7d7d,stroke-width:2px;
-  classDef summaryEdge stroke:#3a7d7d,stroke-width:2px,stroke-dasharray:4 2;
   classDef cfgEdge stroke:#bf8700,stroke-width:1.5px;
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
   class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
-  class t1,t2,t3,t4,t5,t6,t7,t8,t9,t10,t11,t12,t13 resultEdge;
-  class s1,s2 summaryEdge;
   class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
   class e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12 envEdge;
   class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;

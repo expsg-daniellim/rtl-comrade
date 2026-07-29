@@ -19,8 +19,8 @@ Drops tests outside the requested register-level window, routing them to a `skip
 
 ## Outputs
 
-`test` — the test, if within range; `skip` — a `TestResult.skip` describing why it was excluded.
+`test` — the test, if within range. An excluded test emits nothing and logs `test_skipped` at `INFO`.
 
 ## Graph node
 
-`filter`, contract `default` (`persistent_inputs: [builder_cfg, reg_level, start_level]`). The `skip` port fans into [summarise-results](summarise-results.md).
+`filter`, contract `default` (`persistent_inputs: [builder_cfg, reg_level, start_level]`).

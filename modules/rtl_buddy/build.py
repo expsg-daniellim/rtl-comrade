@@ -10,7 +10,7 @@ from serde import serde
 
 from rtl_comrade.logging import HarnessLogger
 
-from modules.rtl_buddy.schema import RootConfig, TestResult, ModelConfig, Command, Proc, RtlBuilderConfig
+from modules.rtl_buddy.schema import RootConfig, ModelConfig, Command, Proc, RtlBuilderConfig
 from modules.rtl_buddy.schema.suite import TestConfig
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
@@ -31,15 +31,12 @@ class RunPreprocMod:
 				code = f.read()
 		except FileNotFoundError:
 			log.error("preproc_script_not_found", key=test.key, test_name=test.get_name(), preproc_path=str(preproc))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"preproc script not found: {preproc}"))
 			return
 		except PermissionError as e:
 			log.error("preproc_script_permission", key=test.key, test_name=test.get_name(), preproc_path=str(preproc), err=e.strerror)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read preproc script {preproc}"))
 			return
 		except OSError as e:
 			log.error("preproc_script_read_error", key=test.key, test_name=test.get_name(), preproc_path=str(preproc), err=e.strerror, errno=e.errno)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot read preproc script {preproc}"))
 			return
 
 		test.model = model  # expose resolved ModelConfig to the script; restored on both exits below
@@ -48,7 +45,6 @@ class RunPreprocMod:
 		except Exception as e:
 			test.model = name
 			log.error("preproc_script_error", key=test.key, test_name=test.get_name(), preproc_path=str(preproc), exc_info=e)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"preproc script raised: {e}"))
 			return
 
 		test.model = name  # restore before forwarding so the test edge always carries the name string
@@ -133,19 +129,14 @@ class WriteFilelistMod:
 			yield ("filelist", path)
 		except FileNotFoundError:
 			log.error("filelist_dir_not_found", key=test.key, test_name=test.get_name(), path=str(path))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"output directory missing for {path}"))
 		except IsADirectoryError:
 			log.error("filelist_is_directory", key=test.key, test_name=test.get_name(), path=str(path))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"{path} is a directory"))
 		except PermissionError as e:
 			log.error("filelist_permission_denied", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot write {path}"))
 		except (KeyError, AttributeError) as e:
 			log.error("filelist_resolve_error", key=test.key, test_name=test.get_name(), path=str(path), err=str(e))
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"filelist resolve failed: {e}"))
 		except OSError as e:
 			log.error("filelist_write_error", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror, errno=e.errno)
-			yield ("fail", TestResult.prep(test.key, test.get_name(), f"cannot write {path}"))
 
 
 class RunProcessMod:
@@ -240,4 +231,3 @@ class InterpretCompileMod:
 		if stderr_tail is not None:
 			log_kw["stderr_tail"] = stderr_tail
 		log.error("compile_failed", **log_kw)
-		yield ("fail", TestResult.compile_fail(test.key, test.get_name()))
