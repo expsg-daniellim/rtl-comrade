@@ -78,6 +78,21 @@ def test_load_processor_function(logging_handler, tmp_path):
 	assert obj.__name__ == "add_marker"
 
 
+def test_load_relative_path(logging_handler, tmp_path):
+	_write(tmp_path, "p.py", """\
+		from __future__ import annotations
+		from typing import Any
+		from collections.abc import MutableMapping
+
+		def add_marker(logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+			event_dict['marker'] = True
+			return event_dict
+	""")
+	obj = _handler_config(Path("p.py"), "add_marker").load(relative_path=tmp_path)
+	assert callable(obj)
+	assert obj.__name__ == "add_marker"
+
+
 def test_load_processor_class_no_config(logging_handler, tmp_path):
 	# A processor class with no `config` __init__ param is instantiated via obj().
 	f = _write(tmp_path, "p.py", """\
