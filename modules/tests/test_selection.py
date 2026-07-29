@@ -23,6 +23,7 @@ RouteListModeMod = _mod.RouteListModeMod
 ListTestNamesMod = _mod.ListTestNamesMod
 SelectTestsMod = _mod.SelectTestsMod
 FilterRegLvlMod = _mod.FilterRegLvlMod
+ResolveModelRefMod = _mod.ResolveModelRefMod
 LoadModelMod = _mod.LoadModelMod
 ModelConfigFile = _mod.ModelConfigFile
 ExpandSweepMod = _mod.ExpandSweepMod
@@ -262,12 +263,34 @@ def test_filter_reglvl_below_lower_bound(logging_handler):
 
 
 # ---------------------------------------------------------------------------
-# LoadModelMod helpers
+# ResolveModelRefMod / LoadModelMod helpers
 # ---------------------------------------------------------------------------
 
 
 def _make_model_test(name="alu", model="test_module", model_path="models.yaml", suite_dir=None, **overrides):
 	return _make_test(name, model=model, model_path=model_path, suite_dir=suite_dir or _MODELS_FIXTURE.parent, **overrides)
+
+
+# ---------------------------------------------------------------------------
+# ResolveModelRefMod
+# ---------------------------------------------------------------------------
+
+
+def test_resolve_model_ref_happy_path():
+	test = _make_model_test()
+	mod = ResolveModelRefMod()
+	results = list(mod.run(test=test))
+	assert len(results) == 2
+	port0, val0 = results[0]
+	assert port0 == "model_name"
+	assert isinstance(val0, KeyedValue)
+	assert val0.key == test.key
+	assert val0.value == test.model
+	port1, val1 = results[1]
+	assert port1 == "model_path"
+	assert isinstance(val1, KeyedValue)
+	assert val1.key == test.key
+	assert val1.value == test.suite_dir / test.model_path
 
 
 # ---------------------------------------------------------------------------
@@ -278,19 +301,14 @@ def _make_model_test(name="alu", model="test_module", model_path="models.yaml", 
 def test_load_model_happy_path(logging_handler):
 	test = _make_model_test()
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
-	assert len(results) == 2
-	port0, val0 = results[0]
-	port1, val1 = results[1]
-	assert port0 == "test"
-	assert val0 is test
-	assert test.model == "test_module"  # name string unchanged — not overwritten with ModelConfig
-	assert port1 == "model"
-	assert isinstance(val1, KeyedValue)
-	assert val1.key == test.key
-	assert val1.value.name == "test_module"
-	assert val1.value.filelist == ["-F test_modules.f"]
-	assert val1.value.path == str(_MODELS_FIXTURE)
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
+	assert len(results) == 1
+	port, val = results[0]
+	assert port == "model"
+	assert isinstance(val, ModelConfig)
+	assert val.name == "test_module"
+	assert val.filelist == ["-F test_modules.f"]
+	assert val.path == str(_MODELS_FIXTURE)
 	assert logging_handler.failure is False
 
 
@@ -301,18 +319,17 @@ def test_load_model_raw_shape_no_path():
 		assert hasattr(item, 'name')
 		assert hasattr(item, 'filelist')
 		assert not hasattr(item, 'path')
-	# emitted ModelConfig.path is set at construction from resolved, not from YAML
 	test = _make_model_test()
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
-	_, val = results[1]
-	assert val.value.path == str(_MODELS_FIXTURE)
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
+	_, val = results[0]
+	assert val.path == str(_MODELS_FIXTURE)
 
 
 def test_load_model_not_in_file(logging_handler):
 	test = _make_model_test(model="nonexistent_model")
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
@@ -320,7 +337,7 @@ def test_load_model_not_in_file(logging_handler):
 def test_load_model_file_not_found(logging_handler):
 	test = _make_model_test(model_path="nonexistent_models.yaml")
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
@@ -330,7 +347,7 @@ def test_load_model_parse_error(tmp_path, logging_handler):
 	bad.write_text("rtl-buddy-filetype: bad_type\nmodels: []\n")
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
@@ -340,7 +357,7 @@ def test_load_model_empty_models_list(tmp_path, logging_handler):
 	empty.write_text("rtl-buddy-filetype: model_config\nmodels: []\n")
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
@@ -349,7 +366,7 @@ def test_load_model_is_directory(tmp_path, logging_handler):
 	(tmp_path / "models.yaml").mkdir()
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
@@ -362,7 +379,7 @@ def test_load_model_permission_denied(tmp_path, logging_handler):
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
 	try:
-		results = list(mod.run(test=test))
+		results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	finally:
 		bad.chmod(0o644)
 	assert len(results) == 0
@@ -374,7 +391,7 @@ def test_load_model_invalid_unicode(tmp_path, logging_handler):
 	bad.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
 	test = _make_model_test(model_path="models.yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
@@ -382,7 +399,7 @@ def test_load_model_invalid_unicode(tmp_path, logging_handler):
 def test_load_model_os_error(tmp_path, logging_handler):
 	test = _make_model_test(model_path="x" * 5000 + ".yaml", suite_dir=tmp_path)
 	mod = LoadModelMod()
-	results = list(mod.run(test=test))
+	results = list(mod.run(model_name=test.model, model_path=test.suite_dir / test.model_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 

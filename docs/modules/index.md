@@ -24,7 +24,7 @@ The `test` flow is a linear pipeline that fans out per test (and per run). The s
 
 **Selection & expansion** (`setup.py`) — route list-mode, select, filter, load model, sweep
 
-- [route-list-mode](route-list-mode.md) · [list-test-names](list-test-names.md) · [select-tests](select-tests.md) · [filter-reglvl](filter-reglvl.md) · [load-model](load-model.md) · [expand-sweep](expand-sweep.md)
+- [route-list-mode](route-list-mode.md) · [list-test-names](list-test-names.md) · [select-tests](select-tests.md) · [filter-reglvl](filter-reglvl.md) · [resolve-model-ref](resolve-model-ref.md) · [load-model](load-model.md) · [expand-sweep](expand-sweep.md)
 
 **Prep** (`build.py`) — preproc script, filelist generation
 
@@ -56,7 +56,9 @@ The `test` flow is a linear pipeline that fans out per test (and per run). The s
 discover → parse-root → select-platform → resolve-builder ┐
 work-dir → ensure-logs                                     │ (persistent config,
 parse-suite → route-list ──list──▶ list-test-names         │  fanned to many nodes)
-             └──run──▶ select ─test▶ filter ─test▶ load-model ─test/model▶ sweep
+             └──run──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
+                                                    └─test──────────────────────────────────────▶
+                                                    └─test▶ load-model
                                                                               │
   sweep ─test/model▶ preproc ▶ gate-pre ▶ filelist ─test/filelist▶ cc-build ─command▶ cc-run
                                                                               │
@@ -71,7 +73,7 @@ Every failure, skip, timeout, or early-stop emits a diagnostic log event (`log.e
 
 ## Shared value types
 
-The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/schema/`. `KeyedValue` is the exception: it belongs to the contract layer (`contracts/sentinels.py`), since [`keyed_join`](../contracts/keyed_join.md) both reads and constructs it, and the schema package re-exports it so the import path is unchanged. Most `keyed_join` nodes set `unwrap: true`, so the envelope rides the wire but never reaches module code — only [expand-sweep](expand-sweep.md) and [expand-runs](expand-runs.md), which mint new keys, construct it themselves.
+The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/schema/`. `KeyedValue` is the exception: it belongs to the contract layer (`contracts/sentinels.py`), since [`keyed_join`](../contracts/keyed_join.md) both reads and constructs it, and the schema package re-exports it so the import path is unchanged. Most `keyed_join` nodes set `unwrap: true`, so the envelope rides the wire but never reaches module code — only [expand-sweep](expand-sweep.md), [expand-runs](expand-runs.md), and [resolve-model-ref](resolve-model-ref.md), which mint or project keys, construct it themselves.
 
 | Type | Fields | Role |
 |---|---|---|

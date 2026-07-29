@@ -28,7 +28,10 @@ nodes:
 - id: filter
   module: filter-reglvl
   contract: { name: default, config: { persistent_inputs: [ builder_cfg, reg_level, start_level ] } }
-- { id: load-model, module: load-model, contract: default }
+- { id: model-ref, module: resolve-model-ref, contract: default }
+- id: load-model
+  module: load-model
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true } }
 - id: sweep
   module: expand-sweep
   contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ root_cfg ] } }
@@ -155,9 +158,12 @@ edges:
 
 # ---- main line: split per-test / per-run keyed edges ----
 - { src: { node: select,     port: test }, dst: { node: filter,     port: test } }
-- { src: { node: filter,     port: test }, dst: { node: load-model, port: test } }
-- { src: { node: load-model, port: test },  dst: { node: sweep, port: test } }
-- { src: { node: load-model, port: model }, dst: { node: sweep, port: model } }
+- { src: { node: filter,     port: test },       dst: { node: model-ref,  port: test } }
+- { src: { node: filter,     port: test },       dst: { node: load-model, port: test } }
+- { src: { node: filter,     port: test },       dst: { node: sweep,      port: test } }
+- { src: { node: model-ref,  port: model_name }, dst: { node: load-model, port: model_name } }
+- { src: { node: model-ref,  port: model_path }, dst: { node: load-model, port: model_path } }
+- { src: { node: load-model, port: model },      dst: { node: sweep,      port: model } }
 - { src: { node: sweep,      port: test },  dst: { node: preproc, port: test } }
 - { src: { node: sweep,      port: model }, dst: { node: preproc, port: model } }
 - { src: { node: preproc,    port: test },  dst: { node: gate-pre, port: test } }

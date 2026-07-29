@@ -8,8 +8,11 @@ The full dataflow of the `test` graph, rendered inline by GitHub. Node labels no
 flowchart TD
   route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select"]
   select m2@-->|"test:TestConfig"| filter["filter"]
-  filter m3@-->|"test:TestConfig"| load_model["load-model"]
-  load_model m4@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| sweep["sweep<br/>(keyed_join)"]
+  filter m3@-->|"test:TestConfig"| model_ref["model-ref"]
+  filter m3a@-->|"test:TestConfig"| load_model["load-model<br/>(keyed_join)"]
+  filter m3b@-->|"test:TestConfig"| sweep["sweep<br/>(keyed_join)"]
+  model_ref m3c@-->|"model_name:KeyedValue[str] + model_path:KeyedValue[Path]"| load_model
+  load_model m4@-->|"model:KeyedValue[ModelConfig]"| sweep
   sweep m5@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| preproc["preproc<br/>(keyed_join)"]
   preproc m6@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| gate_pre["gate-pre<br/>(keyed_join)"]
   gate_pre m7@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| filelist["filelist<br/>(keyed_join)"]
@@ -79,7 +82,7 @@ flowchart TD
   classDef join fill:#fff3cd,stroke:#bf8700;
   classDef cli fill:#eef7ee,stroke:#2da44e;
   class select,sweep,runs fanout;
-  class filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
+  class load_model,filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
   %% edge styling by class — each styled edge has a unique ID; per-type class lists below.
@@ -89,7 +92,7 @@ flowchart TD
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
-  class m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
+  class m1,m2,m3,m3a,m3b,m3c,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
   class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
   class e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12 envEdge;
   class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;

@@ -39,7 +39,7 @@ The project inputs (`root_config.yaml`, `tests.yaml`, `models.yaml`) and their d
 |---|---|
 | `root_config.yaml` | [discover-config-file](../modules/discover-config-file.md) → [parse-root-config](../modules/parse-root-config.md) |
 | `tests.yaml` | [parse-suite-config](../modules/parse-suite-config.md) |
-| `models.yaml` | [load-model](../modules/load-model.md) |
+| `models.yaml` | [resolve-model-ref](../modules/resolve-model-ref.md) (path) → [load-model](../modules/load-model.md) (read) |
 
 ## Pipeline
 
@@ -49,7 +49,9 @@ For the full GitHub-rendered dataflow (per-edge payloads and pairing contracts),
 discover → parse-root → select-platform → resolve-builder ┐
 work-dir → ensure-logs                                     │ (persistent config,
 parse-suite → route-list ──list──▶ list-test-names         │  fanned to many nodes)
-             └──run──▶ select ─test▶ filter ─test▶ load-model ─test/model▶ sweep
+             └──run──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
+                                                    └─test──────────────────────────────────────▶
+                                                    └─test▶ load-model
                                                                               │
   sweep ─test/model▶ preproc ▶ gate-pre ▶ filelist ─test/filelist▶ cc-build ─command▶ cc-run
                                                                               │
@@ -64,7 +66,7 @@ The flow reads in stages (see [docs/modules/index.md](../modules/index.md) for t
 
 1. **Setup** — locate and parse `root_config.yaml`, pick the platform and builder from the host `uname`, resolve the working and logs directories, parse the suite, and derive the seed mode. These one-shot nodes produce the persistent configuration fanned out to the rest of the graph.
 2. **List vs run** — `--list` short-circuits to [list-test-names](../modules/list-test-names.md) and prints nothing else; otherwise the suite enters the run pipeline.
-3. **Selection & expansion** — select the requested tests, filter by register level, load each test's model, and expand sweep variants. From here the main line carries **split edges** (see below).
+3. **Selection & expansion** — select the requested tests, filter by register level, resolve the model reference, load each test's model, and expand sweep variants. From here the main line carries **split edges** (see below).
 4. **Prep** — run the optional preproc script, then generate the compile filelist.
 5. **Compile** — build the compile command, run it via [run-process](../modules/run-process.md), interpret the return code.
 6. **Sim** — fan out into runs, resolve the seed, build and run the sim command (again via [run-process](../modules/run-process.md)), persist the seed, refresh the `latest` symlinks, and interpret the outcome.
@@ -75,8 +77,8 @@ The flow reads in stages (see [docs/modules/index.md](../modules/index.md) for t
 The graph relies on a few contract choices to coordinate the fan-out (full detail in [docs/contracts/index.md](../contracts/index.md)):
 
 - **[`unit`](../contracts/unit.md)** — the one-shot setup nodes that must run exactly once (`parse-root`, `select-platform`, `resolve-builder`, `ensure-logs`, `parse-suite`, `seed-mode`, `route-list`).
-- **[`default`](../contracts/default.md)** — source nodes and the fan-out points (`select`, `filter`, `load-model`), plus the compile `run-process`.
-- **[`keyed_join`](../contracts/keyed_join.md)** — the backbone of the per-test/per-run stages. Because a single test travels as **split edges** (e.g. a `test` payload alongside a keyed `model` or `filelist` payload), each downstream node uses `keyed_join` with `key_field: key` to reassemble the payloads belonging to the same test before invoking the module. [expand-runs](../modules/expand-runs.md) re-keys each item to `<test.key>#<run_id>` so per-run stages stay correlated. Most of those nodes also set `unwrap: true`: the `KeyedValue` envelope stays on the wire, but the contract strips it before the module sees it and re-attaches the assembled key to what the module emits, so only the two fan-out modules that mint new keys ([expand-sweep](../modules/expand-sweep.md) and `expand-runs`) handle keys themselves.
+- **[`default`](../contracts/default.md)** — source nodes and the fan-out points (`select`, `filter`, `model-ref`), plus the compile `run-process`.
+- **[`keyed_join`](../contracts/keyed_join.md)** — the backbone of the per-test/per-run stages. Because a single test travels as **split edges** (e.g. a `test` payload alongside a keyed `model` or `filelist` payload), each downstream node uses `keyed_join` with `key_field: key` to reassemble the payloads belonging to the same test before invoking the module. [load-model](../modules/load-model.md) uses `keyed_join` with `unwrap: true` to receive the model name and path as bare values and rewrap its output. [expand-runs](../modules/expand-runs.md) re-keys each item to `<test.key>#<run_id>` so per-run stages stay correlated. Most of those nodes also set `unwrap: true`: the `KeyedValue` envelope stays on the wire, but the contract strips it before the module sees it and re-attaches the assembled key to what the module emits, so only the fan-out modules that mint new keys ([expand-sweep](../modules/expand-sweep.md) and `expand-runs`) and [resolve-model-ref](../modules/resolve-model-ref.md), which projects keys, construct `KeyedValue` themselves.
 
 Persistent configuration (builder config, work dir, logs dir, seed mode, root config) is wired as `persistent_inputs` on the joining contracts, so one upstream value is cached and reused for every keyed item without re-delivery.
 

@@ -224,32 +224,37 @@ class ModelConfigFile:
 	models:list[ModelConfigFileItem] = field(default_factory=list)
 
 
-class LoadModelMod:
+class ResolveModelRefMod:
 	def run(self, test:TestConfig):
-		resolved = test.suite_dir / test.model_path
+		yield ("model_name", KeyedValue(test.key, test.model))
+		yield ("model_path", KeyedValue(test.key, test.suite_dir / test.model_path))
+
+
+class LoadModelMod:
+	def run(self, model_name:str, model_path:Path, test:TestConfig|None = None):
+		key = test.key if test is not None else model_name
+		test_name = test.get_name() if test is not None else None
 		try:
-			with open(resolved, encoding="utf-8") as f:
+			with open(model_path, encoding="utf-8") as f:
 				file = from_yaml(ModelConfigFile, f.read())
-			item = next((m for m in file.models if m.name == test.model), None)
+			item = next((m for m in file.models if m.name == model_name), None)
 			if item is None:
-				raise LookupError(f"model {test.model!r} not in {resolved}")
-			model = ModelConfig(name=item.name, filelist=item.filelist, path=str(resolved))
-			yield ("test", test)
-			yield ("model", KeyedValue(test.key, model))
+				raise LookupError(f"model {model_name!r} not in {model_path}")
+			yield ("model", ModelConfig(name=item.name, filelist=item.filelist, path=str(model_path)))
 		except FileNotFoundError:
-			log.error("model_file_not_found", key=test.key, test_name=test.get_name(), model_path=str(resolved))
+			log.error("model_file_not_found", key=key, test_name=test_name, model_path=str(model_path))
 		except IsADirectoryError:
-			log.error("model_is_directory", key=test.key, test_name=test.get_name(), model_path=str(resolved))
+			log.error("model_is_directory", key=key, test_name=test_name, model_path=str(model_path))
 		except PermissionError as e:
-			log.error("model_permission_denied", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror)
+			log.error("model_permission_denied", key=key, test_name=test_name, model_path=str(model_path), err=e.strerror)
 		except UnicodeDecodeError as e:
-			log.error("model_invalid_unicode", key=test.key, test_name=test.get_name(), model_path=str(resolved), reason=e.reason)
+			log.error("model_invalid_unicode", key=key, test_name=test_name, model_path=str(model_path), reason=e.reason)
 		except (SerdeError, MarkedYAMLError, ReaderError) as e:
-			log.error("model_parse_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=str(e))
+			log.error("model_parse_error", key=key, test_name=test_name, model_path=str(model_path), err=str(e))
 		except LookupError:
-			log.error("model_not_found", key=test.key, test_name=test.get_name(), model_path=str(resolved), model=test.model)
+			log.error("model_not_found", key=key, test_name=test_name, model_path=str(model_path), model=model_name)
 		except OSError as e:
-			log.error("model_read_error", key=test.key, test_name=test.get_name(), model_path=str(resolved), err=e.strerror, errno=e.errno)
+			log.error("model_read_error", key=key, test_name=test_name, model_path=str(model_path), err=e.strerror, errno=e.errno)
 
 
 class ExpandSweepMod:
