@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
 from itertools import groupby
@@ -19,7 +18,6 @@ from .logging import HarnessLogger
 from .module import GraphModule, PortInvalidMappingTarget, PortNonDefinitePositionalDestinationError
 from .module_cli import ModuleCLI
 from .node import Connection, Node, PreNode, InvalidNodeModule
-from .port import Port
 from .validation import validate_no_static_deadlock, validate_branching
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())

@@ -11,7 +11,7 @@ import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
 
 from .config import GraphConfigNode, GraphConfigEdge
-from .logging import HarnessLogger, LogEvent
+from .logging import HarnessLogger
 from .port import Port
 from .structure import ModuleStructure
 from .structure import StructureInvalidTupleError, StructureNonStrPortNameError
