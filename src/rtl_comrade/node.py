@@ -15,8 +15,9 @@ from structlog.contextvars import bind_contextvars, unbind_contextvars
 import typer
 
 from .api import Payload, EndSentinel
-from .contract import ContractDefinitions
-from .logging import HarnessLogger
+from .config import GraphConfigNode, GraphConfigEdge
+from .contract import ContractDefinitions, InvalidContractParameterTypeError, MissingContractError, MissingContractFunctionError, MissingContractParameterError
+from .logging import HarnessLogger, LogEvent
 from .module import GraphModule
 from .port import Port, InvalidEnqueuedError, IllegalGetAccessError
 from .structure import ModuleStructure
@@ -39,6 +40,16 @@ class Connection:
 	self_port: str
 	other_node: str
 	other_port: str
+
+@dataclass(slots=True)
+class InvalidNodeModule(Exception):
+	"""Raised when a node references a module name absent from the loaded module plugins.
+
+	Attributes:
+		mod: The unresolved module name.
+	"""
+
+	mod: str
 
 @dataclass(slots=True)
 class PreNode:  # pylint: disable=too-many-instance-attributes
@@ -103,6 +114,8 @@ class PreNode:  # pylint: disable=too-many-instance-attributes
 					log.fatal('config.deserialise.serde_error', context='harness.node.module', node=self.id, module=module.name, exc_info=e)
 				except UserError as e:
 					log.fatal('config.deserialise.user_error', context='harness.node.module', node=self.id, module=module.name, exc_info=e)
+			else:
+				log.warn('config_mismatch', context='harness.node.module', node=self.id, module=module.name)
 
 			module_init_args['config'] = config
 
@@ -142,6 +155,34 @@ class PreNode:  # pylint: disable=too-many-instance-attributes
 			return list(self.ports.keys())[port - 1]
 
 		return None
+
+	@classmethod
+	def from_config_node(cls, node:GraphConfigNode, edges:list[GraphConfigEdge], module_mappings:dict[str, GraphModule], contract_mappings:dict[str, type], relative_path:Path) -> Self:
+		"""Construct a PreNode from a graph config node, resolving its module, ports, and contract definitions.
+
+		Args:
+			node: The graph config node to construct from.
+			edges: All graph edges, used to derive ports for non-definite modules and to collect required-port markers.
+			module_mappings: Loaded module plugin descriptors keyed by exported name.
+			contract_mappings: Loaded contract plugin classes keyed by exported name.
+			relative_path: Base path used to resolve ``{graph}``-relative config paths.
+
+		Returns:
+			The constructed PreNode.
+		"""
+
+		if node.module.name not in module_mappings:
+			raise InvalidNodeModule(node.module.name)
+
+		# Get node ports
+		definite_inputs_override = node.contract_port_mappings is not None
+		ports = module_mappings[node.module.name].construct_node_ports(node, edges)
+
+		# Consolidate contract definitions
+		contract_definitions = ContractDefinitions.from_config(node.contract, node.input_contract, node.output_contract, contract_mappings)
+		required_ports = [ edge.dst.port for edge in edges if edge.dst.node == node.id and edge.dst.required ]
+
+		return cls(id=node.id, module=module_mappings[node.module.name], config=node.module.config, contract_definitions=contract_definitions, relative_path=relative_path, ports=ports, required_ports=required_ports, definite_inputs_override=definite_inputs_override)
 
 @dataclass(frozen=True, slots=True)
 class Node:  # pylint: disable=too-many-instance-attributes

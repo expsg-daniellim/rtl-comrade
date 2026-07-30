@@ -226,6 +226,11 @@ class _InputBranchModule:
 			yield ("q", 2)
 
 
+class _DefaultInputModule:
+	def run(self, a=None):
+		return a
+
+
 def _make_branching_prenode(nid, Module, ports=None, required_ports=None):
 	structure = ModuleStructure(Module)
 	pre = MagicMock()
@@ -293,3 +298,20 @@ def test_branching_overloaded_independent_guards():
 	node_dsts = { "g": [ Connection("p", "sink", "a"), Connection("q", "sink", "a") ], "sink": [] }
 	input_labels, overloaded = validate_branching(prenodes, node_dsts)
 	assert ("sink", "a") in overloaded
+
+
+def test_branching_non_gating_input_does_not_propagate():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("b", _BranchModule), _make_branching_prenode("relay", _DefaultInputModule), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "b": [ Connection("p", "relay", "a") ], "relay": [ Connection("default", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert input_labels["relay"]["a"] == frozenset({("b", frozenset({"p"}))})
+	assert input_labels["sink"]["a"] == frozenset()
+	assert len(overloaded) == 0
+
+
+def test_branching_required_default_port_propagates():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("b", _BranchModule), _make_branching_prenode("relay", _DefaultInputModule, required_ports={"a"}), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "b": [ Connection("p", "relay", "a") ], "relay": [ Connection("default", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert input_labels["sink"]["a"] == frozenset({("b", frozenset({"p"}))})
+	assert len(overloaded) == 0

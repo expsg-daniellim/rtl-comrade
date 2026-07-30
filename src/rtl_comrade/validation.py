@@ -130,6 +130,18 @@ def validate_no_static_deadlock(prenodes:dict[str, PreNode], node_dsts:dict[str,
 	return res
 
 def validate_branching(prenodes:dict[str, PreNode], node_dsts:dict[str, list[Connection]]) -> tuple[dict[str, dict[str, frozenset]], list[tuple[str, str]]]:
+	"""Propagate control-dependence labels and detect overloaded multi-source ports.
+
+	Walks nodes in topological order, computing each input port's branch label (the intersection of its incoming edge labels) and checking that multi-source ports are fed only by mutually exclusive arms of a common branch origin.
+
+	Args:
+		prenodes: Constructed PreNodes keyed by node id, carrying port and structure metadata.
+		node_dsts: Outgoing connections keyed by source node id.
+
+	Returns:
+		A ``(input_labels, overloaded)`` pair: ``input_labels`` maps each node id to a dict of port name to control-dependence label frozenset; ``overloaded`` lists ``(node_id, port_name)`` pairs whose sources are not mutually exclusive.
+	"""
+
 	input_labels:dict[str, dict[str, frozenset]] = { nid: {} for nid in prenodes }
 	edge_labels:dict[str, dict[str, list[frozenset]]] = { nid: {} for nid in prenodes }
 	declared_arms:dict[str, bool] = {}

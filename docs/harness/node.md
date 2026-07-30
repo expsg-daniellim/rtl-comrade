@@ -6,9 +6,10 @@ Source: [src/rtl_comrade/node.py](../../src/rtl_comrade/node.py)
 
 This file defines the runtime execution unit of the harness and the construction-time value it is built from:
 
-- `PreNode` — a node under construction: a module instance, its input ports, and the resolved `ContractDefinitions`, minus the node's outgoing edges. Enough to validate edges and propagate labels.
+- `PreNode` — a node under construction: a module instance, its input ports, and the resolved `ContractDefinitions`, minus the node's outgoing edges. Enough to validate edges and propagate labels. `PreNode.from_config_node` is the primary constructor from graph config, consolidating module lookup, port construction (via `GraphModule.construct_node_ports`), and contract resolution into one call.
 - `Node` — the immutable runtime unit, produced by `Node.from_prenode`, binding one module instance, its constructed contracts, one input-port set, and its outgoing dispatch map (`dsts`, source output port name → destination `Port`s).
 - `Connection` — one outgoing edge in id space, `(self_port, other_node, other_port)`. A construction-time value: it carries node identity so deadlock validation and label propagation work over ids, and it names the destination port so the runtime dispatch map can be materialised from it. It does not enter the runtime `Node`.
+- `InvalidNodeModule` — raised by `from_config_node` when a node references a module name absent from the loaded plugins.
 
 ## See Also
 
@@ -25,7 +26,7 @@ This file defines the runtime execution unit of the harness and the construction
 
 ## Main Responsibilities
 
-- `PreNode`: instantiate the module from a pre-validated `GraphModule` descriptor, deep-copy port templates so each node has independent queues, resolve `required_ports`, and retain the resolved `ContractDefinitions`
+- `PreNode`: construct from a graph config node via `from_config_node` (validating the module name, building ports via `GraphModule.construct_node_ports`, resolving contracts via `ContractDefinitions.from_config`), or directly via `__init__` for harness-created nodes (CLI nodes). Instantiate the module from a pre-validated `GraphModule` descriptor, resolve `required_ports`, and retain the resolved `ContractDefinitions`
 - `Node.from_prenode`: construct the node's contracts from the now-labelled ports, coupling the `PreNode` with its edge information into an immutable `Node`
 - run the contract/module loop, opening and closing the port read window around each `get_inputs()` call
 - pass each module output through the output contract, then dispatch by enqueuing directly onto destination `Port`s
@@ -40,8 +41,8 @@ This file defines the runtime execution unit of the harness and the construction
 
 `PreNode` takes a pre-validated [GraphModule](module.md) descriptor rather than a raw module class. All module-side reflection is done once by `GraphModule.from_module` before any `PreNode` is created.
 
-- **Module instantiation** uses the descriptor's `has_config`, `has_id`, and `defines_config` flags to decide what to pass to the module constructor: `config` when `has_config`; that config deserialized through `serde.from_dict(...)` when `defines_config`; `<node-id>.module` when `has_id`. After deserialization, a non-absolute `Path` field whose first component is `{graph}` is rewritten to `relative_path / <remaining>`.
-- **Ports** are the deep-copy of `GraphModule.ports` (independent queues per node), unless `Graph.from_config` supplies an explicit `ports` surface — for non-definite-input modules (built from incoming edges) or `contract_port_mappings` nodes — in which case that surface replaces the template outright.
+- **Module instantiation** uses the descriptor's `has_config`, `has_id`, and `defines_config` flags to decide what to pass to the module constructor: `config` when `has_config`; that config deserialised through `serde.from_dict(...)` when `defines_config`; `<node-id>.module` when `has_id`. After deserialisation, a non-absolute `Path` field whose first component is `{graph}` is rewritten to `relative_path / <remaining>`.
+- **Ports** are built by `GraphModule.construct_node_ports` (called by `from_config_node`) or supplied directly by the caller. For definite modules without `contract_port_mappings`, `construct_node_ports` deep-copies `GraphModule.ports` (independent queues per node). For `contract_port_mappings` nodes or non-definite modules, it builds the surface from the config or incoming edges respectively. When `__init__` receives no explicit `ports`, it falls back to deep-copying the module's own template.
 - `PreNode.definite_inputs` records whether the input surface is a known finite set (the module's `structure.definite_inputs`, or forced true for a `contract_port_mappings` node).
 - `required_ports` is resolved from the graph config's `required: true` destination references (by name or 1-based index, via `get_canonical_port`) into a canonical-name set. Required-ness is wiring policy expressed in port names; it stays off the transport-level `Port`.
 - `get_canonical_port` lives on `PreNode` — it is used during edge wiring and `required_ports` resolution, both construction-time concerns.
@@ -115,7 +116,7 @@ Dispatch targets `Port`s, not nodes. The runtime `Node` holds `dsts`, a `dict[st
 - destination ports are resolved by name or 1-based position during wiring (`PreNode.get_canonical_port`)
 - output tuples must be exactly `(port_name, value)`; `None` means "emit nothing"
 - emitting on a port with no matching downstream connection is **not** an error: `no_destination` at INFO, value dropped. This fires only when the node has at least one wired destination
-- non-`rtl_comrade` exceptions during contract reflection, config deserialization, construction, and runtime execution are logged with `exc_info=e`; module-side reflection exceptions are handled by `GraphModule.from_module`
+- non-`rtl_comrade` exceptions during contract reflection, config deserialisation, construction, and runtime execution are logged with `exc_info=e`; module-side reflection exceptions are handled by `GraphModule.from_module`; port construction errors propagate as `PortInvalidMappingTarget`/`PortNonDefinitePositionalDestinationError` from `GraphModule.construct_node_ports`
 - `ERROR` allows best-effort continuation, `CRITICAL` aborts immediately
 - `module.finalise` is detected with `hasattr` + `callable`; a non-callable `finalise` attribute is silently ignored
 - `EndSentinel` is only propagated after `finalise` completes — if `finalise` raises fatally, downstream nodes do not receive a sentinel and will block indefinitely

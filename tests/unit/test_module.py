@@ -1,4 +1,4 @@
-"""Unit tests for module.py — GraphModule.from_module."""
+"""Unit tests for module.py — GraphModule.from_module and GraphModule.construct_node_ports."""
 
 import inspect
 from collections import OrderedDict
@@ -7,7 +7,8 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from rtl_comrade.module import GraphModule
+from rtl_comrade.config import GraphConfigNode, GraphConfigNodePlugin, GraphConfigEdge, GraphConfigSrcPort, GraphConfigDstPort
+from rtl_comrade.module import GraphModule, PortInvalidMappingTarget, PortNonDefinitePositionalDestinationError
 from rtl_comrade.port import Port
 
 
@@ -240,3 +241,78 @@ def test_graphmodule_is_frozen(logging_handler):
 	gm = GraphModule.from_module(_MinimalModule)
 	with pytest.raises((AttributeError, TypeError)):
 		gm.name = "changed"  # type: ignore[misc]
+
+
+# ---------------------------------------------------------------------------
+# construct_node_ports — contract_port_mappings
+# ---------------------------------------------------------------------------
+
+
+class _MixedDefaultModule:
+	def run(self, a, b=0):
+		return None
+
+
+def _node(id_, module_name, mappings=None):
+	return GraphConfigNode(id=id_, module=GraphConfigNodePlugin(name=module_name), contract_port_mappings=mappings)
+
+
+def _edge(src_node, src_port, dst_node, dst_port):
+	return GraphConfigEdge(src=GraphConfigSrcPort(node=src_node, port=src_port), dst=GraphConfigDstPort(node=dst_node, port=dst_port))
+
+
+def test_construct_node_ports_with_mappings(logging_handler):
+	gm = GraphModule.from_module(_MixedDefaultModule)
+	node = _node("n", "_MixedDefaultModule", {"cp_a": ["a"], "cp_b": ["b"]})
+	ports = gm.construct_node_ports(node, [])
+	assert list(ports.keys()) == ["cp_a", "cp_b"]
+	assert ports["cp_a"].has_default is False
+	assert ports["cp_b"].has_default is True
+
+
+def test_construct_node_ports_invalid_mapping_target(logging_handler):
+	gm = GraphModule.from_module(_MixedDefaultModule)
+	node = _node("n", "_MixedDefaultModule", {"cp_a": ["nonexistent"]})
+	with pytest.raises(PortInvalidMappingTarget) as exc_info:
+		gm.construct_node_ports(node, [])
+	assert exc_info.value.targets == ["nonexistent"]
+
+
+def test_construct_node_ports_empty_targets_no_default(logging_handler):
+	gm = GraphModule.from_module(_MixedDefaultModule)
+	node = _node("n", "_MixedDefaultModule", {"cp_a": []})
+	ports = gm.construct_node_ports(node, [])
+	assert ports["cp_a"].has_default is False
+
+
+def test_construct_node_ports_non_definite_string_ports(logging_handler):
+	gm = GraphModule.from_module(_KwargsModule)
+	node = _node("agg", "_KwargsModule")
+	edges = [ _edge("src", "default", "agg", "x"), _edge("src2", "default", "agg", "y") ]
+	ports = gm.construct_node_ports(node, edges)
+	assert list(ports.keys()) == ["x", "y"]
+
+
+def test_construct_node_ports_non_definite_positional_rejects(logging_handler):
+	gm = GraphModule.from_module(_KwargsModule)
+	node = _node("agg", "_KwargsModule")
+	edges = [ _edge("src", "default", "agg", 1) ]
+	with pytest.raises(PortNonDefinitePositionalDestinationError) as exc_info:
+		gm.construct_node_ports(node, edges)
+	assert exc_info.value.ports == [1]
+
+
+def test_construct_node_ports_definite_returns_copy(logging_handler):
+	gm = GraphModule.from_module(_OneInputModule)
+	node = _node("n", "_OneInputModule")
+	ports = gm.construct_node_ports(node, [])
+	assert list(ports.keys()) == ["a"]
+	assert ports["a"] is not gm.ports["a"]  # deep copy, not same object
+
+
+def test_construct_node_ports_kwargs_skips_target_check(logging_handler):
+	gm = GraphModule.from_module(_KwargsModule)
+	node = _node("n", "_KwargsModule", {"cp_a": ["anything"]})
+	ports = gm.construct_node_ports(node, [])
+	assert list(ports.keys()) == ["cp_a"]
+	assert ports["cp_a"].has_default is False

@@ -6,7 +6,8 @@ from unittest.mock import patch
 import pytest
 import typer
 
-from serde import serde
+from serde import serde, SerdeError
+from serde.compat import UserError
 
 from rtl_comrade.config import GraphConfigDstPort, GraphConfigEdge, GraphConfigNode, GraphConfigNodePlugin, GraphConfigSrcCLI, GraphConfigSrcPort, GraphFileConfig
 from rtl_comrade.config_graph import GraphConfig
@@ -116,6 +117,26 @@ class _MixedDefaultModule:
 	"""One default-less input (a) and one default-bearing input (b)."""
 
 	def run(self, a, b=0):
+		return None
+
+
+class _ModuleWithTypedConfig:
+	@serde
+	class Config:
+		value: int = 0
+
+	def __init__(self, config):
+		self.cfg = config
+
+	def run(self):
+		return None
+
+
+class _InitCrashMod:
+	def __init__(self):
+		raise RuntimeError("deliberate init crash")
+
+	def run(self):
 		return None
 
 
@@ -674,5 +695,42 @@ def test_contract_port_mappings_kwargs_valid_no_warning(logging_handler, caplog)
 	assert graph.nodes["dst"].ports["cp_a"].has_default is False
 	assert logging_handler.failure is False
 	assert "non_definite_inputs" not in caplog.text
+
+
+# --- Module config/init fatal paths (via from_config_node → graph catch) ---
+
+
+def _from_config_with_module_map(config, module_map):
+	call_count = [0]
+
+	def side_effect(paths, namespace):
+		call_count[0] += 1
+		return module_map if call_count[0] == 1 else {}
+
+	with patch("rtl_comrade.graph.load_plugins", side_effect=side_effect):
+		return Graph.from_config(config)
+
+
+def test_module_config_serde_error_fatal(logging_handler):
+	module_map = {**_MODULE_MAP, "typed_config_mod": _ModuleWithTypedConfig}
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="typed_config_mod", config={"value": 0}))], [])
+	with patch("rtl_comrade.node.from_dict", side_effect=SerdeError("bad config")):
+		with pytest.raises(typer.Exit):
+			_from_config_with_module_map(config, module_map)
+
+
+def test_module_config_user_error_fatal(logging_handler):
+	module_map = {**_MODULE_MAP, "typed_config_mod": _ModuleWithTypedConfig}
+	config = _make_config([GraphConfigNode(id="n1", module=GraphConfigNodePlugin(name="typed_config_mod", config={"value": 0}))], [])
+	with patch("rtl_comrade.node.from_dict", side_effect=UserError("user error")):  # ty: ignore[invalid-argument-type]
+		with pytest.raises(typer.Exit):
+			_from_config_with_module_map(config, module_map)
+
+
+def test_module_init_exception_fatal(logging_handler):
+	module_map = {**_MODULE_MAP, "crash_mod": _InitCrashMod}
+	config = _make_config([_node("n1", "crash_mod")], [])
+	with pytest.raises(typer.Exit):
+		_from_config_with_module_map(config, module_map)
 
 

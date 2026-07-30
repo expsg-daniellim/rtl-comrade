@@ -11,10 +11,11 @@ from serde import SerdeError
 from serde.compat import UserError
 
 from rtl_comrade.api import Payload, EndSentinel
+from rtl_comrade.config import GraphConfigNode, GraphConfigNodePlugin, GraphConfigEdge, GraphConfigSrcPort, GraphConfigDstPort
 from rtl_comrade.contract import ContractDefinition, ContractDefinitions
 from rtl_comrade.contract_default import DefaultContract
-from rtl_comrade.module import GraphModule
-from rtl_comrade.node import Node, PreNode
+from rtl_comrade.module import GraphModule, PortInvalidMappingTarget, PortNonDefinitePositionalDestinationError
+from rtl_comrade.node import Connection, Node, PreNode, InvalidNodeModule
 from rtl_comrade.port import Port
 
 
@@ -895,3 +896,100 @@ async def test_run_finalise_async_return_dispatched(logging_handler):
 async def test_run_finalise_async_generator_dispatched(logging_handler):
 	outputs = await _run_node_with_input(_ModuleWithFinaliseAsyncGenerator, {})
 	assert outputs == [10, 20]
+
+
+# ---------------------------------------------------------------------------
+# PreNode.from_config_node
+# ---------------------------------------------------------------------------
+
+
+class _SourceModule:
+	def run(self):
+		return 1
+
+
+class _TwoInputsFromConfig:
+	def run(self, a, b):
+		return None
+
+
+class _SimpleContract:
+	def __init__(self, id, ports):  # pylint: disable=redefined-builtin
+		self.id = id
+		self.ports = ports
+
+	async def get_inputs(self):
+		return EndSentinel(self.id)
+
+
+def _cfg_node(id_, module, contract="", mappings=None):
+	return GraphConfigNode(id=id_, module=GraphConfigNodePlugin(name=module), contract=GraphConfigNodePlugin(name=contract), contract_port_mappings=mappings)
+
+
+def _cfg_edge(src_node, src_port, dst_node, dst_port):
+	return GraphConfigEdge(src=GraphConfigSrcPort(node=src_node, port=src_port), dst=GraphConfigDstPort(node=dst_node, port=dst_port))
+
+
+class _KwargsModule:
+	def run(self, **kwargs):
+		return None
+
+
+def _module_map():
+	return { name: GraphModule.from_module(cls) for name, cls in [("source_mod", _SourceModule), ("two_input_mod", _TwoInputsFromConfig), ("kwargs_mod", _KwargsModule)] }
+
+
+def _contract_map():
+	return {"simple_contract": _SimpleContract}
+
+
+def test_from_config_node_valid(logging_handler):
+	node = _cfg_node("n1", "source_mod")
+	pre = PreNode.from_config_node(node, [], _module_map(), {}, Path())
+	assert pre.id == "n1"
+
+
+def test_from_config_node_invalid_module(logging_handler):
+	node = _cfg_node("n1", "nonexistent_mod")
+	with pytest.raises(InvalidNodeModule) as exc_info:
+		PreNode.from_config_node(node, [], _module_map(), {}, Path())
+	assert exc_info.value.mod == "nonexistent_mod"
+
+
+def test_from_config_node_with_contract(logging_handler):
+	node = _cfg_node("n1", "source_mod", contract="simple_contract")
+	pre = PreNode.from_config_node(node, [], _module_map(), _contract_map(), Path())
+	assert pre.contract_definitions is not None
+
+
+def test_from_config_node_missing_contract(logging_handler):
+	from rtl_comrade.contract import MissingContractError  # pylint: disable=import-outside-toplevel
+	node = _cfg_node("n1", "source_mod", contract="nonexistent")
+	with pytest.raises(MissingContractError):
+		PreNode.from_config_node(node, [], _module_map(), _contract_map(), Path())
+
+
+def test_from_config_node_invalid_mapping_target(logging_handler):
+	node = _cfg_node("n1", "two_input_mod", mappings={"cp": ["nonexistent"]})
+	with pytest.raises(PortInvalidMappingTarget):
+		PreNode.from_config_node(node, [], _module_map(), {}, Path())
+
+
+def test_from_config_node_non_definite_positional(logging_handler):
+	node = _cfg_node("agg", "kwargs_mod")
+	edges = [ _cfg_edge("src", "default", "agg", 1) ]
+	with pytest.raises(PortNonDefinitePositionalDestinationError):
+		PreNode.from_config_node(node, edges, _module_map(), {}, Path())
+
+
+def test_from_config_node_required_ports(logging_handler):
+	node = _cfg_node("sink", "two_input_mod")
+	edges = [ GraphConfigEdge(src=GraphConfigSrcPort(node="src"), dst=GraphConfigDstPort(node="sink", port="a", required=True)) ]
+	pre = PreNode.from_config_node(node, edges, _module_map(), {}, Path())
+	assert "a" in pre.required_ports
+
+
+def test_from_config_node_definite_inputs_override_with_mappings(logging_handler):
+	node = _cfg_node("n1", "kwargs_mod", mappings={"cp": ["x"]})
+	pre = PreNode.from_config_node(node, [], _module_map(), {}, Path())
+	assert pre.definite_inputs is True
