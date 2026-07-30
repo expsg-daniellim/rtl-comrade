@@ -1,4 +1,4 @@
-"""Unit tests for validation.py — validate_acyclic and validate_no_static_deadlock."""
+"""Unit tests for validation.py — validate_acyclic, validate_no_static_deadlock, and validate_branching."""
 
 from collections import OrderedDict
 from unittest.mock import MagicMock
@@ -7,9 +7,11 @@ from rtl_comrade.config import GraphConfigEdge, GraphConfigNode, GraphConfigNode
 from rtl_comrade.config_graph import GraphConfig
 from rtl_comrade.node import Connection
 from rtl_comrade.port import Port
+from rtl_comrade.structure import ModuleStructure
 from rtl_comrade.validation import (
 	StaticDeadlockValidationResults,
 	validate_acyclic,
+	validate_branching,
 	validate_no_static_deadlock,
 )
 
@@ -174,3 +176,120 @@ def test_deadlock_required_default_port_not_source_capable():
 	prenodes["only"].required_ports = {"inp"}
 	result = validate_no_static_deadlock(prenodes, {})
 	assert result.has_source_capable is False
+
+
+# --- validate_branching ---
+# Tests build mock PreNodes carrying real ModuleStructure objects (for resolve_arms / exclusive_arms) and call validate_branching directly.
+
+
+class _SourceModule:
+	def run(self):
+		return 1
+
+
+class _SinkModule:
+	def run(self, a):
+		return None
+
+
+class _TwoInputModule:
+	def run(self, a, b):
+		return None
+
+
+class _BranchModule:
+	def run(self):
+		if True:  # pylint: disable=using-constant-test
+			yield ("p", 1)
+		else:
+			yield ("q", 2)
+
+
+class _TwoGuardModule:
+	def run(self):
+		if True:  # pylint: disable=using-constant-test
+			yield ("p", 1)
+		if True:  # pylint: disable=using-constant-test
+			yield ("q", 2)
+
+
+class _PassModule:
+	def run(self, a):
+		return a
+
+
+class _InputBranchModule:
+	def run(self, a):
+		if a:
+			yield ("p", 1)
+		else:
+			yield ("q", 2)
+
+
+def _make_branching_prenode(nid, Module, ports=None, required_ports=None):
+	structure = ModuleStructure(Module)
+	pre = MagicMock()
+	pre.id = nid
+	pre.structure = structure
+	pre.module = Module
+	pre.required_ports = required_ports or set()
+	if ports is not None:
+		pre.ports = ports
+	else:
+		pre.ports = OrderedDict({ arg.name: Port(name=arg.name, has_default=arg.has_default) for arg in structure.args })
+	return pre
+
+
+def test_branching_labels_propagate_distinct_arms():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("b", _BranchModule), _make_branching_prenode("n", _TwoInputModule) ] }
+	node_dsts = { "b": [ Connection("p", "n", "a"), Connection("q", "n", "b") ], "n": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert input_labels["n"]["a"] == frozenset({("b", frozenset({"p"}))})
+	assert input_labels["n"]["b"] == frozenset({("b", frozenset({"q"}))})
+	assert len(overloaded) == 0
+
+
+def test_branching_exclusive_arms_may_share_one_input_port():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("b", _BranchModule), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "b": [ Connection("p", "sink", "a"), Connection("q", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert len(overloaded) == 0
+	assert input_labels["sink"]["a"] == frozenset()
+
+
+def test_branching_exclusive_arms_through_intermediates():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("b", _BranchModule), _make_branching_prenode("x", _PassModule), _make_branching_prenode("y", _PassModule), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "b": [ Connection("p", "x", "a"), Connection("q", "y", "a") ], "x": [ Connection("default", "sink", "a") ], "y": [ Connection("default", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert len(overloaded) == 0
+	assert input_labels["sink"]["a"] == frozenset()
+
+
+def test_branching_merged_port_keeps_shared_labels():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("b", _BranchModule), _make_branching_prenode("c", _InputBranchModule), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "b": [ Connection("p", "c", "a") ], "c": [ Connection("p", "sink", "a"), Connection("q", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert len(overloaded) == 0
+	assert input_labels["sink"]["a"] == frozenset({("b", frozenset({"p"}))})
+
+
+def test_branching_labels_empty_for_unbranched_edge():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("s", _SourceModule), _make_branching_prenode("k", _SinkModule) ] }
+	node_dsts = { "s": [ Connection("default", "k", "a") ], "k": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert input_labels["k"]["a"] == frozenset()
+	assert len(overloaded) == 0
+
+
+def test_branching_overloaded_unconditional_sources():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("src1", _SourceModule), _make_branching_prenode("src2", _SourceModule), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "src1": [ Connection("default", "sink", "a") ], "src2": [ Connection("default", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert ("sink", "a") in overloaded
+
+
+def test_branching_overloaded_independent_guards():
+	prenodes = { n.id: n for n in [ _make_branching_prenode("g", _TwoGuardModule), _make_branching_prenode("sink", _SinkModule) ] }
+	node_dsts = { "g": [ Connection("p", "sink", "a"), Connection("q", "sink", "a") ], "sink": [] }
+	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	assert ("sink", "a") in overloaded

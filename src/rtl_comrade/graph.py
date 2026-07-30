@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from collections import OrderedDict, deque
+from collections import OrderedDict
 from dataclasses import dataclass
 import inspect
-from itertools import combinations, groupby
+from itertools import groupby
 from typing import cast, Any, Callable, Self
 import structlog
 from structlog.contextvars import bind_contextvars, unbind_contextvars
@@ -20,7 +20,7 @@ from .module import GraphModule
 from .module_cli import ModuleCLI
 from .node import Connection, Node, PreNode
 from .port import Port
-from .validation import validate_no_static_deadlock
+from .validation import validate_no_static_deadlock, validate_branching
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -204,46 +204,8 @@ class Graph:
 		if static_validation_res.has_error():
 			log.fatal('has_deadlock', context='harness.graph.validation')
 
-		# Propagate control-dependence labels to each input port (topological over the already-acyclic graph)
-		input_labels:dict[str, dict[str, frozenset]] = { nid: {} for nid in prenodes }
-		edge_labels:dict[str, dict[str, list[frozenset]]] = { nid: {} for nid in prenodes }
-		declared_arms:dict[str, bool] = {}
-		overloaded:list[tuple[str, str]] = []
-		indegree = { nid: 0 for nid in prenodes }
-		for conns in node_dsts.values():
-			for conn in conns:
-				indegree[conn.other_node] += 1
-
-		# Perform branch verification
-		queue = deque(nid for nid in prenodes if indegree[nid] == 0)
-		while len(queue) > 0:
-			pre = prenodes[queue.popleft()]
-
-			# Indegree only reaches zero once every incoming edge has been walked, so each port's edge labels are complete by the time they are reached.
-			# Collected overloaded nodes (have ports with multiple srcs from non-exclusive branches)
-			for name, labels in edge_labels[pre.id].items():
-				input_labels[pre.id][name] = frozenset.intersection(*labels)
-
-				# A port is overloaded unless every pair of its srcs is on mutually exclusive arms of a common origin
-				if len(labels) > 1 and not all(any(a_origin == b_origin and a_arm != b_arm and prenodes[a_origin].structure.exclusive_arms(a_arm, b_arm, declared_arms[a_origin]) for (a_origin, a_arm) in a for (b_origin, b_arm) in b) for (a, b) in combinations(labels, 2)):
-					overloaded.append((pre.id, name))
-
-			inherited:frozenset = frozenset()
-			for name, port in pre.ports.items():
-				# A gating input is one the node cannot produce its first output without, so its label flows on.
-				if not (port.has_default and name not in pre.required_ports):
-					inherited |= input_labels[pre.id].get(name, frozenset())
-
-			full_outputs = set(pre.structure.emits) if pre.structure.definite_emits else { conn.self_port for conn in node_dsts[pre.id] }
-			arm_map, declared_arms[pre.id] = pre.structure.resolve_arms(full_outputs, getattr(pre.module, 'output_groups', None))
-
-			for conn in node_dsts[pre.id]:
-				arm = arm_map.get(conn.self_port)
-				edge_labels[conn.other_node].setdefault(conn.other_port, []).append(inherited if arm is None else inherited | { (pre.id, arm) })
-				indegree[conn.other_node] -= 1
-				if indegree[conn.other_node] == 0:
-					queue.append(conn.other_node)
-
+		# Perform branch validation and propagate control-dependence labels to each input port (topological over the already-acyclic graph)
+		input_labels, overloaded = validate_branching(prenodes, node_dsts)
 		if len(overloaded) > 0:
 			log.fatal('overloaded_srcs', context='harness.graph.validation', node_ports=overloaded)
 
