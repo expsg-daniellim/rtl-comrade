@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import signal
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -51,6 +52,11 @@ class RunPreprocMod:
 		yield ("test", test)
 		yield ("model", model)
 
+
+@dataclass(frozen=True)
+class FilelistEntry:
+	path: str  # resolved/rewritten path; for a +libext+ entry, the coalesced value
+	option: str | None  # option token: "-v ", "-y ", "+incdir+", "+libext+", or None
 
 FILELIST_OPTION_RE = re.compile(r"^((?:-v|-y|-[Ff])\s+|(\+(?:incdir|libext)\+))?(.*)$")
 
