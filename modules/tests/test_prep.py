@@ -27,6 +27,7 @@ PrioritisedMergeMod = _mod.PrioritisedMergeMod
 FilelistNormaliseMod = _mod.FilelistNormaliseMod
 FilelistFlattenMod = _mod.FilelistFlattenMod
 FilelistStripMod = _mod.FilelistStripMod
+FilelistDedupMod = _mod.FilelistDedupMod
 FilelistPathMod = _mod.FilelistPathMod
 BuildCompileCmdMod = _mod.BuildCompileCmdMod
 
@@ -686,3 +687,51 @@ def test_strip_libext_unchanged():
 	assert out[0] == FilelistEntry("path/a.sv", None)
 	assert out[1] == FilelistEntry("sv+v+svh", "+libext+")  # unchanged
 	assert out[2] == FilelistEntry("path/b.sv", None)
+
+
+# ---------------------------------------------------------------------------
+# FilelistDedupMod
+# ---------------------------------------------------------------------------
+
+
+def test_dedup_removes_duplicates_preserves_order():
+	"""Repeated (path, option) entries are dropped; first occurrence and order preserved."""
+	entries = [
+		FilelistEntry("a.sv", None),
+		FilelistEntry("b.sv", "-v "),
+		FilelistEntry("a.sv", None),
+		FilelistEntry("c.sv", None),
+		FilelistEntry("b.sv", "-v "),
+	]
+	mod = FilelistDedupMod()
+	results = list(mod.run(entries=entries))
+	assert len(results) == 1
+	port, out = results[0]
+	assert port == "entries"
+	assert out == [FilelistEntry("a.sv", None), FilelistEntry("b.sv", "-v "), FilelistEntry("c.sv", None)]
+
+
+def test_dedup_same_path_different_option_kept():
+	"""Two entries with the same path but different option are both kept."""
+	entries = [
+		FilelistEntry("lib/pkg.sv", None),
+		FilelistEntry("lib/pkg.sv", "-v "),
+	]
+	mod = FilelistDedupMod()
+	out = list(mod.run(entries=entries))[0][1]
+	assert len(out) == 2
+	assert out[0] == FilelistEntry("lib/pkg.sv", None)
+	assert out[1] == FilelistEntry("lib/pkg.sv", "-v ")
+
+
+def test_dedup_after_flatten_catches_basename_collision():
+	"""After flatten, two entries sharing a basename collide and dedup catches the duplicate."""
+	entries = [
+		FilelistEntry("a/b/top.sv", None),
+		FilelistEntry("x/y/top.sv", None),
+	]
+	flat = list(FilelistFlattenMod().run(entries=entries))[0][1]
+	assert flat[0] == FilelistEntry("top.sv", None)
+	assert flat[1] == FilelistEntry("top.sv", None)  # now duplicates
+	out = list(FilelistDedupMod().run(entries=flat))[0][1]
+	assert out == [FilelistEntry("top.sv", None)]

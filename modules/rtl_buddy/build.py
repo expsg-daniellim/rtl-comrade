@@ -130,6 +130,17 @@ class FilelistStripMod:
 		yield ("entries", out)
 
 
+class FilelistDedupMod:
+	def run(self, entries:list[FilelistEntry]):
+		seen, out = set(), []
+		for entry in entries:
+			if entry in seen:
+				continue
+			seen.add(entry)
+			out.append(entry)
+		yield ("entries", out)
+
+
 class PrioritisedMergeMod:
 	@serde
 	class Config:
