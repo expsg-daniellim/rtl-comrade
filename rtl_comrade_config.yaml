@@ -2,3 +2,6 @@ commands:
   test:
     path: "graphs/test.yaml"
     help: "Compile and simulate a SystemVerilog/UVM test suite."
+  filelist:
+    path: "graphs/filelist.yaml"
+    help: "Generate a compile filelist from a model configuration."
