@@ -2,7 +2,10 @@
 
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
+import pytest
+import typer
 
 from rtl_comrade.testing import run_module_scenario
 
@@ -14,6 +17,8 @@ _spec.loader.exec_module(_mod)
 AddMod = _mod.AddMod
 ALUMod = _mod.ALUMod
 DirnameMod = _mod.DirnameMod
+LoggerMod = _mod.LoggerMod
+LOG_LEVELS = _mod.LOG_LEVELS
 
 
 # ---------------------------------------------------------------------------
@@ -162,4 +167,148 @@ async def test_dirname_path_input(tmp_path):
 		DirnameMod,
 		input_sequence=[{"path": runf}],
 		expected_emissions={"default": [build]},
+	)
+
+
+# ---------------------------------------------------------------------------
+# LoggerMod
+# ---------------------------------------------------------------------------
+
+
+def spy_emit(mod):
+	"""Wrap mod.emit to record calls while delegating to the original."""
+	calls = []
+	original = mod.emit
+	def wrapper(event, **kwargs):
+		calls.append({"event": event, **kwargs})
+		return original(event, **kwargs)
+	mod.emit = wrapper
+	return calls
+
+
+def test_logger_dict_mapping_nested_payload(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"path": "filelist.path"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value=SimpleNamespace(filelist=SimpleNamespace(path="/foo/bar")))
+	assert result is None
+	assert calls == [{"event": "test_event", "path": "/foo/bar"}]
+	assert logging_handler.failure is False
+
+
+def test_logger_dict_mapping_dict_payload(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"path": "filelist.path"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value={"filelist": {"path": "/foo/bar"}})
+	assert result is None
+	assert calls == [{"event": "test_event", "path": "/foo/bar"}]
+	assert logging_handler.failure is False
+
+
+def test_logger_str_mapping(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping="path")
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value="/foo/bar")
+	assert result is None
+	assert calls == [{"event": "test_event", "path": "/foo/bar"}]
+	assert logging_handler.failure is False
+
+
+def test_logger_unresolved_no_constant(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"path": "missing", "key": "key"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value=SimpleNamespace(key="k1"))
+	assert result is None
+	assert logging_handler.failure is True
+	assert len(calls) == 1
+	assert "path" not in calls[0]
+	assert calls[0]["key"] == "k1"
+	assert calls[0]["event"] == "test_event"
+
+
+def test_logger_unresolved_non_subscriptable(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"val": "x.y"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value=SimpleNamespace(x=42))
+	assert result is None
+	assert logging_handler.failure is True
+	assert len(calls) == 1
+	assert "val" not in calls[0]
+
+
+def test_logger_constants_fixed_field(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"path": "path"}, constants={"context": "filelist.write"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value=SimpleNamespace(path="/foo"))
+	assert result is None
+	assert calls == [{"event": "test_event", "path": "/foo", "context": "filelist.write"}]
+	assert logging_handler.failure is False
+
+
+def test_logger_unresolved_with_constant(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"path": "missing"}, constants={"path": "/default"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value=SimpleNamespace())
+	assert result is None
+	assert calls == [{"event": "test_event", "path": "/default"}]
+	assert logging_handler.failure is False
+
+
+def test_logger_resolved_overrides_constant(logging_handler):
+	cfg = LoggerMod.Config(event="test_event", mapping={"path": "path"}, constants={"path": "/default"})
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value=SimpleNamespace(path="/actual"))
+	assert result is None
+	assert calls == [{"event": "test_event", "path": "/actual"}]
+	assert logging_handler.failure is False
+
+
+def test_logger_level_error(logging_handler):
+	cfg = LoggerMod.Config(level="error", event="test_event", mapping="value")
+	mod = LoggerMod(config=cfg)
+	calls = spy_emit(mod)
+	result = mod.run(value="hello")
+	assert result is None
+	assert calls == [{"event": "test_event", "value": "hello"}]
+	assert logging_handler.failure is True
+
+
+def test_logger_invalid_level(logging_handler):
+	with pytest.raises(typer.Exit):
+		LoggerMod(config=LoggerMod.Config(level="nonsense"))
+
+
+def test_logger_reserved_mapping_event(logging_handler):
+	with pytest.raises(typer.Exit):
+		LoggerMod(config=LoggerMod.Config(mapping={"event": "x"}))
+
+
+def test_logger_reserved_constants_event(logging_handler):
+	with pytest.raises(typer.Exit):
+		LoggerMod(config=LoggerMod.Config(constants={"event": "x"}))
+
+
+def test_logger_reserved_mapping_exc_info(logging_handler):
+	with pytest.raises(typer.Exit):
+		LoggerMod(config=LoggerMod.Config(mapping={"exc_info": "x"}))
+
+
+def test_logger_reserved_constants_stack_info(logging_handler):
+	with pytest.raises(typer.Exit):
+		LoggerMod(config=LoggerMod.Config(constants={"stack_info": "x"}))
+
+
+async def test_logger_no_emissions(logging_handler):
+	await run_module_scenario(
+		LoggerMod,
+		input_sequence=[{"value": "hello"}],
+		expected_emissions={},
+		config=LoggerMod.Config(event="test_event", mapping="value"),
 	)
