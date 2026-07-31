@@ -25,6 +25,7 @@ FilelistExtractMod = _mod.FilelistExtractMod
 FilelistEntry = _mod.FilelistEntry
 PrioritisedMergeMod = _mod.PrioritisedMergeMod
 FilelistNormaliseMod = _mod.FilelistNormaliseMod
+FilelistFlattenMod = _mod.FilelistFlattenMod
 FilelistPathMod = _mod.FilelistPathMod
 BuildCompileCmdMod = _mod.BuildCompileCmdMod
 
@@ -616,3 +617,41 @@ def test_normalise_existence_warnings(tmp_path, logging_handler):
 	assert out[0].option == "+incdir+"
 	assert out[1].option is None
 	assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# FilelistFlattenMod
+# ---------------------------------------------------------------------------
+
+
+def test_flatten_basenames_and_options_preserved():
+	"""Each non-+libext+ path becomes its basename; options are preserved."""
+	entries = [
+		FilelistEntry("a/b/c.sv", None),
+		FilelistEntry("a/b/inc", "+incdir+"),
+		FilelistEntry("x/y/pkg.sv", "-v "),
+		FilelistEntry("d/e/lib", "-y "),
+	]
+	mod = FilelistFlattenMod()
+	results = list(mod.run(entries=entries))
+	assert len(results) == 1
+	port, out = results[0]
+	assert port == "entries"
+	assert out[0] == FilelistEntry("c.sv", None)
+	assert out[1] == FilelistEntry("inc", "+incdir+")
+	assert out[2] == FilelistEntry("pkg.sv", "-v ")
+	assert out[3] == FilelistEntry("lib", "-y ")
+
+
+def test_flatten_libext_unchanged():
+	"""+libext+ entry passes through without basename transformation."""
+	entries = [
+		FilelistEntry("a/b/c.sv", None),
+		FilelistEntry("sv+v+svh", "+libext+"),
+		FilelistEntry("x/y/d.sv", None),
+	]
+	mod = FilelistFlattenMod()
+	out = list(mod.run(entries=entries))[0][1]
+	assert out[0] == FilelistEntry("c.sv", None)
+	assert out[1] == FilelistEntry("sv+v+svh", "+libext+")  # unchanged
+	assert out[2] == FilelistEntry("d.sv", None)

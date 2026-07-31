@@ -118,6 +118,12 @@ class FilelistNormaliseMod:
 		yield ("entries", out)
 
 
+class FilelistFlattenMod:
+	def run(self, entries:list[FilelistEntry]):
+		out = [ e if e.option == "+libext+" else FilelistEntry(os.path.basename(e.path), e.option) for e in entries ]
+		yield ("entries", out)
+
+
 class PrioritisedMergeMod:
 	@serde
 	class Config:
