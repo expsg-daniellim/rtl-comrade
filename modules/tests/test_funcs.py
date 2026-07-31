@@ -18,6 +18,7 @@ _spec.loader.exec_module(_mod)
 AddMod = _mod.AddMod
 ALUMod = _mod.ALUMod
 DirnameMod = _mod.DirnameMod
+DirjoinMod = _mod.DirjoinMod
 LoggerMod = _mod.LoggerMod
 LOG_LEVELS = _mod.LOG_LEVELS
 ConstantMod = _mod.ConstantMod
@@ -169,6 +170,43 @@ async def test_dirname_path_input(tmp_path):
 		DirnameMod,
 		input_sequence=[{"path": runf}],
 		expected_emissions={"default": [build]},
+	)
+
+
+# ---------------------------------------------------------------------------
+# DirjoinMod
+# ---------------------------------------------------------------------------
+
+
+async def test_dirjoin_bare_filename():
+	await run_module_scenario(
+		DirjoinMod,
+		input_sequence=[{"dir_": Path("/work"), "name": "models.yaml"}],
+		expected_emissions={"default": [Path("/work/models.yaml")]},
+	)
+
+
+async def test_dirjoin_relative_with_components():
+	await run_module_scenario(
+		DirjoinMod,
+		input_sequence=[{"dir_": Path("/work"), "name": "sub/models.yaml"}],
+		expected_emissions={"default": [Path("/work/sub/models.yaml")]},
+	)
+
+
+async def test_dirjoin_absolute_name_replaces_dir():
+	await run_module_scenario(
+		DirjoinMod,
+		input_sequence=[{"dir_": Path("/work"), "name": Path("/abs/models.yaml")}],
+		expected_emissions={"default": [Path("/abs/models.yaml")]},
+	)
+
+
+async def test_dirjoin_path_name_input():
+	await run_module_scenario(
+		DirjoinMod,
+		input_sequence=[{"dir_": Path("/work"), "name": Path("models.yaml")}],
+		expected_emissions={"default": [Path("/work/models.yaml")]},
 	)
 
 

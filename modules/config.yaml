@@ -12,6 +12,7 @@ files:
   - name: alu
     class_name: ALUMod
   - { name: dirname, class_name: DirnameMod }
+  - { name: dirjoin, class_name: DirjoinMod }
   - { name: logger, class_name: LoggerMod }
   - { name: constant, class_name: ConstantMod }
 - file: rtl_buddy/build.py

@@ -38,6 +38,11 @@ class DirnameMod:
 		return ("default", p.parent)
 
 
+class DirjoinMod:
+	def run(self, dir_:Path, name:str|Path):
+		return ("default", Path(dir_) / name)
+
+
 LOG_LEVELS = {"debug", "info", "warning", "error", "critical", "fatal"}
 
 
