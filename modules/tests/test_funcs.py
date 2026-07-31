@@ -13,6 +13,7 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 AddMod = _mod.AddMod
 ALUMod = _mod.ALUMod
+DirnameMod = _mod.DirnameMod
 
 
 # ---------------------------------------------------------------------------
@@ -98,4 +99,67 @@ async def test_alu_multi_step():
 			{"a": 10, "b": 3, "op": 1},
 		],
 		expected_emissions={"default": [13, 7]},
+	)
+
+
+# ---------------------------------------------------------------------------
+# DirnameMod
+# ---------------------------------------------------------------------------
+
+
+async def test_dirname_file(tmp_path):
+	build = tmp_path / "build"
+	build.mkdir()
+	runf = build / "run.f"
+	runf.touch()
+	await run_module_scenario(
+		DirnameMod,
+		input_sequence=[{"path": str(runf)}],
+		expected_emissions={"default": [build]},
+	)
+
+
+async def test_dirname_directory(tmp_path):
+	build = tmp_path / "build"
+	build.mkdir()
+	await run_module_scenario(
+		DirnameMod,
+		input_sequence=[{"path": str(build)}],
+		expected_emissions={"default": [build]},
+	)
+
+
+async def test_dirname_nonexistent():
+	await run_module_scenario(
+		DirnameMod,
+		input_sequence=[{"path": "/nonexistent/run.f"}],
+		expected_emissions={"default": [Path("/nonexistent")]},
+	)
+
+
+async def test_dirname_bare_filename_fallback():
+	await run_module_scenario(
+		DirnameMod,
+		input_sequence=[{"path": "run.f"}],
+		expected_emissions={"default": [Path(".")]},
+	)
+
+
+async def test_dirname_abs_nonexistent():
+	await run_module_scenario(
+		DirnameMod,
+		input_sequence=[{"path": "/abs/dir/run.f"}],
+		expected_emissions={"default": [Path("/abs/dir")]},
+	)
+
+
+async def test_dirname_path_input(tmp_path):
+	build = tmp_path / "build"
+	build.mkdir()
+	runf = build / "run.f"
+	runf.touch()
+	await run_module_scenario(
+		DirnameMod,
+		input_sequence=[{"path": runf}],
+		expected_emissions={"default": [build]},
 	)

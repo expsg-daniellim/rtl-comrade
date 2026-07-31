@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import cast
 
 import structlog
@@ -23,3 +24,13 @@ class ALUMod:
 		else:
 			log.error("invalid_op", op=op)
 			return None
+
+
+class DirnameMod:
+	def run(self, path:str|Path):
+		p = Path(path)
+		if p.is_file():
+			return ("default", p.parent)
+		if p.is_dir():
+			return ("default", p)
+		return ("default", p.parent)
