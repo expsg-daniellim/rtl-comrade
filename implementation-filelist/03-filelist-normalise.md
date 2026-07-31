@@ -55,11 +55,11 @@ class FilelistNormaliseMod:
 
 ## Algorithm
 
-Port the rebase + checks of `VlogFilelist._process` (`vlog_filelist.py:107-120`), taking `base_dir` instead of the implicit CWD:
+Port the rebase + checks of `VlogFilelist._process` (`vlog_filelist.py:107-118`), taking `base_dir` instead of the implicit CWD:
 
 1. For each entry in `entries`:
    - `+libext+` → pass through untouched (the coalesced value is not a path; no relpath, no check). Later render (spec [07](07-write-filelist.md)) emits it verbatim.
-   - Existence warning, best-effort: `+incdir+`/`-y ` → `log.error("filelist_incdir_not_a_dir")` if not a dir; any other option → `log.error("filelist_file_not_found")` if not a file. Run continues.
+   - Existence warning, best-effort: `+incdir+`/`-y ` → `log.error("filelist_incdir_not_a_dir")` if not a dir; any other option (including non-unrolled `-F `, which points at an include file) → `log.error("filelist_file_not_found")` if not a file. Run continues.
    - Emit `FilelistEntry(os.path.relpath(e.path, base_dir), e.option)`.
 2. rtl_buddy uses bare `os.path.relpath(path)` (CWD-implicit). The `base_dir` argument makes output correct under a relocated `work_dir` and byte-identical when `base_dir == CWD`.
 
@@ -69,8 +69,8 @@ No flatten/strip/dedup/render here — each is a separate node.
 
 In `modules/rtl_buddy/build.py`, the normalise stage replacing the front of the fused node's `filelist_process`:
 
-- `FilelistNormaliseMod` — `(entries:list[FilelistEntry], base_dir:Path)` → `("entries", list[...])`. Lifts the relpath + existence-check loop from `filelist_process` (`build.py:99-113`), generalising the hard-coded `work_dir` to the `base_dir` port, and dropping the line-rendering/dedup tail (moved to specs [06](06-filelist-dedup.md)/[07](07-write-filelist.md)). `KeyedValue` threading is the contract's job — the module works on bare lists in every graph.
-- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:107-120` — the rebase + existence portion of `_process`.
+- `FilelistNormaliseMod` — `(entries:list[FilelistEntry], base_dir:Path)` → `("entries", list[...])`. Lifts the relpath + existence-check loop from `filelist_process` (`build.py:95-112`), generalising the hard-coded `work_dir` to the `base_dir` port, and dropping the line-rendering/dedup tail (moved to specs [06](06-filelist-dedup.md)/[07](07-write-filelist.md)). `KeyedValue` threading is the contract's job — the module works on bare lists in every graph.
+- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:107-118` — the rebase + existence portion of `_process`.
 
 Manifest entry `{ name: filelist-normalise, class_name: FilelistNormaliseMod }` (registered with the pipeline — see [spec 02 Deliverables](02-filelist-extract.md#deliverables)).
 

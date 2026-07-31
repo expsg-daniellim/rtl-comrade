@@ -33,12 +33,12 @@ class FilelistFlattenMod:
 
 ## Algorithm
 
-Port the `flatten` branch of `_process` (`vlog_filelist.py:122`): `line_path = os.path.basename(line_path)`. `+libext+` entries pass through untouched (the value is not a path).
+Port the `flatten` branch of `_process` (`vlog_filelist.py:120-121`): `line_path = os.path.basename(line_path)`. `+libext+` entries pass through untouched (the value is not a path).
 
 ## Deliverables
 
 - `FilelistFlattenMod` — `(entries)` → `("entries", …)`. In `modules/rtl_buddy/build.py`.
-- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:122` (`flatten` branch).
+- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:120-121` (`flatten` branch).
 - Manifest `{ name: filelist-flatten, class_name: FilelistFlattenMod }` (with the pipeline — [spec 02](02-filelist-extract.md#deliverables)).
 
 ## Tests

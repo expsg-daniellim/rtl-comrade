@@ -87,7 +87,7 @@ In `modules/tests/test_prep.py`, driven by the module-scenario harness (`docs/mo
 The module is driven with bare lists, as the contract delivers them:
 
 - Two ports `model_entries=[a,b]`/`tb_entries=[c]` with `priorities={model_entries:0, tb_entries:1}` → `("entries", [a,b,c])`. Reversed priorities → `[c,a,b]` (order follows config, not kwarg/arrival order).
-- Single port `model_entries=[a,b]`, `priorities={model_entries:0}` → `("entries", [a,b])` (filelist-command case).
+- Single port `model_entries=[a,b]`, `priorities={model_entries:0}` → `("entries", [a,b])`.
 - A wired port absent from `priorities` → `log.fatal("unranked_merge_port", …)`.
 - Two ports with equal priority → deterministic name-tiebreak order.
 

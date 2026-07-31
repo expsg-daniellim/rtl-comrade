@@ -19,15 +19,7 @@ inputs:            entries:list[FilelistEntry], path:Path, test:TestConfig|None 
 outputs:           filelist → Path (the written .f; the contract rewraps it as KeyedValue)
 ```
 
-```yaml
-contract:
-  name: keyed_join
-  config:
-    key_field: key
-    unwrap: true
-```
-
-`entries` and `path` ride the wire as `KeyedValue[list[entry]]` / `KeyedValue[Path]` and reach the module as the bare list and the bare `Path`; `test` is a self-keyed record (a `key` with no `value` beside it), so `keyed_join` delivers it whole and `test.key` stays available for the failure logs. On the way out the contract keys `filelist` with the assembled key — and `filelist` is the only emitted port, so no `ignore` list is needed.
+The contract is a per-graph choice — `keyed_join` with `unwrap: true` in the `test` graph (spec [14](14-test-update.md)), `default` in the `filelist` graph (spec [16](16-filelist-graph.md)). The module is envelope-agnostic: it takes and returns bare values in both cases.
 
 **`test` is consumed, not forwarded.** The writer reads `test.key`/`test.get_name()` for its failure logs and emits nothing back: re-yielding the record it was handed is a passthrough the graph can do itself, so `cc-build` takes its `test` edge straight from `gate-pre` rather than from the writer. Sequencing survives the change — `cc-build` joins `test` and `filelist` by key, so a failed write withholds `filelist` and that key never assembles, exactly as before. This is the same removal `ResolveModelRefMod` made upstream ([docs/modules/resolve-model-ref.md](../docs/modules/resolve-model-ref.md): "The input `test` is not re-emitted; the graph wires it directly from upstream").
 
@@ -61,7 +53,7 @@ class WriteFilelistMod:
 
 ## Algorithm
 
-1. **Render** each entry to a line: `+libext+` → `f"+libext+{e.path}\n"`; else `f"{e.option}{e.path}\n"` if `e.option` else `f"{e.path}\n"`. (Matches `_process`'s line-build, `vlog_filelist.py:124-125`, and its `+libext+` special case, `:110`.)
+1. **Render** each entry to a line: `+libext+` → `f"+libext+{e.path}\n"`; else `f"{e.option}{e.path}\n"` if `e.option` else `f"{e.path}\n"`. (Matches `_process`'s line-build, `vlog_filelist.py:123`, and its `+libext+` guard, `:116`.)
 2. Open `path`; write the header `// rtl-buddy generated model filelist\n` then `writelines(lines)` (`vlog_filelist.py:155-158`).
 3. On success emit `("filelist", path)` — the contract rewraps the path as `KeyedValue(test.key, path)`, and `build-compile-cmd` consumes it alongside the `test` edge it takes from `gate-pre`.
 4. **Failure — write error, one `except` per class** (the write half of 06b's handler; the resolve half is extract's, spec [02](02-filelist-extract.md)): `FileNotFoundError`→`filelist_dir_not_found`, `IsADirectoryError`→`filelist_is_directory`, `PermissionError`→`filelist_permission_denied` (`err=e.strerror`), `OSError`→`filelist_write_error` (`err`/`errno`; **last** — the others subclass it). Each logs its event at ERROR with the attempted `path` plus the `key`/`test_name` a summary row is stamped from, and **emits nothing** — the handler's `failure` flag carries the verdict. Per-test FAIL, not abort. No `except Exception` catch-all.
@@ -74,7 +66,7 @@ In `modules/rtl_buddy/build.py`, `WriteFilelistMod` reduced to render + write:
 
 - `WriteFilelistMod` — `(entries:list[FilelistEntry], path:Path, test:TestConfig|None = None)`, `keyed_join` over `entries` + `path` (keyed by test, `unwrap: true`, no `ignore`), `test` read for log context only. Emits `("filelist", path)`; a write error logs and emits nothing. Drops the `model`/`work_dir`/`test_filelist` inputs and the inlined `filelist_extract`/`filelist_process` calls (moved to specs 02–06); folds in the line-render loop. Drops the `KeyError`/`AttributeError` handler with them — resolve errors are extract's now (spec [02](02-filelist-extract.md)) — and drops the `test` passthrough yield.
 - **Graph rewiring** — in `graphs/test.yaml`, repoint `cc-build`'s `test` edge from `filelist` to `gate-pre`, the writer's own source for it.
-- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:110,124-125,155-159` — the render + header + write of `_process`/`write_output`; called from `VlogSim._write_filelist` (`tools/vlog_sim.py:88-93`).
+- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:116,123,155-158` — the render + header + write of `_process`/`write_output`; called from `VlogSim._write_filelist` (`tools/vlog_sim.py:88-93`).
 
 Manifest `{ name: write-filelist, class_name: WriteFilelistMod }` (with the pipeline — [spec 02 Deliverables](02-filelist-extract.md#deliverables)). The four write-error events keep their `FAIL_EVENTS`/`DESC_BUILDERS` registrations in `graphs/log/summary.py` unchanged.
 

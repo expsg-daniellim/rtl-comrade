@@ -37,12 +37,12 @@ class FilelistDedupMod:
 
 ## Algorithm
 
-rtl_buddy dedups on the *rendered line string* (`vlog_filelist.py:128-130`). After `normalise`/`flatten`/`strip`, an entry's `(path, option)` tuple maps one-to-one onto its rendered line (render is deterministic — spec [07](07-write-filelist.md)), so deduping on the tuple is equivalent and needs no rendering here. Keep first occurrence; preserve order (`set` for membership, list for output).
+rtl_buddy dedups on the *rendered line string* (`vlog_filelist.py:124-127`). After `normalise`/`flatten`/`strip`, an entry's `(path, option)` tuple maps one-to-one onto its rendered line (render is deterministic — spec [07](07-write-filelist.md)), so deduping on the tuple is equivalent and needs no rendering here. Keep first occurrence; preserve order (`set` for membership, list for output).
 
 ## Deliverables
 
 - `FilelistDedupMod` — `(entries)` → `("entries", …)`. In `modules/rtl_buddy/build.py`.
-- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:128-130` (`deduplicate` branch).
+- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:124-127` (`deduplicate` branch).
 - Manifest `{ name: filelist-dedup, class_name: FilelistDedupMod }` (with the pipeline — [spec 02](02-filelist-extract.md#deliverables)).
 
 ## Tests

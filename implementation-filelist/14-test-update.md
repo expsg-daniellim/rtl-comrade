@@ -158,13 +158,13 @@ The pipeline must reproduce the fused node byte-for-byte on the same inputs. The
 
 | stage | fused node | pipeline |
 |---|---|---|
-| model root | `dirname(abspath(model.get_model_path()))` (`build.py:125-126`) | `dirname(test.suite_dir / test.model_path)` — the same absolute directory, since `load-model` stamps `ModelConfig.path` from that join |
-| tb root | `dirname(str(work_dir / "tests.yaml"))` = `work_dir` (`build.py:127`) | `work_dir` |
+| model root | `dirname(abspath(model.get_model_path())) if model_path else work_dir` (`build.py:120-121`) | `dirname(test.suite_dir / test.model_path)` — the same absolute directory, since `load-model` stamps `ModelConfig.path` from that join; when `model_path` is empty the join yields `suite_dir` (a directory), and `dirname`'s `is_dir()` guard returns it unchanged, matching the fused node's `work_dir` fallback |
+| tb root | `dirname(str(work_dir / "tests.yaml"))` = `work_dir` (`build.py:123`) | `work_dir` |
 | unroll | hard-coded `True` at both call sites | `constant` → `unroll` on both extracts |
 | order | model entries then testbench entries (`extend`) | `priorities: { model_entries: 0, tb_entries: 1 }` |
-| rebase | `relpath(abs_path, work_dir)` (`build.py:105`) | `fl-norm` with `base_dir = work_dir` |
+| rebase | `relpath(abs_path, work_dir)` (`build.py:100`) | `fl-norm` with `base_dir = work_dir` |
 | flatten / strip | not applied | nodes absent from the graph |
-| dedup | `deduplicate=True` (`build.py:128`) | `fl-dedup` wired unconditionally |
+| dedup | `deduplicate=True` (`build.py:124`) | `fl-dedup` wired unconditionally |
 | destination | `work_dir / f"run.{test_tag}.f"` (`build.py:117-118`) | `fl-path` ([spec 13](13-filelist-path.md)) |
 | output | header + rendered lines | `write-filelist` ([spec 07](07-write-filelist.md)) |
 

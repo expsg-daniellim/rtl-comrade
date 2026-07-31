@@ -38,7 +38,7 @@ Set each entry's option to `None` so render (spec [07](07-write-filelist.md)) em
 ## Deliverables
 
 - `FilelistStripMod` — `(entries)` → `("entries", …)`. In `modules/rtl_buddy/build.py`.
-- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:131-132` (the `strip` intent; the reference no-op is corrected here).
+- **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:129-130` (the `strip` intent; the reference no-op is corrected here).
 - Manifest `{ name: filelist-strip, class_name: FilelistStripMod }` (with the pipeline — [spec 02](02-filelist-extract.md#deliverables)).
 - **Divergence entry** — record under **Deliberate divergences** in `docs/divergences.md` that `--strip` drops the option token, where rtl_buddy renders the line at `vlog_filelist.py:123` before assigning `line_option = ''` (129-130) and appends the already-rendered line, so the upstream flag emits identical output whether or not it is set.
 

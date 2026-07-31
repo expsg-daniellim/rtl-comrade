@@ -1,7 +1,7 @@
 # Spec 16: Graph YAML, manifest, and command registration
 
 **Depends on:** specs [02](02-filelist-extract.md)–[07](07-write-filelist.md), [09](09-flag-gate.md)–[11](11-logger.md) (the modules the `filelist` graph wires); [15](15-dirjoin.md) (`dirjoin`); [implementation-test spec 05e](../implementation-test/specs/05e-load-model.md) (`load-model`); [implementation-test spec 04f](../implementation-test/specs/04f-work-dir.md) (`work-dir`).
-**References:** [00-overview](00-overview.md) — pipeline diagram, head, ordering; [09 — Wiring](09-flag-gate.md#wiring--the-filelist-graph) — the gate-chain edges (verbatim, except the `strip` → `strip_options` CLI rename below).
+**References:** [00-overview](00-overview.md) — pipeline diagram, head, ordering; [09](09-flag-gate.md) — the flag-gate module, rejoining mechanics, and `required`+`persistent_inputs` reasoning.
 
 ## Before you start
 
@@ -37,7 +37,7 @@ Assemble the `filelist` graph YAML, carry the manifest entries from this plan's 
       config:
         persistent_inputs: [ base_dir ]
 
-  # --- flag-gated transforms (spec 09 wiring, verbatim except the strip_options CLI rename) ---
+  # --- flag-gated transforms ---
   - id: gate-flatten
     module: flag-gate
     contract:
@@ -155,7 +155,7 @@ Assemble the `filelist` graph YAML, carry the manifest entries from this plan's 
   - **`config-path` (`dirjoin`).** Resolves the bare `model_config` filename against CWD: `work-dir` provides `Path.cwd().resolve()` on port `dir`, the CLI `model_config` string arrives on port `name`, and `dirjoin` returns `Path(dir) / name` — an absolute `Path` that `load-model` and `model-dir` both accept. This replaces the implicit CWD resolution `ModelConfigLoader` performs in rtl_buddy.
   - **`model_name` has no default** — it is required. Omitting `default` in the CLI descriptor makes the parameter mandatory.
   - **`required: true` on defaulted CLI-fed ports.** `unroll`, `flatten`, `strip_options`, and `deduplicate` all feed ports with Python defaults (`False`). Without `required: true`, `DefaultContract` treats the port as special (non-blocking), and the module's default can silently win a race against the CLI injection. `required: true` forces the first invocation to await the real value. The three gate flags additionally list `flag` in `persistent_inputs` — both, always, per [spec 09](09-flag-gate.md#the-flag-needs-required-true-and-persistent_inputs). `unroll` on `extract` needs only `required: true` (no `persistent_inputs`): the node fires once, so there is no second invocation to replay for.
-  - **`strip_options`** is the CLI name, matching rtl_buddy's parameter name (`rtl_buddy.py:446`); the parameter reaches `write_output` as `strip=strip_options` (`:457`). The plan calls the node-port name `strip` (spec [05](05-filelist-strip.md)), which is the input port of `filelist-strip`, not the CLI parameter. [Spec 09](09-flag-gate.md#wiring--the-filelist-graph) wrote `cli: strip` in its wiring example; this spec carries the final CLI name.
+  - **`strip_options`** is the CLI name, matching rtl_buddy's parameter name (`rtl_buddy.py:446`); the parameter reaches `write_output` as `strip=strip_options` (`:457`). The plan calls the node-port name `strip` (spec [05](05-filelist-strip.md)), which is the input port of `filelist-strip`, not the CLI parameter.
   - **No short flags.** rtl_buddy declares `-c`/`-u`/`-f`/`-s`/`-d` short forms; the graph YAML schema has no `short_flag` field, so the CLI exposes long-form options only (`--model-config`, `--unroll`, `--flatten`, `--strip-options`, `--deduplicate`).
 
   Contract choices:
@@ -165,7 +165,7 @@ Assemble the `filelist` graph YAML, carry the manifest entries from this plan's 
   - **`model-dir`, `output-dir`** — `unit`. One input, one invocation, per [spec 10](10-dirname.md).
   - **`extract`** — `default`. Three singleton inputs (`source`, `base_dir`, `unroll`). `unroll` is the only defaulted port; `required: true` on its edge prevents the default from racing.
   - **`normalise`** — `default` with `persistent_inputs: [base_dir]`, per [spec 03](03-filelist-normalise.md#contract--per-graph-module-is-envelope-agnostic). The singleton `base_dir` from `output-dir` is cached, though the node fires only once.
-  - **`gate-flatten`, `gate-strip`, `gate-dedup`** — `default` with `persistent_inputs: [flag]`, per [spec 09](09-flag-gate.md#wiring--the-filelist-graph).
+  - **`gate-flatten`, `gate-strip`, `gate-dedup`** — `default` with `persistent_inputs: [flag]`, per [spec 09](09-flag-gate.md#the-flag-needs-required-true-and-persistent_inputs).
   - **`flatten`, `strip`, `dedup`** — `default`. One input (`entries`, no default), fed by the gate's `on` arm; the node fires once if the flag is true, never if false.
   - **`write`** — `default`. Two singleton inputs (`entries`, `path`); `test` unwired, default `None`. On success, emits `("filelist", path)` to `log-filelist`; on write error, logs and emits nothing, so `log-filelist` never fires and the node terminates on `EndSentinel`.
   - **`log-filelist`** — `default`. One input (`value`, no default); fires once if `write` succeeds, never otherwise. Terminal sink — no output ports.
@@ -207,7 +207,7 @@ Graph-assembly checks in `tests/test_graph_assembly.py` (or similar) — the inp
 
 ## Constraints
 
-- Wire per the YAML above. The gate-chain edges are [spec 09](09-flag-gate.md#wiring--the-filelist-graph)'s, renamed from `cli: strip` to `cli: strip_options`.
+- Wire per the YAML above.
 - **No `logging` block.** The command has no tests to tabulate and no summary processors.
 - **No keying.** Entries travel as a bare `list[entry]` throughout; no `KeyedValue` envelopes, no `keyed_join` contracts, no `unwrap`. [Spec 03](03-filelist-normalise.md) is envelope-agnostic — it works on bare lists here and uses `keyed_join` with `unwrap: true` in the test graph.
 - **No `prioritised-merge`, `constant`, or `filelist-path`.** Single source (model only), CLI supplies `unroll` and `output_path` — the nodes the `test` graph needs for these roles are absent here. Their manifest entries are registered for other graphs, not consumed by this one.

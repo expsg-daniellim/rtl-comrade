@@ -60,8 +60,8 @@ outputs:           default → the configured value
 class ConstantMod:
     @serde
     class Config:
+        value:Any = None
         type:str = ""
-        value:Any = field(default=MISSING)
         args:list = field(default_factory=list)
         kwargs:dict = field(default_factory=dict)
 
@@ -74,6 +74,8 @@ class ConstantMod:
                 self.value = cls(*config.args, **config.kwargs)
             else:
                 self.value = cls(config.value)
+        elif config.value is None:
+            log.fatal("constant_missing_value")
         else:
             self.value = config.value
 
@@ -86,13 +88,13 @@ class ConstantMod:
 | field | type | default | meaning |
 |---|---|---|---|
 | `type` | `str` | `""` | a `module.path:ClassName` reference resolved via `importlib.import_module` + `getattr`; when empty, `value` is emitted as-is |
-| `value` | `Any` | (none) | the payload to emit, or the single positional constructor argument when `type` is set and `args`/`kwargs` are absent |
+| `value` | `Any` | `None` | the payload to emit, or the single positional constructor argument when `type` is set and `args`/`kwargs` are absent |
 | `args` | `list` | `[]` | positional arguments forwarded to the `type` constructor; when non-empty, `value` is ignored |
 | `kwargs` | `dict` | `{}` | keyword arguments forwarded to the `type` constructor |
 
 **Precedence when `type` is set:** `args`/`kwargs` present → `cls(*args, **kwargs)`. Neither present → `cls(value)`.
 
-`value` is required when `type` is absent — a constant with nothing to emit is a configuration error, and serde reports the missing field at construction. When `type` is set with `args`/`kwargs`, `value` is unused and may be omitted.
+`value` is required when `type` is absent — a constant with nothing to emit is a configuration error, and the constructor aborts with `log.fatal("constant_missing_value")` when both `type` and `value` are absent. When `type` is set with `args`/`kwargs`, `value` is unused and may be omitted (it defaults to `None`).
 
 ## Contract — `default`, and why it runs once
 
@@ -111,7 +113,8 @@ If the destination port also carries a **Python default**, the edge must additio
 1. If `config.type` is non-empty, split on `:` → `(mod_path, cls_name)`. `importlib.import_module(mod_path)`, then `getattr(mod, cls_name)` → `cls`.
 2. If `config.args` or `config.kwargs` are non-empty, `self.value = cls(*config.args, **config.kwargs)`.
 3. Otherwise `self.value = cls(config.value)`.
-4. If `config.type` is empty, `self.value = config.value`.
+4. If `config.type` is empty and `config.value is None`, `log.fatal("constant_missing_value")`.
+5. If `config.type` is empty and `config.value` is not `None`, `self.value = config.value`.
 
 **Run:**
 
@@ -132,7 +135,7 @@ In `modules/tests/test_funcs.py`:
 - A `str`, an `int` and a `list` value → each emitted unchanged on `default`, showing the node is payload-agnostic.
 - The emitted payload **is** the configured object (`result[0][1] is config.value` for a non-scalar), so nothing is copied or rewrapped.
 - Two `run()` calls → the same value both times (the node holds no state; the once-only property belongs to the node loop, not the module, and is not re-tested here).
-- `config` missing both `value` and `type` → the serde error surfaces at construction.
+- `config` missing both `value` and `type` → `log.fatal("constant_missing_value")` at construction.
 
 **Constructed value (`type` set):**
 - `type: "pathlib:Path"`, `value: "/tmp"` → `("default", Path("/tmp"))`, the emitted value is a `Path` instance.

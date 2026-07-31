@@ -59,7 +59,7 @@ Constants seed the kwargs and a resolved mapping field overwrites its same-named
 
 ## Algorithm
 
-1. **Validate at construction.** `level` not in the allowed set → `log.fatal("logger_invalid_level", level=…, allowed=…)`. A key named `event` in either `mapping` or `constants` → `log.fatal("logger_reserved_kwarg", name="event")`, because it would collide with the event name the log call already passes positionally. Both are config errors that recur on every item, so they abort the run rather than deferring.
+1. **Validate at construction.** `level` not in the allowed set → `log.fatal("logger_invalid_level", level=…, allowed=…)`. A key named `event`, `exc_info`, or `stack_info` in either `mapping` or `constants` → `log.fatal("logger_reserved_kwarg", name=…)`: `event` collides with the positional event name; `exc_info` and `stack_info` are structlog-meaningful and would be interpreted rather than rendered as fields. All three are config errors that recur on every item, so they abort the run rather than deferring.
 2. **Bind the level** once: `self.emit = getattr(log, config.level)`, after validation.
 3. **Normalise `mapping`** to a dict: a `str` becomes `{ <str>: "" }`.
 4. **Per invocation**, seed the kwargs from `constants`, walk each field path off `value` over the top, then make one log call.
@@ -82,8 +82,10 @@ class LoggerMod:
         self.event = config.event
         self.constants = config.constants
         self.mapping = {config.mapping: ""} if isinstance(config.mapping, str) else config.mapping
-        if "event" in self.mapping or "event" in self.constants:
-            log.fatal("logger_reserved_kwarg", name="event")
+        reserved = {"event", "exc_info", "stack_info"}
+        for name in reserved:
+            if name in self.mapping or name in self.constants:
+                log.fatal("logger_reserved_kwarg", name=name)
         self.emit = getattr(log, config.level)
 
     def run(self, value:Any):
@@ -146,6 +148,7 @@ In `modules/tests/test_funcs.py`:
 - `level: error` on a resolvable mapping → the event logs and `logging_handler.failure is True` (the level drives failure, not the resolution).
 - `level: nonsense` → `pytest.raises(typer.Exit)` at construction.
 - `mapping: { event: "x" }` and, separately, `constants: { event: "x" }` → `pytest.raises(typer.Exit)` at construction.
+- `mapping: { exc_info: "x" }` and, separately, `constants: { stack_info: "x" }` → `pytest.raises(typer.Exit)` at construction.
 - Any scenario → `expected_emissions={}`; the module never emits.
 
 ## Acceptance criteria
@@ -155,7 +158,7 @@ In `modules/tests/test_funcs.py`:
 - Dict and str `mapping` forms both work; the str form is equivalent to a one-key dict with an empty path.
 - Paths resolve through attributes and dict entries alike; an unresolvable one is an ERROR that omits its kwarg and keeps the rest, **unless** `constants` names it, in which case the constant stands silently.
 - `constants` keys `mapping` does not name appear on every event; keys it does name are overwritten by a resolved value.
-- An invalid `level` or a reserved `event` kwarg in either dict aborts at construction, before any value is processed.
+- An invalid `level` or a reserved kwarg (`event`, `exc_info`, `stack_info`) in either dict aborts at construction, before any value is processed.
 - `logger` → `LoggerMod` resolves in the manifest.
 
 ## Constraints
@@ -164,6 +167,6 @@ In `modules/tests/test_funcs.py`:
 - **Domain-agnostic.** Lives in `modules/funcs.py`, names no `rtl_buddy` type, and is not part of the seven pipeline nodes ([spec 02 Deliverables](02-filelist-extract.md#deliverables)).
 - **Config errors abort, item errors defer.** An invalid level or reserved kwarg is `log.fatal` at construction; an unresolvable field with no constant behind it is `log.error` per item. Do not soften the first or escalate the second.
 - **A constant silences the ERROR for its own kwarg only** — it is a per-name fallback, never a blanket suppression of `logger_unresolved_field`.
-- **`event` is reserved** in both `mapping` and `constants`. `exc_info` and `stack_info` are structlog-meaningful and will be interpreted rather than rendered as fields — do not use them as kwarg names.
+- **`event`, `exc_info`, and `stack_info` are reserved** in both `mapping` and `constants` — validated at construction. `event` collides with the positional event name; `exc_info` and `stack_info` are structlog-meaningful and would be interpreted rather than rendered as fields.
 - **One log call per invocation**, built from `constants` overlaid by the resolved mapping — not one call per field.
 - `value` keeps **no Python default**: the node exists to receive something, and a default would make the port non-gating for any upstream branch arm ([spec 09](09-flag-gate.md#rejoining-the-arms)).

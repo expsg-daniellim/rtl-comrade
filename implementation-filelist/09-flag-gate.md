@@ -51,66 +51,9 @@ Either way, rejoin each gate's arms **before** the next gate. Labels union along
 
 That cancellation depends on the transform sitting on the `on` arm keeping a **non-defaulted** input port. A default makes the port non-gating, the arm label stops propagating through it, and the two edges into the rejoin no longer look mutually exclusive. That is reported at startup as `overloaded_srcs` rather than mis-run silently.
 
-## Wiring — the `filelist` graph
-
-Three flags, so three gate instances, each rejoining at the next gate's `value` port and the last at the writer's `entries`:
-
-```yaml
-nodes:
-- id: gate-flatten
-  module: flag-gate
-  contract:
-    name: default
-    config:
-      persistent_inputs: [ flag ]
-- id: gate-strip
-  module: flag-gate
-  contract:
-    name: default
-    config:
-      persistent_inputs: [ flag ]
-- id: gate-dedup
-  module: flag-gate
-  contract:
-    name: default
-    config:
-      persistent_inputs: [ flag ]
-
-edges:
-- src: { cli: flatten,     type: bool, default: false }
-  dst: { node: gate-flatten, port: flag, required: true }
-- src: { cli: strip_options, type: bool, default: false }
-  dst: { node: gate-strip,   port: flag, required: true }
-- src: { cli: deduplicate, type: bool, default: false }
-  dst: { node: gate-dedup,   port: flag, required: true }
-
-- src: { node: normalise,    port: entries }
-  dst: { node: gate-flatten, port: value }
-- src: { node: gate-flatten, port: on }
-  dst: { node: flatten,      port: entries }
-- src: { node: flatten,      port: entries }
-  dst: { node: gate-strip,   port: value }
-- src: { node: gate-flatten, port: off }
-  dst: { node: gate-strip,   port: value }
-- src: { node: gate-strip,   port: on }
-  dst: { node: strip,        port: entries }
-- src: { node: strip,        port: entries }
-  dst: { node: gate-dedup,   port: value }
-- src: { node: gate-strip,   port: off }
-  dst: { node: gate-dedup,   port: value }
-- src: { node: gate-dedup,   port: on }
-  dst: { node: dedup,        port: entries }
-- src: { node: dedup,        port: entries }
-  dst: { node: write,        port: entries }
-- src: { node: gate-dedup,   port: off }
-  dst: { node: write,        port: entries }
-```
-
-The three CLI defaults are `rtl_buddy`'s own (`rtl_buddy.py:445-447` — all three `False`). `test`/`randtest`/`regression` wire none of this: no gate, `normalise → dedup → write`, matching `VlogSim`'s hard-coded `flatten=False, strip=False, deduplicate=True` (`vlog_sim.py:93`).
-
-Both arms of a rejoin must carry the **identical** payload shape, since they feed one port — entries travel as `list[FilelistEntry]` ([spec 01](01-filelist-entry.md)) throughout the pipeline, so the bypassed arm and the transform arm carry the same shape.
-
 ## The flag needs `required: true` *and* `persistent_inputs`
+
+The concrete gate-chain wiring for the `filelist` graph is in [spec 16](16-filelist-graph.md). The mechanics below apply to any graph that wires a `flag-gate` instance with a CLI-fed or constant-fed `flag`.
 
 Neither alone is correct, and getting it wrong misroutes silently.
 
