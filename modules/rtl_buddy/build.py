@@ -102,6 +102,22 @@ class FilelistExtractMod:
 		yield ("entries", entries)
 
 
+class FilelistNormaliseMod:
+	def run(self, entries:list[FilelistEntry], base_dir:Path):
+		out = []
+		for e in entries:
+			if e.option == "+libext+":
+				out.append(e)
+				continue
+			if e.option in ("+incdir+", "-y "):
+				if not os.path.isdir(e.path):
+					log.error("filelist_incdir_not_a_dir", path=str(e.path))
+			elif not os.path.isfile(e.path):
+				log.error("filelist_file_not_found", path=str(e.path))
+			out.append(FilelistEntry(os.path.relpath(e.path, base_dir), e.option))
+		yield ("entries", out)
+
+
 class PrioritisedMergeMod:
 	@serde
 	class Config:

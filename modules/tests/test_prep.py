@@ -24,6 +24,7 @@ WriteFilelistMod = _mod.WriteFilelistMod
 FilelistExtractMod = _mod.FilelistExtractMod
 FilelistEntry = _mod.FilelistEntry
 PrioritisedMergeMod = _mod.PrioritisedMergeMod
+FilelistNormaliseMod = _mod.FilelistNormaliseMod
 FilelistPathMod = _mod.FilelistPathMod
 BuildCompileCmdMod = _mod.BuildCompileCmdMod
 
@@ -557,3 +558,61 @@ def test_filelist_path_nonexistent_work_dir(tmp_path):
 	result = FilelistPathMod().run(test=test, work_dir=missing)
 	assert result == ("path", missing / "run.t1.f")
 	assert not missing.exists()
+
+
+# ---------------------------------------------------------------------------
+# FilelistNormaliseMod
+# ---------------------------------------------------------------------------
+
+
+def test_normalise_relativise_and_libext_passthrough(tmp_path):
+	"""Entries with +incdir+, source files, and +libext+ as bare list; paths relativised against base_dir; +libext+ unchanged."""
+	inc = tmp_path / "inc"
+	inc.mkdir()
+	src = tmp_path / "src"
+	src.mkdir()
+	(src / "a.sv").write_text("// a")
+	entries = [
+		FilelistEntry(str(inc), "+incdir+"),
+		FilelistEntry(str(src / "a.sv"), None),
+		FilelistEntry("sv+v", "+libext+"),
+	]
+	mod = FilelistNormaliseMod()
+	results = list(mod.run(entries=entries, base_dir=tmp_path))
+	assert len(results) == 1
+	port, out = results[0]
+	assert port == "entries"
+	assert isinstance(out, list)
+	assert out[0] == FilelistEntry("inc", "+incdir+")
+	assert out[1] == FilelistEntry("src/a.sv", None)
+	assert out[2] == FilelistEntry("sv+v", "+libext+")  # unchanged
+
+
+def test_normalise_relpath_uses_base_dir_not_cwd(tmp_path, monkeypatch):
+	"""base_dir governs relpath, not the process CWD."""
+	other = tmp_path / "other"
+	other.mkdir()
+	monkeypatch.chdir(other)
+	(tmp_path / "src").mkdir()
+	(tmp_path / "src" / "a.sv").write_text("// a")
+	entries = [FilelistEntry(str(tmp_path / "src" / "a.sv"), None)]
+	mod = FilelistNormaliseMod()
+	out = list(mod.run(entries=entries, base_dir=tmp_path))[0][1]
+	assert out[0] == FilelistEntry("src/a.sv", None)
+	assert ".." not in out[0].path
+
+
+def test_normalise_existence_warnings(tmp_path, logging_handler):
+	"""+incdir+ target not a dir and missing source path log errors; entries still emitted."""
+	not_a_dir = tmp_path / "not_a_dir"
+	not_a_dir.write_text("i am a file")
+	entries = [
+		FilelistEntry(str(not_a_dir), "+incdir+"),  # exists but is not a directory
+		FilelistEntry(str(tmp_path / "missing.sv"), None),  # does not exist
+	]
+	mod = FilelistNormaliseMod()
+	out = list(mod.run(entries=entries, base_dir=tmp_path))[0][1]
+	assert len(out) == 2  # both entries still emitted
+	assert out[0].option == "+incdir+"
+	assert out[1].option is None
+	assert logging_handler.failure is True
