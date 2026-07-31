@@ -18,6 +18,7 @@ files:
 - file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc, class_name: RunPreprocMod }
+  - { name: filelist-extract, class_name: FilelistExtractMod }
   - { name: write-filelist, class_name: WriteFilelistMod }
   - { name: run-process, class_name: RunProcessMod }
   - { name: build-compile-cmd, class_name: BuildCompileCmdMod }

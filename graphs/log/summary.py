@@ -20,7 +20,7 @@ def colourise(line:str) -> str:
 FAIL_EVENTS = [
 	"compile_failed", "sim_timeout",
 	"preproc_script_not_found", "preproc_script_permission", "preproc_script_read_error", "preproc_script_error",
-	"filelist_dir_not_found", "filelist_is_directory", "filelist_permission_denied", "filelist_resolve_error", "filelist_write_error",
+	"filelist_dir_not_found", "filelist_is_directory", "filelist_permission_denied", "filelist_write_error",
 	"replay_seed_not_found", "replay_seed_malformed", "replay_seed_permission",
 	"model_file_not_found", "model_is_directory", "model_permission_denied", "model_invalid_unicode", "model_parse_error", "model_not_found", "model_read_error",
 	"sweep_script_not_found", "sweep_script_permission", "sweep_script_read_error", "sweep_script_error", "sweep_output_invalid",
@@ -38,7 +38,6 @@ DESC_BUILDERS = {
 	"filelist_dir_not_found": lambda e: f"output directory missing for {e.get('path')}",
 	"filelist_is_directory": lambda e: f"{e.get('path')} is a directory",
 	"filelist_permission_denied": lambda e: f"cannot write {e.get('path')}",
-	"filelist_resolve_error": lambda e: f"filelist resolve failed: {e.get('err')}",
 	"filelist_write_error": lambda e: f"cannot write {e.get('path')}",
 	"replay_seed_not_found": lambda e: f"Replay seed missing or invalid at {e.get('path')}",
 	"replay_seed_malformed": lambda e: f"Replay seed missing or invalid at {e.get('path')}",

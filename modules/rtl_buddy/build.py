@@ -12,7 +12,7 @@ from serde import serde
 from rtl_comrade.logging import HarnessLogger
 
 from modules.rtl_buddy.schema import RootConfig, ModelConfig, Command, Proc, RtlBuilderConfig
-from modules.rtl_buddy.schema.suite import TestConfig
+from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -59,6 +59,47 @@ class FilelistEntry:
 	option: str | None  # option token: "-v ", "-y ", "+incdir+", "+libext+", or None
 
 FILELIST_OPTION_RE = re.compile(r"^((?:-v|-y|-[Ff])\s+|(\+(?:incdir|libext)\+))?(.*)$")
+
+
+class FilelistExtractMod:
+	def run(self, source:ModelConfig|TestbenchConfig|TestConfig, base_dir:Path, unroll:bool = False):
+		config = source.get_testbench() if isinstance(source, TestConfig) else source
+		lines = config.get_filelist()
+		entries = []
+		libexts = {}
+		def extract(lines_in, prefix_parent):
+			for line in lines_in:
+				line = line.strip()
+				if not line or line.startswith('//') or line.startswith('/*') or line.startswith('*'):
+					continue
+				m = FILELIST_OPTION_RE.fullmatch(line)
+				if not m or not m.group(3):
+					log.error("filelist_malformed_line", line=line)
+					continue
+				if m.group(2):
+					line_option, line_path = m.group(2), m.group(3)
+				elif m.group(1):
+					line_option, line_path = m.group(1).strip() + " ", m.group(3)
+				else:
+					line_option, line_path = None, m.group(3)
+				line_path = os.path.expandvars(line_path)
+				if line_option == '-f ':
+					log.fatal("filelist_lower_f_not_allowed", line=line)
+				elif line_option == '-F ' and unroll:
+					path_next = os.path.join(prefix_parent, line_path)
+					try:
+						with open(path_next, encoding="utf-8") as f:
+							extract(f.readlines(), os.path.dirname(path_next))
+					except OSError as e:
+						log.error("filelist_resolve_error", path=str(path_next), err=str(e))
+				elif line_option == '+libext+':
+					libexts.update(dict.fromkeys(line_path.split('+')))
+				else:
+					entries.append(FilelistEntry(os.path.join(prefix_parent, line_path), line_option))
+		extract(lines, str(base_dir))
+		if len(libexts) > 0:
+			entries.append(FilelistEntry("+".join(libexts), "+libext+"))
+		yield ("entries", entries)
 
 
 def filelist_extract(lines_in, unroll, fpath):

@@ -20,6 +20,8 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 RunPreprocMod = _mod.RunPreprocMod
 WriteFilelistMod = _mod.WriteFilelistMod
+FilelistExtractMod = _mod.FilelistExtractMod
+FilelistEntry = _mod.FilelistEntry
 
 
 def _make_tb():
@@ -348,4 +350,111 @@ def test_write_filelist_write_oserror(tmp_path, logging_handler):
 	model = _make_filelist_model(path=str(tmp_path / "models.yaml"))
 	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
 	assert len(results) == 0
+	assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# FilelistExtractMod
+# ---------------------------------------------------------------------------
+
+
+def test_extract_order_and_coalesced_libext():
+	"""Entries preserve order, prepend base_dir, and coalesce +libext+ into one trailing entry. No relpath, no dedup."""
+	filelist = ["-v lib/pkg.sv", "rtl/top.sv", "rtl/top.sv", "+incdir+inc", "+libext+sv+v", "+libext+svh"]
+	model = ModelConfig(name="m", filelist=filelist)
+	mod = FilelistExtractMod()
+	results = list(mod.run(source=model, base_dir=Path("/design/hw")))
+	assert len(results) == 1
+	port, entries = results[0]
+	assert port == "entries"
+	assert entries[0] == FilelistEntry("/design/hw/lib/pkg.sv", "-v ")
+	assert entries[1] == FilelistEntry("/design/hw/rtl/top.sv", None)
+	assert entries[2] == FilelistEntry("/design/hw/rtl/top.sv", None)  # not deduped
+	assert entries[3] == FilelistEntry("/design/hw/inc", "+incdir+")
+	assert entries[4] == FilelistEntry("sv+v+svh", "+libext+")
+	assert len(entries) == 5
+
+
+def test_extract_two_base_dirs():
+	"""Same record driven with two different base_dir values roots entries on each."""
+	model = ModelConfig(name="m", filelist=["src/a.sv"])
+	mod = FilelistExtractMod()
+	e1 = list(mod.run(source=model, base_dir=Path("/dir1")))[0][1]
+	e2 = list(mod.run(source=model, base_dir=Path("/dir2")))[0][1]
+	assert e1[0].path == "/dir1/src/a.sv"
+	assert e2[0].path == "/dir2/src/a.sv"
+
+
+def test_extract_ignores_record_path_and_cwd(tmp_path, monkeypatch):
+	"""Entries are rooted on base_dir, not on the record's own path or on the process CWD."""
+	other = tmp_path / "other"
+	other.mkdir()
+	monkeypatch.chdir(other)
+	model = ModelConfig(name="m", filelist=["src/a.sv"], path=str(tmp_path / "models.yaml"))
+	mod = FilelistExtractMod()
+	entries = list(mod.run(source=model, base_dir=Path("/explicit/base")))[0][1]
+	assert entries[0].path == "/explicit/base/src/a.sv"
+
+
+def test_extract_same_lines_through_each_record_type():
+	"""ModelConfig, TestbenchConfig, and TestConfig wrapping that testbench all produce identical entries."""
+	filelist = ["rtl/top.sv", "-v lib/pkg.sv"]
+	base = Path("/design")
+	tb = TestbenchConfig(name="tb", filelist=filelist)
+	model = ModelConfig(name="m", filelist=filelist)
+	test = _make_test("t", tb=tb)
+	mod = FilelistExtractMod()
+	e_model = list(mod.run(source=model, base_dir=base))[0][1]
+	e_tb = list(mod.run(source=tb, base_dir=base))[0][1]
+	e_test = list(mod.run(source=test, base_dir=base))[0][1]
+	assert e_model == e_tb == e_test
+
+
+def test_extract_f_unroll_spliced_and_rooted(tmp_path):
+	"""-F with unroll=True splices included entries in order, rooted on the include file's directory."""
+	sub = tmp_path / "sub"
+	sub.mkdir()
+	(sub / "other.f").write_text("inner.sv\n")
+	model = ModelConfig(name="m", filelist=["before.sv", "-F sub/other.f", "after.sv"])
+	mod = FilelistExtractMod()
+	entries = list(mod.run(source=model, base_dir=tmp_path, unroll=True))[0][1]
+	assert entries[0] == FilelistEntry(str(tmp_path / "before.sv"), None)
+	assert entries[1] == FilelistEntry(str(sub / "inner.sv"), None)  # rooted on other.f's directory
+	assert entries[2] == FilelistEntry(str(tmp_path / "after.sv"), None)
+
+
+def test_extract_f_no_unroll():
+	"""-F with unroll=False produces a single -F entry without recursion."""
+	model = ModelConfig(name="m", filelist=["-F other.f"])
+	mod = FilelistExtractMod()
+	entries = list(mod.run(source=model, base_dir=Path("/design"), unroll=False))[0][1]
+	assert len(entries) == 1
+	assert entries[0] == FilelistEntry("/design/other.f", "-F ")
+
+
+def test_extract_missing_f_include(logging_handler):
+	"""Missing -F include logs filelist_resolve_error and continues with remaining lines."""
+	model = ModelConfig(name="m", filelist=["-F nonexistent.f", "after.sv"])
+	mod = FilelistExtractMod()
+	entries = list(mod.run(source=model, base_dir=Path("/design"), unroll=True))[0][1]
+	assert len(entries) == 1
+	assert entries[0] == FilelistEntry("/design/after.sv", None)
+	assert logging_handler.failure is True
+
+
+def test_extract_lower_f_fatal(logging_handler):
+	"""Lowercase -f triggers log.fatal."""
+	model = ModelConfig(name="m", filelist=["-f other.f"])
+	mod = FilelistExtractMod()
+	with pytest.raises(typer.Exit):
+		list(mod.run(source=model, base_dir=Path("/design")))
+
+
+def test_extract_malformed_line(logging_handler):
+	"""A malformed line (option with no path) logs filelist_malformed_line and is skipped."""
+	model = ModelConfig(name="m", filelist=["+incdir+", "good.sv"])
+	mod = FilelistExtractMod()
+	entries = list(mod.run(source=model, base_dir=Path("/design")))[0][1]
+	assert len(entries) == 1
+	assert entries[0] == FilelistEntry("/design/good.sv", None)
 	assert logging_handler.failure is True
