@@ -1,4 +1,4 @@
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from serde import serde
@@ -28,3 +28,11 @@ class EarlyStopGateMod:
 		else:
 			for name, payload in edges.items():
 				yield (name, payload)
+
+
+class FlagGateMod:
+	def run(self, value:Any, flag:bool = False):
+		if flag:
+			yield ("on", value)
+		else:
+			yield ("off", value)

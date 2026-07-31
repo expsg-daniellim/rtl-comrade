@@ -21,6 +21,7 @@ assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 EarlyStopGateMod = _mod.EarlyStopGateMod
+FlagGateMod = _mod.FlagGateMod
 
 
 def _make_tb():
@@ -294,3 +295,40 @@ def test_git_status_git_unavailable(logging_handler):
 		result = GitStatusMod().run()
 	assert result == ("default", True)
 	assert logging_handler.failure is False
+
+
+# ---------------------------------------------------------------------------
+# FlagGateMod (spec 09)
+# ---------------------------------------------------------------------------
+
+
+def test_flag_gate_true():
+	value = {"some": "payload"}
+	results = list(FlagGateMod().run(value=value, flag=True))
+	assert len(results) == 1
+	assert results[0] == ("on", value)
+
+
+def test_flag_gate_false():
+	value = {"some": "payload"}
+	results = list(FlagGateMod().run(value=value, flag=False))
+	assert len(results) == 1
+	assert results[0] == ("off", value)
+
+
+def test_flag_gate_default():
+	value = {"some": "payload"}
+	results = list(FlagGateMod().run(value=value))
+	assert len(results) == 1
+	assert results[0] == ("off", value)
+
+
+def test_flag_gate_identity():
+	from contracts.sentinels import KeyedValue
+	plain = [1, 2, 3]
+	results = list(FlagGateMod().run(value=plain, flag=True))
+	assert results[0][1] is plain
+	keyed = KeyedValue(key="k1", value=[4, 5])
+	results = list(FlagGateMod().run(value=keyed, flag=False))
+	assert results[0][1] is keyed
+	assert results[0][1].key == "k1"

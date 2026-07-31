@@ -40,6 +40,7 @@ files:
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }
+  - { name: flag-gate, class_name: FlagGateMod }
 - file: rtl_buddy/sim.py
   plugins:
   - { name: expand-runs, class_name: ExpandRunsMod }
