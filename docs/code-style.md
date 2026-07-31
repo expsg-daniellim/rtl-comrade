@@ -2,14 +2,14 @@
 
 ## Type annotations
 
-Omit the space before the colon in all annotation contexts — function parameters, return types, and module-level variable annotations:
+Omit the space before the colon in all annotation contexts — function parameters, return types, and module-level variable annotations. Omit spaces around `|` in union types:
 
 ```python
-def run(self, x:int, y:str = "default") -> bool:
+def run(self, x:int, y:str|None = "default") -> bool:
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 ```
 
-This applies consistently; do not add a space before the colon anywhere.
+This applies consistently; do not add a space before the colon or around `|` anywhere.
 
 ## Spelling
 
