@@ -19,7 +19,7 @@ The harness already models "a value fixed before the run" as a source node: a CL
 
 The alternative — folding the value into the module's `Config` — would make a port value into constructor state. The module would then need a `Config` class it has no other use for, plus two ways of learning `unroll`, and the next module with a load-time-constant port would repeat both. The node keeps `filelist-extract`'s surface untouched and puts the difference where the plan puts every other per-command difference: in the wiring. In the `test` graph `unroll` is fed by a `constant`; in the `filelist` command by a `cli` edge; the module cannot tell.
 
-The value is also visible where a reader looks for it. A `constant` node renders on the dataflow diagram carrying what it emits — unlike a CLI bubble, whose value belongs to the invoking user and is deliberately left off the label ([`scratch.md`](scratch.md)).
+The value is also visible where a reader looks for it. A `constant` node renders on the dataflow diagram carrying what it emits — unlike a CLI bubble, whose value belongs to the invoking user and is deliberately left off the label.
 
 ## Surface
 
@@ -96,7 +96,7 @@ class ConstantMod:
 
 ## Contract — `default`, and why it runs once
 
-`default`, not `unit`, for the reason [04f](../implementation-test/specs/04f-work-dir.md) gives for `work-dir`: with no ports the two contracts behave identically, and `unit` would assert a one-shot guarantee it does not supply. The one-shot behaviour comes from the node loop instead — `DefaultContract.get_inputs()` over an empty port set returns `{}`, and `Node.run()` breaks after the invocation on `len(inputs) == 0` (`src/rtl_comrade/node.py:331-332`). `work-dir`, `prepend-path` and `git-status` are all wired this way in `graphs/test.yaml`.
+`default`, not `unit`, for the reason [04f](../implementation-test/specs/04f-work-dir.md) gives for `work-dir`: with no ports the two contracts behave identically, and `unit` would assert a one-shot guarantee it does not supply. The one-shot behaviour comes from the node loop instead — `DefaultContract.get_inputs()` over an empty port set returns `{}`, and `Node.run()` breaks after the invocation on `len(inputs) == 0` (`src/rtl_comrade/node.py:372`). `work-dir`, `prepend-path` and `git-status` are all wired this way in `graphs/test.yaml`.
 
 ## What the consumer must declare
 

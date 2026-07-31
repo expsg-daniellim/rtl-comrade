@@ -5,11 +5,11 @@
 
 ## Before you start
 
-Read `docs/modules/implementation.md`. Native reimplementation of the *path-rebase + existence-check* portion of rtl_buddy's `VlogFilelist._process` — **do not import rtl_buddy**.
+Read `docs/module-implementation/implementation.md`. Native reimplementation of the *path-rebase + existence-check* portion of rtl_buddy's `VlogFilelist._process` — **do not import rtl_buddy**.
 
 ## Goal
 
-The always-present first transform after the merge: relativise each path against a `base_dir`, and emit the `+incdir+`/`-y ` is-a-dir and source is-a-file existence warnings. It consumes entries as a bare `list[tuple[str, str | None]]` — `KeyedValue` threading is the contract's job, not the module's — and outputs `entries` (not lines) so the optional flatten/strip/dedup nodes can compose after it.
+The always-present first transform after the merge: relativise each path against a `base_dir`, and emit the `+incdir+`/`-y ` is-a-dir and source is-a-file existence warnings. It consumes entries as a bare `list[FilelistEntry]` ([spec 01](01-filelist-entry.md)) — `KeyedValue` threading is the contract's job, not the module's — and outputs `entries` (not lines) so the optional flatten/strip/dedup nodes can compose after it.
 
 ## Where relpath lives
 
@@ -30,26 +30,26 @@ This replaces the earlier design where the module threaded `entries.value`/`entr
 
 ```
 contract:          per-graph (see Contract section)
-inputs:            entries:list[tuple[str, str|None]], base_dir:Path
-outputs:           entries → list[tuple[str, str|None]]   (paths base_dir-relative)
+inputs:            entries:list[FilelistEntry], base_dir:Path
+outputs:           entries → list[FilelistEntry]   (paths base_dir-relative)
 ```
 
 `entries` is the entry list — bare in the `filelist` graph, unwrapped from `KeyedValue` by `keyed_join` in the `test` graph. `base_dir` is the relativise root, a persistent singleton (`work_dir` in the test graph, the output-file directory in the `filelist` command).
 
 ```python
 class FilelistNormaliseMod:
-    def run(self, entries:list[tuple[str, str|None]], base_dir:Path):
+    def run(self, entries:list[FilelistEntry], base_dir:Path):
         out = []
-        for path, option in entries:
-            if option == "+libext+":
-                out.append((path, option))
+        for e in entries:
+            if e.option == "+libext+":
+                out.append(e)
                 continue
-            if option in ("+incdir+", "-y "):
-                if not os.path.isdir(path):
-                    log.error("filelist_incdir_not_a_dir", path=str(path))
-            elif not os.path.isfile(path):
-                log.error("filelist_file_not_found", path=str(path))
-            out.append((os.path.relpath(path, base_dir), option))
+            if e.option in ("+incdir+", "-y "):
+                if not os.path.isdir(e.path):
+                    log.error("filelist_incdir_not_a_dir", path=str(e.path))
+            elif not os.path.isfile(e.path):
+                log.error("filelist_file_not_found", path=str(e.path))
+            out.append(FilelistEntry(os.path.relpath(e.path, base_dir), e.option))
         yield ("entries", out)
 ```
 
@@ -57,10 +57,10 @@ class FilelistNormaliseMod:
 
 Port the rebase + checks of `VlogFilelist._process` (`vlog_filelist.py:107-120`), taking `base_dir` instead of the implicit CWD:
 
-1. For each `(path, option)` in `entries`:
+1. For each entry in `entries`:
    - `+libext+` → pass through untouched (the coalesced value is not a path; no relpath, no check). Later render (spec [07](07-write-filelist.md)) emits it verbatim.
    - Existence warning, best-effort: `+incdir+`/`-y ` → `log.error("filelist_incdir_not_a_dir")` if not a dir; any other option → `log.error("filelist_file_not_found")` if not a file. Run continues.
-   - Emit `(os.path.relpath(path, base_dir), option)`.
+   - Emit `FilelistEntry(os.path.relpath(e.path, base_dir), e.option)`.
 2. rtl_buddy uses bare `os.path.relpath(path)` (CWD-implicit). The `base_dir` argument makes output correct under a relocated `work_dir` and byte-identical when `base_dir == CWD`.
 
 No flatten/strip/dedup/render here — each is a separate node.
@@ -69,7 +69,7 @@ No flatten/strip/dedup/render here — each is a separate node.
 
 In `modules/rtl_buddy/build.py`, the normalise stage replacing the front of the fused node's `filelist_process`:
 
-- `FilelistNormaliseMod` — `(entries:list[tuple[str, str | None]], base_dir:Path)` → `("entries", list[...])`. Lifts the relpath + existence-check loop from `filelist_process` (`build.py:99-113`), generalising the hard-coded `work_dir` to the `base_dir` port, and dropping the line-rendering/dedup tail (moved to specs [06](06-filelist-dedup.md)/[07](07-write-filelist.md)). `KeyedValue` threading is the contract's job — the module works on bare lists in every graph.
+- `FilelistNormaliseMod` — `(entries:list[FilelistEntry], base_dir:Path)` → `("entries", list[...])`. Lifts the relpath + existence-check loop from `filelist_process` (`build.py:99-113`), generalising the hard-coded `work_dir` to the `base_dir` port, and dropping the line-rendering/dedup tail (moved to specs [06](06-filelist-dedup.md)/[07](07-write-filelist.md)). `KeyedValue` threading is the contract's job — the module works on bare lists in every graph.
 - **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:107-120` — the rebase + existence portion of `_process`.
 
 Manifest entry `{ name: filelist-normalise, class_name: FilelistNormaliseMod }` (registered with the pipeline — see [spec 02 Deliverables](02-filelist-extract.md#deliverables)).
@@ -78,7 +78,7 @@ Manifest entry `{ name: filelist-normalise, class_name: FilelistNormaliseMod }` 
 
 In `modules/tests/test_prep.py`:
 
-- Entries with `+incdir+`, source files, a `+libext+` entry as a bare `list[tuple[str, str | None]]`, `base_dir=tmp_path` → each path relativised against `tmp_path`; `+libext+` passed through unchanged; output is a bare `list`.
+- Entries with `+incdir+`, source files, a `+libext+` entry as a bare `list[FilelistEntry]`, `base_dir=tmp_path` → each path relativised against `tmp_path`; `+libext+` passed through unchanged; output is a bare `list`.
 - **Relpath base_dir, not CWD:** `monkeypatch.chdir(other)`, `base_dir=tmp_path`, entry `tmp_path/"src/a.sv"` → emits `src/a.sv`, not `../…/src/a.sv`. (The byte-parity boundary from 06b moves here.)
 - `+incdir+` target not a dir, and a missing source path → `log.error("filelist_incdir_not_a_dir")` / `filelist_file_not_found`, best-effort (entry still emitted, run continues).
 

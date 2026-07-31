@@ -1,11 +1,11 @@
-# Spec 01: filelist-extract (`FilelistExtractMod`)
+# Spec 02: filelist-extract (`FilelistExtractMod`)
 
 **Depends on:** [01c](../implementation-test/specs/01c-model-schema.md) (`ModelConfig`) and [01b](../implementation-test/specs/01b-suite-schema.md) (`TestConfig`, `TestbenchConfig`) — the source records this node reads its lines off; [spec 01 — FilelistEntry](01-filelist-entry.md) (the entry datatype it produces).
 **References:** [00-overview](00-overview.md) — the pipeline rationale, node map, and ordering; [implementation-test spec 06b](../implementation-test/specs/06b-write-filelist.md) — the fused `WriteFilelistMod` this pipeline replaces.
 
 ## Before you start
 
-Read `docs/modules/implementation.md` (input-port inference, output forms, `finalise()`). This module natively reimplements rtl_buddy's `VlogFilelist._extract` — **do not import or construct rtl_buddy's `VlogFilelist`** (`modules/rtl_buddy/` is deliberately distinct from the upstream `rtl_buddy/src/...` tree, cited only as a compatibility source).
+Read `docs/module-implementation/implementation.md` (input-port inference, output forms, `finalise()`). This module natively reimplements rtl_buddy's `VlogFilelist._extract` — **do not import or construct rtl_buddy's `VlogFilelist`** (`modules/rtl_buddy/` is deliberately distinct from the upstream `rtl_buddy/src/...` tree, cited only as a compatibility source).
 
 ## Goal
 
@@ -16,7 +16,7 @@ Turn **one** filelist source (the record whose `filelist` field holds the lines 
 ```
 contract:          default   (one instance per source; keyed by test in the test graph)
 inputs:            source:ModelConfig|TestbenchConfig|TestConfig, base_dir:Path, unroll:bool = False
-outputs:           entries → list[tuple[str, str|None]]   (self-keyed in the test graph)
+outputs:           entries → list[FilelistEntry]   (self-keyed in the test graph)
 ```
 
 `entries` is the only output port. An unresolvable `-F` include is logged at ERROR and skipped — there is no `fail` port.
@@ -33,7 +33,10 @@ Each graph instantiates one `filelist-extract` per source; the `prioritised-merg
 class FilelistExtractMod:
     def run(self, source:ModelConfig|TestbenchConfig|TestConfig, base_dir:Path, unroll:bool = False):
         config = source.get_testbench() if isinstance(source, TestConfig) else source
-        entries = self.extract(config.get_filelist(), base_dir, unroll)   # placeholder for the inlined _extract port
+        lines = config.get_filelist()
+        entries = []
+        libexts = {}
+        # ... algorithm steps 1-4 inlined here (see Algorithm below)
         yield ("entries", entries)
 ```
 
@@ -48,9 +51,9 @@ Resolve `config` — `get_testbench()` first when `source` is a `TestConfig` —
 3. `line_path = os.path.expandvars(line_path)`, then branch:
    - `-f ` (lower-case) → `log.fatal("filelist_lower_f_not_allowed", line=line)` (hard stop).
    - `-F ` **and** `unroll` → `path_next = os.path.join(prefix_parent, line_path)`; open and recurse with `base_dir = os.path.dirname(path_next)`, extending `entries`. An include **is** a file, so it roots on its own directory — this is the one root the node derives, and it is unaffected by the wired top-level `base_dir`. Open failure → step 5.
-   - `+libext+` → `libexts.update(line_path.split('+'))` (accumulate).
+   - `+libext+` → `libexts.update(dict.fromkeys(line_path.split('+')))` (accumulate, insertion-ordered).
    - else (source files, `-v`, `-y`, `+incdir+`, non-unrolled `-F`) → `entries.append((os.path.join(prefix_parent, line_path), option))`.
-4. After the loop, if any `+libext+` accumulated, append one coalesced `("+".join(libexts), "+libext+")`.
+4. After the loop, if any `+libext+` accumulated, append one coalesced `("+".join(libexts), "+libext+")`. `libexts` is a `dict` (used as an ordered set via `dict.fromkeys`), so the join is deterministic.
 5. **Failure — unresolvable `-F` include.** rtl_buddy `log.error`s and continues (`vlog_filelist.py:99-100`); rtl_comrade's `filelist_extract` raises `KeyError` on the `OSError` (`build.py:87-89`) for the fused node to catch as `filelist_resolve_error`. Catch the include-open `OSError` here instead — `log.error("filelist_resolve_error", path=str(path_next), err=str(e))` — and skip that include, continuing the remaining lines. The event carries no `key`/`test_name`: this node holds a source record, not a test, so the error is a non-row ERROR and is **removed** from `FAIL_EVENTS`/`DESC_BUILDERS` in `graphs/log/summary.py`, joining `filelist_malformed_line` and `filelist_file_not_found`. It still trips the run's exit status via `handler.failure`.
 
 Entries carry **non-relativized, non-flattened, non-deduped** paths, absolute whenever `base_dir` is — which every wiring makes it — because [normalise](03-filelist-normalise.md) rebases against a `base_dir` in a different directory and checks existence on what arrives. Every rewrite after that is a downstream node's function.
@@ -59,20 +62,10 @@ Entries carry **non-relativized, non-flattened, non-deduped** paths, absolute wh
 
 In `modules/rtl_buddy/build.py`, replacing the extract portion of the fused `WriteFilelistMod`:
 
-- `FilelistExtractMod` — `(source:ModelConfig | TestbenchConfig | TestConfig, base_dir:Path, unroll:bool = False)` → `("entries", list[tuple[str, str | None]])`, the single output port. Reuse the existing `FILELIST_OPTION_RE` and `-F`/`+libext+` recursion from `filelist_extract`; lift them into this node rather than keeping the free function as a parallel path. The `model.get_filelist()` / `test.get_testbench().get_filelist()` calls the fused node made at its call site (`build.py:126-127`) move inside the module, one branch each, while the two `source_dir` values it computed there (`build.py:124-125`, `127`) move outward onto the `base_dir` edges — the graph keeps the per-source distinction the fused node hard-coded.
+- `FilelistExtractMod` — `(source:ModelConfig | TestbenchConfig | TestConfig, base_dir:Path, unroll:bool = False)` → `("entries", list[FilelistEntry])`, the single output port. Reuse the existing `FILELIST_OPTION_RE` and `-F`/`+libext+` recursion from `filelist_extract`; lift them into this node rather than keeping the free function as a parallel path. The `model.get_filelist()` / `test.get_testbench().get_filelist()` calls the fused node made at its call site (`build.py:126-127`) move inside the module, one branch each, while the two `source_dir` values it computed there (`build.py:124-125`, `127`) move outward onto the `base_dir` edges — the graph keeps the per-source distinction the fused node hard-coded.
 - **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:26-105` — `VlogFilelist._extract`.
 
-**Manifest** — in the `- file: rtl_buddy/build.py` block of `modules/config.yaml`, replace `{ name: write-filelist, class_name: WriteFilelistMod }` with the seven pipeline entries:
-
-```yaml
-  - { name: filelist-extract,   class_name: FilelistExtractMod }
-  - { name: prioritised-merge,  class_name: PrioritisedMergeMod }
-  - { name: filelist-normalise, class_name: FilelistNormaliseMod }
-  - { name: filelist-flatten,   class_name: FilelistFlattenMod }
-  - { name: filelist-strip,     class_name: FilelistStripMod }
-  - { name: filelist-dedup,     class_name: FilelistDedupMod }
-  - { name: write-filelist,     class_name: WriteFilelistMod }
-```
+**Manifest** — `{ name: filelist-extract, class_name: FilelistExtractMod }` in the `- file: rtl_buddy/build.py` block of `modules/config.yaml`. The full seven-entry listing is in [00-overview](00-overview.md#the-pipeline-at-a-glance).
 
 **Summary registration** — in `graphs/log/summary.py`, drop `filelist_resolve_error` from `FAIL_EVENTS` and `DESC_BUILDERS`. It moves from the writer (which had a `test` to attribute it to) into this node (which does not), so it stops being a summary row; the four write-error events stay ([spec 07](07-write-filelist.md)).
 

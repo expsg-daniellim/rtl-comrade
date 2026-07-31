@@ -24,7 +24,7 @@ outputs:           default → Path   (the joined path)
 ```python
 class DirjoinMod:
     def run(self, dir_:Path, name:str|Path):
-        return Path(dir_) / name
+        return ("default", Path(dir_) / name)
 ```
 
 `dir_` carries a trailing underscore because `dir` is a Python builtin; the harness exposes the input port as `dir` (the underscore is stripped — see `docs/module-implementation/implementation.md` § Avoiding builtin/keyword clashes). Graph edges write `port: dir`.

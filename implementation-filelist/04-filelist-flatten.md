@@ -1,11 +1,11 @@
-# Spec 03: filelist-flatten (`FilelistFlattenMod`)
+# Spec 04: filelist-flatten (`FilelistFlattenMod`)
 
 **Depends on:** [spec 03](03-filelist-normalise.md) (`entries` input, already base-relative).
 **References:** pipeline overview [00-overview](00-overview.md#why-this-pipeline-exists).
 
 ## Before you start
 
-Read `docs/modules/implementation.md`. This is one of the three transforms that were baked booleans in the fused node (`flatten`/`strip`/`deduplicate`) and are now composable nodes — wired in only when a command wants them. Native reimplementation of the `flatten` branch of `VlogFilelist._process`.
+Read `docs/module-implementation/implementation.md`. This is one of the three transforms that were baked booleans in the fused node (`flatten`/`strip`/`deduplicate`) and are now composable nodes — wired in only when a command wants them. Native reimplementation of the `flatten` branch of `VlogFilelist._process`.
 
 ## Goal
 
@@ -19,15 +19,15 @@ Must sit **after** `filelist-normalise`: `flatten` is `os.path.basename`, which 
 
 ```
 contract:          default   (keyed by test in the test graph; unwired unless requested)
-inputs:            entries:list[tuple[str, str|None]]
-outputs:           entries → list[tuple[str, str|None]]
+inputs:            entries:list[FilelistEntry]
+outputs:           entries → list[FilelistEntry]
 ```
 
 ```python
 class FilelistFlattenMod:
-    def run(self, entries:list[tuple[str, str|None]]):
-        out = [ (path, option) if option == "+libext+" else (os.path.basename(path), option)
-                for path, option in entries ]
+    def run(self, entries:list[FilelistEntry]):
+        out = [ e if e.option == "+libext+" else FilelistEntry(os.path.basename(e.path), e.option)
+                for e in entries ]
         yield ("entries", out)
 ```
 
@@ -45,7 +45,7 @@ Port the `flatten` branch of `_process` (`vlog_filelist.py:122`): `line_path = o
 
 In `modules/tests/test_prep.py`:
 
-- Entries `("a/b/c.sv", None)`, `("+incdir+", "…")` etc. → paths become basenames (`c.sv`), options preserved.
+- Entries `("a/b/c.sv", None)`, `("a/b/inc", "+incdir+")` etc. → paths become basenames (`c.sv`, `inc`), options preserved.
 - `+libext+` entry passes through unchanged.
 
 ## Acceptance criteria

@@ -1,11 +1,11 @@
-# Spec 04: filelist-strip (`FilelistStripMod`)
+# Spec 05: filelist-strip (`FilelistStripMod`)
 
 **Depends on:** [spec 03](03-filelist-normalise.md) (`entries` input).
 **References:** pipeline overview [00-overview](00-overview.md#why-this-pipeline-exists).
 
 ## Before you start
 
-Read `docs/modules/implementation.md`. Second of the three ex-boolean transforms now composable as nodes. Native reimplementation of the `strip` intent of `VlogFilelist._process` — **fixing a bug in the reference** (see Algorithm).
+Read `docs/module-implementation/implementation.md`. Second of the three ex-boolean transforms now composable as nodes. Native reimplementation of the `strip` intent of `VlogFilelist._process` — **fixing a bug in the reference** (see Algorithm).
 
 ## Goal
 
@@ -15,15 +15,15 @@ Optional transform: drop the option token from each entry, leaving a bare-path l
 
 ```
 contract:          default   (keyed by test in the test graph; unwired unless requested)
-inputs:            entries:list[tuple[str, str|None]]
-outputs:           entries → list[tuple[str, str|None]]   (option set to None)
+inputs:            entries:list[FilelistEntry]
+outputs:           entries → list[FilelistEntry]   (option set to None)
 ```
 
 ```python
 class FilelistStripMod:
-    def run(self, entries:list[tuple[str, str|None]]):
-        out = [ (path, option) if option == "+libext+" else (path, None)
-                for path, option in entries ]
+    def run(self, entries:list[FilelistEntry]):
+        out = [ e if e.option == "+libext+" else FilelistEntry(e.path, None)
+                for e in entries ]
         yield ("entries", out)
 ```
 
@@ -40,7 +40,7 @@ Set each entry's option to `None` so render (spec [07](07-write-filelist.md)) em
 - `FilelistStripMod` — `(entries)` → `("entries", …)`. In `modules/rtl_buddy/build.py`.
 - **Compatibility source:** `rtl_buddy/src/rtl_buddy/tools/vlog_filelist.py:131-132` (the `strip` intent; the reference no-op is corrected here).
 - Manifest `{ name: filelist-strip, class_name: FilelistStripMod }` (with the pipeline — [spec 02](02-filelist-extract.md#deliverables)).
-- **Divergence entry** — record in `docs/divergences.md` that `--strip` drops the option token, where rtl_buddy renders the line at `vlog_filelist.py:123` before assigning `line_option = ''` (129-130) and appends the already-rendered line, so the upstream flag emits identical output whether or not it is set.
+- **Divergence entry** — record under **Deliberate divergences** in `docs/divergences.md` that `--strip` drops the option token, where rtl_buddy renders the line at `vlog_filelist.py:123` before assigning `line_option = ''` (129-130) and appends the already-rendered line, so the upstream flag emits identical output whether or not it is set.
 
 ## Tests
 

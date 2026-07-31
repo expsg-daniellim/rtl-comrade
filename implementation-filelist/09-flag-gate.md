@@ -37,7 +37,7 @@ Exactly one port fires per input, and the value is re-emitted **as it arrived** 
 
 1. `flag` true → `yield ("on", value)`; else → `yield ("off", value)`.
 
-That is the whole module. Both ports are statically named under an `if`/`else`, so `ModuleStructure` derives the two arms straight from the AST — **no `output_groups` declaration**, which `EarlyStopGateMod` needs only because it emits through `**edges` and the AST cannot name those ports.
+That is the whole module. Both ports are statically named under an `if`/`else`, so `ModuleStructure` derives the two arms straight from the AST and proves them mutually exclusive — **no `output_groups` declaration** needed. `EarlyStopGateMod` emits through `**edges`, which the AST cannot name, so it falls back to one shared arm (all-or-nothing), which is correct for a gate that re-emits every edge or none. The difference is that `FlagGateMod`'s static `if`/`else` lets the harness prove exclusivity per arm, which is what makes the downstream same-port rejoin validate.
 
 ## Rejoining the arms
 
@@ -79,7 +79,7 @@ nodes:
 edges:
 - src: { cli: flatten,     type: bool, default: false }
   dst: { node: gate-flatten, port: flag, required: true }
-- src: { cli: strip,       type: bool, default: false }
+- src: { cli: strip_options, type: bool, default: false }
   dst: { node: gate-strip,   port: flag, required: true }
 - src: { cli: deduplicate, type: bool, default: false }
   dst: { node: gate-dedup,   port: flag, required: true }
@@ -108,7 +108,7 @@ edges:
 
 The three CLI defaults are `rtl_buddy`'s own (`rtl_buddy.py:445-447` — all three `False`). `test`/`randtest`/`regression` wire none of this: no gate, `normalise → dedup → write`, matching `VlogSim`'s hard-coded `flatten=False, strip=False, deduplicate=True` (`vlog_sim.py:93`).
 
-Both arms of a rejoin must carry the **identical** payload shape, since they feed one port — so when specs [02](02-filelist-extract.md)–[08](08-prioritised-merge.md) migrate from `list[tuple[str, str | None]]` to `list[FilelistEntry]` ([spec 01](01-filelist-entry.md#note--migration)), the bypassed transforms migrate with the nodes around them or the rejoin becomes shape-heterogeneous.
+Both arms of a rejoin must carry the **identical** payload shape, since they feed one port — entries travel as `list[FilelistEntry]` ([spec 01](01-filelist-entry.md)) throughout the pipeline, so the bypassed arm and the transform arm carry the same shape.
 
 ## The flag needs `required: true` *and* `persistent_inputs`
 

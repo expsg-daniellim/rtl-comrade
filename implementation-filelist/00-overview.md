@@ -91,7 +91,19 @@ The command extracts a single source: it calls `write_output` with no `test_file
 | `filelist-dedup` | [06](06-filelist-dedup.md) | drop duplicate entries | gated on `--deduplicate/-d` | always (unconditional) |
 | `write-filelist` | [07](07-write-filelist.md) | render entries → `.f`, write | always, feeds `log-filelist` | always, feeds `cc-build` |
 
-The manifest that registers all seven with `modules/config.yaml` is in [spec 02 Deliverables](02-filelist-extract.md#deliverables); each node's spec points there.
+The manifest registering all seven with `modules/config.yaml` (the `- file: rtl_buddy/build.py` block, replacing the single `{ name: write-filelist, class_name: WriteFilelistMod }` from [implementation-test spec 11](../implementation-test/specs/11-graph-and-manifests.md)):
+
+```yaml
+  - { name: filelist-extract,   class_name: FilelistExtractMod }
+  - { name: prioritised-merge,  class_name: PrioritisedMergeMod }
+  - { name: filelist-normalise, class_name: FilelistNormaliseMod }
+  - { name: filelist-flatten,   class_name: FilelistFlattenMod }
+  - { name: filelist-strip,     class_name: FilelistStripMod }
+  - { name: filelist-dedup,     class_name: FilelistDedupMod }
+  - { name: write-filelist,     class_name: WriteFilelistMod }
+```
+
+This is the single authoritative listing; individual specs reference it rather than duplicating it.
 
 `gate-flatten`/`gate-strip`/`gate-dedup` are three instances of one payload-agnostic [flag-gate](09-flag-gate.md), a graph-control node registered under `rtl_buddy/control.py` beside `early-stop-gate` rather than with the seven.
 

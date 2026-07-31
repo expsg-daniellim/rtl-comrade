@@ -35,7 +35,7 @@ Both reproduce the fused node exactly. It rooted model entries on `dirname(abspa
 
 `model-ref` already emits `model_path`, but it sits **upstream of `expand-sweep`**, which mints a new key per variant (`variant.key = f"{test.key}#{i}"`, `setup.py:291`). A root keyed `foo` can never join a source keyed `foo#0`, so `keyed_join` would hold the group forever — for swept tests only. Carrying the root through instead is not available either: `ExpandSweepMod` and `RunPreprocMod` yield only `test` and `model`, so a third payload means editing both (`gate-pre` would forward it — `EarlyStopGateMod` re-emits `**edges`).
 
-So a second `resolve-model-ref` instance sits on the post-sweep `test` edge. It is a pure projection — two attribute reads and a path join wrapped in `KeyedValue`, no I/O, no state, no failure path (`setup.py:227-230`) — so re-running it costs one invocation per variant and yields the identical value: the sweep rewrites only `key` and `model` on a variant, leaving `suite_dir` and `model_path` untouched. Its `model_name` port is left unwired, which the graph already does for `git-status`.
+So a second `resolve-model-ref` instance sits on the post-sweep `test` edge. It is a pure projection — two attribute reads and a path join wrapped in `KeyedValue`, no I/O, no state, no failure path (`setup.py:227-230`) — so re-running it costs one invocation per variant and yields the identical value: the sweep rewrites only `key` and `model` on a variant, leaving `suite_dir` and `model_path` untouched.
 
 ## `route-list` on `flag-gate`
 
@@ -183,10 +183,10 @@ The processors' `Config` defaults are the only place `FAIL_EVENTS` is consumed, 
 ## Deliverables
 
 - **`graphs/test.yaml`** — the node and edge changes above; delete the `filelist` node's old definition, its `work-dir` edge, and the `filelist → cc-build` `test` edge.
-- **`modules/config.yaml`** — remove `{ name: route-list-mode, class_name: RouteListModeMod }`; add `constant`, `dirname` and `logger` to the `funcs.py` block, `flag-gate` to the `rtl_buddy/control.py` block, and the seven pipeline entries plus `filelist-path` to the `rtl_buddy/build.py` block ([spec 02 Deliverables](02-filelist-extract.md#deliverables), [13](13-filelist-path.md)).
+- **`modules/config.yaml`** — remove `{ name: route-list-mode, class_name: RouteListModeMod }`; add `constant`, `dirname` and `logger` to the `funcs.py` block, `flag-gate` to the `rtl_buddy/control.py` block, and the seven pipeline entries ([00-overview](00-overview.md#the-pipeline-at-a-glance)) plus `filelist-path` ([13](13-filelist-path.md)) to the `rtl_buddy/build.py` block.
 - **`modules/rtl_buddy/setup.py`** — delete `RouteListModeMod`.
 - **`graphs/log/summary.py`** — drop `filelist_resolve_error` from `FAIL_EVENTS` and `DESC_BUILDERS`.
-- **Docs.** New pages under `docs/modules/`: `filelist-extract`, `prioritised-merge`, `filelist-normalise`, `filelist-flatten`, `filelist-strip`, `filelist-dedup`, `filelist-path`, `flag-gate`, `constant`, `dirname`, `logger`. Rewrite `write-filelist.md` to render-and-write only. Delete `route-list-mode.md`. Update `docs/modules/index.md` (the prep section, the pipeline sketch, and the deleted/added entries), `docs/graphs/test.md` (the `--list` destination row, the pipeline sketch, the `keyed_join` paragraph), `docs/graphs/test-dataflow-diagram.md`, and `docs/graphs/index.md:75` (the `run.<test>.f` producer link). Follow `docs/creating-documentation.md` and `docs/modules/doc-structure.md`.
+- **Docs.** Delete `docs/modules/route-list-mode.md`. Update `docs/modules/index.md` (the prep section, the pipeline sketch, and the deleted/added entries), `docs/graphs/test.md` (the `--list` destination row, the pipeline sketch, the `keyed_join` paragraph), `docs/graphs/test-dataflow-diagram.md`, and `docs/graphs/index.md:75` (the `run.<test>.f` producer link). Follow `docs/creating-documentation.md` and `docs/modules/doc-structure.md`. Per-module doc pages are each module spec's implementor's responsibility (`docs/contributing.md`), not this spec's.
 - **No divergence entry.** Output is byte-identical; [spec 05](05-filelist-strip.md)'s `--strip` divergence belongs to a node this graph does not wire.
 
 ## Tests
@@ -196,7 +196,6 @@ The module-level tests belong to specs 02–13. This spec's own coverage is the 
 - **`modules/tests/test_selection.py`** — remove the `RouteListModeMod` cases. Do not re-test `flag-gate` here; [spec 09](09-flag-gate.md) owns it.
 - **`graphs/tests/test_summary.py`** — a `filelist_resolve_error` event produces **no** row, while the four write-error events still do.
 - **`tests/e2e/test_e2e.py`** — the existing comparison against snapshotted `rtl_buddy` output is the parity gate; it should need no change, and needing one is the signal that parity broke.
-- Add an e2e case covering a **swept** test, since the model root is re-derived after `expand-sweep` and a key mismatch there would hang only for swept tests. If the committed fixtures have no sweep script, add one (`docs/testing.md` § Committed fixtures).
 - `--list` still prints the test names and nothing else, and the run branch is unaffected — the arm rename is invisible from outside.
 
 ## Acceptance criteria

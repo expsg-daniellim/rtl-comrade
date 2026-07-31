@@ -1,11 +1,11 @@
-# Spec 07: prioritised-merge (`PrioritisedMergeMod`)
+# Spec 08: prioritised-merge (`PrioritisedMergeMod`)
 
 **Depends on:** [spec 02](02-filelist-extract.md) (the per-source `entries` inputs).
 **References:** [spec 03 — filelist-normalise](03-filelist-normalise.md) (consumes this node's output), `contracts/keyed_join.py`, [`docs/contracts/keyed_join.md` — Unwrapping and rewrapping](../docs/contracts/keyed_join.md#unwrapping-and-rewrapping), [00-overview — Why this pipeline exists](00-overview.md#why-this-pipeline-exists).
 
 ## Before you start
 
-Read `docs/modules/implementation.md` (port inference from `run`, `**edges` capture as in `EarlyStopGateMod`, output forms) and `contracts/keyed_join.py` (the contract this node pairs with, including its `unwrap`/`ignore` config). This is a plain module — **no new contract**.
+Read `docs/module-implementation/implementation.md` (port inference from `run`, `**edges` capture as in `EarlyStopGateMod`, output forms) and `contracts/keyed_join.py` (the contract this node pairs with, including its `unwrap`/`ignore` config). This is a plain module — **no new contract**.
 
 ## Why a module on `keyed_join`, not a new contract
 
@@ -74,10 +74,6 @@ class PrioritisedMergeMod:
 2. **Order** the delivered ports by `(priorities[name], name)` — priority ascending, name as deterministic tiebreak.
 3. **Concatenate** the delivered lists in that order.
 4. **Emit** `("entries", merged)`. The contract rewraps it as `KeyedValue(test.key, merged)` on the way out.
-
-## The single-source case
-
-The `filelist` command wires only `model_entries`. `keyed_join` then delivers one port, `ordered` is `[model_entries]`, and the "concatenation" is that one list re-emitted under `entries` — a correct one-element merge, no special path. `config.priorities` lists just `model_entries`.
 
 ## Deliverables
 

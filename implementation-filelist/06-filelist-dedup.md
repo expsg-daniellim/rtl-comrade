@@ -1,11 +1,11 @@
-# Spec 05: filelist-dedup (`FilelistDedupMod`)
+# Spec 06: filelist-dedup (`FilelistDedupMod`)
 
 **Depends on:** [spec 03](03-filelist-normalise.md) (`entries` input).
 **References:** pipeline overview [00-overview](00-overview.md#why-this-pipeline-exists).
 
 ## Before you start
 
-Read `docs/modules/implementation.md`. Third of the three ex-boolean transforms now composable as nodes. Native reimplementation of the `deduplicate` branch of `VlogFilelist._process`.
+Read `docs/module-implementation/implementation.md`. Third of the three ex-boolean transforms now composable as nodes. Native reimplementation of the `deduplicate` branch of `VlogFilelist._process`.
 
 ## Goal
 
@@ -19,13 +19,13 @@ Must sit **after** `filelist-flatten`/`filelist-strip` (when those are wired): b
 
 ```
 contract:          default   (keyed by test in the test graph)
-inputs:            entries:list[tuple[str, str|None]]
-outputs:           entries → list[tuple[str, str|None]]
+inputs:            entries:list[FilelistEntry]
+outputs:           entries → list[FilelistEntry]
 ```
 
 ```python
 class FilelistDedupMod:
-    def run(self, entries:list[tuple[str, str|None]]):
+    def run(self, entries:list[FilelistEntry]):
         seen, out = set(), []
         for entry in entries:
             if entry in seen:

@@ -76,9 +76,9 @@ Assemble the `filelist` graph YAML, carry the manifest entries from this plan's 
   # Positional arguments — declaration order sets CLI position.
   - src: { cli: model_name, option: false, type: str }
     dst: { node: load-model, port: model_name }
-  - src: { cli: output_path, option: false, type: str, default: "run.f" }
+  - src: { cli: output_path, option: false, type: pathlib.Path, default: "run.f" }
     dst: { node: output-dir, port: path }
-  - src: { cli: output_path, option: false, type: str, default: "run.f" }
+  - src: { cli: output_path, option: false, type: pathlib.Path, default: "run.f" }
     dst: { node: write, port: path }
   # Options.
   - src: { cli: model_config, type: str, default: "models.yaml" }
@@ -142,7 +142,7 @@ Assemble the `filelist` graph YAML, carry the manifest entries from this plan's 
   | cli name | src | kind | type | default | help | destinations |
   |---|---|---|---|---|---|---|
   | `model_name` | `:441` | positional | `str` | — (required) | `name of model` | `load-model.model_name` |
-  | `output_path` | `:442` | positional | `str` | `run.f` | `Output filename` | `output-dir.path`, `write.path` |
+  | `output_path` | `:442` | positional | `pathlib.Path` | `run.f` | `Output filename` | `output-dir.path`, `write.path` |
   | `model_config` | `:443` | option | `str` | `models.yaml` | `model_config.yaml to use` | `config-path.name` |
   | `unroll` | `:444` | option | `bool` | `false` | `Recursively unroll -F in filelists` | `extract.unroll` |
   | `flatten` | `:445` | option | `bool` | `false` | `Remove path to a file, leaving just the filename` | `gate-flatten.flag` |
@@ -170,34 +170,7 @@ Assemble the `filelist` graph YAML, carry the manifest entries from this plan's 
   - **`write`** — `default`. Two singleton inputs (`entries`, `path`); `test` unwired, default `None`. On success, emits `("filelist", path)` to `log-filelist`; on write error, logs and emits nothing, so `log-filelist` never fires and the node terminates on `EndSentinel`.
   - **`log-filelist`** — `default`. One input (`value`, no default); fires once if `write` succeeds, never otherwise. Terminal sink — no output ports.
 
-- **`modules/config.yaml`** — the manifest additions from this plan's module specs. Three blocks are added or modified; each entry is declared by the module spec it names. The `rtl_buddy/build.py` block replaces the single `{ name: write-filelist, class_name: WriteFilelistMod }` from [implementation-test spec 11](../implementation-test/specs/11-graph-and-manifests.md) with the seven pipeline entries plus `filelist-path` ([spec 02 Deliverables](02-filelist-extract.md#deliverables), [spec 13](13-filelist-path.md)):
-  ```yaml
-  - file: funcs.py
-    plugins:
-    - { name: dirname,  class_name: DirnameMod }
-    - { name: dirjoin,  class_name: DirjoinMod }
-    - { name: logger,   class_name: LoggerMod }
-    - { name: constant, class_name: ConstantMod }
-  - file: rtl_buddy/build.py
-    plugins:
-    - { name: run-preproc,          class_name: RunPreprocMod }
-    - { name: filelist-extract,     class_name: FilelistExtractMod }
-    - { name: prioritised-merge,    class_name: PrioritisedMergeMod }
-    - { name: filelist-normalise,   class_name: FilelistNormaliseMod }
-    - { name: filelist-flatten,     class_name: FilelistFlattenMod }
-    - { name: filelist-strip,       class_name: FilelistStripMod }
-    - { name: filelist-dedup,       class_name: FilelistDedupMod }
-    - { name: write-filelist,       class_name: WriteFilelistMod }
-    - { name: filelist-path,        class_name: FilelistPathMod }
-    - { name: build-compile-cmd,    class_name: BuildCompileCmdMod }
-    - { name: run-process,          class_name: RunProcessMod }
-    - { name: interpret-compile,    class_name: InterpretCompileMod }
-  - file: rtl_buddy/control.py
-    plugins:
-    - { name: early-stop-gate, class_name: EarlyStopGateMod }
-    - { name: flag-gate,       class_name: FlagGateMod }
-  ```
-  The `funcs.py` block extends the existing one (which has `add` and `alu`). The `rtl_buddy/control.py` block extends the existing one (which has `early-stop-gate`). The `rtl_buddy/setup.py` and `rtl_buddy/sim.py` and `rtl_buddy/summarise_results.py` blocks are unchanged from [implementation-test spec 11](../implementation-test/specs/11-graph-and-manifests.md).
+- **`modules/config.yaml`** — the seven pipeline entries are listed in [00-overview](00-overview.md#the-pipeline-at-a-glance). This spec asserts that every node in `graphs/filelist.yaml` resolves against the manifest. Additional entries beyond the seven: `filelist-path` ([spec 13](13-filelist-path.md)) in the `rtl_buddy/build.py` block; `dirname`, `dirjoin`, `logger`, `constant` in the `funcs.py` block; `flag-gate` in the `rtl_buddy/control.py` block. The `rtl_buddy/setup.py` block drops `route-list-mode` ([spec 14](14-test-update.md)).
 
   Not every entry in the manifest is wired by this graph. `prioritised-merge`, `constant`, and `filelist-path` are registered for the `test` graph ([spec 14](14-test-update.md)) and for reuse by sibling graphs. This spec asserts that every node in `graphs/filelist.yaml` resolves against the manifest — the central registry-resolvability assertion.
 

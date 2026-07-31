@@ -5,7 +5,7 @@
 
 ## Before you start
 
-Read `docs/modules/implementation.md`. This spec defines a shared datatype only — no node, no contract.
+Read `docs/module-implementation/implementation.md`. This spec defines a shared datatype only — no node, no contract.
 
 ## Goal
 
@@ -48,6 +48,3 @@ Keeping the key on the envelope is also what lets the `keyed_join` nodes ([07](0
 - **No `key` field** — the key rides on the `KeyedValue` envelope (see above).
 - `+libext+` entries keep the coalesced value in `path`, with `option == "+libext+"`.
 
-## Note — migration
-
-Specs [02](02-filelist-extract.md)–[08](08-prioritised-merge.md) still describe entries as `list[tuple[str, str | None]]`. Migrating those signatures to `list[FilelistEntry]` (`.path`/`.option` access) is folded into the payload/key-threading rework and is not yet reflected in those specs.
