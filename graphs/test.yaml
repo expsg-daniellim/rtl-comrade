@@ -170,7 +170,7 @@ edges:
 - { src: { node: preproc,    port: model }, dst: { node: gate-pre, port: model } }
 - { src: { node: gate-pre,   port: test },  dst: { node: filelist, port: test } }
 - { src: { node: gate-pre,   port: model }, dst: { node: filelist, port: model } }
-- { src: { node: filelist,   port: test },     dst: { node: cc-build, port: test } }
+- { src: { node: gate-pre,   port: test },     dst: { node: cc-build, port: test } }
 - { src: { node: filelist,   port: filelist }, dst: { node: cc-build, port: filelist } }
 # Compile
 - { src: { node: cc-build, port: command }, dst: { node: cc-run, port: command } }

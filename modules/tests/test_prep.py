@@ -30,6 +30,8 @@ FilelistStripMod = _mod.FilelistStripMod
 FilelistDedupMod = _mod.FilelistDedupMod
 FilelistPathMod = _mod.FilelistPathMod
 BuildCompileCmdMod = _mod.BuildCompileCmdMod
+filelist_extract = _mod.filelist_extract
+filelist_process = _mod.filelist_process
 
 
 def _make_tb():
@@ -180,183 +182,108 @@ def test_run_preproc_script_read_oserror(tmp_path, logging_handler):
 # ---------------------------------------------------------------------------
 
 
-def _make_filelist_model(filelist=None, path=None, name="sandbox"):
+def make_filelist_model(filelist=None, path=None, name="sandbox"):
 	return ModelConfig(name=name, filelist=filelist or [], path=path)
 
 
 def test_write_filelist_success(tmp_path):
-	"""Writes .f under work_dir, yields test then filelist; entries are work_dir-relative."""
+	"""Entries with options and +libext+ render correctly; yields ("filelist", path) only."""
+	entries = [
+		FilelistEntry("rtl/top.sv", None),
+		FilelistEntry("lib/pkg.sv", "-v "),
+		FilelistEntry("inc", "+incdir+"),
+		FilelistEntry("sv+v", "+libext+"),
+	]
+	path = tmp_path / "run.foo.f"
+	test = _make_test("foo")
+	results = list(WriteFilelistMod().run(entries=entries, path=path, test=test))
+	assert len(results) == 1
+	assert results[0] == ("filelist", path)
+	content = path.read_text()
+	assert content == "// rtl-buddy generated model filelist\nrtl/top.sv\n-v lib/pkg.sv\n+incdir+inc\n+libext+sv+v\n"
+
+
+def test_write_filelist_parity(tmp_path):
+	"""Pipeline extract x2 -> normalise -> dedup -> write reproduces the fused node's byte-for-byte .f."""
 	(tmp_path / "rtl").mkdir()
 	(tmp_path / "rtl" / "model.sv").write_text("// model")
+	(tmp_path / "inc").mkdir()
 	(tmp_path / "tb").mkdir()
 	(tmp_path / "tb" / "top.sv").write_text("// tb")
-	test = _make_test("basic", tb=TestbenchConfig(name="tb_top", filelist=["tb/top.sv"]))
-	model = _make_filelist_model(filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-	assert len(results) == 2
-	assert results[0] == ("test", test)
-	port, emitted_path = results[1]
-	assert port == "filelist"
-	assert emitted_path == tmp_path / "run.basic.f"
-	content = (tmp_path / "run.basic.f").read_text()
-	assert content.startswith("// rtl-buddy generated model filelist\n")
-	assert "rtl/model.sv\n" in content
-	assert "tb/top.sv\n" in content
-
-
-def test_write_filelist_location_follows_work_dir(tmp_path, monkeypatch):
-	"""The .f is written under work_dir regardless of the process CWD."""
-	other = tmp_path / "other"
-	other.mkdir()
-	monkeypatch.chdir(other)
-	(tmp_path / "rtl").mkdir()
-	(tmp_path / "rtl" / "model.sv").write_text("// model")
-	test = _make_test("loc", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(filelist=["rtl/model.sv"], path=str(tmp_path / "models.yaml"))
-	list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-	assert (tmp_path / "run.loc.f").exists()
-	assert not (other / "run.loc.f").exists()
-
-
-def test_write_filelist_contents_follow_work_dir(tmp_path, monkeypatch):
-	"""Entry paths are relpath from work_dir, not from the process CWD."""
-	other = tmp_path / "other"
-	other.mkdir()
-	monkeypatch.chdir(other)
-	(tmp_path / "src").mkdir()
-	(tmp_path / "src" / "a.sv").write_text("// a")
-	test = _make_test("ct", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(filelist=["src/a.sv"], path=str(tmp_path / "models.yaml"))
-	list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-	content = (tmp_path / "run.ct.f").read_text()
-	assert "src/a.sv\n" in content
-	assert ".." not in content  # no CWD-relative escape
-
-
-def test_write_filelist_tag_sanitization(tmp_path):
-	"""Shell-unsafe characters in the test name are replaced with underscores in the filename."""
-	test = _make_test("a/b:c", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-	f_path = tmp_path / "run.a_b_c.f"
-	assert f_path.exists()
-	port, emitted_path = results[1]
-	assert port == "filelist"
-	assert emitted_path == f_path
-
-
-def test_write_filelist_resolve_error(tmp_path, logging_handler):
-	"""Unresolvable -F include (KeyError) or missing testbench (AttributeError) emits fail."""
-	test1 = _make_test("re1", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model1 = _make_filelist_model(filelist=["-F nonexistent.f"], path=str(tmp_path / "models.yaml"))
-	results1 = list(WriteFilelistMod().run(test=test1, model=model1, work_dir=tmp_path))
-	assert len(results1) == 0
-	test2 = _make_test("re2", tb=None)
-	model2 = _make_filelist_model(path=str(tmp_path / "models.yaml"))
-	results2 = list(WriteFilelistMod().run(test=test2, model=model2, work_dir=tmp_path))
-	assert len(results2) == 0
-	assert logging_handler.failure is True
+	model = make_filelist_model(filelist=["rtl/model.sv", "+libext+sv", "+incdir+inc"], path=str(tmp_path / "models.yaml"))
+	test = _make_test("parity", tb=TestbenchConfig(name="tb_top", filelist=["tb/top.sv", "rtl/model.sv"]))
+	work_dir = tmp_path
+	model_path = model.get_model_path()
+	model_dir = os.path.dirname(os.path.abspath(model_path)) if model_path else str(work_dir)
+	ref_entries = filelist_extract(model.get_filelist(), True, os.path.join(model_dir, "models.yaml"))
+	ref_entries.extend(filelist_extract(test.get_testbench().get_filelist(), True, str(Path(work_dir) / "tests.yaml")))
+	ref_lines = filelist_process(ref_entries, str(work_dir), True)
+	ref_path = tmp_path / "ref.f"
+	with open(ref_path, "w", encoding="utf-8") as fh:
+		fh.write("// rtl-buddy generated model filelist\n")
+		fh.writelines(ref_lines)
+	extract = FilelistExtractMod()
+	model_entries = list(extract.run(source=model, base_dir=Path(model_dir)))[0][1]
+	tb_entries = list(extract.run(source=test, base_dir=work_dir))[0][1]
+	combined = model_entries + tb_entries
+	normalised = list(FilelistNormaliseMod().run(entries=combined, base_dir=work_dir))[0][1]
+	deduped = list(FilelistDedupMod().run(entries=normalised))[0][1]
+	pipe_path = tmp_path / "pipe.f"
+	results = list(WriteFilelistMod().run(entries=deduped, path=pipe_path, test=test))
+	assert len(results) == 1
+	assert results[0] == ("filelist", pipe_path)
+	assert pipe_path.read_bytes() == ref_path.read_bytes()
 
 
 @pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o555 grants no denial")
 def test_write_filelist_permission_error(tmp_path, logging_handler):
-	"""A read-only work_dir triggers PermissionError → filelist_permission_denied."""
-	work_dir = tmp_path / "readonly"
-	work_dir.mkdir()
-	work_dir.chmod(0o555)
-	test = _make_test("perm", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(path=str(tmp_path / "models.yaml"))
+	"""path into a read-only dir -> PermissionError -> filelist_permission_denied."""
+	ro_dir = tmp_path / "readonly"
+	ro_dir.mkdir()
+	ro_dir.chmod(0o555)
+	path = ro_dir / "run.foo.f"
+	test = _make_test("foo")
 	try:
-		results = list(WriteFilelistMod().run(test=test, model=model, work_dir=work_dir))
+		results = list(WriteFilelistMod().run(entries=[], path=path, test=test))
 	finally:
-		work_dir.chmod(0o755)
+		ro_dir.chmod(0o755)
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
 def test_write_filelist_dir_not_found(tmp_path, logging_handler):
-	"""A non-existent work_dir parent causes FileNotFoundError → filelist_dir_not_found."""
-	missing = tmp_path / "nonexistent" / "subdir"
-	test = _make_test("dnf", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=missing))
+	"""path with missing parent -> FileNotFoundError -> filelist_dir_not_found."""
+	path = tmp_path / "nonexistent" / "subdir" / "run.foo.f"
+	test = _make_test("foo")
+	results = list(WriteFilelistMod().run(entries=[], path=path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
-
-
-def test_write_filelist_extract_options(tmp_path, logging_handler):
-	"""Comments/blanks are skipped, +incdir+ and +libext+ options are recognised, -F is unrolled, and duplicate entries are deduplicated."""
-	(tmp_path / "incdir_dir").mkdir()
-	(tmp_path / "rtl").mkdir()
-	(tmp_path / "rtl" / "model.sv").write_text("// model")
-	(tmp_path / "rtl" / "extra.sv").write_text("// extra")
-	(tmp_path / "child.f").write_text("rtl/extra.sv\n")
-	filelist = [
-		"// a comment",
-		"",
-		"+incdir+incdir_dir",
-		"+libext+sv+v",
-		"rtl/model.sv",
-		"rtl/model.sv",  # duplicate → deduplicated
-		"-F child.f",    # unrolled: pulls in rtl/extra.sv
-	]
-	test = _make_test("opts", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(filelist=filelist, path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-	assert len(results) == 2
-	content = (tmp_path / "run.opts.f").read_text()
-	assert "// a comment" not in content
-	assert "+incdir+incdir_dir\n" in content
-	assert content.count("rtl/model.sv\n") == 1  # deduplicated
-	assert "rtl/extra.sv\n" in content
-	libext_lines = [ln for ln in content.splitlines() if ln.startswith("+libext+")]
-	assert len(libext_lines) == 1
-	assert set(libext_lines[0].removeprefix("+libext+").split("+")) == {"sv", "v"}
-	assert not logging_handler.failure
-
-
-def test_write_filelist_process_warnings(tmp_path, logging_handler):
-	"""A +incdir+ target that is not a directory, a missing source file, and a malformed option each log an error but the .f is still written."""
-	(tmp_path / "rtl").mkdir()
-	(tmp_path / "not_a_dir").write_text("i am a file")
-	filelist = [
-		"+incdir+not_a_dir",  # incdir target is a file, not a directory → warn
-		"rtl/missing.sv",     # referenced source does not exist → warn
-		"+incdir+",           # malformed: option prefix with no path → warn
-	]
-	test = _make_test("warn", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(filelist=filelist, path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
-	assert len(results) == 2  # still writes despite the warnings
-	content = (tmp_path / "run.warn.f").read_text()
-	assert "+incdir+not_a_dir\n" in content
-	assert "rtl/missing.sv\n" in content
-	assert logging_handler.failure is True
-
-
-def test_write_filelist_lower_f_fatal(tmp_path, logging_handler):
-	"""A lowercase -f include is disallowed and fatals → typer.Exit."""
-	test = _make_test("lowerf", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(filelist=["-f included.f"], path=str(tmp_path / "models.yaml"))
-	with pytest.raises(typer.Exit):
-		list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
 
 
 def test_write_filelist_is_directory(tmp_path, logging_handler):
-	"""The output path already existing as a directory triggers IsADirectoryError → filelist_is_directory."""
-	(tmp_path / "run.isdir.f").mkdir()
-	test = _make_test("isdir", tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+	"""path that is a directory -> IsADirectoryError -> filelist_is_directory."""
+	dir_path = tmp_path / "run.foo.f"
+	dir_path.mkdir()
+	test = _make_test("foo")
+	results = list(WriteFilelistMod().run(entries=[], path=dir_path, test=test))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 
 
-def test_write_filelist_write_oserror(tmp_path, logging_handler):
-	"""An over-long output filename triggers a generic OSError (ENAMETOOLONG) on write → filelist_write_error."""
-	test = _make_test("x" * 5000, tb=TestbenchConfig(name="tb_top", filelist=[]))
-	model = _make_filelist_model(path=str(tmp_path / "models.yaml"))
-	results = list(WriteFilelistMod().run(test=test, model=model, work_dir=tmp_path))
+def test_write_filelist_no_test(tmp_path):
+	"""test omitted (filelist command) -> success still yields ("filelist", path)."""
+	entries = [FilelistEntry("rtl/top.sv", None)]
+	path = tmp_path / "run.f"
+	results = list(WriteFilelistMod().run(entries=entries, path=path))
+	assert len(results) == 1
+	assert results[0] == ("filelist", path)
+	assert path.read_text() == "// rtl-buddy generated model filelist\nrtl/top.sv\n"
+
+
+def test_write_filelist_no_test_error(tmp_path, logging_handler):
+	"""test omitted + write error -> logs with key/test_name None."""
+	path = tmp_path / "nonexistent" / "run.f"
+	results = list(WriteFilelistMod().run(entries=[], path=path))
 	assert len(results) == 0
 	assert logging_handler.failure is True
 

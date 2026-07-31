@@ -221,30 +221,23 @@ class FilelistPathMod:
 
 
 class WriteFilelistMod:
-	def run(self, test:TestConfig, model:ModelConfig, work_dir:Path):
-		test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
-		path = Path(work_dir) / f"run.{test_tag}.f"
+	def run(self, entries:list[FilelistEntry], path:Path, test:TestConfig|None = None):
+		key = test.key if test is not None else None
+		test_name = test.get_name() if test is not None else None
+		lines = [ f"+libext+{e.path}\n" if e.option == "+libext+" else (f"{e.option}{e.path}\n" if e.option else f"{e.path}\n") for e in entries ]
 		try:
-			model_path = model.get_model_path()
-			model_dir = os.path.dirname(os.path.abspath(model_path)) if model_path else str(work_dir)
-			entries = filelist_extract(model.get_filelist(), True, os.path.join(model_dir, "models.yaml"))
-			entries.extend(filelist_extract(test.get_testbench().get_filelist(), True, str(Path(work_dir) / "tests.yaml")))
-			lines = filelist_process(entries, str(work_dir), True)
 			with open(path, "w", encoding="utf-8") as f:
 				f.write("// rtl-buddy generated model filelist\n")
 				f.writelines(lines)
-			yield ("test", test)
 			yield ("filelist", path)
 		except FileNotFoundError:
-			log.error("filelist_dir_not_found", key=test.key, test_name=test.get_name(), path=str(path))
+			log.error("filelist_dir_not_found", key=key, test_name=test_name, path=str(path))
 		except IsADirectoryError:
-			log.error("filelist_is_directory", key=test.key, test_name=test.get_name(), path=str(path))
+			log.error("filelist_is_directory", key=key, test_name=test_name, path=str(path))
 		except PermissionError as e:
-			log.error("filelist_permission_denied", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror)
-		except (KeyError, AttributeError) as e:
-			log.error("filelist_resolve_error", key=test.key, test_name=test.get_name(), path=str(path), err=str(e))
+			log.error("filelist_permission_denied", key=key, test_name=test_name, path=str(path), err=e.strerror)
 		except OSError as e:
-			log.error("filelist_write_error", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror, errno=e.errno)
+			log.error("filelist_write_error", key=key, test_name=test_name, path=str(path), err=e.strerror, errno=e.errno)
 
 
 class RunProcessMod:
