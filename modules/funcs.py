@@ -1,3 +1,4 @@
+import importlib
 from pathlib import Path
 from typing import Any, cast
 
@@ -73,3 +74,29 @@ class LoggerMod:
 				continue
 			kwargs[name] = resolved
 		self.emit(self.event, **kwargs)
+
+
+class ConstantMod:
+	@serde
+	class Config:
+		value:Any = None
+		type:str = ""
+		args:list = field(default_factory=list)
+		kwargs:dict = field(default_factory=dict)
+
+	def __init__(self, config):
+		if config.type:
+			mod_path, cls_name = config.type.rsplit(":", 1)
+			mod = importlib.import_module(mod_path)
+			cls = getattr(mod, cls_name)
+			if len(config.args) > 0 or len(config.kwargs) > 0:
+				self.value = cls(*config.args, **config.kwargs)
+			else:
+				self.value = cls(config.value)
+		elif config.value is None:
+			log.fatal("constant_missing_value")
+		else:
+			self.value = config.value
+
+	def run(self):
+		return ("default", self.value)

@@ -13,6 +13,7 @@ files:
     class_name: ALUMod
   - { name: dirname, class_name: DirnameMod }
   - { name: logger, class_name: LoggerMod }
+  - { name: constant, class_name: ConstantMod }
 - file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc, class_name: RunPreprocMod }

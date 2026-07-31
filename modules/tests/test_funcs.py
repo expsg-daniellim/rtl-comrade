@@ -1,6 +1,7 @@
 """Tests for modules/funcs.py using the module testing harness."""
 
 import importlib.util
+from collections import OrderedDict
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -19,6 +20,7 @@ ALUMod = _mod.ALUMod
 DirnameMod = _mod.DirnameMod
 LoggerMod = _mod.LoggerMod
 LOG_LEVELS = _mod.LOG_LEVELS
+ConstantMod = _mod.ConstantMod
 
 
 # ---------------------------------------------------------------------------
@@ -312,3 +314,74 @@ async def test_logger_no_emissions(logging_handler):
 		expected_emissions={},
 		config=LoggerMod.Config(event="test_event", mapping="value"),
 	)
+
+
+# ---------------------------------------------------------------------------
+# ConstantMod — bare value
+# ---------------------------------------------------------------------------
+
+
+async def test_constant_bare_true():
+	await run_module_scenario(ConstantMod, input_sequence=[{}], expected_emissions={"default": [True]}, config=ConstantMod.Config(value=True))
+
+
+def test_constant_bare_payload_agnostic():
+	for val in ["hello", 42, [1, 2, 3]]:
+		mod = ConstantMod(config=ConstantMod.Config(value=val))
+		assert mod.run() == ("default", val)
+
+
+def test_constant_bare_identity():
+	sentinel = [1, 2, 3]
+	mod = ConstantMod(config=ConstantMod.Config(value=sentinel))
+	assert mod.run()[1] is sentinel
+
+
+def test_constant_bare_repeat():
+	mod = ConstantMod(config=ConstantMod.Config(value=42))
+	assert mod.run() == ("default", 42)
+	assert mod.run() == ("default", 42)
+
+
+def test_constant_missing_value(logging_handler):
+	with pytest.raises(typer.Exit):
+		ConstantMod(config=ConstantMod.Config())
+
+
+# ---------------------------------------------------------------------------
+# ConstantMod — constructed value
+# ---------------------------------------------------------------------------
+
+
+def test_constant_type_path():
+	mod = ConstantMod(config=ConstantMod.Config(type="pathlib:Path", value="/tmp"))
+	result = mod.run()
+	assert result == ("default", Path("/tmp"))
+	assert isinstance(result[1], Path)
+
+
+def test_constant_type_path_args():
+	mod = ConstantMod(config=ConstantMod.Config(type="pathlib:Path", args=["/tmp", "sub"]))
+	assert mod.run() == ("default", Path("/tmp", "sub"))
+
+
+def test_constant_type_ordered_dict_kwargs():
+	mod = ConstantMod(config=ConstantMod.Config(type="collections:OrderedDict", kwargs={"a": 1, "b": 2}))
+	result = mod.run()
+	assert isinstance(result[1], OrderedDict)
+	assert result[1] == OrderedDict(a=1, b=2)
+
+
+def test_constant_type_args_over_value():
+	mod = ConstantMod(config=ConstantMod.Config(type="pathlib:Path", args=["/tmp"], value="ignored"))
+	assert mod.run() == ("default", Path("/tmp"))
+
+
+def test_constant_unimportable_type():
+	with pytest.raises(ModuleNotFoundError):
+		ConstantMod(config=ConstantMod.Config(type="nonexistent.module:Foo"))
+
+
+def test_constant_absent_class():
+	with pytest.raises(AttributeError):
+		ConstantMod(config=ConstantMod.Config(type="pathlib:NonexistentClass"))
