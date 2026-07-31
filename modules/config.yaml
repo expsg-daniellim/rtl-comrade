@@ -21,6 +21,7 @@ files:
   - { name: filelist-extract, class_name: FilelistExtractMod }
   - { name: filelist-normalise, class_name: FilelistNormaliseMod }
   - { name: filelist-flatten, class_name: FilelistFlattenMod }
+  - { name: filelist-strip, class_name: FilelistStripMod }
   - { name: prioritised-merge, class_name: PrioritisedMergeMod }
   - { name: filelist-path, class_name: FilelistPathMod }
   - { name: write-filelist, class_name: WriteFilelistMod }

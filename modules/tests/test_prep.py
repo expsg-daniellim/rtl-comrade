@@ -26,6 +26,7 @@ FilelistEntry = _mod.FilelistEntry
 PrioritisedMergeMod = _mod.PrioritisedMergeMod
 FilelistNormaliseMod = _mod.FilelistNormaliseMod
 FilelistFlattenMod = _mod.FilelistFlattenMod
+FilelistStripMod = _mod.FilelistStripMod
 FilelistPathMod = _mod.FilelistPathMod
 BuildCompileCmdMod = _mod.BuildCompileCmdMod
 
@@ -655,3 +656,33 @@ def test_flatten_libext_unchanged():
 	assert out[0] == FilelistEntry("c.sv", None)
 	assert out[1] == FilelistEntry("sv+v+svh", "+libext+")  # unchanged
 	assert out[2] == FilelistEntry("d.sv", None)
+
+
+# ---------------------------------------------------------------------------
+# FilelistStripMod
+# ---------------------------------------------------------------------------
+
+
+def test_strip_drops_option():
+	"""Entry with -v option → option set to None; rendered line carries no option prefix (fixes rtl_buddy no-op)."""
+	entries = [FilelistEntry("path/a.sv", "-v ")]
+	mod = FilelistStripMod()
+	results = list(mod.run(entries=entries))
+	assert len(results) == 1
+	port, out = results[0]
+	assert port == "entries"
+	assert out[0] == FilelistEntry("path/a.sv", None)
+
+
+def test_strip_libext_unchanged():
+	"""+libext+ entry passes through without stripping."""
+	entries = [
+		FilelistEntry("path/a.sv", "-v "),
+		FilelistEntry("sv+v+svh", "+libext+"),
+		FilelistEntry("path/b.sv", "+incdir+"),
+	]
+	mod = FilelistStripMod()
+	out = list(mod.run(entries=entries))[0][1]
+	assert out[0] == FilelistEntry("path/a.sv", None)
+	assert out[1] == FilelistEntry("sv+v+svh", "+libext+")  # unchanged
+	assert out[2] == FilelistEntry("path/b.sv", None)

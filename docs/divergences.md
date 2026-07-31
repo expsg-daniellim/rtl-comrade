@@ -55,6 +55,10 @@ rtl_buddy has no SIGKILL escalation — a SIGQUIT-trapping simulator hangs the s
 
 rtl_buddy `os.chdir`s the whole process into each suite's directory and back (`rtl_buddy.py:404,436`) — safe only because it runs suites serially. rtl-comrade runs tests concurrently, where a process-wide `chdir` would race, so it passes `cwd=work_dir` to each `create_subprocess_exec` (`build.py:158`) — per-child, no shared global state. This is what makes `work_dir` the single artefact-location source: the leaves root their paths on it, the runner roots each child's CWD on it, and the harness process never `chdir`s.
 
+### `--strip` drops the option token
+
+rtl_buddy's `VlogFilelist._process` (`vlog_filelist.py:123`) renders the line (with its option prefix) before the `if strip: line_option = ''` assignment at lines 129-130, then appends the already-rendered line, so `strip=True` emits identical output to `strip=False` — a silent no-op. rtl-comrade's `filelist-strip` node sets each entry's option to `None` (except `+libext+`), so downstream render genuinely omits the option prefix.
+
 ### Atomic `force_symlink`
 
 rtl_buddy's `force_symlink` does a non-atomic `os.remove` + `os.symlink` (`tools/vlog_sim.py:26-30`), leaving a window with no link. rtl-comrade symlinks to a unique temp name then `os.replace`s it over the target (`sim.py:89-92`), so the "latest" pointer swap is atomic.

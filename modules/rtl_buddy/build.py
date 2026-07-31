@@ -124,6 +124,12 @@ class FilelistFlattenMod:
 		yield ("entries", out)
 
 
+class FilelistStripMod:
+	def run(self, entries:list[FilelistEntry]):
+		out = [ e if e.option == "+libext+" else FilelistEntry(e.path, None) for e in entries ]
+		yield ("entries", out)
+
+
 class PrioritisedMergeMod:
 	@serde
 	class Config:
