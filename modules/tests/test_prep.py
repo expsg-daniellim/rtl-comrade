@@ -22,6 +22,7 @@ RunPreprocMod = _mod.RunPreprocMod
 WriteFilelistMod = _mod.WriteFilelistMod
 FilelistExtractMod = _mod.FilelistExtractMod
 FilelistEntry = _mod.FilelistEntry
+PrioritisedMergeMod = _mod.PrioritisedMergeMod
 
 
 def _make_tb():
@@ -458,3 +459,50 @@ def test_extract_malformed_line(logging_handler):
 	assert len(entries) == 1
 	assert entries[0] == FilelistEntry("/design/good.sv", None)
 	assert logging_handler.failure is True
+
+
+# ---------------------------------------------------------------------------
+# PrioritisedMergeMod
+# ---------------------------------------------------------------------------
+
+
+def _merge_config(priorities):
+	from serde import from_dict
+	return from_dict(PrioritisedMergeMod.Config, {"priorities": priorities})
+
+
+def test_prioritised_merge_two_ports():
+	"""Two ports ordered by priority; reversed priorities reverse the output."""
+	mod = PrioritisedMergeMod(config=_merge_config({"model_entries": 0, "tb_entries": 1}))
+	result = mod.run(model_entries=["a", "b"], tb_entries=["c"])
+	assert result == ("entries", ["a", "b", "c"])
+
+
+def test_prioritised_merge_reversed_priorities():
+	"""Reversed priorities produce tb before model."""
+	mod = PrioritisedMergeMod(config=_merge_config({"model_entries": 1, "tb_entries": 0}))
+	result = mod.run(model_entries=["a", "b"], tb_entries=["c"])
+	assert result == ("entries", ["c", "a", "b"])
+
+
+def test_prioritised_merge_single_port():
+	"""Single port produces a correct one-element merge with no special-casing."""
+	mod = PrioritisedMergeMod(config=_merge_config({"model_entries": 0}))
+	result = mod.run(model_entries=["a", "b"])
+	assert result == ("entries", ["a", "b"])
+
+
+def test_prioritised_merge_unranked_port(logging_handler):
+	"""A wired port absent from priorities triggers log.fatal."""
+	mod = PrioritisedMergeMod(config=_merge_config({"model_entries": 0}))
+	with pytest.raises(typer.Exit):
+		mod.run(model_entries=["a"], tb_entries=["c"])
+
+
+def test_prioritised_merge_equal_priority_tiebreak():
+	"""Two ports with equal priority are ordered by name as deterministic tiebreak."""
+	mod = PrioritisedMergeMod(config=_merge_config({"alpha_entries": 0, "beta_entries": 0}))
+	result = mod.run(alpha_entries=["a"], beta_entries=["b"])
+	assert result == ("entries", ["a", "b"])
+	result2 = mod.run(beta_entries=["b"], alpha_entries=["a"])
+	assert result2 == ("entries", ["a", "b"])

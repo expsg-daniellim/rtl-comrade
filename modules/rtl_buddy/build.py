@@ -102,6 +102,22 @@ class FilelistExtractMod:
 		yield ("entries", entries)
 
 
+class PrioritisedMergeMod:
+	@serde
+	class Config:
+		priorities:dict[str, int]
+
+	def __init__(self, config):
+		self.priorities = config.priorities
+
+	def run(self, **entries):
+		missing = [name for name in entries if name not in self.priorities]
+		if len(missing) > 0:
+			log.fatal("unranked_merge_port", ports=missing)
+		ordered = sorted(entries, key=lambda name: (self.priorities[name], name))
+		return ("entries", [item for name in ordered for item in entries[name]])
+
+
 def filelist_extract(lines_in, unroll, fpath):
 	prefix_parent = os.path.dirname(fpath)
 	entries = []

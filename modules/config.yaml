@@ -19,6 +19,7 @@ files:
   plugins:
   - { name: run-preproc, class_name: RunPreprocMod }
   - { name: filelist-extract, class_name: FilelistExtractMod }
+  - { name: prioritised-merge, class_name: PrioritisedMergeMod }
   - { name: write-filelist, class_name: WriteFilelistMod }
   - { name: run-process, class_name: RunProcessMod }
   - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
