@@ -48,7 +48,7 @@ cli:               # optional — CLI-supplied config fields
 ```yaml
 cli: <str>        # required — CLI parameter name (must be a valid Python identifier)
 option: <bool>    # optional — true (default) for --<name> option; false for positional argument
-type: <str>       # optional — primitive type: int, float, bool, str; defaults to str
+type: <str>       # optional — type annotation: builtins by name (int, str, etc.), non-builtins by qualified name (pathlib.Path); validated against typer; defaults to str
 default: <value>  # optional — default value; if absent the parameter is required
 help: <str>       # optional — help text shown in --help output
 ```
@@ -133,7 +133,7 @@ edges:
 - src:
     cli: <str>               # required — CLI parameter name (must be a valid Python identifier)
     option: <bool>           # optional — true (default) for --<name> option; false for positional argument
-    type: <str>              # optional — primitive type: int, float, bool, str; defaults to str
+    type: <str>              # optional — type annotation: builtins by name (int, str, etc.), non-builtins by qualified name (pathlib.Path); validated against typer; defaults to str
     default: <value>         # optional — default value; if absent the parameter is required
     help: <str>              # optional — help text shown in --help output
   dst:

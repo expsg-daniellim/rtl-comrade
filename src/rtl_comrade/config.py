@@ -4,18 +4,39 @@ This module defines the typed boundary between user-authored graph YAML and
 the harness graph-construction logic.
 """
 
+import builtins
+import importlib
 from dataclasses import dataclass
 from inspect import Parameter
 from pathlib import Path
-from typing import Any, Annotated, Literal, Self
+from typing import Any, Annotated, Self
 
 from serde import serde, field, from_dict, to_dict, Untagged
 import typer
+from typer.main import get_click_type
 
 from .loader_logger import LoggingConfig
 from .logging import LogEvent
 
-PRIMITIVE_TYPES = { 'int': int, 'float': float, 'str': str, 'bool': bool }
+
+def resolve_cli_type(name:str) -> type:
+	"""Resolve a CLI type name to its Python type.
+
+	Returns:
+		The resolved type.
+	"""
+
+	t = getattr(builtins, name, None)
+	if isinstance(t, type):
+		return t
+
+	if '.' in name:
+		mod, _, attr = name.rpartition('.')
+		t = getattr(importlib.import_module(mod), attr, None)
+		if isinstance(t, type):
+			return t
+
+	raise InvalidCLIParameterError(name)
 
 @serde
 @dataclass(slots=True, frozen=True)
@@ -42,14 +63,14 @@ class GraphConfigSrcCLI:
 	Attributes:
 		cli: The CLI parameter name, used both as the argument/option name and as the virtual node id suffix.
 		option: If ``True``, the parameter is a ``--<name>`` option; if ``False``, a positional argument.
-		type: The primitive type to coerce the string input to. One of ``"int"``, ``"float"``, ``"bool"``, or ``"str"``.
+		type: The annotation type for the CLI parameter. Builtins (``"int"``, ``"str"``, etc.) by name; non-builtins by qualified name (``"pathlib.Path"``). Validated against ``typer.main.get_click_type``.
 		default: The default value if the parameter is not supplied. Defaults to ``Parameter.empty``, making the parameter required.
 		help: Help text shown in ``--help`` output.
 	"""
 
 	cli: str
 	option: bool = field(default=True) # if it's not an option it's an argument
-	type: Literal["int", "float", "bool", "str"] = field(default="str")
+	type: str = field(default="str")
 	default: Any = field(default=Parameter.empty) # Might as well instead of None
 	help: str|None = field(default=None)
 
@@ -60,8 +81,14 @@ class GraphConfigSrcCLI:
 			A keyword-only ``Parameter`` with the appropriate typer annotation.
 		"""
 
-		t = PRIMITIVE_TYPES[self.type] if self.type in PRIMITIVE_TYPES else str
-		annotation = Annotated[t, typer.Option(help=self.help) if self.option else typer.Argument(help=self.help)]
+		t = resolve_cli_type(self.type)
+		info = typer.Option(help=self.help) if self.option else typer.Argument(help=self.help)
+		try:
+			get_click_type(annotation=t, parameter_info=info)
+		except RuntimeError as e:
+			raise InvalidCLIParameterError(self.cli) from e
+
+		annotation = Annotated[t, info]
 		try:
 			return Parameter(self.cli, Parameter.KEYWORD_ONLY, default=self.default, annotation=annotation)
 		except ValueError as e:

@@ -40,7 +40,7 @@ This is the harness config boundary. `GraphFileConfig` is the typed shape of a g
 
 `GraphConfigEdge.src` is a union deserialized with `Untagged` serde tagging; the schema is tried as `GraphConfigSrcPort` first, then `GraphConfigSrcCLI`.
 
-`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (`"int"`, `"float"`, `"bool"`, or `"str"`, default `"str"`), `default` (optional), `help` (optional string). Used both as edge sources and as values in each `GraphConfigNodePlugin`'s `cli` block.
+`GraphConfigSrcCLI` fields: `cli` (parameter name), `option` (bool, default `True`), `type` (type annotation string, default `"str"` — builtins by name, non-builtins by qualified name e.g. `"pathlib.Path"`; resolved by `resolve_cli_type` and validated against `typer.main.get_click_type`), `default` (optional), `help` (optional string). Used both as edge sources and as values in each `GraphConfigNodePlugin`'s `cli` block.
 
 Each `GraphConfigNodePlugin` carries a `cli: dict[str, GraphConfigSrcCLI]` block where the dict key is the `Config` field name to inject into and the value is the CLI parameter descriptor. The file defines `GraphConfigSrcCLI` before `GraphConfigNodePlugin` so the field type is directly resolvable at class definition time.
 

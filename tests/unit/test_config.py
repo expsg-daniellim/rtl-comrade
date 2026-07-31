@@ -4,6 +4,8 @@ from pathlib import Path
 
 from serde import from_dict
 
+import pytest
+
 from rtl_comrade.config import (
 	GraphFileConfig,
 	GraphConfigDstPort,
@@ -12,6 +14,8 @@ from rtl_comrade.config import (
 	GraphConfigNodePlugin,
 	GraphConfigSrcCLI,
 	GraphConfigSrcPort,
+	InvalidCLIParameterError,
+	resolve_cli_type,
 )
 
 
@@ -129,6 +133,45 @@ def test_validate_cli_config_static_override_warns():
 	assert len(errors) == 1
 	assert errors[0].level == 'warn'
 	assert errors[0].event == 'cli_config_override'
+
+
+# --- resolve_cli_type ---
+
+
+def test_resolve_cli_type_builtin():
+	assert resolve_cli_type("int") is int
+	assert resolve_cli_type("str") is str
+	assert resolve_cli_type("float") is float
+	assert resolve_cli_type("bool") is bool
+
+
+def test_resolve_cli_type_qualified():
+	from pathlib import Path
+	assert resolve_cli_type("pathlib.Path") is Path
+
+
+def test_resolve_cli_type_unknown():
+	with pytest.raises(InvalidCLIParameterError):
+		resolve_cli_type("nonsense")
+
+
+def test_resolve_cli_type_qualified_unknown_module():
+	with pytest.raises((InvalidCLIParameterError, ModuleNotFoundError)):
+		resolve_cli_type("no_such_module.Foo")
+
+
+def test_resolve_cli_type_qualified_unknown_attr():
+	with pytest.raises(InvalidCLIParameterError):
+		resolve_cli_type("pathlib.NoSuchType")
+
+
+# --- as_param rejects typer-unsupported types ---
+
+
+def test_as_param_rejects_unsupported_type():
+	cli = GraphConfigSrcCLI(cli="x", type="object")
+	with pytest.raises(InvalidCLIParameterError):
+		cli.as_param()
 
 
 # --- GraphConfigSrcPort ---
