@@ -22,13 +22,17 @@ The `test` flow is a linear pipeline that fans out per test (and per run). The s
 
 - [discover-config-file](discover-config-file.md) · [prepend-cwd-path](prepend-cwd-path.md) · [parse-root-config](parse-root-config.md) · [select-platform](select-platform.md) · [resolve-builder](resolve-builder.md) · [work-dir](work-dir.md) · [ensure-logs-dir](ensure-logs-dir.md) · [parse-suite-config](parse-suite-config.md) · [derive-seed-mode](derive-seed-mode.md) · [git-status](git-status.md)
 
-**Selection & expansion** (`setup.py`) — route list-mode, select, filter, load model, sweep
+**List mode** (`control.py`) — route `--list` flag to list-names or run
 
-- [route-list-mode](route-list-mode.md) · [list-test-names](list-test-names.md) · [select-tests](select-tests.md) · [filter-reglvl](filter-reglvl.md) · [resolve-model-ref](resolve-model-ref.md) · [load-model](load-model.md) · [expand-sweep](expand-sweep.md)
+- `route-list` (`flag-gate` instance) · [list-test-names](list-test-names.md)
 
-**Prep** (`build.py`) — preproc script, filelist generation
+**Selection & expansion** (`setup.py`) — select, filter, load model, sweep
 
-- [run-preproc](run-preproc.md) · [write-filelist](write-filelist.md)
+- [select-tests](select-tests.md) · [filter-reglvl](filter-reglvl.md) · [resolve-model-ref](resolve-model-ref.md) · [load-model](load-model.md) · [expand-sweep](expand-sweep.md)
+
+**Prep** (`build.py`) — preproc script, filelist pipeline
+
+- [run-preproc](run-preproc.md) · filelist-extract · filelist-normalise · filelist-dedup · prioritised-merge · filelist-path · [write-filelist](write-filelist.md)
 
 **Subprocess runner** (`build.py`) — reusable, used by both compile and sim
 
@@ -46,21 +50,25 @@ The `test` flow is a linear pipeline that fans out per test (and per run). The s
 
 - [route-post](route-post.md) · [parse-log](parse-log.md) · [parse-uvm-log](parse-uvm-log.md)
 
-**Early-stop control** (`control.py`)
+**Control** (`control.py`)
 
-- [early-stop-gate](early-stop-gate.md)
+- [early-stop-gate](early-stop-gate.md) · `flag-gate`
 
 ## Data flow at a glance
 
 ```
 discover → parse-root → select-platform → resolve-builder ┐
 work-dir → ensure-logs                                     │ (persistent config,
-parse-suite → route-list ──list──▶ list-test-names         │  fanned to many nodes)
-             └──run──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
+parse-suite → route-list ──on──▶ list-test-names           │  fanned to many nodes)
+             └──off──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
                                                     └─test──────────────────────────────────────▶
                                                     └─test▶ load-model
                                                                               │
-  sweep ─test/model▶ preproc ▶ gate-pre ▶ filelist ─test/filelist▶ cc-build ─command▶ cc-run
+  sweep ─test/model▶ preproc ▶ gate-pre ─test/model▶ fl-model-ref → fl-model-root → fl-model ┐
+                                  └─test▶ fl-tb ──────────────────────────────────────────────▶│
+                                         fl-merge → fl-norm → fl-dedup → filelist             │
+                                         fl-path ────────────────────────────▶│                │
+                                                              filelist ─filelist▶ cc-build ─command▶ cc-run
                                                                               │
   cc-run ─proc▶ cc-int ▶ gate-comp ▶ expand-runs ▶ resolve-seed ▶ build-sim-cmd ─command▶ sim-run
                                                                               │

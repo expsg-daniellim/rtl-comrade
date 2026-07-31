@@ -22,6 +22,7 @@ files:
   - { name: filelist-normalise, class_name: FilelistNormaliseMod }
   - { name: filelist-flatten, class_name: FilelistFlattenMod }
   - { name: filelist-strip, class_name: FilelistStripMod }
+  - { name: filelist-dedup, class_name: FilelistDedupMod }
   - { name: prioritised-merge, class_name: PrioritisedMergeMod }
   - { name: filelist-path, class_name: FilelistPathMod }
   - { name: write-filelist, class_name: WriteFilelistMod }
@@ -39,7 +40,6 @@ files:
   - { name: ensure-logs-dir, class_name: EnsureLogsDirMod }
   - { name: parse-suite-config, class_name: ParseSuiteConfigMod }
   - { name: derive-seed-mode, class_name: DeriveSeedModeMod }
-  - { name: route-list-mode, class_name: RouteListModeMod }
   - { name: list-test-names, class_name: ListTestNamesMod }
   - { name: select-tests, class_name: SelectTestsMod }
   - { name: filter-reglvl, class_name: FilterRegLvlMod }

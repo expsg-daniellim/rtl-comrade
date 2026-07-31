@@ -20,7 +20,7 @@ nodes:
 - { id: git-status,   module: git-status,         contract: default }
 
 # --- list mode vs run ---
-- { id: route-list, module: route-list-mode, contract: unit }
+- { id: route-list, module: flag-gate,      contract: unit }
 - { id: list-names, module: list-test-names, contract: default }
 
 # --- selection / expansion ---
@@ -43,9 +43,39 @@ nodes:
 - id: gate-pre
   module: { name: early-stop-gate, config: { phase: pre } }
   contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ early_stop ], unwrap: true, ignore: [ test ] } }
+# --- per-test filelist pipeline ---
+- id: unroll
+  module: { name: constant, config: { value: true } }
+  contract: default
+- id: fl-model-ref
+  module: resolve-model-ref
+  contract: default
+- id: fl-model-root
+  module: dirname
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true } }
+- id: fl-model
+  module: filelist-extract
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ unroll ], unwrap: true } }
+- id: fl-tb
+  module: filelist-extract
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ unroll, base_dir ], unwrap: true } }
+- id: fl-merge
+  module:
+    name: prioritised-merge
+    config: { priorities: { model_entries: 0, tb_entries: 1 } }
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true } }
+- id: fl-norm
+  module: filelist-normalise
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ base_dir ], unwrap: true } }
+- id: fl-dedup
+  module: filelist-dedup
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true } }
+- id: fl-path
+  module: filelist-path
+  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true } }
 - id: filelist
   module: write-filelist
-  contract: { name: keyed_join, config: { key_field: key, persistent_inputs: [ work_dir ], unwrap: true, ignore: [ test ] } }
+  contract: { name: keyed_join, config: { key_field: key, unwrap: true } }
 
 # --- compile (run-process #1) ---
 - id: cc-build
@@ -113,7 +143,7 @@ edges:
 - { src: { cli: logs_dir,    type: str,  default: "logs" },       dst: { node: ensure-logs,     port: logs_dir } }
 - { src: { cli: builder,     type: str,  default: "" },           dst: { node: resolve-builder, port: builder } }
 - { src: { cli: test_name, option: false, type: str, default: "" }, dst: { node: select,        port: test_name } }
-- { src: { cli: list,        type: bool, default: false },        dst: { node: route-list,      port: list } }
+- { src: { cli: list,        type: bool, default: false },        dst: { node: route-list,      port: flag } }
 - { src: { cli: rnd_new,     type: bool, default: false },        dst: { node: seed-mode,       port: rnd_new } }
 - { src: { cli: rnd_last,    type: bool, default: false },        dst: { node: seed-mode,       port: rnd_last } }
 - { src: { cli: builder_mode, type: str, default: "debug" },      dst: { node: cc-build,        port: builder_mode } }
@@ -132,7 +162,6 @@ edges:
 - { src: { node: prepend-path }, dst: { node: cc-run,  port: env_ready, required: true } }
 - { src: { node: prepend-path }, dst: { node: sim-run, port: env_ready, required: true } }
 - { src: { node: work-dir },   dst: { node: ensure-logs, port: work_dir } }
-- { src: { node: work-dir },   dst: { node: filelist,    port: work_dir } }
 - { src: { node: work-dir },   dst: { node: cc-build,    port: work_dir } }
 - { src: { node: work-dir },   dst: { node: cc-run,      port: work_dir } }
 - { src: { node: work-dir },   dst: { node: sim-run,     port: work_dir } }
@@ -152,9 +181,9 @@ edges:
 - { src: { node: seed-mode },       dst: { node: seed,      port: seed_mode } }
 
 # ---- list mode vs run ----
-- { src: { node: parse-suite },            dst: { node: route-list, port: suite_cfg } }
-- { src: { node: route-list, port: list }, dst: { node: list-names, port: suite_cfg } }
-- { src: { node: route-list, port: run },  dst: { node: select,     port: suite_cfg } }
+- { src: { node: parse-suite },           dst: { node: route-list, port: value } }
+- { src: { node: route-list, port: "on" },  dst: { node: list-names, port: suite_cfg } }
+- { src: { node: route-list, port: "off" }, dst: { node: select,     port: suite_cfg } }
 
 # ---- main line: split per-test / per-run keyed edges ----
 - { src: { node: select,     port: test }, dst: { node: filter,     port: test } }
@@ -168,10 +197,27 @@ edges:
 - { src: { node: sweep,      port: model }, dst: { node: preproc, port: model } }
 - { src: { node: preproc,    port: test },  dst: { node: gate-pre, port: test } }
 - { src: { node: preproc,    port: model }, dst: { node: gate-pre, port: model } }
-- { src: { node: gate-pre,   port: test },  dst: { node: filelist, port: test } }
-- { src: { node: gate-pre,   port: model }, dst: { node: filelist, port: model } }
-- { src: { node: gate-pre,   port: test },     dst: { node: cc-build, port: test } }
-- { src: { node: filelist,   port: filelist }, dst: { node: cc-build, port: filelist } }
+# ---- per-test filelist pipeline ----
+- { src: { node: unroll },   dst: { node: fl-model, port: unroll, required: true } }
+- { src: { node: unroll },   dst: { node: fl-tb,    port: unroll, required: true } }
+- { src: { node: work-dir }, dst: { node: fl-tb,    port: base_dir } }
+- { src: { node: work-dir }, dst: { node: fl-norm,  port: base_dir } }
+- { src: { node: work-dir }, dst: { node: fl-path,  port: work_dir } }
+- { src: { node: gate-pre,      port: test },       dst: { node: fl-model-ref,  port: test } }
+- { src: { node: fl-model-ref,  port: model_path }, dst: { node: fl-model-root, port: path } }
+- { src: { node: fl-model-root },                   dst: { node: fl-model,      port: base_dir } }
+- { src: { node: gate-pre,      port: model },      dst: { node: fl-model,      port: source } }
+- { src: { node: gate-pre,      port: test },       dst: { node: fl-tb,         port: source } }
+- { src: { node: fl-model, port: entries }, dst: { node: fl-merge, port: model_entries } }
+- { src: { node: fl-tb,    port: entries }, dst: { node: fl-merge, port: tb_entries } }
+- { src: { node: fl-merge, port: entries }, dst: { node: fl-norm,  port: entries } }
+- { src: { node: fl-norm,  port: entries }, dst: { node: fl-dedup, port: entries } }
+- { src: { node: fl-dedup, port: entries }, dst: { node: filelist, port: entries } }
+- { src: { node: gate-pre, port: test },     dst: { node: fl-path,  port: test } }
+- { src: { node: fl-path,  port: path },     dst: { node: filelist, port: path } }
+- { src: { node: gate-pre, port: test },     dst: { node: filelist, port: test } }
+- { src: { node: filelist, port: filelist }, dst: { node: cc-build, port: filelist } }
+- { src: { node: gate-pre, port: test },     dst: { node: cc-build, port: test } }
 # Compile
 - { src: { node: cc-build, port: command }, dst: { node: cc-run, port: command } }
 - { src: { node: cc-build, port: test },    dst: { node: cc-int, port: test } }
