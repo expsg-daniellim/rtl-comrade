@@ -2,6 +2,7 @@
 
 import importlib.util
 import os
+import re
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,8 @@ WriteFilelistMod = _mod.WriteFilelistMod
 FilelistExtractMod = _mod.FilelistExtractMod
 FilelistEntry = _mod.FilelistEntry
 PrioritisedMergeMod = _mod.PrioritisedMergeMod
+FilelistPathMod = _mod.FilelistPathMod
+BuildCompileCmdMod = _mod.BuildCompileCmdMod
 
 
 def _make_tb():
@@ -506,3 +509,51 @@ def test_prioritised_merge_equal_priority_tiebreak():
 	assert result == ("entries", ["a", "b"])
 	result2 = mod.run(beta_entries=["b"], alpha_entries=["a"])
 	assert result2 == ("entries", ["a", "b"])
+
+
+# ---------------------------------------------------------------------------
+# FilelistPathMod
+# ---------------------------------------------------------------------------
+
+
+def test_filelist_path_simple(tmp_path):
+	"""A TestConfig named foo with work_dir=tmp_path produces run.foo.f."""
+	test = _make_test("foo")
+	result = FilelistPathMod().run(test=test, work_dir=tmp_path)
+	assert result == ("path", tmp_path / "run.foo.f")
+
+
+def test_filelist_path_sanitisation():
+	"""Slashes, spaces and + are replaced with _; dots, hyphens and underscores survive."""
+	test = _make_test("a/b c+d.e-f_g")
+	result = FilelistPathMod().run(test=test, work_dir=Path("/wd"))
+	assert result == ("path", Path("/wd/run.a_b_c_d.e-f_g.f"))
+
+
+def test_filelist_path_distinct_per_test(tmp_path):
+	"""Two TestConfigs with different names produce distinct paths."""
+	t1 = _make_test("alpha")
+	t2 = _make_test("beta")
+	r1 = FilelistPathMod().run(test=t1, work_dir=tmp_path)
+	r2 = FilelistPathMod().run(test=t2, work_dir=tmp_path)
+	assert r1[1] != r2[1]
+
+
+def test_filelist_path_matches_build_compile_tag():
+	"""The tag agrees with what BuildCompileCmdMod derives for obj_dir_<tag>."""
+	name = "tricky/name with+stuff"
+	test = _make_test(name)
+	path_result = FilelistPathMod().run(test=test, work_dir=Path("/wd"))
+	tag = path_result[1].stem.removeprefix("run.")  # extract tag from run.<tag>.f
+	expected_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
+	assert tag == expected_tag
+	assert f"obj_dir_{tag}" == f"obj_dir_{expected_tag}"
+
+
+def test_filelist_path_nonexistent_work_dir(tmp_path):
+	"""A work_dir that does not exist still returns the joined path with no error."""
+	missing = tmp_path / "does" / "not" / "exist"
+	test = _make_test("t1")
+	result = FilelistPathMod().run(test=test, work_dir=missing)
+	assert result == ("path", missing / "run.t1.f")
+	assert not missing.exists()

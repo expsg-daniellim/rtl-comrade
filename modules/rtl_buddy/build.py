@@ -175,6 +175,12 @@ def filelist_process(entries, work_dir, deduplicate):
 	return out_lines
 
 
+class FilelistPathMod:
+	def run(self, test:TestConfig, work_dir:Path):
+		tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
+		return ("path", Path(work_dir) / f"run.{tag}.f")
+
+
 class WriteFilelistMod:
 	def run(self, test:TestConfig, model:ModelConfig, work_dir:Path):
 		test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
