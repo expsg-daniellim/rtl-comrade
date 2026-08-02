@@ -10,7 +10,7 @@ Fans the suite out into one `TestConfig` per selected test. With no `test_name`,
 
 | Port | Type | Default | Meaning |
 |---|---|---|---|
-| `suite_cfg` | `SuiteConfig` | — | suite from [route-list-mode](route-list-mode.md)'s `run` branch |
+| `suite_cfg` | `SuiteConfig` | — | suite from `route-list`'s `off` branch (`flag-gate` instance) |
 | `test_name` | `str` | `""` | positional CLI arg; empty means all tests |
 
 ## Outputs

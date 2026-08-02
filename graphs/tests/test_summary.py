@@ -341,3 +341,23 @@ def test_file_config_defaults():
 	config = FileSummaryProcessor.Config(out=Path("x.log"))
 	assert config.suppress == []
 	assert config.fail == list(FAIL_EVENTS)
+
+
+# ===========================================================================
+# filelist_resolve_error — no row (moved to filelist-extract, which has no test key)
+# ===========================================================================
+
+
+def test_filelist_resolve_error_produces_no_row():
+	proc = _make_console()
+	returned = proc(None, "error", {"event": "filelist_resolve_error", "path": "/x/y.f", "err": "boom"})
+	assert returned == {"event": "filelist_resolve_error", "path": "/x/y.f", "err": "boom"}
+	assert len(proc.rows) == 0
+
+
+def test_filelist_write_errors_still_produce_rows():
+	proc = _make_console()
+	for event in ["filelist_dir_not_found", "filelist_is_directory", "filelist_permission_denied", "filelist_write_error"]:
+		proc(None, "error", {"event": event, "test_name": "t1", "key": "k1", "path": "/x/y.f"})
+	assert len(proc.rows) == 4
+	assert all(r["result"] == "FAIL" for r in proc.rows)

@@ -1,0 +1,120 @@
+modules:
+- "../modules"
+contracts:
+- "../contracts"
+
+nodes:
+# --- head: CWD resolution, model loading, directory extraction ---
+- { id: work-dir,    module: work-dir, contract: default }    # zero-input CWD provider
+- { id: config-path, module: dirjoin,  contract: unit }       # resolves model_config against CWD
+- { id: load-model,  module: load-model, contract: default }  # model_name + model_path; test unwired (None default)
+- { id: model-dir,   module: dirname,    contract: unit }     # dirname(config-path) → extract.base_dir
+- { id: output-dir,  module: dirname,    contract: unit }     # dirname(output_path) → normalise.base_dir
+
+# --- pipeline ---
+- { id: extract, module: filelist-extract, contract: default }   # model filelist → resolved entries
+- id: normalise
+  module: filelist-normalise
+  contract:
+    name: default
+    config:
+      persistent_inputs: [ base_dir ]
+
+# --- flag-gated transforms ---
+- id: gate-flatten
+  module: flag-gate
+  contract:
+    name: default
+    config:
+      persistent_inputs: [ flag ]
+- { id: flatten, module: filelist-flatten, contract: default }
+- id: gate-strip
+  module: flag-gate
+  contract:
+    name: default
+    config:
+      persistent_inputs: [ flag ]
+- { id: strip, module: filelist-strip, contract: default }
+- id: gate-dedup
+  module: flag-gate
+  contract:
+    name: default
+    config:
+      persistent_inputs: [ flag ]
+- { id: dedup, module: filelist-dedup, contract: default }
+
+# --- write + report ---
+- { id: write, module: write-filelist, contract: default }   # entries + path from CLI; test unwired (None default)
+- id: log-filelist
+  module:
+    name: logger
+    config:
+      level: info
+      event: filelist_written
+      mapping: path
+  contract: default
+
+edges:
+# ---- CLI edges ----
+# Positional arguments — declaration order sets CLI position.
+- src: { cli: model_name, option: false, type: str }
+  dst: { node: load-model, port: model_name }
+- src: { cli: output_path, option: false, type: pathlib.Path, default: "run.f" }
+  dst: { node: output-dir, port: path }
+- src: { cli: output_path, option: false, type: pathlib.Path, default: "run.f" }
+  dst: { node: write, port: path }
+# Options.
+- src: { cli: model_config, type: str, default: "models.yaml" }
+  dst: { node: config-path, port: name }
+- src: { cli: unroll, type: bool, default: false }
+  dst: { node: extract, port: unroll, required: true }
+- src: { cli: flatten, type: bool, default: false }
+  dst: { node: gate-flatten, port: flag, required: true }
+- src: { cli: strip_options, type: bool, default: false }
+  dst: { node: gate-strip, port: flag, required: true }
+- src: { cli: deduplicate, type: bool, default: false }
+  dst: { node: gate-dedup, port: flag, required: true }
+
+# ---- head: CWD → config-path → model loading → extract ----
+- src: { node: work-dir }
+  dst: { node: config-path, port: dir }
+- src: { node: config-path }
+  dst: { node: load-model, port: model_path }
+- src: { node: config-path }
+  dst: { node: model-dir, port: path }
+- src: { node: load-model, port: model }
+  dst: { node: extract, port: source }
+- src: { node: model-dir }
+  dst: { node: extract, port: base_dir }
+- src: { node: output-dir }
+  dst: { node: normalise, port: base_dir }
+
+# ---- pipeline: extract → normalise → gate chain → write → log ----
+- src: { node: extract, port: entries }
+  dst: { node: normalise, port: entries }
+- src: { node: normalise, port: entries }
+  dst: { node: gate-flatten, port: value }
+# gate-flatten → flatten → gate-strip
+- src: { node: gate-flatten, port: "on" }
+  dst: { node: flatten, port: entries }
+- src: { node: flatten, port: entries }
+  dst: { node: gate-strip, port: value }
+- src: { node: gate-flatten, port: "off" }
+  dst: { node: gate-strip, port: value }
+# gate-strip → strip → gate-dedup
+- src: { node: gate-strip, port: "on" }
+  dst: { node: strip, port: entries }
+- src: { node: strip, port: entries }
+  dst: { node: gate-dedup, port: value }
+- src: { node: gate-strip, port: "off" }
+  dst: { node: gate-dedup, port: value }
+# gate-dedup → dedup → write
+- src: { node: gate-dedup, port: "on" }
+  dst: { node: dedup, port: entries }
+- src: { node: dedup, port: entries }
+  dst: { node: write, port: entries }
+- src: { node: gate-dedup, port: "off" }
+  dst: { node: write, port: entries }
+# write → log
+- src: { node: write, port: filelist }
+  dst: { node: log-filelist, port: value }

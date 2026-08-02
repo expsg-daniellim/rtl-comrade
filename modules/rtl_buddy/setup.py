@@ -180,13 +180,6 @@ class DeriveSeedModeMod:
 		return ("default", mode)
 
 
-class RouteListModeMod:
-	def run(self, suite_cfg:SuiteConfig, list_:bool = False):
-		if list_:
-			return ("list", suite_cfg)
-		return ("run", suite_cfg)
-
-
 class ListTestNamesMod:
 	def run(self, suite_cfg:SuiteConfig):
 		print("  ".join(suite_cfg.get_test_names()))

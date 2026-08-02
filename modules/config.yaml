@@ -11,9 +11,20 @@ files:
     class_name: AddMod
   - name: alu
     class_name: ALUMod
+  - { name: dirname, class_name: DirnameMod }
+  - { name: dirjoin, class_name: DirjoinMod }
+  - { name: logger, class_name: LoggerMod }
+  - { name: constant, class_name: ConstantMod }
 - file: rtl_buddy/build.py
   plugins:
   - { name: run-preproc, class_name: RunPreprocMod }
+  - { name: filelist-extract, class_name: FilelistExtractMod }
+  - { name: filelist-normalise, class_name: FilelistNormaliseMod }
+  - { name: filelist-flatten, class_name: FilelistFlattenMod }
+  - { name: filelist-strip, class_name: FilelistStripMod }
+  - { name: filelist-dedup, class_name: FilelistDedupMod }
+  - { name: prioritised-merge, class_name: PrioritisedMergeMod }
+  - { name: filelist-path, class_name: FilelistPathMod }
   - { name: write-filelist, class_name: WriteFilelistMod }
   - { name: run-process, class_name: RunProcessMod }
   - { name: build-compile-cmd, class_name: BuildCompileCmdMod }
@@ -29,7 +40,6 @@ files:
   - { name: ensure-logs-dir, class_name: EnsureLogsDirMod }
   - { name: parse-suite-config, class_name: ParseSuiteConfigMod }
   - { name: derive-seed-mode, class_name: DeriveSeedModeMod }
-  - { name: route-list-mode, class_name: RouteListModeMod }
   - { name: list-test-names, class_name: ListTestNamesMod }
   - { name: select-tests, class_name: SelectTestsMod }
   - { name: filter-reglvl, class_name: FilterRegLvlMod }
@@ -40,6 +50,7 @@ files:
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }
+  - { name: flag-gate, class_name: FlagGateMod }
 - file: rtl_buddy/sim.py
   plugins:
   - { name: expand-runs, class_name: ExpandRunsMod }

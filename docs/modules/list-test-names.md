@@ -10,7 +10,7 @@ Prints the suite's test names space-separated. Terminal node for `--list` mode; 
 
 | Port | Type | Meaning |
 |---|---|---|
-| `suite_cfg` | `SuiteConfig` | suite from [route-list-mode](route-list-mode.md)'s `list` branch |
+| `suite_cfg` | `SuiteConfig` | suite from `route-list`'s `on` branch (`flag-gate` instance) |
 
 ## Outputs
 

@@ -27,7 +27,7 @@ uv run rtl-comrade test [TEST_NAME] [options]
 | `--logs-dir` | [ensure-logs-dir](../modules/ensure-logs-dir.md) |
 | `--builder` | [resolve-builder](../modules/resolve-builder.md) |
 | `--builder-mode` | [build-compile-cmd](../modules/build-compile-cmd.md), [build-sim-cmd](../modules/build-sim-cmd.md) |
-| `--list` | [route-list-mode](../modules/route-list-mode.md) |
+| `--list` | `route-list` (`flag-gate` instance) |
 | `--rnd-new` / `--rnd-last` | [derive-seed-mode](../modules/derive-seed-mode.md) |
 | `--early-stop` | the three [early-stop-gate](../modules/early-stop-gate.md) nodes |
 
@@ -48,12 +48,16 @@ For the full GitHub-rendered dataflow (per-edge payloads and pairing contracts),
 ```
 discover → parse-root → select-platform → resolve-builder ┐
 work-dir → ensure-logs                                     │ (persistent config,
-parse-suite → route-list ──list──▶ list-test-names         │  fanned to many nodes)
-             └──run──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
+parse-suite → route-list ──on──▶ list-test-names           │  fanned to many nodes)
+             └──off──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
                                                     └─test──────────────────────────────────────▶
                                                     └─test▶ load-model
                                                                               │
-  sweep ─test/model▶ preproc ▶ gate-pre ▶ filelist ─test/filelist▶ cc-build ─command▶ cc-run
+  sweep ─test/model▶ preproc ▶ gate-pre ─test/model▶ fl-model-ref → fl-model-root → fl-model ┐
+                                  └─test▶ fl-tb ──────────────────────────────────────────────▶│
+                                         fl-merge → fl-norm → fl-dedup → filelist             │
+                                         fl-path ────────────────────────────▶│                │
+                                                              filelist ─filelist▶ cc-build ─command▶ cc-run
                                                                               │
   cc-run ─proc▶ cc-int ▶ gate-comp ▶ expand-runs ▶ resolve-seed ▶ build-sim-cmd ─command▶ sim-run
                                                                               │
@@ -77,8 +81,8 @@ The flow reads in stages (see [docs/modules/index.md](../modules/index.md) for t
 The graph relies on a few contract choices to coordinate the fan-out (full detail in [docs/contracts/index.md](../contracts/index.md)):
 
 - **[`unit`](../contracts/unit.md)** — the one-shot setup nodes that must run exactly once (`parse-root`, `select-platform`, `resolve-builder`, `ensure-logs`, `parse-suite`, `seed-mode`, `route-list`).
-- **[`default`](../contracts/default.md)** — source nodes and the fan-out points (`select`, `filter`, `model-ref`), plus the compile `run-process`.
-- **[`keyed_join`](../contracts/keyed_join.md)** — the backbone of the per-test/per-run stages. Because a single test travels as **split edges** (e.g. a `test` payload alongside a keyed `model` or `filelist` payload), each downstream node uses `keyed_join` with `key_field: key` to reassemble the payloads belonging to the same test before invoking the module. [load-model](../modules/load-model.md) uses `keyed_join` with `unwrap: true` to receive the model name and path as bare values and rewrap its output. [expand-runs](../modules/expand-runs.md) re-keys each item to `<test.key>#<run_id>` so per-run stages stay correlated. Most of those nodes also set `unwrap: true`: the `KeyedValue` envelope stays on the wire, but the contract strips it before the module sees it and re-attaches the assembled key to what the module emits, so only the fan-out modules that mint new keys ([expand-sweep](../modules/expand-sweep.md) and `expand-runs`) and [resolve-model-ref](../modules/resolve-model-ref.md), which projects keys, construct `KeyedValue` themselves.
+- **[`default`](../contracts/default.md)** — source nodes and the fan-out points (`select`, `filter`, `model-ref`, `fl-model-ref`), the `unroll` constant, and the compile `run-process`.
+- **[`keyed_join`](../contracts/keyed_join.md)** — the backbone of the per-test/per-run stages and the filelist pipeline. Because a single test travels as **split edges** (e.g. a `test` payload alongside a keyed `model` or `filelist` payload), each downstream node uses `keyed_join` with `key_field: key` to reassemble the payloads belonging to the same test before invoking the module. [load-model](../modules/load-model.md) uses `keyed_join` with `unwrap: true` to receive the model name and path as bare values and rewrap its output. The filelist pipeline nodes (`fl-model-root`, `fl-model`, `fl-tb`, `fl-merge`, `fl-norm`, `fl-dedup`, `fl-path`, `filelist`) all use `keyed_join` with `unwrap: true`, running their envelope-agnostic modules once per test. [expand-runs](../modules/expand-runs.md) re-keys each item to `<test.key>#<run_id>` so per-run stages stay correlated. Most of those nodes also set `unwrap: true`: the `KeyedValue` envelope stays on the wire, but the contract strips it before the module sees it and re-attaches the assembled key to what the module emits, so only the fan-out modules that mint new keys ([expand-sweep](../modules/expand-sweep.md) and `expand-runs`) and [resolve-model-ref](../modules/resolve-model-ref.md) (plus `fl-model-ref`), which project keys, construct `KeyedValue` themselves.
 
 Persistent configuration (builder config, work dir, logs dir, seed mode, root config) is wired as `persistent_inputs` on the joining contracts, so one upstream value is cached and reused for every keyed item without re-delivery.
 

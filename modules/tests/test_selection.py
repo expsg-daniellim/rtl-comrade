@@ -19,7 +19,6 @@ assert _spec is not None
 assert _spec.loader is not None
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
-RouteListModeMod = _mod.RouteListModeMod
 ListTestNamesMod = _mod.ListTestNamesMod
 SelectTestsMod = _mod.SelectTestsMod
 FilterRegLvlMod = _mod.FilterRegLvlMod
@@ -33,43 +32,6 @@ _MODELS_FIXTURE = Path(__file__).parent / "fixtures" / "design" / "sandbox" / "m
 
 def _suite_cfg(tests=None):
 	return SuiteConfig(path=Path("/fake/tests.yaml"), tests=tests or {})
-
-
-# ---------------------------------------------------------------------------
-# RouteListModeMod
-# ---------------------------------------------------------------------------
-
-
-def test_route_list_mode_list_true():
-	cfg = _suite_cfg({"t1": None})
-	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg, list_=True)
-	assert port == "list"
-	assert result is cfg
-
-
-def test_route_list_mode_list_false():
-	cfg = _suite_cfg({"t1": None})
-	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg, list_=False)
-	assert port == "run"
-	assert result is cfg
-
-
-def test_route_list_mode_default():
-	cfg = _suite_cfg({"t1": None})
-	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg)
-	assert port == "run"
-	assert result is cfg
-
-
-def test_route_list_mode_empty_suite():
-	cfg = _suite_cfg()
-	mod = RouteListModeMod()
-	port, result = mod.run(suite_cfg=cfg, list_=False)
-	assert port == "run"
-	assert result is cfg
 
 
 # ---------------------------------------------------------------------------

@@ -2,6 +2,7 @@ import asyncio
 import os
 import re
 import signal
+from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
 
@@ -11,7 +12,7 @@ from serde import serde
 from rtl_comrade.logging import HarnessLogger
 
 from modules.rtl_buddy.schema import RootConfig, ModelConfig, Command, Proc, RtlBuilderConfig
-from modules.rtl_buddy.schema.suite import TestConfig
+from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
 log:HarnessLogger = cast(HarnessLogger, structlog.get_logger())
 
@@ -52,7 +53,108 @@ class RunPreprocMod:
 		yield ("model", model)
 
 
+@dataclass(frozen=True)
+class FilelistEntry:
+	path: str  # resolved/rewritten path; for a +libext+ entry, the coalesced value
+	option: str | None  # option token: "-v ", "-y ", "+incdir+", "+libext+", or None
+
 FILELIST_OPTION_RE = re.compile(r"^((?:-v|-y|-[Ff])\s+|(\+(?:incdir|libext)\+))?(.*)$")
+
+
+class FilelistExtractMod:
+	def run(self, source:ModelConfig|TestbenchConfig|TestConfig, base_dir:Path, unroll:bool = False):
+		config = source.get_testbench() if isinstance(source, TestConfig) else source
+		lines = config.get_filelist()
+		entries = []
+		libexts = {}
+		def extract(lines_in, prefix_parent):
+			for line in lines_in:
+				line = line.strip()
+				if not line or line.startswith('//') or line.startswith('/*') or line.startswith('*'):
+					continue
+				m = FILELIST_OPTION_RE.fullmatch(line)
+				if not m or not m.group(3):
+					log.error("filelist_malformed_line", line=line)
+					continue
+				if m.group(2):
+					line_option, line_path = m.group(2), m.group(3)
+				elif m.group(1):
+					line_option, line_path = m.group(1).strip() + " ", m.group(3)
+				else:
+					line_option, line_path = None, m.group(3)
+				line_path = os.path.expandvars(line_path)
+				if line_option == '-f ':
+					log.fatal("filelist_lower_f_not_allowed", line=line)
+				elif line_option == '-F ' and unroll:
+					path_next = os.path.join(prefix_parent, line_path)
+					try:
+						with open(path_next, encoding="utf-8") as f:
+							extract(f.readlines(), os.path.dirname(path_next))
+					except OSError as e:
+						log.error("filelist_resolve_error", path=str(path_next), err=str(e))
+				elif line_option == '+libext+':
+					libexts.update(dict.fromkeys(line_path.split('+')))
+				else:
+					entries.append(FilelistEntry(os.path.join(prefix_parent, line_path), line_option))
+		extract(lines, str(base_dir))
+		if len(libexts) > 0:
+			entries.append(FilelistEntry("+".join(libexts), "+libext+"))
+		yield ("entries", entries)
+
+
+class FilelistNormaliseMod:
+	def run(self, entries:list[FilelistEntry], base_dir:Path):
+		out = []
+		for e in entries:
+			if e.option == "+libext+":
+				out.append(e)
+				continue
+			if e.option in ("+incdir+", "-y "):
+				if not os.path.isdir(e.path):
+					log.error("filelist_incdir_not_a_dir", path=str(e.path))
+			elif not os.path.isfile(e.path):
+				log.error("filelist_file_not_found", path=str(e.path))
+			out.append(FilelistEntry(os.path.relpath(e.path, base_dir), e.option))
+		yield ("entries", out)
+
+
+class FilelistFlattenMod:
+	def run(self, entries:list[FilelistEntry]):
+		out = [ e if e.option == "+libext+" else FilelistEntry(os.path.basename(e.path), e.option) for e in entries ]
+		yield ("entries", out)
+
+
+class FilelistStripMod:
+	def run(self, entries:list[FilelistEntry]):
+		out = [ e if e.option == "+libext+" else FilelistEntry(e.path, None) for e in entries ]
+		yield ("entries", out)
+
+
+class FilelistDedupMod:
+	def run(self, entries:list[FilelistEntry]):
+		seen, out = set(), []
+		for entry in entries:
+			if entry in seen:
+				continue
+			seen.add(entry)
+			out.append(entry)
+		yield ("entries", out)
+
+
+class PrioritisedMergeMod:
+	@serde
+	class Config:
+		priorities:dict[str, int]
+
+	def __init__(self, config):
+		self.priorities = config.priorities
+
+	def run(self, **entries):
+		missing = [name for name in entries if name not in self.priorities]
+		if len(missing) > 0:
+			log.fatal("unranked_merge_port", ports=missing)
+		ordered = sorted(entries, key=lambda name: (self.priorities[name], name))
+		return ("entries", [item for name in ordered for item in entries[name]])
 
 
 def filelist_extract(lines_in, unroll, fpath):
@@ -112,31 +214,30 @@ def filelist_process(entries, work_dir, deduplicate):
 	return out_lines
 
 
+class FilelistPathMod:
+	def run(self, test:TestConfig, work_dir:Path):
+		tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
+		return ("path", Path(work_dir) / f"run.{tag}.f")
+
+
 class WriteFilelistMod:
-	def run(self, test:TestConfig, model:ModelConfig, work_dir:Path):
-		test_tag = re.sub(r"[^A-Za-z0-9_.-]", "_", test.get_name())
-		path = Path(work_dir) / f"run.{test_tag}.f"
+	def run(self, entries:list[FilelistEntry], path:Path, test:TestConfig|None = None):
+		key = test.key if test is not None else None
+		test_name = test.get_name() if test is not None else None
+		lines = [ f"+libext+{e.path}\n" if e.option == "+libext+" else (f"{e.option}{e.path}\n" if e.option else f"{e.path}\n") for e in entries ]
 		try:
-			model_path = model.get_model_path()
-			model_dir = os.path.dirname(os.path.abspath(model_path)) if model_path else str(work_dir)
-			entries = filelist_extract(model.get_filelist(), True, os.path.join(model_dir, "models.yaml"))
-			entries.extend(filelist_extract(test.get_testbench().get_filelist(), True, str(Path(work_dir) / "tests.yaml")))
-			lines = filelist_process(entries, str(work_dir), True)
 			with open(path, "w", encoding="utf-8") as f:
 				f.write("// rtl-buddy generated model filelist\n")
 				f.writelines(lines)
-			yield ("test", test)
 			yield ("filelist", path)
 		except FileNotFoundError:
-			log.error("filelist_dir_not_found", key=test.key, test_name=test.get_name(), path=str(path))
+			log.error("filelist_dir_not_found", key=key, test_name=test_name, path=str(path))
 		except IsADirectoryError:
-			log.error("filelist_is_directory", key=test.key, test_name=test.get_name(), path=str(path))
+			log.error("filelist_is_directory", key=key, test_name=test_name, path=str(path))
 		except PermissionError as e:
-			log.error("filelist_permission_denied", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror)
-		except (KeyError, AttributeError) as e:
-			log.error("filelist_resolve_error", key=test.key, test_name=test.get_name(), path=str(path), err=str(e))
+			log.error("filelist_permission_denied", key=key, test_name=test_name, path=str(path), err=e.strerror)
 		except OSError as e:
-			log.error("filelist_write_error", key=test.key, test_name=test.get_name(), path=str(path), err=e.strerror, errno=e.errno)
+			log.error("filelist_write_error", key=key, test_name=test_name, path=str(path), err=e.strerror, errno=e.errno)
 
 
 class RunProcessMod:

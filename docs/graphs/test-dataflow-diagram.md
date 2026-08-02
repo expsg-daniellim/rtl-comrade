@@ -6,7 +6,7 @@ The full dataflow of the `test` graph, rendered inline by GitHub. Node labels no
 
 ```mermaid
 flowchart TD
-  route_list["route-list"] m1@-->|"run:SuiteConfig"| select["select"]
+  route_list["route-list<br/>(flag-gate, unit)"] m1@-->|"off:SuiteConfig"| select["select"]
   select m2@-->|"test:TestConfig"| filter["filter"]
   filter m3@-->|"test:TestConfig"| model_ref["model-ref"]
   filter m3a@-->|"test:TestConfig"| load_model["load-model<br/>(keyed_join)"]
@@ -15,8 +15,21 @@ flowchart TD
   load_model m4@-->|"model:KeyedValue[ModelConfig]"| sweep
   sweep m5@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| preproc["preproc<br/>(keyed_join)"]
   preproc m6@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| gate_pre["gate-pre<br/>(keyed_join)"]
-  gate_pre m7@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| filelist["filelist<br/>(keyed_join)"]
-  filelist m8@-->|"test:TestConfig + filelist:KeyedValue[Path]"| cc_build["cc-build<br/>(keyed_join)"]
+  gate_pre p1@-->|"test:TestConfig"| fl_model_ref["fl-model-ref"]
+  gate_pre p2@-->|"model:KeyedValue[ModelConfig]"| fl_model["fl-model<br/>(filelist-extract, keyed_join)"]
+  gate_pre p3@-->|"test:TestConfig"| fl_tb["fl-tb<br/>(filelist-extract, keyed_join)"]
+  gate_pre p9@-->|"test:TestConfig"| fl_path["fl-path<br/>(filelist-path, keyed_join)"]
+  gate_pre p10@-->|"test:TestConfig"| filelist["filelist<br/>(write-filelist, keyed_join)"]
+  fl_model_ref p4@-->|"model_path:KeyedValue[Path]"| fl_model_root["fl-model-root<br/>(dirname, keyed_join)"]
+  fl_model_root p5@-->|"base_dir:Path"| fl_model
+  fl_model p6@-->|"entries:list[entry]"| fl_merge["fl-merge<br/>(prioritised-merge, keyed_join)"]
+  fl_tb p7@-->|"entries:list[entry]"| fl_merge
+  fl_merge p8@-->|"entries:list[entry]"| fl_norm["fl-norm<br/>(filelist-normalise, keyed_join)"]
+  fl_norm p11@-->|"entries:list[entry]"| fl_dedup["fl-dedup<br/>(filelist-dedup, keyed_join)"]
+  fl_dedup p12@-->|"entries:list[entry]"| filelist
+  fl_path p13@-->|"path:Path"| filelist
+  filelist m8@-->|"filelist:KeyedValue[Path]"| cc_build["cc-build<br/>(keyed_join)"]
+  gate_pre m7@-->|"test:TestConfig"| cc_build
   cc_build m9@-->|"command:Command"| cc_run["cc-run<br/>(run-process)"]
   cc_build m10@-->|"test:TestConfig + simv:KeyedValue[str]"| cc_int["cc-int<br/>(keyed_join)"]
   cc_run m11@-->|"proc:Proc"| cc_int
@@ -36,7 +49,7 @@ flowchart TD
   gate_sim m22@-->|"test:TestConfig + proc:Proc"| route_post["route-post<br/>(keyed_join)"]
   route_post m23@-->|"plain: test:TestConfig + proc:Proc"| parse_log["parse-log<br/>(keyed_join)"]
   route_post m24@-->|"uvm: test:TestConfig + proc:Proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
-  route_list m25@-->|"list:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
+  route_list m25@-->|"on:SuiteConfig"| list_names["list-names<br/>(prints names; exit 0)"]
 
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
@@ -49,11 +62,15 @@ flowchart TD
   resolve_builder c9@-. "builder_cfg:RtlBuilderConfig" .-> seed
   resolve_builder c10@-. "builder_cfg:RtlBuilderConfig" .-> sim_build
   seed_mode["seed-mode"] c11@-. "seed_mode:SeedMode" .-> seed
-  parse_suite["parse-suite"] c12@-. "suite_cfg:SuiteConfig" .-> route_list
+  parse_suite["parse-suite"] c12@-. "value:SuiteConfig" .-> route_list
 
+  unroll_node["unroll<br/>(constant)"] u1@-->|"unroll:bool"| fl_model
+  unroll_node u2@-->|"unroll:bool"| fl_tb
   prepend_path["prepend-path"] e1@-->|"env_ready:bool"| cc_run
   prepend_path e2@-->|"env_ready:bool"| sim_run
-  work_dir_node e3@-->|"work_dir:Path"| filelist
+  work_dir_node e3@-->|"base_dir:Path"| fl_tb
+  work_dir_node e3b@-->|"base_dir:Path"| fl_norm
+  work_dir_node e3c@-->|"work_dir:Path"| fl_path
   work_dir_node e4@-->|"work_dir:Path"| cc_build
   work_dir_node e5@-->|"work_dir:Path"| cc_run
   work_dir_node e9@-->|"work_dir:Path"| sim_run
@@ -67,7 +84,7 @@ flowchart TD
   c_logs_dir(["logs_dir (name)"]) g2@-->|"logs_dir:str"| ensure_logs
   c_builder(["builder"]) g3@-->|"builder:str"| resolve_builder
   c_test_name(["test_name"]) g4@-->|"test_name:str"| select
-  c_list(["list"]) g5@-->|"list:bool"| route_list
+  c_list(["list"]) g5@-->|"flag:bool"| route_list
   c_rnd_new(["rnd_new"]) g6@-->|"rnd_new:bool"| seed_mode
   c_rnd_last(["rnd_last"]) g7@-->|"rnd_last:bool"| seed_mode
   c_builder_mode(["builder_mode"]) g8@-->|"builder_mode:str"| cc_build
@@ -81,8 +98,9 @@ flowchart TD
   classDef fanout fill:#e6f2ff,stroke:#1f6feb;
   classDef join fill:#fff3cd,stroke:#bf8700;
   classDef cli fill:#eef7ee,stroke:#2da44e;
+  classDef pipeline fill:#f0f8ff,stroke:#4a90d9;
   class select,sweep,runs fanout;
-  class load_model,filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
+  class load_model,fl_model_root,fl_model,fl_tb,fl_merge,fl_norm,fl_dedup,fl_path,filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_list,c_rnd_new,c_rnd_last,c_builder_mode,c_early_stop cli;
 
   %% edge styling by class — each styled edge has a unique ID; per-type class lists below.
@@ -92,9 +110,9 @@ flowchart TD
   classDef envEdge stroke:#8250df,stroke-width:1.5px;
   classDef cliEdge stroke:#1a7f37,stroke-width:1.5px;
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
-  class m1,m2,m3,m3a,m3b,m3c,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
+  class m1,m2,m3,m3a,m3b,m3c,m4,m5,m6,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24,m25 mainEdge;
   class c1,c2,c3,c5,c6,c7,c8,c9,c10,c11,c12 cfgEdge;
-  class e1,e2,e3,e4,e5,e6,e7,e8,e9,e10,e11,e12 envEdge;
+  class e1,e2,e3,e3b,e3c,e4,e5,e6,e7,e8,e9,e10,e11,e12,u1,u2 envEdge;
   class g1,g2,g3,g4,g5,g6,g7,g8,g9,g10,g11,g12 cliEdge;
   class gs1 gitEdge;
 ```
