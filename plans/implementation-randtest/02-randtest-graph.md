@@ -33,13 +33,13 @@ Add:
 
 ### Edges
 
-Remove the `seed-mode` wiring (two CLI inputs, one output), the `list` CLI edge, and the four `route-list` edges (input from `parse-suite`, two output arms to `list-names` and `select`).
+Remove the `seed-mode` wiring (two CLI inputs, one output), the `list` CLI edge, and the three `route-list` node edges (input from `parse-suite`, two output arms to `list-names` and `select`).
 
 Add `derive-runs` CLI inputs and outputs:
 
 ```yaml
 - { src: { cli: rnd_cnt, option: false, type: int, default: 2 }, dst: { node: derive-runs, port: rnd_cnt } }
-- { src: { cli: rnd_rpt, type: int, default: -1 },              dst: { node: derive-runs, port: rnd_rpt } }
+- { src: { cli: rnd_rpt, type: int, default: -1, flags: ["--rnd-rpt", "-r"] }, dst: { node: derive-runs, port: rnd_rpt } }
 - { src: { node: derive-runs, port: run_ids },   dst: { node: runs, port: run_ids } }
 - { src: { node: derive-runs, port: seed_mode }, dst: { node: seed, port: seed_mode } }
 ```
@@ -65,6 +65,8 @@ The full CLI surface is documented in [00-overview § CLI surface](00-overview.m
 - `rnd_cnt` is a positional (second, after `test_name`) with default `2`.
 - `rnd_rpt` is an option (`-r/--rnd-rpt`) with default `-1`.
 - `test_name` is a required positional (no `default` field).
+
+> **Positional ordering.** The `test_name` CLI edge must be declared before `rnd_cnt` in the `edges` list — the harness derives positional argument order from declaration order (see `docs/harness_configs/graph.md`).
 
 ### Everything else
 
@@ -98,7 +100,7 @@ Using the existing fixture project (`tests/e2e/fixtures/proj/`).
 
 - `rtl-comrade randtest <test_name>` — runs with default `rnd_cnt=2`, produces sim outputs for run IDs 1 and 2.
 - `rtl-comrade randtest <test_name> 3` — runs with `rnd_cnt=3`.
-- `rtl-comrade randtest <test_name> --rnd-rpt 1` — replays seed from run 1 (requires a prior `randtest` run to have written the `.randseed` file).
+- `rtl-comrade randtest <test_name> --rnd-rpt 1` — replays seed from run 1. The test must pre-create a `.randseed` file in the fixture's logs directory (e.g. `logs/<test_name>_0001.randseed` containing a seed integer) before invoking this case.
 - `rtl-comrade randtest` (no test name) — errors with a missing-argument message (required positional).
 
 ### CLI tests

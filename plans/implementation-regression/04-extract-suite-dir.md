@@ -66,7 +66,7 @@ In the regression graph, downstream nodes that received `work_dir`, `base_dir`, 
 | `sim-build` | `logs_dir` | `ensure-logs` | `extract-dir-post` |
 | `seed` | `logs_dir` | `ensure-logs` | `extract-dir-post` |
 
-No downstream module changes — only graph-YAML contract configs (removing ports from `persistent_inputs`).
+No downstream module changes — only graph-YAML contract configs (`persistent_inputs` removal, `unwrap: true` additions on `randseed`/`link-latest`, and `cc-run`'s contract switch to `keyed_join`).
 
 ## Deliverables
 

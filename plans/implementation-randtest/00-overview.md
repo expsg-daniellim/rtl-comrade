@@ -66,12 +66,13 @@ flowchart TD
   route_post m23@-->|"plain: test:TestConfig + proc:Proc"| parse_log["parse-log<br/>(keyed_join)"]
   route_post m24@-->|"uvm: test:TestConfig + proc:Proc"| parse_uvm["parse-uvm-log<br/>(keyed_join)"]
 
-  derive_runs["derive-runs<br/>(derive-randtest-runs, unit)"] d1@-->|"run_ids:list[int]"| runs
-  derive_runs d2@-->|"seed_mode:SeedMode"| seed
+  derive_runs["derive-runs<br/>(unit)"] d1@-. "run_ids:list[int]" .-> runs
+  derive_runs d2@-. "seed_mode:SeedMode" .-> seed
 
   discover_root["discover-root"] c1@-->|"path:Path"| parse_root["parse-root"]
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
-  select_platform c3@-->|"platform_cfg:PlatformConfig"| resolve_builder["resolve-builder"]
+  parse_root c4@-->|"root_cfg:RootConfig"| resolve_builder["resolve-builder"]
+  select_platform c3@-->|"platform_cfg:PlatformConfig"| resolve_builder
   work_dir_node["work-dir"] e12@-->|"work_dir:Path"| ensure_logs["ensure-logs"]
   parse_root c5@-. "root_cfg:RootConfig" .-> sweep
   parse_root c6@-. "root_cfg:RootConfig" .-> preproc
@@ -115,7 +116,7 @@ flowchart TD
   classDef cli fill:#eef7ee,stroke:#2da44e;
   classDef delta fill:#fde8e8,stroke:#cf222e,stroke-width:2px;
   class select,sweep,runs fanout;
-  class load_model,fl_model_root,fl_model,fl_tb,fl_merge,fl_norm,fl_dedup,fl_path,filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
+  class load_model,fl_model_root,fl_model,fl_tb,fl_merge,fl_norm,fl_dedup,fl_path,filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,preproc,gate_pre,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class c_test_config,c_logs_dir,c_builder,c_test_name,c_rnd_cnt,c_rnd_rpt,c_builder_mode,c_early_stop cli;
   class derive_runs delta;
 
@@ -126,11 +127,11 @@ flowchart TD
   classDef gitEdge stroke:#6e7781,stroke-width:1px;
   classDef deltaEdge stroke:#cf222e,stroke-width:2px;
   class m2,m3,m3a,m3b,m3c,m4,m5,m6,p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,m7,m8,m9,m10,m11,m12,m13,m14,m15,m16,m17,m17b,m17c,m18,m18b,m18c,m19,m21,m22,m23,m24 mainEdge;
-  class c1,c2,c3,c5,c6,c7,c8,c9,c10 cfgEdge;
+  class c1,c2,c3,c4,c5,c6,c7,c8,c9,c10 cfgEdge;
   class e1,e2,e3,e3b,e3c,e4,e5,e6,e7,e8,e9,e10,e11,e12,u1,u2 envEdge;
-  class g1,g2,g3,g4,g8,g9,g10,g11,g12 cliEdge;
+  class g1,g2,g3,g8,g9,g10,g11,g12 cliEdge;
   class gs1 gitEdge;
-  class m1,d1,d2,g5,g6 deltaEdge;
+  class m1,d1,d2,g4,g5,g6 deltaEdge;
 ```
 
 ## Graph delta summary
@@ -169,7 +170,7 @@ flowchart TD
 ```yaml
 # derive-randtest-runs CLI inputs
 - { src: { cli: rnd_cnt, option: false, type: int, default: 2 }, dst: { node: derive-runs, port: rnd_cnt } }
-- { src: { cli: rnd_rpt, type: int, default: -1 },              dst: { node: derive-runs, port: rnd_rpt } }
+- { src: { cli: rnd_rpt, type: int, default: -1, flags: ["--rnd-rpt", "-r"] }, dst: { node: derive-runs, port: rnd_rpt } }
 
 # derive-randtest-runs outputs
 - { src: { node: derive-runs, port: run_ids },   dst: { node: runs, port: run_ids } }
@@ -213,9 +214,9 @@ Matching rtl_buddy's `do_rand_test` signature.
 | `rnd_rpt` | `-r/--rnd-rpt` | int | -1 | `derive-runs.rnd_rpt` |
 | `test_config` | `-c/--test-config` | str | `tests.yaml` | `parse-suite.test_config` |
 | `logs_dir` | `--logs-dir` | str | `logs` | `ensure-logs.logs_dir` |
-| `builder` | `--builder` | str | `""` | `resolve-builder.builder` |
+| `builder` | `-B/--builder` | str | `""` | `resolve-builder.builder` |
 | `builder_mode` | `-M/--builder-mode` | str | `debug` | `cc-build.builder_mode`, `sim-build.builder_mode` |
-| `early_stop` | `--early-stop` | str | `post` | `gate-pre`, `gate-comp`, `gate-sim` |
+| `early_stop` | `-E/--early-stop` | str | `post` | `gate-pre`, `gate-comp`, `gate-sim` |
 
 **Removed from test:** `rnd_new`, `rnd_last` (replaced by `derive-randtest-runs`), `list` (randtest has no list mode).
 

@@ -30,26 +30,41 @@ class ParseRegConfigMod:
     def run(self, reg_config_path:Path):
         try:
             raw = from_yaml(RegConfigFile, reg_config_path.read_text(encoding="utf-8"))
+        except UnicodeDecodeError as e:
+            log.fatal("reg_config_invalid_unicode", path=str(reg_config_path), reason=e.reason, exc_info=e)
         except FileNotFoundError as e:
             log.fatal("reg_config_not_found", path=str(reg_config_path), exc_info=e)
+        except IsADirectoryError as e:
+            log.fatal("reg_config_is_directory", path=str(reg_config_path), exc_info=e)
+        except PermissionError as e:
+            log.fatal("reg_config_permission_denied", path=str(reg_config_path), exc_info=e)
+        except OSError as e:
+            log.fatal("reg_config_os_error", path=str(reg_config_path), err=e.strerror, errno=e.errno, exc_info=e)
         except SerdeError as e:
             log.fatal("reg_config_serde_error", path=str(reg_config_path), message=str(e), exc_info=e)
         except MarkedYAMLError as e:
             log.fatal("reg_config_yaml_invalid", path=str(reg_config_path), problem=e.problem, exc_info=e)
+        except ReaderError as e:
+            log.fatal("reg_config_yaml_unreadable", path=str(reg_config_path), reason=e.reason, exc_info=e)
         for entry in raw.test_configs:
             yield ("default", (reg_config_path.parent / entry).resolve())
 ```
 
-The `RegConfigFile` mirrors the upstream serde type, preserving the YAML field names exactly. Each yielded `Path` is resolved against the reg config's directory — `parse-suite-config` downstream receives it as its `test_config:str` input and resolves it (idempotent on an absolute path).
+The `RegConfigFile` mirrors the upstream serde type, preserving the YAML field names exactly. Each yielded `Path` is resolved against the reg config's directory — `parse-suite-config` downstream receives it as its `test_config:str` input. The `Path` object flows into a `str`-annotated port; `ParseSuiteConfigMod` calls `Path(test_config).resolve()` which accepts both `str` and `Path`, so the type mismatch is harmless at runtime.
 
 ## Algorithm
 
 1. Read `reg_config_path` as UTF-8 text.
 2. Deserialise via `from_yaml(RegConfigFile, ...)`.
-3. On `FileNotFoundError` → `log.fatal("reg_config_not_found")`.
-4. On `SerdeError` → `log.fatal("reg_config_serde_error")`.
-5. On `MarkedYAMLError` → `log.fatal("reg_config_yaml_invalid")`.
-6. For each entry in `test_configs`, yield `("default", (reg_config_path.parent / entry).resolve())`.
+3. On `UnicodeDecodeError` → `log.fatal("reg_config_invalid_unicode")`.
+4. On `FileNotFoundError` → `log.fatal("reg_config_not_found")`.
+5. On `IsADirectoryError` → `log.fatal("reg_config_is_directory")`.
+6. On `PermissionError` → `log.fatal("reg_config_permission_denied")`.
+7. On `OSError` → `log.fatal("reg_config_os_error")`.
+8. On `SerdeError` → `log.fatal("reg_config_serde_error")`.
+9. On `MarkedYAMLError` → `log.fatal("reg_config_yaml_invalid")`.
+10. On `ReaderError` → `log.fatal("reg_config_yaml_unreadable")`.
+11. For each entry in `test_configs`, yield `("default", (reg_config_path.parent / entry).resolve())`.
 
 ## `RegConfigFile` serde container
 
@@ -77,12 +92,15 @@ In `modules/tests/test_setup.py`.
 - Valid `regressions.yaml` with two `test-configs` entries → yields two `("default", Path)` values, each resolved against the reg config's directory.
 - Valid `regressions.yaml` with an empty `test-configs` list → yields nothing (generator exhausts immediately).
 - Missing file → `log.fatal("reg_config_not_found")`.
+- Path is a directory → `log.fatal("reg_config_is_directory")`.
+- Permission denied → `log.fatal("reg_config_permission_denied")`.
+- Non-UTF-8 file → `log.fatal("reg_config_invalid_unicode")`.
 - Malformed YAML → `log.fatal("reg_config_yaml_invalid")`.
 - Valid YAML, schema mismatch → `log.fatal("reg_config_serde_error")`.
 
 ## Acceptance criteria
 
-- All five test cases pass.
+- All eight test cases pass.
 - `parse-reg-config` → `ParseRegConfigMod` resolves in the manifest.
 - Each yielded path is resolved against the reg config's parent directory, not CWD.
 - Error paths abort via `log.fatal` with distinct event names.

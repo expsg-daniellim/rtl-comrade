@@ -37,22 +37,22 @@ flowchart TD
   preproc m6@-->|"test:TestConfig + model:KeyedValue[ModelConfig]"| gate_pre["gate-pre<br/>(keyed_join)"]
 
   gate_pre p1@-->|"test:TestConfig"| fl_model_ref["fl-model-ref"]
-  gate_pre p2@-->|"model:KeyedValue[ModelConfig]"| fl_model["fl-model<br/>(filelist-extract, keyed_join)"]
-  gate_pre p3@-->|"test:TestConfig"| fl_tb["fl-tb<br/>(filelist-extract, keyed_join)"]
-  gate_pre p9@-->|"test:TestConfig"| fl_path["fl-path<br/>(filelist-path, keyed_join)"]
-  gate_pre p10@-->|"test:TestConfig"| filelist["filelist<br/>(write-filelist, keyed_join)"]
-  fl_model_ref p4@-->|"model_path:KeyedValue[Path]"| fl_model_root["fl-model-root<br/>(dirname, keyed_join)"]
+  gate_pre p2@-->|"model:KeyedValue[ModelConfig]"| fl_model["fl-model<br/>(keyed_join)"]
+  gate_pre p3@-->|"test:TestConfig"| fl_tb["fl-tb<br/>(keyed_join)"]
+  gate_pre p9@-->|"test:TestConfig"| fl_path["fl-path<br/>(keyed_join)"]
+  gate_pre p10@-->|"test:TestConfig"| filelist["filelist<br/>(keyed_join)"]
+  fl_model_ref p4@-->|"model_path:KeyedValue[Path]"| fl_model_root["fl-model-root<br/>(keyed_join)"]
   fl_model_root p5@-->|"base_dir:Path"| fl_model
-  fl_model p6@-->|"entries:list[entry]"| fl_merge["fl-merge<br/>(prioritised-merge, keyed_join)"]
+  fl_model p6@-->|"entries:list[entry]"| fl_merge["fl-merge<br/>(keyed_join)"]
   fl_tb p7@-->|"entries:list[entry]"| fl_merge
-  fl_merge p8@-->|"entries:list[entry]"| fl_norm["fl-norm<br/>(filelist-normalise, keyed_join)"]
-  fl_norm p11@-->|"entries:list[entry]"| fl_dedup["fl-dedup<br/>(filelist-dedup, keyed_join)"]
+  fl_merge p8@-->|"entries:list[entry]"| fl_norm["fl-norm<br/>(keyed_join)"]
+  fl_norm p11@-->|"entries:list[entry]"| fl_dedup["fl-dedup<br/>(keyed_join)"]
   fl_dedup p12@-->|"entries:list[entry]"| filelist
   fl_path p13@-->|"path:Path"| filelist
   filelist m8@-->|"filelist:KeyedValue[Path]"| cc_build["cc-build<br/>(keyed_join)"]
 
   gate_pre m7@-->|"test:TestConfig"| cc_build
-  cc_build m9@-->|"command:Command"| cc_run["cc-run<br/>(run-process)"]
+  cc_build m9@-->|"command:Command"| cc_run["cc-run<br/>(keyed_join)"]
   cc_build m10@-->|"test:TestConfig + simv:KeyedValue[str]"| cc_int["cc-int<br/>(keyed_join)"]
   cc_run m11@-->|"proc:Proc"| cc_int
   cc_int m12@-->|"test:TestConfig + simv:KeyedValue[str]"| gate_comp["gate-comp<br/>(keyed_join)"]
@@ -125,9 +125,9 @@ flowchart TD
   classDef cli fill:#eef7ee,stroke:#2da44e;
   classDef delta fill:#fde8e8,stroke:#cf222e,stroke-width:2px;
   class select,sweep,runs fanout;
-  class load_model,fl_model_root,fl_model,fl_tb,fl_merge,fl_norm,fl_dedup,fl_path,filelist,cc_build,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
+  class load_model,fl_model_root,fl_model,fl_tb,fl_merge,fl_norm,fl_dedup,fl_path,filelist,cc_build,cc_run,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class c_reg_config,c_reg_level,c_start_level,c_logs_dir,c_builder,c_builder_mode,c_early_stop cli;
-  class resolve_reg,parse_reg,parse_suite,const_seed,extract_dir,extract_dir_post delta;
+  class resolve_reg,parse_reg,parse_suite,const_seed,extract_dir,extract_dir_post,cc_run delta;
 
   classDef mainEdge stroke:#1f6feb,stroke-width:2px;
   classDef cfgEdge stroke:#bf8700,stroke-width:1.5px;
@@ -160,7 +160,7 @@ flowchart TD
 | ID | Module | Contract |
 |---|---|---|
 | `resolve-reg-path` | `resolve-reg-config-path` | `unit` |
-| `parse-reg` | `parse-reg-config` | `default` |
+| `parse-reg` | `parse-reg-config` | `unit` |
 | `const-seed-mode` | `constant` (config: `SeedMode.DEFAULT`) | `default` |
 | `extract-dir` | `extract-suite-dir` | `{ name: default, config: { persistent_inputs: [logs_dir] } }` |
 | `extract-dir-post` | `extract-suite-dir` | `{ name: default, config: { persistent_inputs: [logs_dir] } }` |
@@ -171,12 +171,12 @@ flowchart TD
 |---|---|
 | `parse-suite` | Contract switches from `unit` to `default`; config adds `prefix_suite: true` |
 | `cc-build` | Remove `work_dir` and `logs_dir` from `persistent_inputs` |
-| `cc-run` | Remove `work_dir` from `persistent_inputs` |
+| `cc-run` | Contract switches from `default` to `keyed_join` (`key_field: key`, `persistent_inputs: [env_ready]`, `unwrap: true`, `ignore: [default]`); mirrors `sim-run`'s contract |
 | `sim-build` | Remove `logs_dir` from `persistent_inputs` |
 | `seed` | Remove `logs_dir` from `persistent_inputs` |
 | `sim-run` | Remove `work_dir` from `persistent_inputs` |
-| `randseed` | Remove `work_dir` from `persistent_inputs` |
-| `link-latest` | Remove `work_dir` from `persistent_inputs` |
+| `randseed` | Remove `work_dir` from `persistent_inputs`; add `unwrap: true` |
+| `link-latest` | Remove `work_dir` from `persistent_inputs`; add `unwrap: true` |
 | `fl-tb` | Remove `base_dir` from `persistent_inputs` |
 | `fl-norm` | Remove `base_dir` from `persistent_inputs` |
 | `fl-path` | Remove `work_dir` from `persistent_inputs` |
@@ -222,7 +222,7 @@ flowchart TD
 **Suite stream:**
 
 ```yaml
-- { src: { cli: reg_config, type: str, default: "" }, dst: { node: resolve-reg-path, port: reg_config } }
+- { src: { cli: reg_config, type: str, default: "", flags: ["--reg-config", "-c"] }, dst: { node: resolve-reg-path, port: reg_config } }
 - { src: { node: parse-root },       dst: { node: resolve-reg-path, port: root_cfg } }
 - { src: { node: resolve-reg-path }, dst: { node: parse-reg,        port: reg_config_path } }
 - { src: { node: parse-reg },        dst: { node: parse-suite,      port: test_config } }
@@ -232,8 +232,8 @@ flowchart TD
 **Level filtering:**
 
 ```yaml
-- { src: { cli: reg_level,   type: int, default: 0 }, dst: { node: filter, port: reg_level } }
-- { src: { cli: start_level, type: int, default: 0 }, dst: { node: filter, port: start_level } }
+- { src: { cli: reg_level,   type: int, default: 0, flags: ["--reg-level", "-l"] }, dst: { node: filter, port: reg_level } }
+- { src: { cli: start_level, type: int, default: 0, flags: ["--start-level", "-s"] }, dst: { node: filter, port: start_level } }
 ```
 
 **Seed mode:**
@@ -275,8 +275,8 @@ All of the following carry over unchanged from `test.yaml`:
 - selection / expansion: `select`, `filter`, `model-ref`, `load-model`, `sweep`
 - per-test prep: `preproc`, `gate-pre`
 - filelist pipeline: `unroll`, `fl-model-ref`, `fl-model-root`, `fl-model`, `fl-tb`, `fl-merge`, `fl-norm`, `fl-dedup`, `fl-path`, `filelist` (contract configs change for `fl-tb`, `fl-norm`, `fl-path` per above)
-- compile: `cc-build`, `cc-run`, `cc-int`, `gate-comp` (contract configs change for `cc-build`, `cc-run` — `work_dir` and `logs_dir` move from persistent to keyed)
-- sim: `runs`, `seed`, `sim-build`, `sim-run`, `randseed`, `link-latest`, `sim-int`, `gate-sim` (contract configs change for `sim-run`, `randseed`, `link-latest` — `work_dir` keyed; `sim-build`, `seed` — `logs_dir` keyed)
+- compile: `cc-build`, `cc-run`, `cc-int`, `gate-comp` (contract configs change for `cc-build` — `work_dir`/`logs_dir` move from persistent to keyed; `cc-run` switches to `keyed_join` per Nodes changed)
+- sim: `runs`, `seed`, `sim-build`, `sim-run`, `randseed`, `link-latest`, `sim-int`, `gate-sim` (contract configs change for `sim-run` — `work_dir` keyed; `randseed`/`link-latest` — `work_dir` keyed, `unwrap: true` added; `sim-build`/`seed` — `logs_dir` keyed)
 - post: `route-post`, `parse-log`, `parse-uvm-log`
 - `logging:` block (both summary processors)
 - all `env_ready`, `builder_cfg`, `root_cfg` fan-out edges
@@ -291,9 +291,9 @@ Matching rtl_buddy's `do_rtl_regression` signature.
 | `reg_level` | `-l/--reg-level` | int | 0 | `filter.reg_level` |
 | `start_level` | `-s/--start-level` | int | 0 | `filter.start_level` |
 | `logs_dir` | `--logs-dir` | str | `logs` | `extract-dir.logs_dir`, `extract-dir-post.logs_dir` |
-| `builder` | `--builder` | str | `""` | `resolve-builder.builder` |
+| `builder` | `-B/--builder` | str | `""` | `resolve-builder.builder` |
 | `builder_mode` | `-M/--builder-mode` | str | **`reg`** | `cc-build.builder_mode`, `sim-build.builder_mode` |
-| `early_stop` | `--early-stop` | str | `post` | `gate-pre`, `gate-comp`, `gate-sim` |
+| `early_stop` | `-E/--early-stop` | str | `post` | `gate-pre`, `gate-comp`, `gate-sim` |
 
 **Removed from test:** `test_name`, `list`, `rnd_new`, `rnd_last`, `test_config`.
 
@@ -327,7 +327,7 @@ The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match d
 - The `regression` subcommand appears in `rtl-comrade --help`.
 - A basic `regression` run against the fixture project:
   - creates per-suite `logs/` directories under each suite's directory
-  - runs all suites' tests
+  - runs all level-0 tests from all suites (the defaults `reg_level=0`, `start_level=0` include them; the fixture's only level-0 test is `basic`)
   - produces a summary table with suite-prefixed keys
   - returns exit code 0 when all tests pass
 - Level filtering correctly includes/excludes tests based on `reg_level` and `start_level`.
@@ -336,7 +336,7 @@ The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match d
 
 ## Settled decisions
 
-1. **Per-suite `work_dir` and `logs_dir` routing:** `ExtractSuiteDirMod` extracts `test.suite_dir` per test and emits keyed `work_dir`, `base_dir`, and `logs_dir` values. Two instances: `extract-dir` (pre-fan-out, key = `test_key`) and `extract-dir-post` (post-fan-out, key = `test_key#run_id`). Downstream nodes move `work_dir`/`base_dir`/`logs_dir` from `persistent_inputs` to regular keyed inputs. No downstream module changes — only graph-YAML contract configs.
+1. **Per-suite `work_dir` and `logs_dir` routing:** `ExtractSuiteDirMod` extracts `test.suite_dir` per test and emits keyed `work_dir`, `base_dir`, and `logs_dir` values. Two instances: `extract-dir` (pre-fan-out, key = `test_key`) and `extract-dir-post` (post-fan-out, key = `test_key#run_id`). Downstream nodes move `work_dir`/`base_dir`/`logs_dir` from `persistent_inputs` to regular keyed inputs. No downstream module changes — only graph-YAML contract configs (`persistent_inputs` removal, `unwrap: true` additions on `randseed`/`link-latest`, and `cc-run`'s contract switch to `keyed_join`).
 
 2. **Suite-key prefixing:** config flag (`prefix_suite: true`) on `ParseSuiteConfigMod`. No separate `stamp-suite-key` module. The key becomes `<suite_dir.name>/<test_name>` at construction time. Same leaf-name collision behaviour as rtl_buddy.
 

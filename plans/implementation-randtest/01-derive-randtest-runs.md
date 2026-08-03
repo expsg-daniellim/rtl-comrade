@@ -39,6 +39,12 @@ class DeriveRandtestRunsMod:
 
 `rnd_rpt = -1` is the absent sentinel — the harness's primitive-only CLI edges cannot represent `None`, so a negative value stands in. Any negative value is treated as absent. rtl_buddy uses `rnd_rpt = None`; the mapping is at the CLI edge level.
 
+## `rnd_cnt` validation
+
+`rnd_cnt < 1` produces an empty `run_ids` list. rtl_buddy does not validate `rnd_cnt` and crashes with an `IndexError` in this case. The module should reject `rnd_cnt < 1` with `log.fatal` rather than silently emitting an empty list or crashing downstream.
+
+Document in `docs/divergences.md` under **Deliberate divergences**.
+
 ## `run_ids` is config, not stream
 
 The list is a fixed, startup-known, small-cardinality set (typically single-digit `rnd_cnt`). The streaming fan-out happens downstream at `expand-runs`, which takes the whole list and yields one edge-set per run-id per compiled test.
@@ -60,10 +66,11 @@ In `modules/tests/test_setup.py`. Pure function — no fixtures needed.
 - `(rnd_cnt=2, rnd_rpt=3)` → yields `("run_ids", [3])`, `("seed_mode", SeedMode.REPLAY)`.
 - `(rnd_cnt=2, rnd_rpt=0)` → yields `("run_ids", [0])`, `("seed_mode", SeedMode.REPLAY)` (boundary: zero is a valid replay index).
 - `()` (defaults) → yields `("run_ids", [1, 2])`, `("seed_mode", SeedMode.NEW)`.
+- `(rnd_cnt=0)` → `log.fatal` (boundary: `rnd_cnt < 1` rejected).
 
 ## Acceptance criteria
 
-- All five test cases pass.
+- All six test cases pass.
 - `derive-randtest-runs` → `DeriveRandtestRunsMod` resolves in the manifest.
 - `rnd_rpt = 0` is treated as replay, not absent.
 - `rnd_rpt` negative → new-seed mode with `rnd_cnt` run IDs.
