@@ -5,6 +5,7 @@ Each graph is an executable dependency graph the harness runs as a subcommand (r
 See also:
 
 - [test.md](test.md) — the `test` graph's pipeline, contracts, and per-node wiring
+- [filelist.md](filelist.md) — the `filelist` graph's pipeline, contracts, and per-node wiring
 - [docs/modules/index.md](../modules/index.md) — reference for every node module
 - [docs/running.md](../running.md) — global options, config discovery, exit codes
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format
@@ -15,8 +16,9 @@ See also:
 | Graph | Command | Page | Summary |
 |---|---|---|---|
 | `test` | `rtl-comrade test` | [test.md](test.md) | Compile and simulate a SystemVerilog/UVM test suite |
+| `filelist` | `rtl-comrade filelist` | [filelist.md](filelist.md) | Generate a compile filelist from a model configuration |
 
-Upstream `rtl_buddy` also shipped `randtest`, `regression`, and `filelist` subcommands. Those are **not ported** — only the `test` flow is implemented here (see the port specs). Their upstream-only options (`--reg-config`, `--reg-level`, `--start-level`, `--rnd-rpt`, the `filelist` transforms) therefore do not exist in `rtl-comrade`.
+Upstream `rtl_buddy` also shipped `randtest` and `regression` subcommands. Those are **not ported** (see the port specs). Their upstream-only options (`--reg-config`, `--reg-level`, `--start-level`, `--rnd-rpt`) therefore do not exist in `rtl-comrade`.
 
 ## CLI reference
 
@@ -51,6 +53,26 @@ uv run rtl-comrade test [TEST_NAME] [options]
 
 For which node each option feeds, see [test.md § Invocation](test.md#invocation).
 
+### `filelist`
+
+```bash
+uv run rtl-comrade filelist MODEL_NAME [OUTPUT_PATH] [options]
+```
+
+`MODEL_NAME` is required. `OUTPUT_PATH` defaults to `run.f`. This command does not share the common test-running options above.
+
+| Option / argument | Default | Effect |
+|---|---|---|
+| `MODEL_NAME` (positional) | — (required) | name of the model in `models.yaml` |
+| `OUTPUT_PATH` (positional) | `run.f` | output filename |
+| `--model-config` | `models.yaml` | model configuration file to read |
+| `--unroll` | off | recursively unroll `-F` in filelists |
+| `--flatten` | off | reduce each path to its basename |
+| `--strip-options` | off | drop the option prefix from each line |
+| `--deduplicate` | off | remove duplicate entries |
+
+For which node each option feeds, see [filelist.md § Invocation](filelist.md#invocation).
+
 ## Project inputs
 
 The commands read a small set of project YAML files, discovered relative to the working directory. These are shared across the `rtl_buddy`-derived commands.
@@ -61,7 +83,7 @@ The commands read a small set of project YAML files, discovered relative to the 
 | `tests.yaml` | testbenches and per-test config (the suite) |
 | `models.yaml` | the RTL model filelist for a design |
 
-`root_config.yaml` is located first (via [discover-config-file](../modules/discover-config-file.md)); the suite and model paths are resolved relative to it.
+`root_config.yaml` is located first (via [discover-config-file](../modules/discover-config-file.md)); the suite and model paths are resolved relative to it. The `filelist` command reads only `models.yaml` (via `--model-config`, resolved against CWD); it does not use `root_config.yaml` or `tests.yaml`.
 
 ## Logging & output layout
 
@@ -84,6 +106,10 @@ For convenience, [link-latest](../modules/link-latest.md) maintains three symlin
 - `test.randseed` → `logs/<test>.randseed`
 
 The colourised summary table is also printed to the console by the `ConsoleSummaryProcessor` logging plugin. See [docs/logger/summary-processor.md](../logger/summary-processor.md).
+
+### `filelist` output
+
+The `filelist` command writes a single `.f` file at `OUTPUT_PATH` (default `run.f` in the working directory). On a clean run, the only console output is the `filelist_written` log event reporting the written path. There is no summary table and no `logging` block.
 
 ## Extensions
 

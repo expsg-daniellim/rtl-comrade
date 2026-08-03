@@ -24,7 +24,6 @@ Keep that split intact. Do not move scheduling logic into modules. Do not let mo
 | Module testing | `docs/module-implementation/testing.md` |
 | A specific `rtl_buddy` `test`-flow module | `docs/modules/index.md` |
 | Graph usage: CLI, output layout, hooks, known issues | `docs/graphs/index.md` |
-| The `test` graph / flow as a whole | `docs/graphs/test.md` |
 | Contracts | `docs/contracts/implementation.md`, `docs/contracts/index.md`, `contracts/contracts.py` |
 | Contract testing | `docs/contracts/testing.md` |
 | Logging plugins | `docs/logger/implementation.md`, `docs/harness/logging.md` |
