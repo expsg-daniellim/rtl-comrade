@@ -289,6 +289,16 @@ def test_write_filelist_no_test_error(tmp_path, logging_handler):
 	assert logging_handler.failure is True
 
 
+def test_write_filelist_oserror(tmp_path, logging_handler):
+	"""A generic OSError (ELOOP via self-referencing symlink) reaches the catch-all handler."""
+	link = tmp_path / "loop"
+	link.symlink_to("loop")
+	test = _make_test("foo")
+	results = list(WriteFilelistMod().run(entries=[], path=link, test=test))
+	assert len(results) == 0
+	assert logging_handler.failure is True
+
+
 # ---------------------------------------------------------------------------
 # FilelistExtractMod
 # ---------------------------------------------------------------------------
@@ -394,6 +404,14 @@ def test_extract_malformed_line(logging_handler):
 	assert len(entries) == 1
 	assert entries[0] == FilelistEntry("/design/good.sv", None)
 	assert logging_handler.failure is True
+
+
+def test_extract_skips_blanks_and_comments():
+	"""Blank lines, // comments, /* comments, and * lines are skipped."""
+	filelist = ["", "  ", "// comment", "/* block", "* line", "rtl/top.sv"]
+	model = ModelConfig(name="m", filelist=filelist)
+	entries = list(FilelistExtractMod().run(source=model, base_dir=Path("/d")))[0][1]
+	assert entries == [FilelistEntry("/d/rtl/top.sv", None)]
 
 
 # ---------------------------------------------------------------------------
@@ -662,3 +680,73 @@ def test_dedup_after_flatten_catches_basename_collision():
 	assert flat[1] == FilelistEntry("top.sv", None)  # now duplicates
 	out = list(FilelistDedupMod().run(entries=flat))[0][1]
 	assert out == [FilelistEntry("top.sv", None)]
+
+
+# ---------------------------------------------------------------------------
+# filelist_extract (standalone function)
+# ---------------------------------------------------------------------------
+
+
+def test_filelist_extract_blanks_and_comments():
+	"""Blank lines, // comments, /* comments, and * lines are skipped."""
+	lines = ["\n", "  \n", "// comment\n", "/* block\n", "* line\n", "a.sv\n"]
+	result = filelist_extract(lines, False, "/base/file.f")
+	assert result == [("/base/a.sv", None)]
+
+
+def test_filelist_extract_malformed(logging_handler):
+	"""Option with no path is skipped with an error."""
+	lines = ["+incdir+\n", "good.sv\n"]
+	result = filelist_extract(lines, False, "/base/file.f")
+	assert result == [("/base/good.sv", None)]
+	assert logging_handler.failure is True
+
+
+def test_filelist_extract_dash_v():
+	"""-v option is parsed into group(1), yielding ("-v ", path) tuples."""
+	result = filelist_extract(["-v lib/pkg.sv\n"], False, "/base/file.f")
+	assert result == [("/base/lib/pkg.sv", "-v ")]
+
+
+def test_filelist_extract_lower_f_fatal(logging_handler):
+	"""Lowercase -f triggers log.fatal."""
+	with pytest.raises(typer.Exit):
+		filelist_extract(["-f other.f\n"], False, "/base/file.f")
+
+
+def test_filelist_extract_upper_f_unroll(tmp_path):
+	"""-F with unroll=True opens the include and splices its entries."""
+	sub = tmp_path / "sub"
+	sub.mkdir()
+	(sub / "inner.f").write_text("inner.sv\n")
+	fpath = str(tmp_path / "outer.f")
+	result = filelist_extract(["-F sub/inner.f\n", "after.sv\n"], True, fpath)
+	assert result == [(str(sub / "inner.sv"), None), (str(tmp_path / "after.sv"), None)]
+
+
+def test_filelist_extract_upper_f_missing(tmp_path):
+	"""-F with unroll=True raises KeyError when the include file is missing."""
+	fpath = str(tmp_path / "outer.f")
+	with pytest.raises(KeyError, match="F-include error"):
+		filelist_extract(["-F missing.f\n"], True, fpath)
+
+
+# ---------------------------------------------------------------------------
+# filelist_process (standalone function)
+# ---------------------------------------------------------------------------
+
+
+def test_filelist_process_incdir_not_a_dir(tmp_path, logging_handler):
+	"""+incdir+ target that is not a directory logs filelist_incdir_not_a_dir."""
+	not_a_dir = tmp_path / "not_a_dir"
+	not_a_dir.write_text("file")
+	result = filelist_process([(str(not_a_dir), "+incdir+")], str(tmp_path), False)
+	assert len(result) == 1
+	assert logging_handler.failure is True
+
+
+def test_filelist_process_file_not_found(tmp_path, logging_handler):
+	"""Missing source file logs filelist_file_not_found."""
+	result = filelist_process([(str(tmp_path / "missing.sv"), None)], str(tmp_path), False)
+	assert len(result) == 1
+	assert logging_handler.failure is True
