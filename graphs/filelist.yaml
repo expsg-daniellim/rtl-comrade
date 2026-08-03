@@ -64,15 +64,15 @@ edges:
 - src: { cli: output_path, option: false, type: pathlib.Path, default: "run.f" }
   dst: { node: write, port: path }
 # Options.
-- src: { cli: model_config, type: str, default: "models.yaml" }
+- src: { cli: model_config, type: str, default: "models.yaml", flags: ["--model-config", "-c"] }
   dst: { node: config-path, port: name }
-- src: { cli: unroll, type: bool, default: false }
+- src: { cli: unroll, type: bool, default: false, flags: ["--unroll", "-u"] }
   dst: { node: extract, port: unroll, required: true }
-- src: { cli: flatten, type: bool, default: false }
+- src: { cli: flatten, type: bool, default: false, flags: ["--flatten", "-f"] }
   dst: { node: gate-flatten, port: flag, required: true }
-- src: { cli: strip_options, type: bool, default: false }
+- src: { cli: strip_options, type: bool, default: false, flags: ["--strip-options", "-s"] }
   dst: { node: gate-strip, port: flag, required: true }
-- src: { cli: deduplicate, type: bool, default: false }
+- src: { cli: deduplicate, type: bool, default: false, flags: ["--deduplicate", "-d"] }
   dst: { node: gate-dedup, port: flag, required: true }
 
 # ---- head: CWD → config-path → model loading → extract ----

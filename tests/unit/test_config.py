@@ -5,6 +5,7 @@ from pathlib import Path
 from serde import from_dict
 
 import pytest
+import typer
 
 from rtl_comrade.config import (
 	GraphFileConfig,
@@ -162,6 +163,63 @@ def test_resolve_cli_type_qualified_unknown_module():
 def test_resolve_cli_type_qualified_unknown_attr():
 	with pytest.raises(InvalidCLIParameterError):
 		resolve_cli_type("pathlib.NoSuchType")
+
+
+# --- flags ---
+
+
+def test_cli_flags_default_empty():
+	cli = GraphConfigSrcCLI(cli="output")
+	assert cli.flags == []
+
+
+def test_cli_flags_deserialise():
+	n = from_dict(
+		GraphConfigNode,
+		{
+			"id": "n1",
+			"module": {"name": "m1", "cli": {"file": {"cli": "output", "flags": ["--out", "-o"]}}},
+		},
+	)
+	assert n.module.cli["file"].flags == ["--out", "-o"]
+
+
+def test_cli_flags_option_short_flag():
+	cli = GraphConfigSrcCLI(cli="output", flags=["--out", "-o"])
+	p = cli.as_param()
+	info = p.annotation.__metadata__[0]
+	assert info.param_decls == ("-o",)
+
+
+def test_cli_flags_option_override_long():
+	cli = GraphConfigSrcCLI(cli="output", flags=["--out"])
+	p = cli.as_param()
+	info = p.annotation.__metadata__[0]
+	assert info.param_decls == ()
+
+
+def test_cli_flags_argument():
+	cli = GraphConfigSrcCLI(cli="input_file", option=False, flags=["INPUT"])
+	p = cli.as_param()
+	info = p.annotation.__metadata__[0]
+	assert isinstance(info, typer.models.ArgumentInfo)
+
+
+def test_cli_flags_mismatch_different_flags():
+	existing = GraphConfigSrcCLI(cli="output", flags=["--out", "-o"])
+	plugin = GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="output", flags=["--out"])})
+	errors = plugin.validate_cli_config({"output": existing}, [])
+	assert len(errors) == 1
+	assert errors[0].event == "cli_def_mismatch"
+
+
+def test_cli_flags_match_deduplicates():
+	existing = GraphConfigSrcCLI(cli="output", flags=["--out", "-o"])
+	plugin = GraphConfigNodePlugin(name="m", cli={"field": GraphConfigSrcCLI(cli="output", flags=["--out", "-o"])})
+	params = []
+	errors = plugin.validate_cli_config({"output": existing}, params)
+	assert len(errors) == 0
+	assert len(params) == 0
 
 
 # --- as_param rejects typer-unsupported types ---

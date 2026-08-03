@@ -23,13 +23,13 @@ uv run rtl-comrade test [TEST_NAME] [options]
 | Parameter | Destination |
 |---|---|
 | `TEST_NAME` | [select-tests](../modules/select-tests.md) |
-| `--test-config` | [parse-suite-config](../modules/parse-suite-config.md) |
+| `--test-config` / `-c` | [parse-suite-config](../modules/parse-suite-config.md) |
 | `--logs-dir` | [ensure-logs-dir](../modules/ensure-logs-dir.md) |
-| `--builder` | [resolve-builder](../modules/resolve-builder.md) |
-| `--builder-mode` | [build-compile-cmd](../modules/build-compile-cmd.md), [build-sim-cmd](../modules/build-sim-cmd.md) |
+| `--builder` / `-B` | [resolve-builder](../modules/resolve-builder.md) |
+| `--builder-mode` / `-M` | [build-compile-cmd](../modules/build-compile-cmd.md), [build-sim-cmd](../modules/build-sim-cmd.md) |
 | `--list` | `route-list` (`flag-gate` instance) |
-| `--rnd-new` / `--rnd-last` | [derive-seed-mode](../modules/derive-seed-mode.md) |
-| `--early-stop` | the three [early-stop-gate](../modules/early-stop-gate.md) nodes |
+| `--rnd-new` / `-n`, `--rnd-last` / `-l` | [derive-seed-mode](../modules/derive-seed-mode.md) |
+| `--early-stop` / `-E` | the three [early-stop-gate](../modules/early-stop-gate.md) nodes |
 
 ## Config files read
 

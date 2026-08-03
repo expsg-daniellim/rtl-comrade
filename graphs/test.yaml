@@ -139,18 +139,18 @@ logging:
 
 edges:
 # ---- CLI edges (subcommand options) ----
-- { src: { cli: test_config, type: str,  default: "tests.yaml" }, dst: { node: parse-suite,     port: test_config } }
+- { src: { cli: test_config, type: str,  default: "tests.yaml", flags: ["--test-config", "-c"] }, dst: { node: parse-suite,     port: test_config } }
 - { src: { cli: logs_dir,    type: str,  default: "logs" },       dst: { node: ensure-logs,     port: logs_dir } }
-- { src: { cli: builder,     type: str,  default: "" },           dst: { node: resolve-builder, port: builder } }
+- { src: { cli: builder,     type: str,  default: "",     flags: ["--builder", "-B"] }, dst: { node: resolve-builder, port: builder } }
 - { src: { cli: test_name, option: false, type: str, default: "" }, dst: { node: select,        port: test_name } }
 - { src: { cli: list,        type: bool, default: false },        dst: { node: route-list,      port: flag } }
-- { src: { cli: rnd_new,     type: bool, default: false },        dst: { node: seed-mode,       port: rnd_new } }
-- { src: { cli: rnd_last,    type: bool, default: false },        dst: { node: seed-mode,       port: rnd_last } }
-- { src: { cli: builder_mode, type: str, default: "debug" },      dst: { node: cc-build,        port: builder_mode } }
-- { src: { cli: builder_mode, type: str, default: "debug" },      dst: { node: sim-build,       port: builder_mode } }
-- { src: { cli: early_stop,  type: str,  default: "post" },       dst: { node: gate-pre,        port: early_stop } }
-- { src: { cli: early_stop,  type: str,  default: "post" },       dst: { node: gate-comp,       port: early_stop } }
-- { src: { cli: early_stop,  type: str,  default: "post" },       dst: { node: gate-sim,        port: early_stop } }
+- { src: { cli: rnd_new,     type: bool, default: false, flags: ["--rnd-new", "-n"] }, dst: { node: seed-mode,       port: rnd_new } }
+- { src: { cli: rnd_last,    type: bool, default: false, flags: ["--rnd-last", "-l"] }, dst: { node: seed-mode,       port: rnd_last } }
+- { src: { cli: builder_mode, type: str, default: "debug", flags: ["--builder-mode", "-M"] }, dst: { node: cc-build,        port: builder_mode } }
+- { src: { cli: builder_mode, type: str, default: "debug", flags: ["--builder-mode", "-M"] }, dst: { node: sim-build,       port: builder_mode } }
+- { src: { cli: early_stop,  type: str,  default: "post", flags: ["--early-stop", "-E"] }, dst: { node: gate-pre,        port: early_stop } }
+- { src: { cli: early_stop,  type: str,  default: "post", flags: ["--early-stop", "-E"] }, dst: { node: gate-comp,       port: early_stop } }
+- { src: { cli: early_stop,  type: str,  default: "post", flags: ["--early-stop", "-E"] }, dst: { node: gate-sim,        port: early_stop } }
 
 # ---- setup chain ----
 - { src: { node: discover-root },     dst: { node: parse-root,      port: path } }

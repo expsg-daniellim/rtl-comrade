@@ -30,9 +30,9 @@ Shared by the test-running commands (`test` today; the future `randtest` / `regr
 
 | Option | Default | Effect |
 |---|---|---|
-| `--builder` | platform default | override the builder from `root_config.yaml` |
-| `--builder-mode` | `debug` | select the compile/run option set |
-| `--early-stop` | `post` | stop each test at `pre`, `comp`, `sim`, or `post` |
+| `--builder`, `-B` | platform default | override the builder from `root_config.yaml` |
+| `--builder-mode`, `-M` | `debug` | select the compile/run option set |
+| `--early-stop`, `-E` | `post` | stop each test at `pre`, `comp`, `sim`, or `post` |
 
 ### `test`
 
@@ -45,11 +45,11 @@ uv run rtl-comrade test [TEST_NAME] [options]
 | Option / argument | Default | Effect |
 |---|---|---|
 | `TEST_NAME` (positional) | all tests | run only the named test |
-| `--test-config` | `tests.yaml` | suite file to read |
+| `--test-config`, `-c` | `tests.yaml` | suite file to read |
 | `--logs-dir` | `logs` | output subdirectory for logs and seeds |
 | `--list` | off | print the suite's test names and exit without running |
-| `--rnd-new` | off | use a freshly generated seed instead of the configured one |
-| `--rnd-last` | off | replay the seed from the previous `--rnd-new` run |
+| `--rnd-new`, `-n` | off | use a freshly generated seed instead of the configured one |
+| `--rnd-last`, `-l` | off | replay the seed from the previous `--rnd-new` run |
 
 For which node each option feeds, see [test.md § Invocation](test.md#invocation).
 
@@ -65,11 +65,11 @@ uv run rtl-comrade filelist MODEL_NAME [OUTPUT_PATH] [options]
 |---|---|---|
 | `MODEL_NAME` (positional) | — (required) | name of the model in `models.yaml` |
 | `OUTPUT_PATH` (positional) | `run.f` | output filename |
-| `--model-config` | `models.yaml` | model configuration file to read |
-| `--unroll` | off | recursively unroll `-F` in filelists |
-| `--flatten` | off | reduce each path to its basename |
-| `--strip-options` | off | drop the option prefix from each line |
-| `--deduplicate` | off | remove duplicate entries |
+| `--model-config`, `-c` | `models.yaml` | model configuration file to read |
+| `--unroll`, `-u` | off | recursively unroll `-F` in filelists |
+| `--flatten`, `-f` | off | reduce each path to its basename |
+| `--strip-options`, `-s` | off | drop the option prefix from each line |
+| `--deduplicate`, `-d` | off | remove duplicate entries |
 
 For which node each option feeds, see [filelist.md § Invocation](filelist.md#invocation).
 

@@ -66,6 +66,7 @@ class GraphConfigSrcCLI:
 		type: The annotation type for the CLI parameter. Builtins (``"int"``, ``"str"``, etc.) by name; non-builtins by qualified name (``"pathlib.Path"``). Validated against ``typer.main.get_click_type``.
 		default: The default value if the parameter is not supplied. Defaults to ``Parameter.empty``, making the parameter required.
 		help: Help text shown in ``--help`` output.
+		flags: Override the flag names passed to ``typer.Option`` or ``typer.Argument``. For options this can add a short flag (``["-o"]``) or rename the long flag (``["--out", "-o"]``). Defaults to ``[]`` (typer derives flags from the ``cli`` name).
 	"""
 
 	cli: str
@@ -73,6 +74,7 @@ class GraphConfigSrcCLI:
 	type: str = field(default="str")
 	default: Any = field(default=Parameter.empty) # Might as well instead of None
 	help: str|None = field(default=None)
+	flags: list[str] = field(default_factory=list)
 
 	def as_param(self) -> Parameter:
 		"""Build an ``inspect.Parameter`` suitable for inclusion in a typer command signature.
@@ -82,7 +84,7 @@ class GraphConfigSrcCLI:
 		"""
 
 		t = resolve_cli_type(self.type)
-		info = typer.Option(help=self.help) if self.option else typer.Argument(help=self.help)
+		info = typer.Option(*self.flags, help=self.help) if self.option else typer.Argument(*self.flags, help=self.help)
 		try:
 			get_click_type(annotation=t, parameter_info=info)
 		except RuntimeError as e:

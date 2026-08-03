@@ -51,6 +51,7 @@ option: <bool>    # optional — true (default) for --<name> option; false for p
 type: <str>       # optional — type annotation: builtins by name (int, str, etc.), non-builtins by qualified name (pathlib.Path); validated against typer; defaults to str
 default: <value>  # optional — default value; if absent the parameter is required
 help: <str>       # optional — help text shown in --help output
+flags: <list>     # optional — override the CLI flag names passed to typer; for options this can set short flags (e.g. ["-o"]) or rename the long flag (e.g. ["--out", "-o"]); for arguments it sets the metavar; defaults to [] (typer derives the flag from the cli name)
 ```
 
 Each `<field>` under a plugin's `cli` block is the name of the corresponding field in that target's `Config` dataclass. The harness injects the CLI-supplied value into the plugin's config dict before calling the node constructor, so the module or contract receives it through the normal serde deserialisation path.
@@ -136,6 +137,7 @@ edges:
     type: <str>              # optional — type annotation: builtins by name (int, str, etc.), non-builtins by qualified name (pathlib.Path); validated against typer; defaults to str
     default: <value>         # optional — default value; if absent the parameter is required
     help: <str>              # optional — help text shown in --help output
+    flags: <list>            # optional — override CLI flag names (see plugin cli block above)
   dst:
     node: <str>              # destination node id
     port: <str|int>          # optional — input port name or 1-based index; defaults to 1

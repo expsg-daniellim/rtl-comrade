@@ -24,11 +24,11 @@ uv run rtl-comrade filelist MODEL_NAME [OUTPUT_PATH] [options]
 |---|---|
 | `MODEL_NAME` | [load-model](../modules/load-model.md) |
 | `OUTPUT_PATH` | `output-dir` (`dirname` instance), `write-filelist` |
-| `--model-config` | `config-path` (`dirjoin` instance) |
-| `--unroll` | `filelist-extract` |
-| `--flatten` | `gate-flatten` (`flag-gate` instance) |
-| `--strip-options` | `gate-strip` (`flag-gate` instance) |
-| `--deduplicate` | `gate-dedup` (`flag-gate` instance) |
+| `--model-config` / `-c` | `config-path` (`dirjoin` instance) |
+| `--unroll` / `-u` | `filelist-extract` |
+| `--flatten` / `-f` | `gate-flatten` (`flag-gate` instance) |
+| `--strip-options` / `-s` | `gate-strip` (`flag-gate` instance) |
+| `--deduplicate` / `-d` | `gate-dedup` (`flag-gate` instance) |
 
 ## Config files read
 
