@@ -201,6 +201,7 @@ class FilterRegLvlMod:
 		else:
 			return ("test", test)
 		log.info("test_skipped", key=test.key, test_name=test.get_name(), reason=desc)
+		return None
 
 
 @serde

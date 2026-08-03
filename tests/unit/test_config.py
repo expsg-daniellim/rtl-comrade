@@ -87,7 +87,7 @@ def test_node_cli_config():
 def test_validate_cli_config_no_cli_params():
 	plugin = GraphConfigNodePlugin(name="m")
 	errors = plugin.validate_cli_config({}, [])
-	assert errors == []
+	assert len(errors) == 0
 
 
 def test_validate_cli_config_registers_new_param():
@@ -95,7 +95,7 @@ def test_validate_cli_config_registers_new_param():
 	clis = {}
 	params = []
 	errors = plugin.validate_cli_config(clis, params)
-	assert errors == []
+	assert len(errors) == 0
 	assert "value" in clis
 	assert len(params) == 1
 
@@ -114,7 +114,7 @@ def test_validate_cli_config_duplicate_matching_dedup():
 	clis = {"value": existing}
 	params = []
 	errors = plugin.validate_cli_config(clis, params)
-	assert errors == []
+	assert len(errors) == 0
 	assert len(params) == 0
 
 
@@ -146,7 +146,6 @@ def test_resolve_cli_type_builtin():
 
 
 def test_resolve_cli_type_qualified():
-	from pathlib import Path
 	assert resolve_cli_type("pathlib.Path") is Path
 
 

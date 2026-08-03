@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 import typer
+from serde import from_dict
 
 from modules.rtl_buddy.schema import RootConfig, RootRtlField, ModelConfig
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
@@ -401,7 +402,6 @@ def test_extract_malformed_line(logging_handler):
 
 
 def _merge_config(priorities):
-	from serde import from_dict
 	return from_dict(PrioritisedMergeMod.Config, {"priorities": priorities})
 
 

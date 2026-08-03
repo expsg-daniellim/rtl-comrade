@@ -304,8 +304,7 @@ def test_parselog_fail_wins_over_pass(tmp_path, logging_handler):
 	test = _make_test_cfg("t")
 	proc = _make_proc(tmp_path, test.key, "PASS result OK\nFAIL run ended\nERR: something wrong\n")
 	mod = ParseLogMod()
-	result = mod.run(test=test, proc=proc)
-	assert result is None
+	mod.run(test=test, proc=proc)
 	assert logging_handler.failure is True
 
 
@@ -319,8 +318,7 @@ def test_parselog_passthrough_not_misclassified(tmp_path, logging_handler):
 	test = _make_test_cfg("t")
 	proc = _make_proc(tmp_path, test.key, "PASSTHROUGH all checks\n")
 	mod = ParseLogMod()
-	result = mod.run(test=test, proc=proc)
-	assert result is None
+	mod.run(test=test, proc=proc)
 	assert logging_handler.failure is True
 
 
@@ -333,8 +331,7 @@ def test_parselog_fail_without_err_no_crash(tmp_path, logging_handler):
 	test = _make_test_cfg("t")
 	proc = _make_proc(tmp_path, test.key, "FAIL test ended badly\n")
 	mod = ParseLogMod()
-	result = mod.run(test=test, proc=proc)
-	assert result is None
+	mod.run(test=test, proc=proc)
 	assert logging_handler.failure is True
 
 

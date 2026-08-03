@@ -9,6 +9,7 @@ import pytest
 import structlog.testing
 import typer
 
+from contracts.sentinels import KeyedValue
 from modules.rtl_buddy.schema import RunDepth, ModelConfig, Proc
 from modules.rtl_buddy.schema.suite import TestConfig, TestbenchConfig
 
@@ -324,7 +325,6 @@ def test_flag_gate_default():
 
 
 def test_flag_gate_identity():
-	from contracts.sentinels import KeyedValue
 	plain = [1, 2, 3]
 	results = list(FlagGateMod().run(value=plain, flag=True))
 	assert results[0][1] is plain

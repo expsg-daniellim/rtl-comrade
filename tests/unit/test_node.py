@@ -15,7 +15,7 @@ from rtl_comrade.config import GraphConfigNode, GraphConfigNodePlugin, GraphConf
 from rtl_comrade.contract import ContractDefinition, ContractDefinitions
 from rtl_comrade.contract_default import DefaultContract
 from rtl_comrade.module import GraphModule, PortInvalidMappingTarget, PortNonDefinitePositionalDestinationError
-from rtl_comrade.node import Connection, Node, PreNode, InvalidNodeModule
+from rtl_comrade.node import Node, PreNode, InvalidNodeModule
 from rtl_comrade.port import Port
 
 

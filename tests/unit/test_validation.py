@@ -289,14 +289,14 @@ def test_branching_labels_empty_for_unbranched_edge():
 def test_branching_overloaded_unconditional_sources():
 	prenodes = { n.id: n for n in [ _make_branching_prenode("src1", _SourceModule), _make_branching_prenode("src2", _SourceModule), _make_branching_prenode("sink", _SinkModule) ] }
 	node_dsts = { "src1": [ Connection("default", "sink", "a") ], "src2": [ Connection("default", "sink", "a") ], "sink": [] }
-	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	_, overloaded = validate_branching(prenodes, node_dsts)
 	assert ("sink", "a") in overloaded
 
 
 def test_branching_overloaded_independent_guards():
 	prenodes = { n.id: n for n in [ _make_branching_prenode("g", _TwoGuardModule), _make_branching_prenode("sink", _SinkModule) ] }
 	node_dsts = { "g": [ Connection("p", "sink", "a"), Connection("q", "sink", "a") ], "sink": [] }
-	input_labels, overloaded = validate_branching(prenodes, node_dsts)
+	_, overloaded = validate_branching(prenodes, node_dsts)
 	assert ("sink", "a") in overloaded
 
 

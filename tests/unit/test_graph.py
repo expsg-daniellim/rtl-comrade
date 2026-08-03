@@ -732,5 +732,3 @@ def test_module_init_exception_fatal(logging_handler):
 	config = _make_config([_node("n1", "crash_mod")], [])
 	with pytest.raises(typer.Exit):
 		_from_config_with_module_map(config, module_map)
-
-
