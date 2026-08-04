@@ -1,97 +1,91 @@
-# `rtl_buddy` `test`-flow Modules
+# Modules
 
-Reference for the modules ported into `modules/rtl_buddy/` to run the `test` graph (`graphs/test.yaml`). Each module is one node-local work unit: it reimplements a slice of upstream `rtl_buddy`'s single-test compile/run/report flow as a graph node.
-
-One file per module, so an agent reading up on one module is never handed another's detail. Read the file for the module you are working on.
+A module is node-local computation — the work a graph node does when its contract says it is time to run. Modules are contract-agnostic: they receive values and emit values without knowing about the graph, the schedule, or other nodes.
 
 See also:
 
 - [docs/module-implementation/implementation.md](../module-implementation/implementation.md) — how the harness turns a `run(...)` signature into ports, and the rules module authors follow
 - [docs/module-implementation/testing.md](../module-implementation/testing.md) — testing modules in isolation
-- [docs/contracts/index.md](../contracts/index.md) — the scheduling policies these nodes are paired with
-- [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML that wires them together
-- [doc-structure.md](doc-structure.md) — the per-module file format
+- [docs/contracts/index.md](../contracts/index.md) — the scheduling policies nodes are paired with
+- [doc-structure.md](doc-structure.md) — the per-module doc file format
 
-These docs describe *what each module does* — its inputs, outputs, config, and failure routing. Scheduling (when a node runs, which inputs it waits for) is the contract's job, not the module's; the "Graph node" section on each page names the contract the `test` graph pairs it with, but the module itself is contract-agnostic.
+## Module reference
 
-## Modules by stage
+Modules are registered by plugin name in `modules/config.yaml`. Each documented module links to its own page; see [doc-structure.md](doc-structure.md) for what those pages cover.
 
-The `test` flow is a linear pipeline that fans out per test (and per run). The stage groupings below are for navigation only — each module has its own file.
+### `modules/funcs.py` — reusable functional modules
 
-**Setup** (`setup.py`) — bootstrap config, platform, builder, directories, suite, seed mode
+| Module | Summary |
+|---|---|
+| `add` | integer addition |
+| `alu` | integer ALU (add / subtract / multiply) |
+| `dirname` | extract the parent directory of a path |
+| `dirjoin` | join a directory and a filename into a path |
+| `logger` | emit a value as a log event at a configurable level |
+| `constant` | emit a configured constant value |
 
-- [discover-config-file](discover-config-file.md) · [prepend-cwd-path](prepend-cwd-path.md) · [parse-root-config](parse-root-config.md) · [select-platform](select-platform.md) · [resolve-builder](resolve-builder.md) · [work-dir](work-dir.md) · [ensure-logs-dir](ensure-logs-dir.md) · [parse-suite-config](parse-suite-config.md) · [derive-seed-mode](derive-seed-mode.md) · [git-status](git-status.md)
+### `modules/io.py` — I/O modules
 
-**List mode** (`control.py`) — route `--list` flag to list-names or run
+| Module | Summary |
+|---|---|
+| `fileread` | read a file from a configured path |
+| `stdout` | print a value to stdout |
 
-- `route-list` (`flag-gate` instance) · [list-test-names](list-test-names.md)
+### `modules/rtl_buddy/setup.py` — config parsing, test selection, model loading
 
-**Selection & expansion** (`setup.py`) — select, filter, load model, sweep
+| Module | Summary |
+|---|---|
+| [discover-config-file](discover-config-file.md) | locate `root_config.yaml` by ascending from CWD |
+| [prepend-cwd-path](prepend-cwd-path.md) | resolve a relative path against the working directory |
+| [parse-root-config](parse-root-config.md) | parse `root_config.yaml` into a `RootConfig` |
+| [select-platform](select-platform.md) | pick the platform entry matching the host `uname` |
+| [resolve-builder](resolve-builder.md) | resolve the builder from the platform or CLI override |
+| [work-dir](work-dir.md) | emit the working directory |
+| [ensure-logs-dir](ensure-logs-dir.md) | create the logs subdirectory |
+| [parse-suite-config](parse-suite-config.md) | parse the test suite YAML |
+| [derive-seed-mode](derive-seed-mode.md) | derive the seed mode from `--rnd-new` / `--rnd-last` |
+| [list-test-names](list-test-names.md) | print test names from the suite and exit |
+| [select-tests](select-tests.md) | select tests from the suite by name or all |
+| [filter-reglvl](filter-reglvl.md) | filter tests by register level |
+| [resolve-model-ref](resolve-model-ref.md) | resolve a test's model name and config path |
+| [load-model](load-model.md) | load a model configuration from `models.yaml` |
+| [expand-sweep](expand-sweep.md) | expand a test into sweep variants via a hook script |
+| [git-status](git-status.md) | capture the repo's git status for logging |
 
-- [select-tests](select-tests.md) · [filter-reglvl](filter-reglvl.md) · [resolve-model-ref](resolve-model-ref.md) · [load-model](load-model.md) · [expand-sweep](expand-sweep.md)
+### `modules/rtl_buddy/build.py` — filelist pipeline, compile
 
-**Prep** (`build.py`) — preproc script, filelist pipeline
+| Module | Summary |
+|---|---|
+| [run-preproc](run-preproc.md) | run a test's preproc hook script |
+| `filelist-extract` | extract filelist entries from a model or testbench config |
+| `filelist-normalise` | relativise paths and warn on missing files |
+| `filelist-flatten` | reduce each path to its basename |
+| `filelist-strip` | drop the option prefix from each entry |
+| `filelist-dedup` | remove duplicate entries |
+| `prioritised-merge` | merge filelist entry lists by configured priority |
+| `filelist-path` | compute the output `.f` path for a test |
+| [write-filelist](write-filelist.md) | render entries to a `.f` file |
+| [run-process](run-process.md) | run a subprocess with timeout and log capture |
+| [build-compile-cmd](build-compile-cmd.md) | build the compile command from builder config and test |
+| [interpret-compile](interpret-compile.md) | interpret the compile subprocess result |
 
-- [run-preproc](run-preproc.md) · filelist-extract · filelist-normalise · filelist-dedup · prioritised-merge · filelist-path · [write-filelist](write-filelist.md)
+### `modules/rtl_buddy/sim.py` — simulation, post-processing
 
-**Subprocess runner** (`build.py`) — reusable, used by both compile and sim
+| Module | Summary |
+|---|---|
+| [expand-runs](expand-runs.md) | fan a test out into multiple simulation runs |
+| [resolve-seed](resolve-seed.md) | resolve the random seed for a run |
+| [build-sim-cmd](build-sim-cmd.md) | build the simulation command |
+| [write-randseed](write-randseed.md) | persist the resolved seed to a `.randseed` file |
+| [link-latest](link-latest.md) | maintain `test.*` symlinks to the latest run's outputs |
+| [interpret-sim](interpret-sim.md) | interpret the simulation subprocess result |
+| [route-post](route-post.md) | route to UVM or plain log parsing |
+| [parse-log](parse-log.md) | parse a plain simulation log into a verdict |
+| [parse-uvm-log](parse-uvm-log.md) | parse a UVM simulation log into a verdict |
 
-- [run-process](run-process.md)
+### `modules/rtl_buddy/control.py` — flow control
 
-**Compile** (`build.py`) — build the compile command, interpret its result
-
-- [build-compile-cmd](build-compile-cmd.md) · [interpret-compile](interpret-compile.md)
-
-**Sim** (`sim.py`) — fan out runs, resolve seed, build/run sim, persist seed, symlink, interpret
-
-- [expand-runs](expand-runs.md) · [resolve-seed](resolve-seed.md) · [build-sim-cmd](build-sim-cmd.md) · [write-randseed](write-randseed.md) · [link-latest](link-latest.md) · [interpret-sim](interpret-sim.md)
-
-**Post** (`sim.py`) — route UVM vs plain, parse the log into a verdict
-
-- [route-post](route-post.md) · [parse-log](parse-log.md) · [parse-uvm-log](parse-uvm-log.md)
-
-**Control** (`control.py`)
-
-- [early-stop-gate](early-stop-gate.md) · `flag-gate`
-
-## Data flow at a glance
-
-```
-discover → parse-root → select-platform → resolve-builder ┐
-work-dir → ensure-logs                                     │ (persistent config,
-parse-suite → route-list ──on──▶ list-test-names           │  fanned to many nodes)
-             └──off──▶ select ─test▶ filter ─test▶ model-ref ─name/path▶ load-model ─model▶ sweep
-                                                    └─test──────────────────────────────────────▶
-                                                    └─test▶ load-model
-                                                                              │
-  sweep ─test/model▶ preproc ▶ gate-pre ─test/model▶ fl-model-ref → fl-model-root → fl-model ┐
-                                  └─test▶ fl-tb ──────────────────────────────────────────────▶│
-                                         fl-merge → fl-norm → fl-dedup → filelist             │
-                                         fl-path ────────────────────────────▶│                │
-                                                              filelist ─filelist▶ cc-build ─command▶ cc-run
-                                                                              │
-  cc-run ─proc▶ cc-int ▶ gate-comp ▶ expand-runs ▶ resolve-seed ▶ build-sim-cmd ─command▶ sim-run
-                                                                              │
-  sim-run ─proc▶ {write-randseed, link-latest, interpret-sim ▶ gate-sim ▶ route-post}
-  route-post ──uvm──▶ parse-uvm-log
-             └─plain─▶ parse-log
-```
-
-Every failure, skip, timeout, or early-stop emits a diagnostic log event (`log.error` or `log.info`). The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match these events by name, accumulate one row per test, and render the results table at end of run. See [docs/logger/summary-processor.md](../logger/summary-processor.md).
-
-## Shared value types
-
-The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/schema/`. `KeyedValue` is the exception: it belongs to the contract layer (`contracts/sentinels.py`), since [`keyed_join`](../contracts/keyed_join.md) both reads and constructs it, and the schema package re-exports it so the import path is unchanged. Most `keyed_join` nodes set `unwrap: true`, so the envelope rides the wire but never reaches module code — only [expand-sweep](expand-sweep.md), [expand-runs](expand-runs.md), and [resolve-model-ref](resolve-model-ref.md), which mint or project keys, construct it themselves.
-
-| Type | Fields | Role |
-|---|---|---|
-| `KeyedValue[T]` | `key`, `value` | a value tagged with a test/run key, so `keyed_join` can correlate split edges |
-| `Command` | `key`, `argv`, `stdout_path`, `stderr_path` | a subprocess to launch (compile or sim), consumed by `run-process` |
-| `Proc` | `key`, `rc`, `stdout_path`, `stderr_path` | a finished subprocess; `rc is None` means it was killed on timeout |
-| `RandSeed` / `RandSeedDone` | seed + paths / `key` | the resolved seed to persist, and an ordering token so `link-latest` runs after the seed is written |
-| `SeedMode` | enum | `NEW` (fresh random), `REPLAY` (reuse last), `DEFAULT` (builder-configured) |
-| `RunDepth` | enum | ordered phases `pre` < `comp` < `sim` < `post`; drives `early-stop-gate` |
-
-## Results reporting
-
-The results summary is not an in-graph node — it is handled by the `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins (`graphs/log/summary.py`), wired in the `test` graph's `logging:` block. These match diagnostic log events by name (e.g. `compile_failed`, `parse_log_passed`, `test_skipped`, `test_stopped_early`), accumulate one row per test, and render the table at end of run. See [docs/logger/summary-processor.md](../logger/summary-processor.md).
+| Module | Summary |
+|---|---|
+| [early-stop-gate](early-stop-gate.md) | gate a test based on `--early-stop` depth |
+| `flag-gate` | route a value to `on` or `off` based on a boolean flag |

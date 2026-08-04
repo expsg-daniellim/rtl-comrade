@@ -5,7 +5,7 @@ Graph file: `graphs/filelist.yaml` — registered as the `filelist` subcommand i
 See also:
 
 - [index.md](index.md) — graphs usage reference: CLI, output layout
-- [docs/modules/index.md](../modules/index.md) — reference for the pipeline modules
+- [docs/modules/index.md](../modules/index.md) — module reference
 - [docs/contracts/index.md](../contracts/index.md) — the scheduling policies the nodes are paired with
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format (nodes, edges, CLI edges, contract config)
 - [docs/running.md](../running.md) — invocation, options, config discovery, exit codes

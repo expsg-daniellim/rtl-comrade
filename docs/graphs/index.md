@@ -6,7 +6,7 @@ See also:
 
 - [test.md](test.md) — the `test` graph's pipeline, contracts, and per-node wiring
 - [filelist.md](filelist.md) — the `filelist` graph's pipeline, contracts, and per-node wiring
-- [docs/modules/index.md](../modules/index.md) — reference for every node module
+- [docs/modules/index.md](../modules/index.md) — module reference
 - [docs/running.md](../running.md) — global options, config discovery, exit codes
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format
 - [docs/divergences.md](../divergences.md) — behavioural deltas from baseline `rtl_buddy`

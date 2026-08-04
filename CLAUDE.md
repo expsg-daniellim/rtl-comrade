@@ -22,7 +22,7 @@ Keep that split intact. Do not move scheduling logic into modules. Do not let mo
 | Harness internals | `docs/harness/README.md` |
 | Writing a module | `docs/module-implementation/implementation.md`, `modules/io.py`, `modules/funcs.py` |
 | Module testing | `docs/module-implementation/testing.md` |
-| A specific `rtl_buddy` `test`-flow module | `docs/modules/index.md` |
+| A specific module | `docs/modules/index.md` |
 | Graph usage: CLI, output layout, hooks, known issues | `docs/graphs/index.md` |
 | Contracts | `docs/contracts/implementation.md`, `docs/contracts/index.md`, `contracts/contracts.py` |
 | Contract testing | `docs/contracts/testing.md` |

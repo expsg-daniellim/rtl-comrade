@@ -5,7 +5,7 @@ Graph file: `graphs/test.yaml` — registered as the `test` subcommand in `rtl_c
 See also:
 
 - [index.md](index.md) — graphs usage reference: CLI, output layout, hook extensions, and known issues
-- [docs/modules/index.md](../modules/index.md) — reference for every node module in this graph
+- [docs/modules/index.md](../modules/index.md) — module reference
 - [docs/contracts/index.md](../contracts/index.md) — the scheduling policies the nodes are paired with
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format (nodes, edges, CLI edges, contract config)
 - [docs/running.md](../running.md) — invocation, options, config discovery, exit codes
@@ -66,7 +66,7 @@ parse-suite → route-list ──on──▶ list-test-names           │  fann
              └─plain─▶ parse-log
 ```
 
-The flow reads in stages (see [docs/modules/index.md](../modules/index.md) for the per-module reference):
+The flow reads in stages:
 
 1. **Setup** — locate and parse `root_config.yaml`, pick the platform and builder from the host `uname`, resolve the working and logs directories, parse the suite, and derive the seed mode. These one-shot nodes produce the persistent configuration fanned out to the rest of the graph.
 2. **List vs run** — `--list` short-circuits to [list-test-names](../modules/list-test-names.md) and prints nothing else; otherwise the suite enters the run pipeline.
@@ -75,6 +75,59 @@ The flow reads in stages (see [docs/modules/index.md](../modules/index.md) for t
 5. **Compile** — build the compile command, run it via [run-process](../modules/run-process.md), interpret the return code.
 6. **Sim** — fan out into runs, resolve the seed, build and run the sim command (again via [run-process](../modules/run-process.md)), persist the seed, refresh the `latest` symlinks, and interpret the outcome.
 7. **Post** — route UVM vs plain tests to the matching log parser, which classifies the outcome as PASS or FAIL via a diagnostic log event.
+
+## Modules by stage
+
+Quick reference for the modules at each stage, with links to their doc pages. See [docs/modules/index.md](../modules/index.md) for the full module catalog.
+
+**Setup** (`setup.py`) — bootstrap config, platform, builder, directories, suite, seed mode
+
+- [discover-config-file](../modules/discover-config-file.md) · [prepend-cwd-path](../modules/prepend-cwd-path.md) · [parse-root-config](../modules/parse-root-config.md) · [select-platform](../modules/select-platform.md) · [resolve-builder](../modules/resolve-builder.md) · [work-dir](../modules/work-dir.md) · [ensure-logs-dir](../modules/ensure-logs-dir.md) · [parse-suite-config](../modules/parse-suite-config.md) · [derive-seed-mode](../modules/derive-seed-mode.md) · [git-status](../modules/git-status.md)
+
+**List mode** (`control.py`) — route `--list` flag to list-names or run
+
+- `route-list` (`flag-gate` instance) · [list-test-names](../modules/list-test-names.md)
+
+**Selection & expansion** (`setup.py`) — select, filter, load model, sweep
+
+- [select-tests](../modules/select-tests.md) · [filter-reglvl](../modules/filter-reglvl.md) · [resolve-model-ref](../modules/resolve-model-ref.md) · [load-model](../modules/load-model.md) · [expand-sweep](../modules/expand-sweep.md)
+
+**Prep** (`build.py`) — preproc script, filelist pipeline
+
+- [run-preproc](../modules/run-preproc.md) · filelist-extract · filelist-normalise · filelist-dedup · prioritised-merge · filelist-path · [write-filelist](../modules/write-filelist.md)
+
+**Subprocess runner** (`build.py`) — reusable, used by both compile and sim
+
+- [run-process](../modules/run-process.md)
+
+**Compile** (`build.py`) — build the compile command, interpret its result
+
+- [build-compile-cmd](../modules/build-compile-cmd.md) · [interpret-compile](../modules/interpret-compile.md)
+
+**Sim** (`sim.py`) — fan out runs, resolve seed, build/run sim, persist seed, symlink, interpret
+
+- [expand-runs](../modules/expand-runs.md) · [resolve-seed](../modules/resolve-seed.md) · [build-sim-cmd](../modules/build-sim-cmd.md) · [write-randseed](../modules/write-randseed.md) · [link-latest](../modules/link-latest.md) · [interpret-sim](../modules/interpret-sim.md)
+
+**Post** (`sim.py`) — route UVM vs plain, parse the log into a verdict
+
+- [route-post](../modules/route-post.md) · [parse-log](../modules/parse-log.md) · [parse-uvm-log](../modules/parse-uvm-log.md)
+
+**Control** (`control.py`)
+
+- [early-stop-gate](../modules/early-stop-gate.md) · `flag-gate`
+
+## Shared value types
+
+The modules exchange a small set of frozen dataclasses from `modules/rtl_buddy/schema/`. `KeyedValue` is the exception: it belongs to the contract layer (`contracts/sentinels.py`), since [`keyed_join`](../contracts/keyed_join.md) both reads and constructs it, and the schema package re-exports it so the import path is unchanged. Most `keyed_join` nodes set `unwrap: true`, so the envelope rides the wire but never reaches module code — only [expand-sweep](../modules/expand-sweep.md), [expand-runs](../modules/expand-runs.md), and [resolve-model-ref](../modules/resolve-model-ref.md), which mint or project keys, construct it themselves.
+
+| Type | Fields | Role |
+|---|---|---|
+| `KeyedValue[T]` | `key`, `value` | a value tagged with a test/run key, so `keyed_join` can correlate split edges |
+| `Command` | `key`, `argv`, `stdout_path`, `stderr_path` | a subprocess to launch (compile or sim), consumed by `run-process` |
+| `Proc` | `key`, `rc`, `stdout_path`, `stderr_path` | a finished subprocess; `rc is None` means it was killed on timeout |
+| `RandSeed` / `RandSeedDone` | seed + paths / `key` | the resolved seed to persist, and an ordering token so `link-latest` runs after the seed is written |
+| `SeedMode` | enum | `NEW` (fresh random), `REPLAY` (reuse last), `DEFAULT` (builder-configured) |
+| `RunDepth` | enum | ordered phases `pre` < `comp` < `sim` < `post`; drives `early-stop-gate` |
 
 ## Contracts and the keyed model
 
