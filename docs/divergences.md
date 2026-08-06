@@ -1,8 +1,8 @@
 # Divergences from rtl_buddy
 
-Behavioural deltas between rtl-comrade's `test` command and upstream `rtl_buddy test`. Each entry describes what rtl_buddy does, what rtl-comrade does instead, and whether the delta is deliberate or a known, deferred limitation.
+Behavioural deltas between rtl-comrade and upstream `rtl_buddy`. Each entry describes what rtl_buddy does, what rtl-comrade does instead, and whether the delta is deliberate or a known, deferred limitation.
 
-For the `test` graph itself see [graphs/test.md](graphs/test.md); for the CLI and output layout see [graphs/index.md](graphs/index.md).
+For the graphs themselves see [graphs/index.md](graphs/index.md).
 
 ---
 
