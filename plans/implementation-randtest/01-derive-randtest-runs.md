@@ -5,7 +5,7 @@
 
 ## Before you start
 
-Read `docs/module-implementation/implementation.md` (input-port inference, output forms).
+Read `docs/module-implementation/implementation.md` (input-port inference, output forms) and `docs/module-implementation/testing.md` (test harness, fatal/error assertion patterns).
 
 ## Goal
 
@@ -25,9 +25,11 @@ class DeriveRandtestRunsMod:
         if rnd_rpt >= 0:
             yield ("run_ids", [rnd_rpt])
             yield ("seed_mode", SeedMode.REPLAY)
-        else:
-            yield ("run_ids", list(range(1, rnd_cnt + 1)))
-            yield ("seed_mode", SeedMode.NEW)
+            return
+        if rnd_cnt < 1:
+            log.fatal("invalid_rnd_cnt", rnd_cnt=rnd_cnt)
+        yield ("run_ids", list(range(1, rnd_cnt + 1)))
+        yield ("seed_mode", SeedMode.NEW)
 ```
 
 ## Algorithm

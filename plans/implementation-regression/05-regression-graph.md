@@ -79,7 +79,7 @@ All other nodes, edges, contracts, fan-out edges, and the `logging:` block carry
 
 ## Command registration
 
-Add to `rtl_comrade_config.yaml`:
+Append under the `commands:` key in `rtl_comrade_config.yaml`:
 
 ```yaml
   regression:

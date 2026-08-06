@@ -15,13 +15,13 @@ Bridge the CLI default to rtl_buddy's behaviour: if `reg_config` is empty, pull 
 
 ```
 contract:          unit
-inputs:            reg_config:str = "", root_cfg:RootConfig
+inputs:            root_cfg:RootConfig, reg_config:str = ""
 outputs:           default → Path
 ```
 
 ```python
 class ResolveRegConfigPathMod:
-    def run(self, reg_config:str, root_cfg:RootConfig):
+    def run(self, root_cfg:RootConfig, reg_config:str = ""):
         if reg_config:
             path = Path(reg_config).resolve()
         else:

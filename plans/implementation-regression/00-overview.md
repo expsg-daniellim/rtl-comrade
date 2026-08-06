@@ -11,7 +11,7 @@ Port `rtl_buddy`'s `do_rtl_regression` command as a sibling `rtl-comrade` graph,
 `regression` differs from `test` in five ways:
 
 1. **Suite pipeline.** `test` reads one suite config from the CLI. `regression` reads a `regressions.yaml` listing N suite configs, resolves each path, and streams them into `parse-suite-config` under a `default` contract (not `unit`).
-2. **Per-suite `work_dir` and `logs_dir`.** `test` emits `Path.cwd().resolve()` once via `work-dir` and fans it out as a persistent input. Regression has no single CWD — each suite's working directory is `suite_dir` from `parse-suite-config`. Two `ExtractSuiteDirMod` instances (pre- and post-fan-out) replace `work-dir` and `ensure-logs`.
+2. **Per-suite `base_dir` and `logs_dir`.** `test` emits `Path.cwd().resolve()` once via `work-dir` and fans it out as a persistent input. Regression has no single CWD — each suite's working directory is `suite_dir` from `parse-suite-config`. Two `ExtractSuiteDirMod` instances (pre- and post-fan-out) replace `work-dir` and `ensure-logs`, emitting `base_dir` (which feeds both `base_dir` and `work_dir` destination ports) and `logs_dir`.
 3. **Suite-key prefixing.** The correlation key becomes `<suite>/<test>#<sweep>#<run>` to distinguish same-named tests across suites and group the summary table by suite.
 4. **Seed mode.** Always `SeedMode.DEFAULT` — no `--rnd-new`/`--rnd-last` CLI flags. A `constant` node replaces `derive-seed-mode`.
 5. **No list mode.** The `route-list` / `list-names` / `list` CLI edge set is absent.
@@ -76,17 +76,17 @@ flowchart TD
   const_seed["const-seed-mode<br/>(constant, SeedMode.DEFAULT)"] d4@-->|"seed_mode:SeedMode"| seed
 
   gate_pre d5@-->|"test:TestConfig"| extract_dir["extract-dir<br/>(extract-suite-dir)"]
-  extract_dir d6@-->|"work_dir:KeyedValue[Path]"| cc_build
-  extract_dir d7@-->|"work_dir:KeyedValue[Path]"| cc_run
+  extract_dir d6@-->|"base_dir:KeyedValue[Path]"| cc_build
+  extract_dir d7@-->|"base_dir:KeyedValue[Path]"| cc_run
   extract_dir d8@-->|"base_dir:KeyedValue[Path]"| fl_tb
   extract_dir d9@-->|"base_dir:KeyedValue[Path]"| fl_norm
-  extract_dir d10@-->|"work_dir:KeyedValue[Path]"| fl_path
+  extract_dir d10@-->|"base_dir:KeyedValue[Path]"| fl_path
   extract_dir d11@-->|"logs_dir:KeyedValue[Path]"| cc_build
 
   runs d12@-->|"test:TestConfig"| extract_dir_post["extract-dir-post<br/>(extract-suite-dir)"]
-  extract_dir_post d13@-->|"work_dir:KeyedValue[Path]"| sim_run
-  extract_dir_post d14@-->|"work_dir:KeyedValue[Path]"| randseed
-  extract_dir_post d15@-->|"work_dir:KeyedValue[Path]"| link_latest
+  extract_dir_post d13@-->|"base_dir:KeyedValue[Path]"| sim_run
+  extract_dir_post d14@-->|"base_dir:KeyedValue[Path]"| randseed
+  extract_dir_post d15@-->|"base_dir:KeyedValue[Path]"| link_latest
   extract_dir_post d16@-->|"logs_dir:KeyedValue[Path]"| sim_build
   extract_dir_post d17@-->|"logs_dir:KeyedValue[Path]"| seed
 
@@ -171,7 +171,8 @@ flowchart TD
 |---|---|
 | `parse-suite` | Contract switches from `unit` to `default`; config adds `prefix_suite: true` |
 | `cc-build` | Remove `work_dir` and `logs_dir` from `persistent_inputs` |
-| `cc-run` | Contract switches from `default` to `keyed_join` (`key_field: key`, `persistent_inputs: [env_ready]`, `unwrap: true`, `ignore: [default]`); mirrors `sim-run`'s contract |
+| `cc-run` | Contract switches from `default` to `keyed_join` (`key_field: key`, `persistent_inputs: [env_ready]`, `unwrap: true`, `ignore: [default]`); somewhat mirrors `sim-run`'s contract |
+| `filter` | No contract config change. `reg_level` and `start_level` gain CLI edges (type `int`, default `0`); in `test` they had no source and defaulted to `None` (no filtering). With `0`/`0`, only level-0 tests pass |
 | `sim-build` | Remove `logs_dir` from `persistent_inputs` |
 | `seed` | Remove `logs_dir` from `persistent_inputs` |
 | `sim-run` | Remove `work_dir` from `persistent_inputs` |
@@ -246,12 +247,12 @@ flowchart TD
 
 ```yaml
 - { src: { node: gate-pre, port: test }, dst: { node: extract-dir, port: test } }
-- { src: { cli: logs_dir, type: str, default: "logs" }, dst: { node: extract-dir, port: logs_dir } }
-- { src: { node: extract-dir, port: work_dir }, dst: { node: cc-build, port: work_dir } }
-- { src: { node: extract-dir, port: work_dir }, dst: { node: cc-run,   port: work_dir } }
+- { src: { cli: logs_dir, type: str, default: "logs", flags: ["--logs-dir", "-L"] }, dst: { node: extract-dir, port: logs_dir } }
+- { src: { node: extract-dir, port: base_dir }, dst: { node: cc-build, port: work_dir } }
+- { src: { node: extract-dir, port: base_dir }, dst: { node: cc-run,   port: work_dir } }
 - { src: { node: extract-dir, port: base_dir }, dst: { node: fl-tb,    port: base_dir } }
 - { src: { node: extract-dir, port: base_dir }, dst: { node: fl-norm,  port: base_dir } }
-- { src: { node: extract-dir, port: work_dir }, dst: { node: fl-path,  port: work_dir } }
+- { src: { node: extract-dir, port: base_dir }, dst: { node: fl-path,  port: work_dir } }
 - { src: { node: extract-dir, port: logs_dir }, dst: { node: cc-build, port: logs_dir } }
 ```
 
@@ -259,10 +260,10 @@ flowchart TD
 
 ```yaml
 - { src: { node: runs, port: test },   dst: { node: extract-dir-post, port: test } }
-- { src: { cli: logs_dir, type: str, default: "logs" }, dst: { node: extract-dir-post, port: logs_dir } }
-- { src: { node: extract-dir-post, port: work_dir }, dst: { node: sim-run,     port: work_dir } }
-- { src: { node: extract-dir-post, port: work_dir }, dst: { node: randseed,    port: work_dir } }
-- { src: { node: extract-dir-post, port: work_dir }, dst: { node: link-latest, port: work_dir } }
+- { src: { cli: logs_dir, type: str, default: "logs", flags: ["--logs-dir", "-L"] }, dst: { node: extract-dir-post, port: logs_dir } }
+- { src: { node: extract-dir-post, port: base_dir }, dst: { node: sim-run,     port: work_dir } }
+- { src: { node: extract-dir-post, port: base_dir }, dst: { node: randseed,    port: work_dir } }
+- { src: { node: extract-dir-post, port: base_dir }, dst: { node: link-latest, port: work_dir } }
 - { src: { node: extract-dir-post, port: logs_dir }, dst: { node: sim-build, port: logs_dir } }
 - { src: { node: extract-dir-post, port: logs_dir }, dst: { node: seed,      port: logs_dir } }
 ```
@@ -290,12 +291,12 @@ Matching rtl_buddy's `do_rtl_regression` signature.
 | `reg_config` | `-c/--reg-config` | str | `""` | `resolve-reg-path.reg_config` |
 | `reg_level` | `-l/--reg-level` | int | 0 | `filter.reg_level` |
 | `start_level` | `-s/--start-level` | int | 0 | `filter.start_level` |
-| `logs_dir` | `--logs-dir` | str | `logs` | `extract-dir.logs_dir`, `extract-dir-post.logs_dir` |
+| `logs_dir` | `-L/--logs-dir` | str | `logs` | `extract-dir.logs_dir`, `extract-dir-post.logs_dir` |
 | `builder` | `-B/--builder` | str | `""` | `resolve-builder.builder` |
 | `builder_mode` | `-M/--builder-mode` | str | **`reg`** | `cc-build.builder_mode`, `sim-build.builder_mode` |
 | `early_stop` | `-E/--early-stop` | str | `post` | `gate-pre`, `gate-comp`, `gate-sim` |
 
-**Removed from test:** `test_name`, `list`, `rnd_new`, `rnd_last`, `test_config`.
+**Removed from test:** `test_name`, `list`, `rnd_new`, `rnd_last`, `test_config`. Without a `test_name` source, `select-tests` defaults to `""` and yields every test in the suite.
 
 **Changed from test:** `builder_mode` default changes from `"debug"` to `"reg"`.
 
@@ -315,7 +316,7 @@ The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match d
 
 ### Pre/post fan-out key mismatch
 
-`expand-runs` re-keys everything from `test_key` to `test_key#run_id`. A keyed `work_dir` emitted with `test_key` won't match `test_key#run_id` in `keyed_join` on post-fan-out nodes. Since `TestConfig.suite_dir` rides the object through the fan-out, the solution is two `ExtractSuiteDirMod` instances — one before and one after `expand-runs`:
+`expand-runs` re-keys everything from `test_key` to `test_key#run_id`. A keyed `base_dir` emitted with `test_key` won't match `test_key#run_id` in `keyed_join` on post-fan-out nodes. Since `TestConfig.suite_dir` rides the object through the fan-out, the solution is two `ExtractSuiteDirMod` instances — one before and one after `expand-runs`:
 
 - **`extract-dir`** (after `gate-pre`): emits with key `test_key`, serves pre-fan-out consumers.
 - **`extract-dir-post`** (after `runs`): receives the re-keyed `test` from `expand-runs`, emits with key `test_key#run_id`, serves post-fan-out consumers.
@@ -336,7 +337,7 @@ The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match d
 
 ## Settled decisions
 
-1. **Per-suite `work_dir` and `logs_dir` routing:** `ExtractSuiteDirMod` extracts `test.suite_dir` per test and emits keyed `work_dir`, `base_dir`, and `logs_dir` values. Two instances: `extract-dir` (pre-fan-out, key = `test_key`) and `extract-dir-post` (post-fan-out, key = `test_key#run_id`). Downstream nodes move `work_dir`/`base_dir`/`logs_dir` from `persistent_inputs` to regular keyed inputs. No downstream module changes — only graph-YAML contract configs (`persistent_inputs` removal, `unwrap: true` additions on `randseed`/`link-latest`, and `cc-run`'s contract switch to `keyed_join`).
+1. **Per-suite `base_dir` and `logs_dir` routing:** `ExtractSuiteDirMod` extracts `test.suite_dir` per test and emits keyed `base_dir` and `logs_dir` values. Two instances: `extract-dir` (pre-fan-out, key = `test_key`) and `extract-dir-post` (post-fan-out, key = `test_key#run_id`). The `base_dir` port feeds both `base_dir` and `work_dir` destination ports — the values are identical, only the destination port names differ. Downstream nodes move these from `persistent_inputs` to regular keyed inputs (persistent lists that become empty are omitted). No downstream module changes — only graph-YAML contract configs (`persistent_inputs` removal, `unwrap: true` additions on `randseed`/`link-latest`, and `cc-run`'s contract switch to `keyed_join`).
 
 2. **Suite-key prefixing:** config flag (`prefix_suite: true`) on `ParseSuiteConfigMod`. No separate `stamp-suite-key` module. The key becomes `<suite_dir.name>/<test_name>` at construction time. Same leaf-name collision behaviour as rtl_buddy.
 

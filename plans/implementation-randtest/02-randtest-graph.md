@@ -74,7 +74,7 @@ All other nodes, edges, contracts, `persistent_inputs` configs, fan-out edges, a
 
 ## Command registration
 
-Add to `rtl_comrade_config.yaml`:
+Add under the `commands:` key in `rtl_comrade_config.yaml`:
 
 ```yaml
   randtest:
@@ -96,11 +96,11 @@ The manifest entry from [spec 01](01-derive-randtest-runs.md) must be landed in 
 
 ### E2E tests
 
-Using the existing fixture project (`tests/e2e/fixtures/proj/`).
+Using the existing fixture project (`tests/e2e/fixtures/proj/`), test name `basic`.
 
-- `rtl-comrade randtest <test_name>` — runs with default `rnd_cnt=2`, produces sim outputs for run IDs 1 and 2.
-- `rtl-comrade randtest <test_name> 3` — runs with `rnd_cnt=3`.
-- `rtl-comrade randtest <test_name> --rnd-rpt 1` — replays seed from run 1. The test must pre-create a `.randseed` file in the fixture's logs directory (e.g. `logs/<test_name>_0001.randseed` containing a seed integer) before invoking this case.
+- `rtl-comrade randtest basic` — runs with default `rnd_cnt=2`, produces sim outputs for run IDs 1 and 2.
+- `rtl-comrade randtest basic 3` — runs with `rnd_cnt=3`.
+- `rtl-comrade randtest basic --rnd-rpt 1` — replays seed from run 1. The fixture's `logs/` directory is gitignored (runtime artefacts only). The test setup must create `logs/basic_0001.randseed` (the run-id-suffixed name `resolve-seed` looks up for `run_id=1`) containing a seed integer before invoking the command.
 - `rtl-comrade randtest` (no test name) — errors with a missing-argument message (required positional).
 
 ### CLI tests
@@ -126,4 +126,11 @@ Using the existing fixture project (`tests/e2e/fixtures/proj/`).
 
 ## Docs
 
-Update `docs/graphs/index.md` to list the `randtest` graph. Add `docs/graphs/randtest.md` following the structure of `docs/graphs/test.md`, documenting only the delta from `test`. Add `docs/graphs/randtest-dataflow-diagram.md` containing the mermaid diagram from [00-overview § Full graph](00-overview.md#full-graph). Follow `docs/creating-documentation.md`.
+Update `docs/graphs/index.md`:
+
+- Add `randtest` to the "Available graphs" table.
+- Remove the paragraph that says `randtest` and `regression` are "not ported" and that `--rnd-rpt` is an "upstream-only option" — `randtest` is now ported and `--rnd-rpt` exists.
+- Update the "Common options" paragraph from `(test today; the future randtest / regression)` to include `randtest` as current.
+- Add a `### randtest` CLI subsection (matching the `### test` / `### filelist` pattern) documenting the CLI surface from [00-overview § CLI surface](00-overview.md#cli-surface).
+
+Add `docs/graphs/randtest.md` following the structure of `docs/graphs/test.md`, documenting only the delta from `test`. Add `docs/graphs/randtest-dataflow-diagram.md` containing the mermaid diagram from [00-overview § Full graph](00-overview.md#full-graph). Follow `docs/creating-documentation.md`.

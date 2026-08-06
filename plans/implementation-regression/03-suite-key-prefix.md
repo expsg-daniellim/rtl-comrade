@@ -78,11 +78,12 @@ In `modules/tests/test_setup.py`.
 
 - `prefix_suite=False` (default) — `test.key` defaults to `test.name` via `__post_init__` (unchanged behaviour).
 - `prefix_suite=True`, suite at `Path("/a/b/sandbox/tests.yaml")` — `test.key == "sandbox/<test_name>"` for each test.
+- `prefix_suite=True`, suite with zero tests — returns `SuiteConfig` with empty `tests` dict, no error.
 - Existing tests (no config) continue to pass — `prefix_suite` defaults to `False`.
 
 ## Acceptance criteria
 
-- All three test cases pass.
+- All four test cases pass.
 - Existing test and randtest graphs (no `config` block) are unaffected — `prefix_suite` defaults to `False`.
 - With `prefix_suite=True`, the key is `<suite_dir.name>/<test_name>`.
 - The module remains contract-agnostic: it runs under both `unit` and `default` without change.
