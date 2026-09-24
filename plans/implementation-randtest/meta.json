@@ -1,0 +1,5 @@
+{
+  "name": "randtest graph",
+  "commit_tag": "randtest graph",
+  "prerequisite": "Prerequisite: the `test` graph and all modules in `modules/rtl_buddy/` must already be complete — the randtest graph is a sibling derived from `test.yaml` and reuses its entire module set. Do not attempt any randtest ticket until the `test` graph commits and the filelist pipeline commits are all present in `git log`."
+}

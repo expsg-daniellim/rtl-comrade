@@ -1,0 +1,5 @@
+{
+  "name": "regression graph",
+  "commit_tag": "regression graph",
+  "prerequisite": "Prerequisite: the `test` graph, filelist pipeline, and `randtest` graph must already be complete — the regression graph is a sibling derived from `test.yaml` and reuses its entire module set plus the randtest-era modules. Do not attempt any regression ticket until the `test`, filelist, and randtest commits are all present in `git log`."
+}

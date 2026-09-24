@@ -1,0 +1,32 @@
+Build the {{plan_name}} by working through the implementation tickets in `{{plan_dir}}/`. Before starting, read `{{plan_dir}}/README.md` and `{{plan_dir}}/00-overview.md` for context.
+
+{{prerequisite}}
+
+Resumption. This run is checkpointed in git — one `feat [{{commit_tag}}]:` commit per completed ticket — not in this conversation, so an interrupted run resumes from a fresh session at near-zero cost. On start, before anything else: determine the resume point by walking the build-order list below from the top and finding the first ticket whose expected commit title (its `#` heading stripped per the commit rule below) is absent from `git log --grep='feat \[{{commit_tag}}\]:'`. That first-absent ticket is your resume point; if all {{ticket_count}} are present the run is already complete. If `git status` shows ANY uncommitted change (tracked or untracked), an agent was mid-flight when the previous session died — discard it with `git reset --hard && git clean -fd` and re-run the resume-point ticket from scratch. Never resume a partially-completed ticket.
+
+Before starting (or resuming at) any ticket, establish a baseline: run `uv run pytest` from the repo root with no path argument and confirm it is green (definition below). If the baseline is not green, STOP and show me — do not start on top of a dirty baseline. Also confirm `git status` is clean; if it shows anything uncommitted, handle it per the resumption rule above before continuing.
+
+"Green" means: zero failures and zero errors, AND zero tests skipped or xfailed because a tool/binary is missing. This is a full build — a test that skips because tooling (a simulator, `mmdc`, etc.) is absent is NOT an acceptable pass; it is a STOP. If any test is skipped for missing tooling, STOP and tell me exactly which tool is missing. Do not install it, stub it, mock past it, or work around it yourself.
+
+Process one ticket at a time, each with its OWN fresh general-purpose agent. Spawn only ONE agent at a time to prevent race conditions. Do NOT bundle tickets into a single agent. Do NOT read the ticket yourself - leave that to the agent. Work through them sequentially in the dependency order listed below.
+
+Build order:
+{{build_order}}
+
+Each agent's brief is exactly:
+- Read that one ticket file AND everything its `## Before you start` section tells you to read (e.g. `docs/module-implementation/implementation.md`, cited compatibility sources, `00-overview.md`). Do not read or implement any other ticket.
+- The cited `rtl_buddy` compatibility source is a READ-ONLY reference to reimplement from, never an import target. Do NOT `import` rtl_buddy, subclass its classes, or call into it — reimplement the cited behaviour natively in the target file. Importing it makes the parity tests vacuously green.
+- The Python skeleton in a ticket's `## Surface` is illustrative. Helper calls in it are stand-ins for inline logic the `## Algorithm` / `## Deliverables` sections specify — implement that logic, do not treat the names as symbols to import. The only pre-existing symbols a skeleton may import are those a `Depends on:` ticket already delivered.
+- Each ticket names exactly one or more target files, and those paths are pinned. Every target file already exists — append or edit, do not overwrite or re-create.
+- Do exactly what the ticket specifies — no more, no less. Do NOT commit, touch git, or modify any file outside the ticket's stated targets — the orchestrator owns commits.
+- If the ticket is ambiguous, under-specified, or you hit a blocker you cannot resolve from the cited reading, STOP and report the blocker. Do NOT guess, improvise, stub, or pick the easiest interpretation to get past it — an unresolved ambiguity is to be surfaced, not worked around.
+- Verify by running `uv run pytest` from the repo root with NO path argument, so it collects `tests/`, `contracts/tests/`, AND `modules/tests/` (a bare run uses the configured testpaths; an explicit path like `uv run pytest tests/` would skip the module tests this ticket adds). Report the full result back, including the exact pass/fail/skip counts and any failure or missing-tooling-skip output verbatim.
+
+After each agent returns, do NOT trust its self-report. Run these checks yourself, in order:
+1. `git status` / `git diff --stat` — confirm ONLY the ticket's stated target paths changed, and that the agent did not commit or touch anything out of scope. If it did, STOP and show me.
+2. Re-run the bare `uv run pytest` and confirm it is green per the definition above (failures, errors, and missing-tooling skips all count as not-green → STOP and show me, even if the agent reported success).
+3. Stage ONLY the ticket's target paths (never `git add -A`), then commit with title `feat [{{commit_tag}}]: <ticket title>`, where `<ticket title>` is the ticket's `#` heading with its leading `Spec NN:` prefix stripped (e.g. `# Spec 09: flag-gate (FlagGateMod)` → `feat [{{commit_tag}}]: flag-gate (FlagGateMod)`). Remember to read your memory on writing commit messages.
+
+Only after the commit, move on to the next ticket. On ANY STOP condition — out-of-scope change, failure, error, missing-tooling skip, or an agent-reported blocker — STOP immediately and show me; do not start the next ticket, do not commit, and do not attempt a workaround.
+
+When ticket {{last_ticket}} is committed and its verification is green, the run is complete: report that all {{ticket_count}} tickets are done, the final bare `uv run pytest` is green, and the `git log --grep='feat \[{{commit_tag}}\]:'` commit count is {{ticket_count}}.
