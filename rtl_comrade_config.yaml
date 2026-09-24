@@ -5,3 +5,6 @@ commands:
   filelist:
     path: "graphs/filelist.yaml"
     help: "Generate a compile filelist from a model configuration."
+  randtest:
+    path: "graphs/randtest.yaml"
+    help: "Random-seed testing of a single test."

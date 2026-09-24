@@ -1,4 +1,4 @@
-"""Integration tests: graphs/test.yaml loads, validates, and appears in --help output.
+"""Integration tests: graphs/test.yaml and graphs/randtest.yaml load, validate, and appear in --help output.
 
 Checks that the assembled graph YAML is internally consistent (no dangling manifest
 references, no cycles, no overloaded inputs) and that the CLI wiring is correct.
@@ -13,6 +13,7 @@ from rtl_comrade.graph import Graph
 
 _PROJECT_ROOT = Path(__file__).parents[2]
 _GRAPH_PATH = _PROJECT_ROOT / "graphs" / "test.yaml"
+_RANDTEST_GRAPH_PATH = _PROJECT_ROOT / "graphs" / "randtest.yaml"
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -80,3 +81,69 @@ def test_subcommand_help_lists_cli_edges():
 	assert "--early-stop" in output
 	# positional argument (option: false — rendered uppercase in typer help)
 	assert "TEST_NAME" in output
+
+
+def test_randtest_graph_constructs(logging_handler):
+	"""graphs/randtest.yaml resolves every module and contract and validates: no cycles, overloaded inputs, or unknown persistent ports."""
+	config = GraphConfig.from_file(_RANDTEST_GRAPH_PATH)
+	graph = Graph.from_config(config)
+	assert graph is not None
+	assert not logging_handler.failure
+
+
+def test_randtest_graph_node_delta(logging_handler):
+	"""randtest.yaml swaps seed-mode for derive-runs and drops the list-mode nodes; every other test.yaml node carries over."""
+	test_ids = { n.id for n in GraphConfig.from_file(_GRAPH_PATH).nodes }
+	randtest_ids = { n.id for n in GraphConfig.from_file(_RANDTEST_GRAPH_PATH).nodes }
+	assert "derive-runs" in randtest_ids
+	assert not randtest_ids & { "seed-mode", "route-list", "list-names" }
+	assert randtest_ids == (test_ids - { "seed-mode", "route-list", "list-names" }) | { "derive-runs" }
+	assert not logging_handler.failure
+
+
+def test_help_lists_randtest_command():
+	"""rtl-comrade --help lists the randtest subcommand with the correct help string."""
+	result = subprocess.run(
+		["uv", "run", "rtl-comrade", "--help"],
+		cwd=_PROJECT_ROOT,
+		capture_output=True,
+		text=True,
+		check=False,
+	)
+	assert result.returncode == 0
+	output = strip_ansi(result.stdout)
+	assert "randtest" in output
+	assert "Random-seed testing of a single test." in output
+
+
+def test_randtest_subcommand_help_lists_cli_edges():
+	"""rtl-comrade randtest --help lists every randtest CLI parameter with its type and default, and none of the removed test options."""
+	result = subprocess.run(
+		["uv", "run", "rtl-comrade", "randtest", "--help"],
+		cwd=_PROJECT_ROOT,
+		capture_output=True,
+		text=True,
+		check=False,
+	)
+	assert result.returncode == 0
+	lines = strip_ansi(result.stdout).splitlines()
+
+	def row(name:str) -> str:
+		"""Return the help row whose first token is ``name``."""
+
+		return next(line for line in lines if line.strip("│* ").startswith(name))
+
+	# positional arguments (option: false — typer lists these by their lowercase names)
+	assert "[required]" in row("test_name")
+	assert "[default: 2]" in row("rnd_cnt")
+	# options (typer renders these as --<hyphenated-name>)
+	assert "-r" in row("--rnd-rpt") and "INTEGER" in row("--rnd-rpt") and "[default: -1]" in row("--rnd-rpt")
+	assert "-c" in row("--test-config") and "[default: tests.yaml]" in row("--test-config")
+	assert "[default: logs]" in row("--logs-dir")
+	assert "-B" in row("--builder ")
+	assert "-M" in row("--builder-mode") and "[default: debug]" in row("--builder-mode")
+	assert "-E" in row("--early-stop") and "[default: post]" in row("--early-stop")
+	output = "\n".join(lines)
+	assert "--rnd-new" not in output
+	assert "--rnd-last" not in output
+	assert "--list" not in output

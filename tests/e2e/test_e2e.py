@@ -276,6 +276,73 @@ def test_lazy_load_model():
 
 
 # ---------------------------------------------------------------------------
+# randtest: rnd_cnt fan-out and --rnd-rpt replay
+# ---------------------------------------------------------------------------
+
+def _clear_run_artifacts(stem):
+	"""Delete a test's run-id-suffixed logs/<stem>_NNNN.* artefacts so each randtest scenario sees only its own runs."""
+	for path in (_SANDBOX / "logs").glob(f"{stem}_[0-9][0-9][0-9][0-9].*"):
+		path.unlink()
+
+
+def _pass_rows(stdout, name):
+	"""Count the summary rows reporting PASS for ``name`` (randtest emits one row per run, all under the test name)."""
+	return sum(1 for line in _strip_ansi(stdout).splitlines() if re.match(rf"^\s*{re.escape(name)}\s+PASS\b", line))
+
+
+@pytest.mark.parametrize("args,run_ids", [
+	(["basic"], [1, 2]),
+	(["basic", "3"], [1, 2, 3]),
+])
+def test_randtest_runs(args, run_ids):
+	"""rtl-comrade randtest basic [RND_CNT] runs the test once per run id 1..rnd_cnt (default 2), each with its own sim outputs."""
+	_clear_run_artifacts("basic")
+	result = _run_rc(["randtest", *args])
+	assert result.returncode == 0, (
+		f"randtest {args} exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	assert _pass_rows(result.stdout, "basic") == len(run_ids), f"Expected {len(run_ids)} PASS rows; stdout: {result.stdout}"
+	logs = _SANDBOX / "logs"
+	assert sorted(logs.glob("basic_[0-9][0-9][0-9][0-9].log")) == [ logs / f"basic_{i:04d}.log" for i in run_ids ]
+	for i in run_ids:
+		for ext in ("err", "randseed"):
+			assert (logs / f"basic_{i:04d}.{ext}").exists(), f"Missing artifact: logs/basic_{i:04d}.{ext}"
+
+
+def test_randtest_rnd_rpt_replays_seed():
+	"""rtl-comrade randtest basic --rnd-rpt 1 runs only run 1, replaying the seed recorded in logs/basic_0001.randseed."""
+	_clear_run_artifacts("basic")
+	logs = _SANDBOX / "logs"
+	logs.mkdir(exist_ok=True)
+	(logs / "basic_0001.randseed").write_text("424242\n")
+	result = _run_rc(["randtest", "basic", "--rnd-rpt", "1"])
+	assert result.returncode == 0, (
+		f"randtest --rnd-rpt 1 exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	assert _pass_rows(result.stdout, "basic") == 1, f"Expected one PASS row; stdout: {result.stdout}"
+	assert sorted(logs.glob("basic_[0-9][0-9][0-9][0-9].log")) == [ logs / "basic_0001.log" ]
+	assert (logs / "basic_0001.randseed").read_text().splitlines()[0] == "424242"  # write-randseed re-records the replayed seed
+
+
+def test_randtest_no_args_prints_help():
+	"""rtl-comrade randtest with no arguments prints the subcommand help and exits 0 (subcommands with parameters are no_args_is_help)."""
+	result = _run_rc(["randtest"])
+	assert result.returncode == 0, (
+		f"bare randtest exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	assert "Usage: rtl-comrade randtest" in _strip_ansi(result.stdout), f"No usage line; stdout: {result.stdout}"
+
+
+def test_randtest_missing_test_name_usage_error():
+	"""rtl-comrade randtest -r 1 without TEST_NAME exits non-zero with a usage_error log line (required positional)."""
+	result = _run_rc(["randtest", "-r", "1"])
+	assert result.returncode != 0, (
+		f"randtest -r 1 without TEST_NAME should exit non-zero; stdout: {result.stdout}"
+	)
+	assert "usage_error" in _strip_ansi(result.stderr), f"No usage_error log line; stderr: {result.stderr[-2000:]}"
+
+
+# ---------------------------------------------------------------------------
 # ParseLog corrections ([07 settled 15])
 # ---------------------------------------------------------------------------
 

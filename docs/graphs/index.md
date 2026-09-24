@@ -6,6 +6,7 @@ See also:
 
 - [test.md](test.md) — the `test` graph's pipeline, contracts, and per-node wiring
 - [filelist.md](filelist.md) — the `filelist` graph's pipeline, contracts, and per-node wiring
+- [randtest.md](randtest.md) — the `randtest` graph's delta from `test`
 - [docs/modules/index.md](../modules/index.md) — module reference
 - [docs/running.md](../running.md) — global options, config discovery, exit codes
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format
@@ -17,8 +18,7 @@ See also:
 |---|---|---|---|
 | `test` | `rtl-comrade test` | [test.md](test.md) | Compile and simulate a SystemVerilog/UVM test suite |
 | `filelist` | `rtl-comrade filelist` | [filelist.md](filelist.md) | Generate a compile filelist from a model configuration |
-
-Upstream `rtl_buddy` also shipped `randtest` and `regression` subcommands. Those are **not ported** (see the port specs). Their upstream-only options (`--reg-config`, `--reg-level`, `--start-level`, `--rnd-rpt`) therefore do not exist in `rtl-comrade`.
+| `randtest` | `rtl-comrade randtest` | [randtest.md](randtest.md) | Random-seed testing of a single test |
 
 ## CLI reference
 
@@ -26,7 +26,7 @@ Global options (`--level`, `--config-file`) apply to every command and must appe
 
 ### Common options
 
-Shared by the test-running commands (`test` today; the future `randtest` / `regression`):
+Shared by the test-running commands (`test` and `randtest` today; the future `regression`):
 
 | Option | Default | Effect |
 |---|---|---|
@@ -52,6 +52,24 @@ uv run rtl-comrade test [TEST_NAME] [options]
 | `--rnd-last`, `-l` | off | replay the seed from the previous `--rnd-new` run |
 
 For which node each option feeds, see [test.md § Invocation](test.md#invocation).
+
+### `randtest`
+
+```bash
+uv run rtl-comrade randtest TEST_NAME [RND_CNT] [options]
+```
+
+`TEST_NAME` is required. Runs the test `RND_CNT` times, each with a fresh random seed, or replays one earlier run's seed with `--rnd-rpt`. Accepts the common options above, plus:
+
+| Option / argument | Default | Effect |
+|---|---|---|
+| `TEST_NAME` (positional) | — (required) | the test to run |
+| `RND_CNT` (positional) | `2` | number of runs, each with a fresh seed (run ids `1`..`RND_CNT`) |
+| `--rnd-rpt`, `-r` | `-1` (off) | replay the seed recorded for this run id; a negative value means no replay and `RND_CNT` applies |
+| `--test-config`, `-c` | `tests.yaml` | suite file to read |
+| `--logs-dir` | `logs` | output subdirectory for logs and seeds |
+
+For which node each option feeds, see [randtest.md § Invocation](randtest.md#invocation).
 
 ### `filelist`
 
