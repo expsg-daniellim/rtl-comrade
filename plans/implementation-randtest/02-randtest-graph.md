@@ -101,7 +101,8 @@ Using the existing fixture project (`tests/e2e/fixtures/proj/`), test name `basi
 - `rtl-comrade randtest basic` — runs with default `rnd_cnt=2`, produces sim outputs for run IDs 1 and 2.
 - `rtl-comrade randtest basic 3` — runs with `rnd_cnt=3`.
 - `rtl-comrade randtest basic --rnd-rpt 1` — replays seed from run 1. The fixture's `logs/` directory is gitignored (runtime artefacts only). The test setup must create `logs/basic_0001.randseed` (the run-id-suffixed name `resolve-seed` looks up for `run_id=1`) containing a seed integer before invoking the command.
-- `rtl-comrade randtest` (no test name) — errors with a missing-argument message (required positional).
+- `rtl-comrade randtest` (no arguments) — prints the subcommand help and exits 0 (subcommands with parameters are registered `no_args_is_help`).
+- `rtl-comrade randtest -r 1` (no test name) — exits non-zero with a `usage_error` log line (required positional).
 
 ### CLI tests
 
