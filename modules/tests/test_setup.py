@@ -30,6 +30,7 @@ WorkDirMod = _mod.WorkDirMod
 EnsureLogsDirMod = _mod.EnsureLogsDirMod
 ParseSuiteConfigMod = _mod.ParseSuiteConfigMod
 DeriveSeedModeMod = _mod.DeriveSeedModeMod
+DeriveRandtestRunsMod = _mod.DeriveRandtestRunsMod
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "root_config.yaml"
 _SUITE_FIXTURE = Path(__file__).parent / "fixtures" / "verif" / "sandbox" / "tests.yaml"
@@ -778,3 +779,39 @@ def test_derive_seed_mode_neither():
 def test_derive_seed_mode_defaults():
 	mod = DeriveSeedModeMod()
 	assert mod.run() == ("default", SeedMode.DEFAULT)
+
+
+# ---------------------------------------------------------------------------
+# DeriveRandtestRunsMod
+# ---------------------------------------------------------------------------
+
+
+def test_derive_randtest_runs_new_two():
+	mod = DeriveRandtestRunsMod()
+	assert list(mod.run(rnd_cnt=2, rnd_rpt=-1)) == [("run_ids", [1, 2]), ("seed_mode", SeedMode.NEW)]
+
+
+def test_derive_randtest_runs_new_five():
+	mod = DeriveRandtestRunsMod()
+	assert list(mod.run(rnd_cnt=5, rnd_rpt=-1)) == [("run_ids", [1, 2, 3, 4, 5]), ("seed_mode", SeedMode.NEW)]
+
+
+def test_derive_randtest_runs_replay():
+	mod = DeriveRandtestRunsMod()
+	assert list(mod.run(rnd_cnt=2, rnd_rpt=3)) == [("run_ids", [3]), ("seed_mode", SeedMode.REPLAY)]
+
+
+def test_derive_randtest_runs_replay_zero():
+	mod = DeriveRandtestRunsMod()
+	assert list(mod.run(rnd_cnt=2, rnd_rpt=0)) == [("run_ids", [0]), ("seed_mode", SeedMode.REPLAY)]
+
+
+def test_derive_randtest_runs_defaults():
+	mod = DeriveRandtestRunsMod()
+	assert list(mod.run()) == [("run_ids", [1, 2]), ("seed_mode", SeedMode.NEW)]
+
+
+def test_derive_randtest_runs_zero_cnt_fatal(logging_handler):
+	mod = DeriveRandtestRunsMod()
+	with pytest.raises(typer.Exit):
+		list(mod.run(rnd_cnt=0))

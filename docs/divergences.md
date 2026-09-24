@@ -63,6 +63,10 @@ rtl_buddy's `VlogFilelist._process` (`vlog_filelist.py:123`) renders the line (w
 
 rtl_buddy's `force_symlink` does a non-atomic `os.remove` + `os.symlink` (`tools/vlog_sim.py:26-30`), leaving a window with no link. rtl-comrade symlinks to a unique temp name then `os.replace`s it over the target (`sim.py:89-92`), so the "latest" pointer swap is atomic.
 
+### `randtest` rejects `rnd_cnt < 1`
+
+rtl_buddy's `do_rand_test` (`rtl_buddy.py:243`) does not validate `rnd_cnt`: a value below 1 yields an empty `run_ids` list and crashes downstream with an `IndexError`. rtl-comrade's `derive-randtest-runs` rejects `rnd_cnt < 1` with `log.fatal("invalid_rnd_cnt")` when no replay index is given.
+
 ---
 
 ## Fixed-simv concurrency hole (deferred)

@@ -44,6 +44,7 @@ Modules are registered by plugin name in `modules/config.yaml`. Each documented 
 | [ensure-logs-dir](ensure-logs-dir.md) | create the logs subdirectory |
 | [parse-suite-config](parse-suite-config.md) | parse the test suite YAML |
 | [derive-seed-mode](derive-seed-mode.md) | derive the seed mode from `--rnd-new` / `--rnd-last` |
+| [derive-randtest-runs](derive-randtest-runs.md) | derive run ids and seed mode from `rnd_cnt` / `--rnd-rpt` |
 | [list-test-names](list-test-names.md) | print test names from the suite and exit |
 | [select-tests](select-tests.md) | select tests from the suite by name or all |
 | [filter-reglvl](filter-reglvl.md) | filter tests by register level |

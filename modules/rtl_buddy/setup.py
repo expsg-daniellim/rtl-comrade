@@ -180,6 +180,18 @@ class DeriveSeedModeMod:
 		return ("default", mode)
 
 
+class DeriveRandtestRunsMod:
+	def run(self, rnd_cnt:int = 2, rnd_rpt:int = -1):
+		if rnd_rpt >= 0:  # negative rnd_rpt is the absent sentinel
+			yield ("run_ids", [rnd_rpt])
+			yield ("seed_mode", SeedMode.REPLAY)
+			return
+		if rnd_cnt < 1:
+			log.fatal("invalid_rnd_cnt", rnd_cnt=rnd_cnt)
+		yield ("run_ids", list(range(1, rnd_cnt + 1)))
+		yield ("seed_mode", SeedMode.NEW)
+
+
 class ListTestNamesMod:
 	def run(self, suite_cfg:SuiteConfig):
 		print("  ".join(suite_cfg.get_test_names()))
