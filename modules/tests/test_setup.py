@@ -31,6 +31,7 @@ EnsureLogsDirMod = _mod.EnsureLogsDirMod
 ParseSuiteConfigMod = _mod.ParseSuiteConfigMod
 DeriveSeedModeMod = _mod.DeriveSeedModeMod
 DeriveRandtestRunsMod = _mod.DeriveRandtestRunsMod
+ResolveRegConfigPathMod = _mod.ResolveRegConfigPathMod
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "root_config.yaml"
 _SUITE_FIXTURE = Path(__file__).parent / "fixtures" / "verif" / "sandbox" / "tests.yaml"
@@ -815,3 +816,22 @@ def test_derive_randtest_runs_zero_cnt_fatal(logging_handler):
 	mod = DeriveRandtestRunsMod()
 	with pytest.raises(typer.Exit):
 		list(mod.run(rnd_cnt=0))
+
+
+# ---------------------------------------------------------------------------
+# ResolveRegConfigPathMod
+# ---------------------------------------------------------------------------
+
+
+def _reg_root_cfg(path):
+	return RootConfig(platforms=[], rtl_builder_cfgs={}, cfg_rtl_reg=RootRtlField(path=path))
+
+
+def test_resolve_reg_config_path_explicit(tmp_path):
+	mod = ResolveRegConfigPathMod()
+	assert mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="path/to/reg.yaml") == ("default", Path("path/to/reg.yaml").resolve())
+
+
+def test_resolve_reg_config_path_fallback_root_dir(tmp_path):
+	mod = ResolveRegConfigPathMod()
+	assert mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="") == ("default", (tmp_path / "design/regression.yaml").resolve())

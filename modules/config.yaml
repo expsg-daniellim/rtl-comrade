@@ -48,6 +48,7 @@ files:
   - { name: expand-sweep, class_name: ExpandSweepMod }
   - { name: git-status, class_name: GitStatusMod }
   - { name: derive-randtest-runs, class_name: DeriveRandtestRunsMod }
+  - { name: resolve-reg-config-path, class_name: ResolveRegConfigPathMod }
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }

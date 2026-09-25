@@ -93,6 +93,15 @@ class ResolveBuilderMod:
 		return ("default", builder_cfg)
 
 
+class ResolveRegConfigPathMod:
+	def run(self, root_cfg:RootConfig, root_cfg_path:Path, reg_config:str = ""):
+		if reg_config:
+			path = Path(reg_config).resolve()
+		else:
+			path = (root_cfg_path.parent / root_cfg.cfg_rtl_reg.path).resolve()  # rtl_buddy resolves the fallback against root_config.yaml's dir, not CWD
+		return ("default", path)
+
+
 class WorkDirMod:
 	def run(self):
 		return ("default", Path.cwd().resolve())
