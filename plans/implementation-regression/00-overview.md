@@ -94,6 +94,7 @@ flowchart TD
   parse_root c2@-->|"root_cfg:RootConfig"| select_platform["select-platform"]
   select_platform c3@-->|"platform_cfg:PlatformConfig"| resolve_builder["resolve-builder"]
   parse_root d18@-->|"root_cfg:RootConfig"| resolve_reg
+  discover_root d19@-->|"root_cfg_path:Path"| resolve_reg
   parse_root c5@-. "root_cfg:RootConfig" .-> sweep
   parse_root c6@-. "root_cfg:RootConfig" .-> preproc
   resolve_builder c7@-. "builder_cfg:RtlBuilderConfig" .-> filter
@@ -140,7 +141,7 @@ flowchart TD
   class e1,e2,u1,u2 envEdge;
   class g5,g6,g7,g8,g9,g10 cliEdge;
   class gs1 gitEdge;
-  class d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,d16,d17,d18,g1,g2,g3,g4,g4b deltaEdge;
+  class d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,d16,d17,d18,d19,g1,g2,g3,g4,g4b deltaEdge;
 ```
 
 ## Graph delta summary
@@ -225,6 +226,7 @@ flowchart TD
 ```yaml
 - { src: { cli: reg_config, type: str, default: "", flags: ["--reg-config", "-c"] }, dst: { node: resolve-reg-path, port: reg_config } }
 - { src: { node: parse-root },       dst: { node: resolve-reg-path, port: root_cfg } }
+- { src: { node: discover-root },    dst: { node: resolve-reg-path, port: root_cfg_path } }
 - { src: { node: resolve-reg-path }, dst: { node: parse-reg,        port: reg_config_path } }
 - { src: { node: parse-reg },        dst: { node: parse-suite,      port: test_config } }
 - { src: { node: parse-suite },      dst: { node: select,           port: suite_cfg } }
