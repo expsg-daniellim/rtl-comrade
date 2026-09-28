@@ -36,8 +36,15 @@ class ParseSuiteConfigMod:
         self.prefix_suite = config.prefix_suite
 
     def run(self, test_config:str = "tests.yaml"):
-        path = Path(test_config).resolve()
-        # ... existing error handling (unchanged) ...
+        try:
+            path = Path(test_config).resolve()
+        except ValueError as e:
+            log.fatal("path_invalid", test_config=test_config, message=str(e), exc_info=e)
+        except RuntimeError as e:
+            log.fatal("path_symlink_loop", test_config=test_config, message=str(e), exc_info=e)
+        except OSError as e:
+            log.fatal("path_os_error", test_config=test_config, err=e.strerror, errno=e.errno, exc_info=e)
+        # ... existing read/parse error handling (unchanged) ...
         tbs = { tb.get_name(): tb for tb in raw.testbenches }
         suite_name = path.parent.name
         tests = {}
@@ -59,6 +66,7 @@ The only changes to `ParseSuiteConfigMod`:
 1. Add `Config` inner class with `prefix_suite:bool = False`.
 2. Add `__init__(self, config)` storing `self.prefix_suite`.
 3. In the test loop, set `key = f"{suite_name}/{t.name}" if self.prefix_suite else ""`.
+4. Wrap the existing `Path(test_config).resolve()` in its own `try` per the code sample, catching `ValueError` (e.g. an embedded null character), `RuntimeError` (symlink loop on Python ≤ 3.12) and `OSError` (symlink loop on Python ≥ 3.13, or a deleted working directory) as distinct `log.fatal` events. The resolve previously sat outside any `try`, leaving these to reach the harness as a raw traceback; this closes that gap under the exhaustive exception-handling rule in `docs/module-implementation/implementation.md`. It is kept separate from the read/parse `try` because that block's `ValueError` handler means `invalid_uvm_config`.
 
 When `prefix_suite` is false and `key=""`, `TestConfig.__post_init__` sets `key = self.name` — identical to the current behaviour. Existing test/randtest graphs pass no config, so `prefix_suite` defaults to `False`. The module keeps its single-return form — no output-shape change.
 
@@ -80,13 +88,23 @@ In `modules/tests/test_setup.py`.
 - `prefix_suite=True`, suite at `Path("/a/b/sandbox/tests.yaml")` — `test.key == "sandbox/<test_name>"` for each test.
 - `prefix_suite=True`, suite with zero tests — returns `SuiteConfig` with empty `tests` dict, no error.
 - Existing tests (no config) continue to pass — `prefix_suite` defaults to `False`.
+- `test_config` containing an embedded null character → `log.fatal("path_invalid")`.
+- `Path.resolve` raising `RuntimeError` (patched) → `log.fatal("path_symlink_loop")`.
+- `Path.resolve` raising `OSError` (patched) → `log.fatal("path_os_error")`.
+
+Each new error test asserts the event name passed to `log.fatal` (e.g. by wrapping it with `unittest.mock.patch(..., wraps=...)`), not only that `typer.Exit` is raised.
 
 ## Acceptance criteria
 
-- All four test cases pass.
+- All seven test cases pass.
 - Existing test and randtest graphs (no `config` block) are unaffected — `prefix_suite` defaults to `False`.
 - With `prefix_suite=True`, the key is `<suite_dir.name>/<test_name>`.
 - The module remains contract-agnostic: it runs under both `unit` and `default` without change.
+- A `test_config` that fails to resolve aborts via `log.fatal` with a distinct event name.
+
+## Docs
+
+Update `docs/modules/parse-suite-config.md`: add a Config section for `prefix_suite`, and add the three resolve events to its Failure routing section. Follow `docs/creating-documentation.md` and `docs/modules/doc-structure.md`.
 
 ## Constraints
 
