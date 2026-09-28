@@ -21,6 +21,7 @@ outputs:           default → Path (generator: 1 → N)
 
 ```python
 @serde
+@dataclass
 class RegConfigFile:
     filetype:Literal['reg_config'] = field(rename='rtl-buddy-filetype')
     test_configs:list[str] = field(rename='test-configs', default_factory=list)
@@ -47,7 +48,15 @@ class ParseRegConfigMod:
         except SerdeError as e:
             log.fatal("reg_config_serde_error", path=str(reg_config_path), message=str(e), exc_info=e)
         for entry in raw.test_configs:
-            yield ("default", (reg_config_path.parent / entry).resolve())
+            try:
+                path = (reg_config_path.parent / entry).resolve()
+            except ValueError as e:
+                log.fatal("reg_config_entry_invalid", path=str(reg_config_path), entry=entry, message=str(e), exc_info=e)
+            except RuntimeError as e:
+                log.fatal("reg_config_entry_symlink_loop", path=str(reg_config_path), entry=entry, message=str(e), exc_info=e)
+            except OSError as e:
+                log.fatal("reg_config_entry_os_error", path=str(reg_config_path), entry=entry, err=e.strerror, errno=e.errno, exc_info=e)
+            yield ("default", path)
 ```
 
 The `RegConfigFile` mirrors the upstream serde type, preserving the YAML field names exactly. Each yielded `Path` is resolved against the reg config's directory — `parse-suite-config` downstream receives it as its `test_config:str` input. The `Path` object flows into a `str`-annotated port; `ParseSuiteConfigMod` calls `Path(test_config).resolve()` which accepts both `str` and `Path`, so the type mismatch is harmless at runtime. Leave both sides as-is — do not change the `test_config:str` annotation or cast the path to `str` before yielding.
@@ -56,8 +65,8 @@ The `RegConfigFile` mirrors the upstream serde type, preserving the YAML field n
 
 1. Read `reg_config_path` as UTF-8 text.
 2. Deserialise via `from_yaml(RegConfigFile, ...)`.
-3. Catch exceptions per the code sample (the code is authoritative for handler set and ordering).
-4. For each entry in `test_configs`, yield `("default", (reg_config_path.parent / entry).resolve())`.
+3. Catch read/deserialise exceptions per the code sample (the code is authoritative for handler set and ordering).
+4. For each entry in `test_configs`, resolve `reg_config_path.parent / entry`, catching `ValueError` (e.g. an embedded null character, which survives YAML and serde), `RuntimeError` (symlink loop on Python ≤ 3.12) and `OSError` (symlink loop on Python ≥ 3.13) per the code sample, then yield `("default", path)` outside the `try`.
 
 ## `RegConfigFile` serde container
 
@@ -65,6 +74,7 @@ Module-private — read-once, never rides a graph edge. Same convention as `Suit
 
 ```python
 @serde
+@dataclass
 class RegConfigFile:
     filetype:Literal['reg_config'] = field(rename='rtl-buddy-filetype')
     test_configs:list[str] = field(rename='test-configs', default_factory=list)
@@ -91,11 +101,16 @@ In `modules/tests/test_setup.py`.
 - Malformed YAML → `log.fatal("reg_config_yaml_invalid")`.
 - Valid YAML, schema mismatch → `log.fatal("reg_config_serde_error")`.
 - YAML reader error (e.g. null bytes) → `log.fatal("reg_config_yaml_unreadable")`.
-- Other OS error (e.g. `ENOSPC` on read) → `log.fatal("reg_config_os_error")`.
+- Other OS error (e.g. `ENAMETOOLONG` from a 5000-character filename, as the existing `ParseSuiteConfigMod` tests do) → `log.fatal("reg_config_os_error")`.
+- `test-configs` entry containing an embedded null character → `log.fatal("reg_config_entry_invalid")`.
+- `Path.resolve` raising `RuntimeError` on an entry (patched) → `log.fatal("reg_config_entry_symlink_loop")`.
+- `Path.resolve` raising `OSError` on an entry (patched) → `log.fatal("reg_config_entry_os_error")`.
+
+Each error test asserts the event name passed to `log.fatal` (e.g. by wrapping it with `unittest.mock.patch(..., wraps=...)`), not only that `typer.Exit` is raised.
 
 ## Acceptance criteria
 
-- All ten test cases pass.
+- All thirteen test cases pass.
 - `parse-reg-config` → `ParseRegConfigMod` resolves in the manifest.
 - Each yielded path is resolved against the reg config's parent directory, not CWD.
 - Error paths abort via `log.fatal` with distinct event names.
