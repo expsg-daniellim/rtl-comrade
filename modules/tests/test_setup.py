@@ -32,6 +32,7 @@ ParseSuiteConfigMod = _mod.ParseSuiteConfigMod
 DeriveSeedModeMod = _mod.DeriveSeedModeMod
 DeriveRandtestRunsMod = _mod.DeriveRandtestRunsMod
 ResolveRegConfigPathMod = _mod.ResolveRegConfigPathMod
+ParseRegConfigMod = _mod.ParseRegConfigMod
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "root_config.yaml"
 _SUITE_FIXTURE = Path(__file__).parent / "fixtures" / "verif" / "sandbox" / "tests.yaml"
@@ -835,3 +836,123 @@ def test_resolve_reg_config_path_explicit(tmp_path):
 def test_resolve_reg_config_path_fallback_root_dir(tmp_path):
 	mod = ResolveRegConfigPathMod()
 	assert mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="") == ("default", (tmp_path / "design/regression.yaml").resolve())
+
+
+# ---------------------------------------------------------------------------
+# ParseRegConfigMod
+# ---------------------------------------------------------------------------
+
+
+def test_parse_reg_config_two_entries(tmp_path, monkeypatch):
+	reg = tmp_path / "design" / "regressions.yaml"
+	reg.parent.mkdir()
+	reg.write_text("rtl-buddy-filetype: reg_config\ntest-configs:\n  - suite_a/tests.yaml\n  - ../suite_b/tests.yaml\n")
+	monkeypatch.chdir(tmp_path)  # CWD differs from the reg config's directory
+	mod = ParseRegConfigMod()
+	assert list(mod.run(reg_config_path=reg)) == [("default", (reg.parent / "suite_a/tests.yaml").resolve()), ("default", (tmp_path / "suite_b/tests.yaml").resolve())]
+
+
+def test_parse_reg_config_empty_list(tmp_path):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text("rtl-buddy-filetype: reg_config\ntest-configs: []\n")
+	mod = ParseRegConfigMod()
+	assert list(mod.run(reg_config_path=reg)) == []
+
+
+def test_parse_reg_config_not_found(tmp_path, logging_handler):
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=tmp_path / "nonexistent.yaml"))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_not_found"
+
+
+def test_parse_reg_config_is_directory(tmp_path, logging_handler):
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=tmp_path))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_is_directory"
+
+
+@pytest.mark.skipif(os.geteuid() == 0, reason="root bypasses file-mode enforcement, so chmod 0o000 grants no denial")
+def test_parse_reg_config_permission_denied(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text("rtl-buddy-filetype: reg_config\ntest-configs: []\n")
+	reg.chmod(0o000)
+	mod = ParseRegConfigMod()
+	try:
+		with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+			list(mod.run(reg_config_path=reg))
+	finally:
+		reg.chmod(0o644)
+	assert log_mock.fatal.call_args.args[0] == "reg_config_permission_denied"
+
+
+def test_parse_reg_config_invalid_unicode(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_invalid_unicode"
+
+
+def test_parse_reg_config_yaml_invalid(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text("key: [\nnot closed")
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_yaml_invalid"
+
+
+def test_parse_reg_config_serde_error(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text("rtl-buddy-filetype: test_config\ntest-configs: []\n")
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_serde_error"
+
+
+def test_parse_reg_config_yaml_unreadable(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_bytes(b"\x00")  # valid UTF-8 but a non-printable char → yaml ReaderError
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_yaml_unreadable"
+
+
+def test_parse_reg_config_os_error(tmp_path, logging_handler):
+	too_long = tmp_path / ("x" * 5000 + ".yaml")  # ENAMETOOLONG on read → generic OSError
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=too_long))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_os_error"
+
+
+def test_parse_reg_config_entry_null_char(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text('rtl-buddy-filetype: reg_config\ntest-configs:\n  - "suite\\0/tests.yaml"\n')  # YAML escape survives into the str → embedded null
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_entry_invalid"
+
+
+def test_parse_reg_config_entry_symlink_loop(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text("rtl-buddy-filetype: reg_config\ntest-configs:\n  - suite/tests.yaml\n")
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=RuntimeError("Symlink loop")), pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_entry_symlink_loop"
+
+
+def test_parse_reg_config_entry_os_error(tmp_path, logging_handler):
+	reg = tmp_path / "regressions.yaml"
+	reg.write_text("rtl-buddy-filetype: reg_config\ntest-configs:\n  - suite/tests.yaml\n")
+	mod = ParseRegConfigMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=OSError(40, "Too many levels of symbolic links")), pytest.raises(typer.Exit):
+		list(mod.run(reg_config_path=reg))
+	assert log_mock.fatal.call_args.args[0] == "reg_config_entry_os_error"

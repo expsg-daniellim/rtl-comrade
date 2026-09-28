@@ -102,6 +102,45 @@ class ResolveRegConfigPathMod:
 		return ("default", path)
 
 
+@serde
+@dataclass
+class RegConfigFile:
+	filetype:Literal['reg_config'] = field(rename='rtl-buddy-filetype')
+	test_configs:list[str] = field(rename='test-configs', default_factory=list)
+
+
+class ParseRegConfigMod:
+	def run(self, reg_config_path:Path):
+		try:
+			raw = from_yaml(RegConfigFile, reg_config_path.read_text(encoding="utf-8"))
+		except UnicodeDecodeError as e:
+			log.fatal("reg_config_invalid_unicode", path=str(reg_config_path), reason=e.reason, exc_info=e)
+		except FileNotFoundError as e:
+			log.fatal("reg_config_not_found", path=str(reg_config_path), exc_info=e)
+		except IsADirectoryError as e:
+			log.fatal("reg_config_is_directory", path=str(reg_config_path), exc_info=e)
+		except PermissionError as e:
+			log.fatal("reg_config_permission_denied", path=str(reg_config_path), exc_info=e)
+		except OSError as e:
+			log.fatal("reg_config_os_error", path=str(reg_config_path), err=e.strerror, errno=e.errno, exc_info=e)
+		except MarkedYAMLError as e:
+			log.fatal("reg_config_yaml_invalid", path=str(reg_config_path), problem=e.problem, exc_info=e)
+		except ReaderError as e:
+			log.fatal("reg_config_yaml_unreadable", path=str(reg_config_path), reason=e.reason, exc_info=e)
+		except SerdeError as e:
+			log.fatal("reg_config_serde_error", path=str(reg_config_path), message=str(e), exc_info=e)
+		for entry in raw.test_configs:
+			try:
+				path = (reg_config_path.parent / entry).resolve()
+			except ValueError as e:
+				log.fatal("reg_config_entry_invalid", path=str(reg_config_path), entry=entry, message=str(e), exc_info=e)
+			except RuntimeError as e:
+				log.fatal("reg_config_entry_symlink_loop", path=str(reg_config_path), entry=entry, message=str(e), exc_info=e)
+			except OSError as e:
+				log.fatal("reg_config_entry_os_error", path=str(reg_config_path), entry=entry, err=e.strerror, errno=e.errno, exc_info=e)
+			yield ("default", path)
+
+
 class WorkDirMod:
 	def run(self):
 		return ("default", Path.cwd().resolve())

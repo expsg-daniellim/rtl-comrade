@@ -49,6 +49,7 @@ files:
   - { name: git-status, class_name: GitStatusMod }
   - { name: derive-randtest-runs, class_name: DeriveRandtestRunsMod }
   - { name: resolve-reg-config-path, class_name: ResolveRegConfigPathMod }
+  - { name: parse-reg-config, class_name: ParseRegConfigMod }
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }
