@@ -47,6 +47,7 @@ Modules are registered by plugin name in `modules/config.yaml`. Each documented 
 | [derive-randtest-runs](derive-randtest-runs.md) | derive run ids and seed mode from `rnd_cnt` / `--rnd-rpt` |
 | [resolve-reg-config-path](resolve-reg-config-path.md) | resolve the regression config path from the CLI or root config |
 | [parse-reg-config](parse-reg-config.md) | parse `regressions.yaml` into one suite config path per entry |
+| [extract-suite-dir](extract-suite-dir.md) | emit a test's suite directory and created logs directory as keyed values |
 | [list-test-names](list-test-names.md) | print test names from the suite and exit |
 | [select-tests](select-tests.md) | select tests from the suite by name or all |
 | [filter-reglvl](filter-reglvl.md) | filter tests by register level |

@@ -10,7 +10,7 @@ import pytest
 import typer
 
 from rtl_comrade.testing import run_module_scenario
-from modules.rtl_buddy.schema import PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, SeedMode
+from modules.rtl_buddy.schema import KeyedValue, PlatformConfig, RootConfig, RootRtlField, RtlBuilderConfig, SeedMode
 from modules.rtl_buddy.schema.suite import SuiteConfig, TestConfig, TestbenchConfig
 
 _spec = importlib.util.spec_from_file_location(
@@ -33,6 +33,7 @@ DeriveSeedModeMod = _mod.DeriveSeedModeMod
 DeriveRandtestRunsMod = _mod.DeriveRandtestRunsMod
 ResolveRegConfigPathMod = _mod.ResolveRegConfigPathMod
 ParseRegConfigMod = _mod.ParseRegConfigMod
+ExtractSuiteDirMod = _mod.ExtractSuiteDirMod
 
 _FIXTURE = Path(__file__).parent / "fixtures" / "root_config.yaml"
 _SUITE_FIXTURE = Path(__file__).parent / "fixtures" / "verif" / "sandbox" / "tests.yaml"
@@ -1033,3 +1034,59 @@ def test_parse_reg_config_entry_os_error(tmp_path, logging_handler):
 	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=OSError(40, "Too many levels of symbolic links")), pytest.raises(typer.Exit):
 		list(mod.run(reg_config_path=reg))
 	assert log_mock.fatal.call_args.args[0] == "reg_config_entry_os_error"
+
+
+# ---------------------------------------------------------------------------
+# ExtractSuiteDirMod
+# ---------------------------------------------------------------------------
+
+
+def _suite_dir_test(suite_dir, key="sandbox/basic"):
+	return TestConfig(name="basic", desc="d", model="m", model_path="models.yaml", suite_dir=suite_dir, reglvl=None, pa=None, pd=None, uvm=None, preproc_path=None, postproc_path=None, sweep_path=None, tb=TestbenchConfig(name="tb", filelist=[]), timeout=None, key=key)
+
+
+def test_extract_suite_dir_default_logs_dir(tmp_path):
+	mod = ExtractSuiteDirMod()
+	assert list(mod.run(test=_suite_dir_test(tmp_path), logs_dir="logs")) == [("base_dir", KeyedValue("sandbox/basic", tmp_path)), ("logs_dir", KeyedValue("sandbox/basic", (tmp_path / "logs").resolve()))]
+	assert (tmp_path / "logs").is_dir()
+
+
+def test_extract_suite_dir_custom_logs_dir(tmp_path):
+	mod = ExtractSuiteDirMod()
+	assert list(mod.run(test=_suite_dir_test(tmp_path), logs_dir="out")) == [("base_dir", KeyedValue("sandbox/basic", tmp_path)), ("logs_dir", KeyedValue("sandbox/basic", (tmp_path / "out").resolve()))]
+	assert (tmp_path / "out").is_dir()
+
+
+def test_extract_suite_dir_idempotent(tmp_path):
+	mod = ExtractSuiteDirMod()
+	first = list(mod.run(test=_suite_dir_test(tmp_path)))
+	assert list(mod.run(test=_suite_dir_test(tmp_path))) == first
+	assert (tmp_path / "logs").is_dir()
+
+
+def test_extract_suite_dir_create_failed(tmp_path, logging_handler):
+	mod = ExtractSuiteDirMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "mkdir", side_effect=PermissionError("denied")), pytest.raises(typer.Exit):
+		list(mod.run(test=_suite_dir_test(tmp_path)))
+	assert log_mock.fatal.call_args.args[0] == "logs_dir_create_failed"
+
+
+def test_extract_suite_dir_path_invalid(tmp_path, logging_handler):
+	mod = ExtractSuiteDirMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		list(mod.run(test=_suite_dir_test(tmp_path), logs_dir="lo\0gs"))
+	assert log_mock.fatal.call_args.args[0] == "logs_dir_path_invalid"
+
+
+def test_extract_suite_dir_path_symlink_loop(tmp_path, logging_handler):
+	mod = ExtractSuiteDirMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=RuntimeError("Symlink loop")), pytest.raises(typer.Exit):
+		list(mod.run(test=_suite_dir_test(tmp_path)))
+	assert log_mock.fatal.call_args.args[0] == "logs_dir_path_symlink_loop"
+
+
+def test_extract_suite_dir_path_os_error(tmp_path, logging_handler):
+	mod = ExtractSuiteDirMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=OSError(40, "Too many levels of symbolic links")), pytest.raises(typer.Exit):
+		list(mod.run(test=_suite_dir_test(tmp_path)))
+	assert log_mock.fatal.call_args.args[0] == "logs_dir_path_os_error"

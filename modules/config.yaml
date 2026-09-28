@@ -50,6 +50,7 @@ files:
   - { name: derive-randtest-runs, class_name: DeriveRandtestRunsMod }
   - { name: resolve-reg-config-path, class_name: ResolveRegConfigPathMod }
   - { name: parse-reg-config, class_name: ParseRegConfigMod }
+  - { name: extract-suite-dir, class_name: ExtractSuiteDirMod }
 - file: rtl_buddy/control.py
   plugins:
   - { name: early-stop-gate, class_name: EarlyStopGateMod }

@@ -164,6 +164,24 @@ class EnsureLogsDirMod:
 		return ("logs_dir", path)
 
 
+class ExtractSuiteDirMod:
+	def run(self, test:TestConfig, logs_dir:str = "logs"):
+		try:
+			logs_path = (test.suite_dir / logs_dir).resolve()
+		except ValueError as e:
+			log.fatal("logs_dir_path_invalid", suite_dir=str(test.suite_dir), logs_dir=logs_dir, message=str(e), exc_info=e)
+		except RuntimeError as e:
+			log.fatal("logs_dir_path_symlink_loop", suite_dir=str(test.suite_dir), logs_dir=logs_dir, message=str(e), exc_info=e)
+		except OSError as e:
+			log.fatal("logs_dir_path_os_error", suite_dir=str(test.suite_dir), logs_dir=logs_dir, err=e.strerror, errno=e.errno, exc_info=e)
+		try:
+			logs_path.mkdir(parents=True, exist_ok=True)
+		except OSError as e:
+			log.fatal("logs_dir_create_failed", path=str(logs_path), exc_info=e)
+		yield ("base_dir", KeyedValue(test.key, test.suite_dir))
+		yield ("logs_dir", KeyedValue(test.key, logs_path))
+
+
 @serde
 @dataclass
 class TestConfigFile:  # pylint: disable=too-many-instance-attributes
