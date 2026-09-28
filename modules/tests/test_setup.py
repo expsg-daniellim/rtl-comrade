@@ -838,6 +838,27 @@ def test_resolve_reg_config_path_fallback_root_dir(tmp_path):
 	assert mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="") == ("default", (tmp_path / "design/regression.yaml").resolve())
 
 
+def test_resolve_reg_config_path_null_char(tmp_path, logging_handler):
+	mod = ResolveRegConfigPathMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="path/to\0/reg.yaml")
+	assert log_mock.fatal.call_args.args[0] == "reg_config_path_invalid"
+
+
+def test_resolve_reg_config_path_symlink_loop(tmp_path, logging_handler):
+	mod = ResolveRegConfigPathMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=RuntimeError("Symlink loop")), pytest.raises(typer.Exit):
+		mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="")
+	assert log_mock.fatal.call_args.args[0] == "reg_config_path_symlink_loop"
+
+
+def test_resolve_reg_config_path_os_error(tmp_path, logging_handler):
+	mod = ResolveRegConfigPathMod()
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=OSError(40, "Too many levels of symbolic links")), pytest.raises(typer.Exit):
+		mod.run(root_cfg=_reg_root_cfg("design/regression.yaml"), root_cfg_path=tmp_path / "root_config.yaml", reg_config="path/to/reg.yaml")
+	assert log_mock.fatal.call_args.args[0] == "reg_config_path_os_error"
+
+
 # ---------------------------------------------------------------------------
 # ParseRegConfigMod
 # ---------------------------------------------------------------------------

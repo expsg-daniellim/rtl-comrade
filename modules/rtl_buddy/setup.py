@@ -95,10 +95,17 @@ class ResolveBuilderMod:
 
 class ResolveRegConfigPathMod:
 	def run(self, root_cfg:RootConfig, root_cfg_path:Path, reg_config:str = ""):
-		if reg_config:
-			path = Path(reg_config).resolve()
-		else:
-			path = (root_cfg_path.parent / root_cfg.cfg_rtl_reg.path).resolve()  # rtl_buddy resolves the fallback against root_config.yaml's dir, not CWD
+		try:
+			if reg_config:
+				path = Path(reg_config).resolve()
+			else:
+				path = (root_cfg_path.parent / root_cfg.cfg_rtl_reg.path).resolve()  # rtl_buddy resolves the fallback against root_config.yaml's dir, not CWD
+		except ValueError as e:
+			log.fatal("reg_config_path_invalid", reg_config=reg_config, message=str(e), exc_info=e)
+		except RuntimeError as e:
+			log.fatal("reg_config_path_symlink_loop", reg_config=reg_config, message=str(e), exc_info=e)
+		except OSError as e:
+			log.fatal("reg_config_path_os_error", reg_config=reg_config, err=e.strerror, errno=e.errno, exc_info=e)
 		return ("default", path)
 
 
