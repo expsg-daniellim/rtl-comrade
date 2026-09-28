@@ -88,7 +88,7 @@ No downstream module changes — only graph-YAML contract configs (`persistent_i
 
 In `modules/tests/test_setup.py`.
 
-- `test` with `key="sandbox/basic"`, `suite_dir=Path("/a/b/sandbox")`, `logs_dir="logs"` → yields `("base_dir", KeyedValue("sandbox/basic", Path("/a/b/sandbox")))`, `("logs_dir", KeyedValue("sandbox/basic", Path("/a/b/sandbox/logs")))`. The `logs/` directory is created.
+- `test` with `key="sandbox/basic"`, `suite_dir=tmp_path`, `logs_dir="logs"` → yields `("base_dir", KeyedValue("sandbox/basic", tmp_path))`, `("logs_dir", KeyedValue("sandbox/basic", (tmp_path / "logs").resolve()))`. The `logs/` directory exists on disk afterwards.
 - `logs_dir="out"` → `logs_dir` path is `suite_dir / "out"`.
 - Idempotent: calling twice with the same `suite_dir` does not error (`mkdir -p`).
 - `mkdir` raises `OSError` → `log.fatal("logs_dir_create_failed")`.
