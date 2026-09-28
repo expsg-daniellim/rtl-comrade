@@ -191,8 +191,22 @@ class SuiteConfigFile:
 
 
 class ParseSuiteConfigMod:
+	@serde
+	class Config:
+		prefix_suite:bool = False
+
+	def __init__(self, config):
+		self.prefix_suite = config.prefix_suite
+
 	def run(self, test_config:str = "tests.yaml"):
-		path = Path(test_config).resolve()
+		try:
+			path = Path(test_config).resolve()
+		except ValueError as e:
+			log.fatal("path_invalid", test_config=test_config, message=str(e), exc_info=e)
+		except RuntimeError as e:
+			log.fatal("path_symlink_loop", test_config=test_config, message=str(e), exc_info=e)
+		except OSError as e:
+			log.fatal("path_os_error", test_config=test_config, err=e.strerror, errno=e.errno, exc_info=e)
 		try:
 			raw = from_yaml(SuiteConfigFile, path.read_text(encoding="utf-8"))
 		except UnicodeDecodeError as e:
@@ -214,13 +228,15 @@ class ParseSuiteConfigMod:
 		except ValueError as e:
 			log.fatal("invalid_uvm_config", path=str(path), reason=str(e), exc_info=e)
 		tbs = { tb.get_name(): tb for tb in raw.testbenches }
+		suite_name = path.parent.name
 		tests = {}
 		for t in raw.tests:
 			try:
 				tb = tbs[t.tb]
 			except KeyError as e:
 				log.fatal("unknown_testbench", path=str(path), test=t.name, testbench=t.tb, exc_info=e)
-			tests[t.name] = TestConfig(name=t.name, desc=t.desc, model=t.model, model_path=t.model_path, reglvl=t.reglvl, pa=t.pa, pd=t.pd, uvm=t.uvm, preproc_path=t.preproc_path, postproc_path=t.postproc_path, sweep_path=t.sweep_path, tb=tb, timeout=t.timeout, suite_dir=path.parent)
+			key = f"{suite_name}/{t.name}" if self.prefix_suite else ""
+			tests[t.name] = TestConfig(name=t.name, desc=t.desc, model=t.model, model_path=t.model_path, reglvl=t.reglvl, pa=t.pa, pd=t.pd, uvm=t.uvm, preproc_path=t.preproc_path, postproc_path=t.postproc_path, sweep_path=t.sweep_path, tb=tb, timeout=t.timeout, suite_dir=path.parent, key=key)
 		suite_cfg = SuiteConfig(path=path, tests=tests)
 		return ("default", suite_cfg)
 

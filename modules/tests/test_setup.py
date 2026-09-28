@@ -483,7 +483,7 @@ tests:
 
 
 def test_parse_suite_config_happy_path():
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	result = mod.run(test_config=str(_SUITE_FIXTURE))
 	assert result is not None
 	port, suite_cfg = result
@@ -502,7 +502,7 @@ def test_parse_suite_config_relative_cwd(tmp_path, monkeypatch):
 	yaml_path = tmp_path / "tests.yaml"
 	yaml_path.write_text(_MINIMAL_SUITE_YAML)
 	monkeypatch.chdir(tmp_path)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	result = mod.run(test_config="tests.yaml")
 	assert result is not None
 	port, suite_cfg = result
@@ -517,7 +517,7 @@ def test_parse_suite_config_relative_subdir(tmp_path, monkeypatch):
 	yaml_path = sub / "tests.yaml"
 	yaml_path.write_text(_MINIMAL_SUITE_YAML)
 	monkeypatch.chdir(tmp_path)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	result = mod.run(test_config="sub/tests.yaml")
 	assert result is not None
 	port, suite_cfg = result
@@ -527,7 +527,7 @@ def test_parse_suite_config_relative_subdir(tmp_path, monkeypatch):
 
 
 def test_parse_suite_config_round_trip():
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	_, suite_cfg = mod.run(test_config=str(_SUITE_FIXTURE))
 	basic = suite_cfg.tests["basic"]
 	assert basic.name == "basic"
@@ -575,7 +575,7 @@ tests:
 """
 	p = tmp_path / "tests.yaml"
 	p.write_text(yaml_text)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	_, suite_cfg = mod.run(test_config=str(p))
 	t = suite_cfg.tests["t"]
 	assert t.tb.name == "tb"
@@ -605,7 +605,7 @@ tests:
 """
 	p = tmp_path / "tests.yaml"
 	p.write_text(yaml_text)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	_, suite_cfg = mod.run(test_config=str(p))
 	assert suite_cfg.tests["t"].preproc_path == "foo.py"
 
@@ -613,7 +613,7 @@ tests:
 def test_parse_suite_config_preproc_omitted(tmp_path):
 	p = tmp_path / "tests.yaml"
 	p.write_text(_MINIMAL_SUITE_YAML)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	_, suite_cfg = mod.run(test_config=str(p))
 	assert suite_cfg.tests["t"].preproc_path is None
 
@@ -634,13 +634,13 @@ tests:
 """
 	p = tmp_path / "tests.yaml"
 	p.write_text(yaml_text)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	_, suite_cfg = mod.run(test_config=str(p))
 	assert suite_cfg.tests["t"].preproc_path is None
 
 
 def test_parse_suite_config_lazy_model():
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	_, suite_cfg = mod.run(test_config=str(_SUITE_FIXTURE))
 	for test in suite_cfg.tests.values():
 		assert isinstance(test.model, str)
@@ -650,13 +650,13 @@ def test_parse_suite_config_lazy_model():
 
 
 def test_parse_suite_config_not_found(tmp_path, logging_handler):
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(tmp_path / "nonexistent.yaml"))
 
 
 def test_parse_suite_config_is_directory(tmp_path, logging_handler):
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(tmp_path))
 
@@ -664,7 +664,7 @@ def test_parse_suite_config_is_directory(tmp_path, logging_handler):
 def test_parse_suite_config_invalid_unicode(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_bytes(b"\xff\xfe invalid utf-8 \x80\x81")
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))
 
@@ -674,7 +674,7 @@ def test_parse_suite_config_permission_denied(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_text("rtl-buddy-filetype: test_config\ntestbenches: []\ntests: []\n")
 	bad.chmod(0o000)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	try:
 		with pytest.raises(typer.Exit):
 			mod.run(test_config=str(bad))
@@ -684,7 +684,7 @@ def test_parse_suite_config_permission_denied(tmp_path, logging_handler):
 
 def test_parse_suite_config_os_error(tmp_path, logging_handler):
 	too_long = tmp_path / ("x" * 5000 + ".yaml")  # ENAMETOOLONG on read → generic OSError
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(too_long))
 
@@ -692,7 +692,7 @@ def test_parse_suite_config_os_error(tmp_path, logging_handler):
 def test_parse_suite_config_yaml_unreadable(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_bytes(b"\x00")  # valid UTF-8 but a non-printable char → yaml ReaderError
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))
 
@@ -700,7 +700,7 @@ def test_parse_suite_config_yaml_unreadable(tmp_path, logging_handler):
 def test_parse_suite_config_yaml_invalid(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_text("key: [\nnot closed")
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))
 
@@ -708,7 +708,7 @@ def test_parse_suite_config_yaml_invalid(tmp_path, logging_handler):
 def test_parse_suite_config_serde_error(tmp_path, logging_handler):
 	bad = tmp_path / "tests.yaml"
 	bad.write_text("rtl-buddy-filetype: wrong_type\ntestbenches: []\ntests: []\n")
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))
 
@@ -729,7 +729,7 @@ tests:
     uvm:
       max_warns: -1
 """)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))
 
@@ -748,9 +748,65 @@ tests:
     model_path: "models.yaml"
     testbench: "tb_nonexistent"
 """)
-	mod = ParseSuiteConfigMod()
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
 	with pytest.raises(typer.Exit):
 		mod.run(test_config=str(bad))
+
+
+def test_parse_suite_config_prefix_suite_default_key_is_name(tmp_path):
+	p = tmp_path / "tests.yaml"
+	p.write_text(_MINIMAL_SUITE_YAML)
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
+	_, suite_cfg = mod.run(test_config=str(p))
+	assert suite_cfg.tests["t"].key == "t"
+
+
+def test_parse_suite_config_prefix_suite_keys_by_suite_dir_name():
+	yaml_text = _MINIMAL_SUITE_YAML + """\
+  - name: "u"
+    desc: "d"
+    model: "m"
+    model_path: "models.yaml"
+    testbench: "tb"
+"""
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config(prefix_suite=True))
+	with patch.object(Path, "read_text", return_value=yaml_text):
+		_, suite_cfg = mod.run(test_config=str(Path("/a/b/sandbox/tests.yaml")))
+	assert sorted(suite_cfg.tests) == ["t", "u"]
+	for name, test in suite_cfg.tests.items():
+		assert test.key == f"sandbox/{name}"
+		assert test.name == name
+
+
+def test_parse_suite_config_prefix_suite_zero_tests(tmp_path):
+	p = tmp_path / "tests.yaml"
+	p.write_text("rtl-buddy-filetype: test_config\ntestbenches: []\ntests: []\n")
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config(prefix_suite=True))
+	port, suite_cfg = mod.run(test_config=str(p))
+	assert port == "default"
+	assert isinstance(suite_cfg, SuiteConfig)
+	assert suite_cfg.tests == {}
+
+
+def test_parse_suite_config_path_invalid(logging_handler):
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, pytest.raises(typer.Exit):
+		mod.run(test_config="path/to\0/tests.yaml")
+	assert log_mock.fatal.call_args.args[0] == "path_invalid"
+
+
+def test_parse_suite_config_path_symlink_loop(logging_handler):
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=RuntimeError("Symlink loop")), pytest.raises(typer.Exit):
+		mod.run(test_config="tests.yaml")
+	assert log_mock.fatal.call_args.args[0] == "path_symlink_loop"
+
+
+def test_parse_suite_config_path_os_error(logging_handler):
+	mod = ParseSuiteConfigMod(ParseSuiteConfigMod.Config())
+	with patch.object(_mod, "log", wraps=_mod.log) as log_mock, patch.object(Path, "resolve", side_effect=OSError(40, "Too many levels of symbolic links")), pytest.raises(typer.Exit):
+		mod.run(test_config="tests.yaml")
+	assert log_mock.fatal.call_args.args[0] == "path_os_error"
 
 
 # ---------------------------------------------------------------------------
