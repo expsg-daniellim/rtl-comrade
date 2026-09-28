@@ -31,7 +31,14 @@ outputs:           ("base_dir", KeyedValue), ("logs_dir", KeyedValue)
 ```python
 class ExtractSuiteDirMod:
     def run(self, test:TestConfig, logs_dir:str = "logs"):
-        logs_path = (test.suite_dir / logs_dir).resolve()
+        try:
+            logs_path = (test.suite_dir / logs_dir).resolve()
+        except ValueError as e:
+            log.fatal("logs_dir_path_invalid", suite_dir=str(test.suite_dir), logs_dir=logs_dir, message=str(e), exc_info=e)
+        except RuntimeError as e:
+            log.fatal("logs_dir_path_symlink_loop", suite_dir=str(test.suite_dir), logs_dir=logs_dir, message=str(e), exc_info=e)
+        except OSError as e:
+            log.fatal("logs_dir_path_os_error", suite_dir=str(test.suite_dir), logs_dir=logs_dir, err=e.strerror, errno=e.errno, exc_info=e)
         try:
             logs_path.mkdir(parents=True, exist_ok=True)
         except OSError as e:
@@ -44,7 +51,7 @@ The `logs_dir` string comes from the CLI edge as a persistent input. `test` is t
 
 ## Algorithm
 
-1. Resolve `test.suite_dir / logs_dir` to an absolute path.
+1. Resolve `test.suite_dir / logs_dir` to an absolute path, catching `ValueError` (e.g. an embedded null character in the CLI `logs_dir` string), `RuntimeError` (symlink loop on Python ≤ 3.12) and `OSError` (symlink loop on Python ≥ 3.13) per the code sample, in a `try` separate from the `mkdir` one.
 2. Create the directory (`parents=True, exist_ok=True`). On `OSError` → `log.fatal("logs_dir_create_failed")`.
 3. Yield `("base_dir", KeyedValue(test.key, test.suite_dir))`.
 4. Yield `("logs_dir", KeyedValue(test.key, logs_path))`.
@@ -85,17 +92,23 @@ In `modules/tests/test_setup.py`.
 - `logs_dir="out"` → `logs_dir` path is `suite_dir / "out"`.
 - Idempotent: calling twice with the same `suite_dir` does not error (`mkdir -p`).
 - `mkdir` raises `OSError` → `log.fatal("logs_dir_create_failed")`.
+- `logs_dir` containing an embedded null character → `log.fatal("logs_dir_path_invalid")`.
+- `Path.resolve` raising `RuntimeError` (patched) → `log.fatal("logs_dir_path_symlink_loop")`.
+- `Path.resolve` raising `OSError` (patched) → `log.fatal("logs_dir_path_os_error")`.
+
+Each error test asserts the event name passed to `log.fatal` (e.g. by wrapping it with `unittest.mock.patch(..., wraps=...)`), not only that `typer.Exit` is raised.
 
 ## Acceptance criteria
 
-- All four test cases pass.
+- All seven test cases pass.
 - `extract-suite-dir` → `ExtractSuiteDirMod` resolves in the manifest.
 - The `logs/` directory is created on each invocation (idempotent).
 - Emitted `KeyedValue`s carry the correct `test.key`.
+- A `logs_dir` path that fails to resolve or create aborts via `log.fatal` with a distinct event name.
 
 ## Docs
 
-Add a `docs/modules/extract-suite-dir.md` page and update `docs/modules/index.md` to include it. Follow `docs/creating-documentation.md` and `docs/modules/doc-structure.md`.
+Add a `docs/modules/extract-suite-dir.md` page (with a Failure routing section listing all four events) and update `docs/modules/index.md` to include it. Follow `docs/creating-documentation.md` and `docs/modules/doc-structure.md`.
 
 ## Constraints
 
