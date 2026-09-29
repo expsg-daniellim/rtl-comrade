@@ -124,7 +124,7 @@ These tests **compile and simulate real RTL**, so `verilator` must be installed;
 
 | Binary | Version | Role |
 |---|---|---|
-| `verilator` | `v5.042` | the configured builder (`root_config.yaml`) — actually compiles and simulates each test |
+| `verilator` | `v5.052` | the configured builder (`root_config.yaml`) — actually compiles and simulates each test |
 
 The `ParseLogMod` correction tests and the concurrency-note test in the same file are self-contained (no suite, no binary) and always run.
 

@@ -44,13 +44,13 @@ typedef class TestCore;
 
 // Error Reporting Macros
 `define lvm_rpt_inf(fmt_msg) \
-  tc.rpt_inf($sformatf fmt_msg)
+  tc.rpt_inf_fn($sformatf fmt_msg)
 `define lvm_rpt_wrn(fmt_msg) \
-  tc.rpt_wrn($sformatf fmt_msg)
+  tc.rpt_wrn_fn($sformatf fmt_msg)
 `define lvm_rpt_err(fmt_msg) \
-  tc.rpt_err($sformatf fmt_msg)
+  tc.rpt_err_fn($sformatf fmt_msg)
 `define lvm_rpt_fat(fmt_msg) \
-  tc.rpt_fat($sformatf fmt_msg)
+  tc.rpt_fat_fn($sformatf fmt_msg)
 
 // Interface
 interface class TestEndHook;
@@ -107,28 +107,28 @@ class TestCore;
   endfunction
   
   // report information 
-  function void rpt_inf(string s);
+  function void rpt_inf_fn(string s);
     ninf++;
     if (this.verbosity <= RPT_INF)
       $display("INF: %t %s", $time, s);
   endfunction
 
   // report warnings 
-  function void rpt_wrn(string s);
+  function void rpt_wrn_fn(string s);
     nwrn++;
     if (this.verbosity <= RPT_WRN)
       $display("WRN: %t %s", $time, s);
   endfunction
 
   // report errors 
-  function void rpt_err(string s);
+  function void rpt_err_fn(string s);
     nerr++;
     if (this.verbosity <= RPT_ERR)
       $display("ERR: %t %s", $time, s);
   endfunction
 
   // report fatals 
-  function void rpt_fat(string s);
+  function void rpt_fat_fn(string s);
     nfat++;
     if (this.verbosity <= RPT_FAT) begin
       $display("FAT: %t %s", $time, s);
@@ -188,19 +188,19 @@ class LvmComponent;
   endfunction
 
   function void rpt_inf(string s);
-    tc.rpt_inf(s);
+    tc.rpt_inf_fn(s);
   endfunction
   
   function void rpt_wrn(string s);
-    tc.rpt_inf(s);
+    tc.rpt_inf_fn(s);
   endfunction
 
   function void rpt_err(string s);
-    tc.rpt_inf(s);
+    tc.rpt_inf_fn(s);
   endfunction
 
   function void rpt_fat(string s);
-    tc.rpt_inf(s);
+    tc.rpt_inf_fn(s);
   endfunction
 
 endclass
