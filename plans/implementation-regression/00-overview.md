@@ -10,7 +10,7 @@ Port `rtl_buddy`'s `do_rtl_regression` command as a sibling `rtl-comrade` graph,
 
 `regression` differs from `test` in five ways:
 
-1. **Suite pipeline.** `test` reads one suite config from the CLI. `regression` reads a `regressions.yaml` listing N suite configs, resolves each path, and streams them into `parse-suite-config` under a `default` contract (not `unit`).
+1. **Suite pipeline.** `test` reads one suite config from the CLI. `regression` reads a `regressions.yaml` listing N suite configs, resolves each path, and streams them into `parse-suite-config` under a `default` contract (not `unit`). The `parse-reg → parse-suite` edge is `required: true`: `test_config` defaults to `"tests.yaml"`, so without it the `default` contract would fire once on that default against the CWD instead of awaiting the suite stream.
 2. **Per-suite `base_dir` and `logs_dir`.** `test` emits `Path.cwd().resolve()` once via `work-dir` and fans it out as a persistent input. Regression has no single CWD — each suite's working directory is `suite_dir` from `parse-suite-config`. Two `ExtractSuiteDirMod` instances (pre- and post-fan-out) replace `work-dir` and `ensure-logs`, emitting `base_dir` (which feeds both `base_dir` and `work_dir` destination ports) and `logs_dir`.
 3. **Suite-key prefixing.** The correlation key becomes `<suite>/<test>#<sweep>#<run>` to distinguish same-named tests across suites and group the summary table by suite.
 4. **Seed mode.** Always `SeedMode.DEFAULT` — no `--rnd-new`/`--rnd-last` CLI flags. A `constant` node replaces `derive-seed-mode`.
@@ -172,7 +172,7 @@ flowchart TD
 |---|---|
 | `parse-suite` | Contract switches from `unit` to `default`; config adds `prefix_suite: true` |
 | `cc-build` | Remove `work_dir` and `logs_dir` from `persistent_inputs` |
-| `cc-run` | Contract switches from `default` to `keyed_join` (`key_field: key`, `persistent_inputs: [env_ready]`, `unwrap: true`, `ignore: [default]`); somewhat mirrors `sim-run`'s contract |
+| `cc-run` | Contract switches from `default` to `keyed_join` (`key_field: key`, `persistent_inputs: [env_ready, timeout]`, `unwrap: true`, `ignore: [default]`); somewhat mirrors `sim-run`'s contract. `timeout` has no source (compile has no timeout, unlike `sim-run`, which gets it from `sim-build`); as a keyed port it would never complete a key and the join would hang, while as a persistent port with a module default it never blocks and `RunProcessMod`'s `timeout=None` applies |
 | `filter` | No contract config change. `reg_level` and `start_level` gain CLI edges (type `int`, default `0`); in `test` they had no source and defaulted to `None` (no filtering). With `0`/`0`, only level-0 tests pass |
 | `sim-build` | Remove `logs_dir` from `persistent_inputs` |
 | `seed` | Remove `logs_dir` from `persistent_inputs` |
@@ -228,7 +228,7 @@ flowchart TD
 - { src: { node: parse-root },       dst: { node: resolve-reg-path, port: root_cfg } }
 - { src: { node: discover-root },    dst: { node: resolve-reg-path, port: root_cfg_path } }
 - { src: { node: resolve-reg-path }, dst: { node: parse-reg,        port: reg_config_path } }
-- { src: { node: parse-reg },        dst: { node: parse-suite,      port: test_config } }
+- { src: { node: parse-reg },        dst: { node: parse-suite,      port: test_config, required: true } }
 - { src: { node: parse-suite },      dst: { node: select,           port: suite_cfg } }
 ```
 

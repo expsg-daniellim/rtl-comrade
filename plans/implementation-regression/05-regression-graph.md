@@ -56,7 +56,7 @@ Change:
 # (was: module: parse-suite-config, contract: unit)
 ```
 
-Apply the contract config changes listed in [00-overview § Nodes changed](00-overview.md#nodes-changed): remove `work_dir`, `base_dir`, and/or `logs_dir` from `persistent_inputs` on `cc-build`, `sim-build`, `seed`, `sim-run`, `fl-tb`, `fl-norm`, `fl-path`; switch `cc-run` to `keyed_join` (mirroring `sim-run`'s contract); add `unwrap: true` to `randseed` and `link-latest`.
+Apply the contract config changes listed in [00-overview § Nodes changed](00-overview.md#nodes-changed): remove `work_dir`, `base_dir`, and/or `logs_dir` from `persistent_inputs` on `cc-build`, `sim-build`, `seed`, `sim-run`, `fl-tb`, `fl-norm`, `fl-path`; switch `cc-run` to `keyed_join` with `persistent_inputs: [env_ready, timeout]` as listed there; add `unwrap: true` to `randseed` and `link-latest`.
 
 ### Edges
 
@@ -97,9 +97,10 @@ Append under the `commands:` key in `rtl_comrade_config.yaml`:
 
 ### E2E tests
 
-Using the existing fixture project. The fixture already has a `design/regression.yaml` (`tests/e2e/fixtures/proj/design/regression.yaml`) referencing `../verif/sandbox/tests.yaml`.
+Using the existing fixture project, run from the fixture project root (`tests/e2e/fixtures/proj`) so the relative `-c` path resolves. The fixture already has a `design/regression.yaml` (`tests/e2e/fixtures/proj/design/regression.yaml`) referencing `../verif/sandbox/tests.yaml`.
 
-- `rtl-comrade regression` — runs with default `reg_config=""` (derived from root config), `reg_level=0`, `start_level=0`. All level-0 tests from all suites run.
+- `rtl-comrade regression` with no arguments — prints help and exits 0, since the harness makes a subcommand with parameters `no_args_is_help` (`src/rtl_comrade/app.py`).
+- `rtl-comrade regression -l 0` — passes the default level explicitly so the graph runs with default `reg_config=""` (derived from root config), `reg_level=0`, `start_level=0`. All level-0 tests from all suites run.
 - `rtl-comrade regression -c design/regression.yaml` — explicit reg config path, same result.
 - `rtl-comrade regression -l 1` — filters tests to regression level ≤ 1.
 - `rtl-comrade regression -s 2` — filters tests to regression level ≥ 2.
