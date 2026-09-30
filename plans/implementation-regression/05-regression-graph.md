@@ -116,7 +116,7 @@ Using the existing fixture project, run from the fixture project root (`tests/e2
 - All test stages pass (`docs/testing.md`).
 - `graphs/regression.yaml` loads without structural validation errors.
 - `regression` appears in `rtl-comrade --help`.
-- A basic `regression` run against the fixture project completes, creates per-suite `logs/` directories, produces a summary table with suite-prefixed keys, and returns exit code 0 when all tests pass.
+- A basic `regression` run against the fixture project completes, creates per-suite `logs/` directories, and returns exit code 0 when all tests pass. The summary table is `test.yaml`'s until [06](06-regression-summary.md) replaces it.
 - Level filtering correctly includes/excludes tests.
 - `builder_mode` defaults to `"reg"`.
 - The graph is structurally identical to `test.yaml` except for the documented deltas — no accidental omissions or additions.

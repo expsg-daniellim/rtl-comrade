@@ -10,6 +10,7 @@ Read in order:
 - [03-suite-key-prefix.md](03-suite-key-prefix.md) — `ParseSuiteConfigMod` config change: `prefix_suite:bool` to stamp `<suite>/<test>` keys.
 - [04-extract-suite-dir.md](04-extract-suite-dir.md) — `ExtractSuiteDirMod`: per-suite `work_dir`, `base_dir`, and `logs_dir` extraction, replacing `work-dir` and `ensure-logs`.
 - [05-regression-graph.md](05-regression-graph.md) — the `regression.yaml` graph YAML, node/edge delta from `test.yaml`, command registration, and graph-level tests.
+- [06-regression-summary.md](06-regression-summary.md) — `ConsoleRegressionSummaryProcessor` / `FileRegressionSummaryProcessor`: rtl_buddy's regression summary table, fed by three `logger` nodes.
 
 ## Priority order
 
@@ -20,5 +21,6 @@ Read in order:
 | 03 | [suite-key-prefix](03-suite-key-prefix.md) | — | Change to existing module. Backwards-compatible. |
 | 04 | [extract-suite-dir](04-extract-suite-dir.md) | — | New module. No graph dependency. |
 | 05 | [regression-graph](05-regression-graph.md) | 01, 02, 03, 04 | Graph YAML, manifest, command registration. Requires all module specs to be landed. |
+| 06 | [regression-summary](06-regression-summary.md) | 05 | New logging plugin plus `logger` nodes and logging-block swap in `regression.yaml`. |
 
-Specs 01–04 have no internal dependencies and can run in parallel from the start. Spec 05 is integration — all module specs must land first.
+Specs 01–04 have no internal dependencies and can run in parallel from the start. Spec 05 is integration — all module specs must land first. Spec 06 edits the graph 05 creates.

@@ -314,7 +314,7 @@ No node calls `os.chdir`. Each compile/sim subprocess runs with `cwd=work_dir` v
 
 ### Summary aggregation
 
-The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match diagnostic log events by name, accumulate one row per test, and render the table at end of run. With the suite name stamped into the correlation key at `parse-suite-config` (`<suite>/<test>#<sweep>#<run>`, via `prefix_suite: true`), every row carries its suite. The table groups naturally on that prefix. No plugin change needed.
+Ticket 05 carries `test.yaml`'s `ConsoleSummaryProcessor` / `FileSummaryProcessor` over unchanged. [Ticket 06](06-regression-summary.md) replaces them with `ConsoleRegressionSummaryProcessor` / `FileRegressionSummaryProcessor` (`graphs/log/regression_summary.py`), which render rtl_buddy's regression table — title, `Builder: <builder>, Builder Mode: <mode>` line, and a suite-path column. The builder name, mode, and suite paths come from three `logger` nodes (`log-builder`, `log-builder-mode`, `log-suite`) that ticket 06 adds; rows are matched to suites by the suite prefix `prefix_suite: true` stamps into each key (`<suite>/<test>#<sweep>#<run>`). These nodes are not part of the ticket 05 delta above.
 
 ### Pre/post fan-out key mismatch
 
@@ -331,7 +331,7 @@ The `ConsoleSummaryProcessor` and `FileSummaryProcessor` logging plugins match d
 - A basic `regression` run against the fixture project:
   - creates per-suite `logs/` directories under each suite's directory
   - runs all level-0 tests from all suites (the defaults `reg_level=0`, `start_level=0` include them; the fixture's only level-0 test is `basic`)
-  - produces a summary table with suite-prefixed keys
+  - produces rtl_buddy's regression summary table, grouped by suite config path (ticket 06)
   - returns exit code 0 when all tests pass
 - Level filtering correctly includes/excludes tests based on `reg_level` and `start_level`.
 - `builder_mode` defaults to `"reg"`, not `"debug"`.
