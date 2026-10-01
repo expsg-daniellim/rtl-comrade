@@ -8,3 +8,6 @@ commands:
   randtest:
     path: "graphs/randtest.yaml"
     help: "Random-seed testing of a single test."
+  regression:
+    path: "graphs/regression.yaml"
+    help: "Run regression suites with level filtering."

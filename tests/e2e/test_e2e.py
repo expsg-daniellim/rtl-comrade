@@ -14,6 +14,7 @@ Deliberate divergences from rtl_buddy (expected mismatches):
 """
 
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -74,10 +75,11 @@ def _verdicts(stdout):
 		basic	  PASS	(nwrn=	0)
 		compile_fail	 FAIL  Compile failed
 		basic	  NA	Stopped early at pre
+		extra	  SKIP	lvl 1000 > cmd end_level 0
 	"""
 	result = {}
 	for line in _strip_ansi(stdout).splitlines():
-		m = re.match(r"^\s*(\S+)\s+(PASS|FAIL|NA)\s+(.*?)\s*$", line)
+		m = re.match(r"^\s*(\S+)\s+(PASS|FAIL|NA|SKIP)\s+(.*?)\s*$", line)
 		if m:
 			result[m.group(1)] = (m.group(2), m.group(3).strip())
 	return result
@@ -340,6 +342,83 @@ def test_randtest_missing_test_name_usage_error():
 		f"randtest -r 1 without TEST_NAME should exit non-zero; stdout: {result.stdout}"
 	)
 	assert "usage_error" in _strip_ansi(result.stderr), f"No usage_error log line; stderr: {result.stderr[-2000:]}"
+
+
+# ---------------------------------------------------------------------------
+# regression: suite stream from the reg config, level filtering, builder mode
+# ---------------------------------------------------------------------------
+
+def _run_regression(args):
+	"""Run rtl-comrade regression from the fixture project root, so the relative -c path and root_config.yaml's reg-cfg-path resolve."""
+	return _run_rc(["regression", *args], cwd=_FIXTURE_PROJ)
+
+
+def test_regression_no_args_prints_help():
+	"""rtl-comrade regression with no arguments prints the subcommand help and exits 0 (subcommands with parameters are no_args_is_help)."""
+	result = _run_regression([])
+	assert result.returncode == 0, (
+		f"bare regression exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	assert "Usage: rtl-comrade regression" in _strip_ansi(result.stdout), f"No usage line; stdout: {result.stdout}"
+
+
+@pytest.mark.parametrize("args", [
+	["-l", "0"],
+	["-c", "design/regression.yaml"],
+])
+def test_regression_level_zero_run(args):
+	"""rtl-comrade regression runs every level-0 test of every suite in the reg config (reg_config from root_config.yaml or -c), creates the suite's logs/, and exits 0.
+
+	The fixture's only level-0 test is ``basic``; every other sandbox test has a higher reglvl and is skipped.
+	"""
+	shutil.rmtree(_SANDBOX / "logs", ignore_errors=True)
+	result = _run_regression(args)
+	assert result.returncode == 0, (
+		f"regression {args} exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	vs = _verdicts(result.stdout)
+	assert vs["basic"][0] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
+	assert vs["extra"] == ("SKIP", "lvl 1000 > cmd end_level 0"), f"Expected extra skipped by end level; stdout: {result.stdout}"
+	assert [ name for name, (verdict, _) in vs.items() if verdict != "SKIP" ] == ["basic"], f"Only basic should run; stdout: {result.stdout}"
+	for stem in ("basic.compile.log", "basic.log", "basic.err", "basic.randseed"):
+		assert (_SANDBOX / "logs" / stem).exists(), f"Missing artifact: verif/sandbox/logs/{stem}"
+
+
+def test_regression_reg_level_filter():
+	"""rtl-comrade regression -l 1 runs only tests with reglvl <= 1."""
+	result = _run_regression(["-l", "1"])
+	assert result.returncode == 0, (
+		f"regression -l 1 exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	vs = _verdicts(result.stdout)
+	assert vs["basic"][0] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
+	assert vs["extra"] == ("SKIP", "lvl 1000 > cmd end_level 1"), f"Expected extra skipped by end level 1; stdout: {result.stdout}"
+
+
+def test_regression_start_level_filter():
+	"""rtl-comrade regression -s 2 excludes tests with reglvl < 2, so the level-0 basic test is skipped rather than run."""
+	result = _run_regression(["-s", "2"])
+	assert result.returncode == 0, (
+		f"regression -s 2 exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	vs = _verdicts(result.stdout)
+	assert vs["basic"] == ("SKIP", "lvl 0 < cmd start_level 2"), f"Expected basic skipped by start level; stdout: {result.stdout}"
+	assert all(verdict == "SKIP" for verdict, _ in vs.values()), f"No test should run; stdout: {result.stdout}"
+
+
+@pytest.mark.parametrize("args,dumps", [
+	(["-l", "0"], False),
+	(["-M", "debug"], True),
+])
+def test_regression_builder_mode(args, dumps):
+	"""builder_mode defaults to reg (no +define+DUMP, so no dump.fst); -M debug selects the debug option set, whose +define+DUMP makes the sim write dump.fst in the suite dir."""
+	(_SANDBOX / "dump.fst").unlink(missing_ok=True)
+	result = _run_regression(args)
+	assert result.returncode == 0, (
+		f"regression {args} exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	assert _verdicts(result.stdout)["basic"][0] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
+	assert (_SANDBOX / "dump.fst").exists() == dumps
 
 
 # ---------------------------------------------------------------------------

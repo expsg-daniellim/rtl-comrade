@@ -1,4 +1,4 @@
-"""Integration tests: graphs/test.yaml and graphs/randtest.yaml load, validate, and appear in --help output.
+"""Integration tests: graphs/test.yaml, graphs/randtest.yaml, and graphs/regression.yaml load, validate, and appear in --help output.
 
 Checks that the assembled graph YAML is internally consistent (no dangling manifest
 references, no cycles, no overloaded inputs) and that the CLI wiring is correct.
@@ -14,6 +14,7 @@ from rtl_comrade.graph import Graph
 _PROJECT_ROOT = Path(__file__).parents[2]
 _GRAPH_PATH = _PROJECT_ROOT / "graphs" / "test.yaml"
 _RANDTEST_GRAPH_PATH = _PROJECT_ROOT / "graphs" / "randtest.yaml"
+_REGRESSION_GRAPH_PATH = _PROJECT_ROOT / "graphs" / "regression.yaml"
 
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -147,3 +148,70 @@ def test_randtest_subcommand_help_lists_cli_edges():
 	assert "--rnd-new" not in output
 	assert "--rnd-last" not in output
 	assert "--list" not in output
+
+
+def test_regression_graph_constructs(logging_handler):
+	"""graphs/regression.yaml resolves every module and contract and validates: no cycles, overloaded inputs, or unknown persistent ports."""
+	config = GraphConfig.from_file(_REGRESSION_GRAPH_PATH)
+	graph = Graph.from_config(config)
+	assert graph is not None
+	assert not logging_handler.failure
+
+
+def test_regression_graph_node_delta(logging_handler):
+	"""regression.yaml swaps seed-mode, work-dir, and ensure-logs for the suite pipeline nodes and drops list mode; every other test.yaml node carries over."""
+	removed = { "seed-mode", "route-list", "list-names", "work-dir", "ensure-logs" }
+	added = { "resolve-reg-path", "parse-reg", "const-seed-mode", "extract-dir", "extract-dir-post" }
+	test_ids = { n.id for n in GraphConfig.from_file(_GRAPH_PATH).nodes }
+	regression_ids = { n.id for n in GraphConfig.from_file(_REGRESSION_GRAPH_PATH).nodes }
+	assert added <= regression_ids
+	assert not regression_ids & removed
+	assert regression_ids == (test_ids - removed) | added
+	assert not logging_handler.failure
+
+
+def test_help_lists_regression_command():
+	"""rtl-comrade --help lists the regression subcommand with the correct help string."""
+	result = subprocess.run(
+		["uv", "run", "rtl-comrade", "--help"],
+		cwd=_PROJECT_ROOT,
+		capture_output=True,
+		text=True,
+		check=False,
+	)
+	assert result.returncode == 0
+	output = strip_ansi(result.stdout)
+	assert "regression" in output
+	assert "Run regression suites with level filtering." in output
+
+
+def test_regression_subcommand_help_lists_cli_edges():
+	"""rtl-comrade regression --help lists every regression CLI parameter with its type and default, and none of the removed test options."""
+	result = subprocess.run(
+		["uv", "run", "rtl-comrade", "regression", "--help"],
+		cwd=_PROJECT_ROOT,
+		capture_output=True,
+		text=True,
+		check=False,
+	)
+	assert result.returncode == 0
+	lines = strip_ansi(result.stdout).splitlines()
+
+	def row(name:str) -> str:
+		"""Return the help row whose first token is ``name``."""
+
+		return next(line for line in lines if line.strip("│* ").startswith(name))
+
+	assert "-c" in row("--reg-config") and "TEXT" in row("--reg-config") and "[default:" not in row("--reg-config")
+	assert "-l" in row("--reg-level") and "INTEGER" in row("--reg-level") and "[default: 0]" in row("--reg-level")
+	assert "-s" in row("--start-level") and "INTEGER" in row("--start-level") and "[default: 0]" in row("--start-level")
+	assert "-L" in row("--logs-dir") and "[default: logs]" in row("--logs-dir")
+	assert "-B" in row("--builder ") and "[default:" not in row("--builder ")
+	assert "-M" in row("--builder-mode") and "[default: reg]" in row("--builder-mode")
+	assert "-E" in row("--early-stop") and "[default: post]" in row("--early-stop")
+	output = "\n".join(lines)
+	assert "TEST_NAME" not in output and "test_name" not in output
+	assert "--list" not in output
+	assert "--rnd-new" not in output
+	assert "--rnd-last" not in output
+	assert "--test-config" not in output

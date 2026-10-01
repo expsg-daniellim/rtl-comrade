@@ -7,6 +7,7 @@ See also:
 - [test.md](test.md) — the `test` graph's pipeline, contracts, and per-node wiring
 - [filelist.md](filelist.md) — the `filelist` graph's pipeline, contracts, and per-node wiring
 - [randtest.md](randtest.md) — the `randtest` graph's delta from `test`
+- [regression.md](regression.md) — the `regression` graph's delta from `test`
 - [docs/modules/index.md](../modules/index.md) — module reference
 - [docs/running.md](../running.md) — global options, config discovery, exit codes
 - [docs/harness_configs/graph.md](../harness_configs/graph.md) — the graph YAML format
@@ -19,6 +20,7 @@ See also:
 | `test` | `rtl-comrade test` | [test.md](test.md) | Compile and simulate a SystemVerilog/UVM test suite |
 | `filelist` | `rtl-comrade filelist` | [filelist.md](filelist.md) | Generate a compile filelist from a model configuration |
 | `randtest` | `rtl-comrade randtest` | [randtest.md](randtest.md) | Random-seed testing of a single test |
+| `regression` | `rtl-comrade regression` | [regression.md](regression.md) | Run regression suites with level filtering |
 
 ## CLI reference
 
@@ -26,12 +28,12 @@ Global options (`--level`, `--config-file`) apply to every command and must appe
 
 ### Common options
 
-Shared by the test-running commands (`test` and `randtest` today; the future `regression`):
+Shared by the test-running commands (`test`, `randtest`, and `regression`):
 
 | Option | Default | Effect |
 |---|---|---|
 | `--builder`, `-B` | platform default | override the builder from `root_config.yaml` |
-| `--builder-mode`, `-M` | `debug` | select the compile/run option set |
+| `--builder-mode`, `-M` | `debug` (`reg` for `regression`) | select the compile/run option set |
 | `--early-stop`, `-E` | `post` | stop each test at `pre`, `comp`, `sim`, or `post` |
 
 ### `test`
@@ -70,6 +72,23 @@ uv run rtl-comrade randtest TEST_NAME [RND_CNT] [options]
 | `--logs-dir` | `logs` | output subdirectory for logs and seeds |
 
 For which node each option feeds, see [randtest.md § Invocation](randtest.md#invocation).
+
+### `regression`
+
+```bash
+uv run rtl-comrade regression [options]
+```
+
+Runs every test of every suite listed in the regression config whose register level lies in `[--start-level, --reg-level]`. Takes no positional arguments, so a bare `rtl-comrade regression` prints help; pass any option (e.g. `-l 0`) to run with the defaults. Accepts the common options above (with `--builder-mode` defaulting to `reg`), plus:
+
+| Option | Default | Effect |
+|---|---|---|
+| `--reg-config`, `-c` | `""` (use `root_config.yaml`'s `reg-cfg-path`) | regression config file listing the suite configs |
+| `--reg-level`, `-l` | `0` | run only tests with register level ≤ this |
+| `--start-level`, `-s` | `0` | run only tests with register level ≥ this |
+| `--logs-dir`, `-L` | `logs` | output subdirectory, created under each suite's directory |
+
+For which node each option feeds, see [regression.md § Invocation](regression.md#invocation).
 
 ### `filelist`
 
