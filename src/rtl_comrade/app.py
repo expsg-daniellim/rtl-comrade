@@ -164,7 +164,7 @@ class App:
 		# Skip rebuilding the formatter when there is no terminal renderer; a processors=[] ProcessorFormatter has nothing to render.
 		if self.processors:
 			# Derive the foreign chain from the live structlog config (its trailing entry is wrap_for_formatter) so it can't drift from a cached copy.
-			self.handler.setFormatter(ProcessorFormatter(processors=self.processors, foreign_pre_chain=structlog.get_config()["processors"][:-1]))
+			self.handler.setFormatter(ProcessorFormatter(processors=[ ProcessorFormatter.remove_processors_meta, *self.processors ], foreign_pre_chain=structlog.get_config()["processors"][:-1]))  # processors= skips the meta-key strip processor= adds
 
 		for spec in handlers:
 			self.root_logger.addHandler(spec.construct())

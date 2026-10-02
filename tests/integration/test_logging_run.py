@@ -117,6 +117,47 @@ def test_processor_function_runs_before_console_renderer(tmp_path):
 	assert app.handler.render is True
 
 
+def test_processor_chain_strips_formatter_meta_keys(tmp_path):
+	stream = io.StringIO()
+	app = _make_app(stream)
+	mods = _write(tmp_path, "mods.py", """\
+		import logging
+		import structlog
+		log = structlog.get_logger()
+
+		class Emit:
+			def run(self):
+				log.info('structlog_event')
+				logging.getLogger('foreign').info('stdlib_event')
+				return None
+	""")
+	proc = _write(tmp_path, "proc.py", """\
+		from __future__ import annotations
+		from typing import Any
+		from collections.abc import MutableMapping
+
+		seen = []
+
+		def record_keys(logger, method_name: str, event_dict: MutableMapping[str, Any]) -> MutableMapping[str, Any]:
+			seen.append(set(event_dict))
+			return event_dict
+	""")
+	config = GraphConfig(
+		nodes=[GraphConfigNode(id="emit", module=GraphConfigNodePlugin(name="emit"))],
+		edges=[],
+		modules=[_pfc(mods)],
+		contracts=[],
+		logging=LoggingConfig(handlers=[LoggingHandlerConfig(path=proc, name="record_keys")], include_default=True),
+	)
+	_run(config, app)
+	out = stream.getvalue()
+	assert "structlog_event" in out and "stdlib_event" in out
+	assert "_record" not in out and "_from_structlog" not in out
+	seen = app.processors[0].__globals__["seen"]
+	assert len(seen) > 0
+	assert all("_record" not in keys and "_from_structlog" not in keys for keys in seen)
+
+
 # ---------------------------------------------------------------------------
 # include_default: false — last processor is the terminal -> str renderer.
 # ---------------------------------------------------------------------------

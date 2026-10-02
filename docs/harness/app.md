@@ -102,7 +102,7 @@ Per-graph custom logging is resolved and installed **lazily at graph invocation*
 
 - constructs each spec via `spec.construct()` (`LoggingPlugin.construct` — instantiating a class, deserialising its `Config` and relativising `{graph}` paths, or using a function/instance as-is) and appends the terminal `ConsoleRenderer` when `include_default`, keeping the resulting chain on `self.processors` for end-of-run finalisation (the `ConsoleRenderer` has no `finalise` and is skipped there);
 - sets `self.handler.render` to `bool(chain)`, so the harness handler writes nothing when there is no terminal renderer;
-- rebuilds the harness handler's `ProcessorFormatter` from the constructed chain (with the foreign pre-chain read from `structlog.get_config()["processors"][:-1]`) when the chain is non-empty;
+- rebuilds the harness handler's `ProcessorFormatter` from the constructed chain (with the foreign pre-chain read from `structlog.get_config()["processors"][:-1]`) when the chain is non-empty, prefixed with `ProcessorFormatter.remove_processors_meta` so structlog's internal `_record` / `_from_structlog` keys never reach a plugin processor or the renderer;
 - constructs and appends each Handler-type spec to the root logger.
 
 Because resolution happens in the `run` closure, custom logging applies to that single graph run only, and a malformed logging config is reported when the subcommand runs rather than at startup. See [logging.md](logging.md) for the processor/handler model and its two hard constraints, and [loader_logger.md](loader_logger.md) for `LoggingConfig.load` itself.
