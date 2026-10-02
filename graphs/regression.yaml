@@ -138,14 +138,40 @@ nodes:
   module: parse-uvm-log
   contract: { name: keyed_join, config: { key_field: key } }
 
+# --- summary metadata (builder, mode, suite paths → regression summary processors) ---
+- id: log-builder
+  module:
+    name: logger
+    config:
+      level: info
+      event: regression_builder
+      mapping: { builder: name }
+  contract: default
+- id: log-builder-mode
+  module:
+    name: logger
+    config:
+      level: info
+      event: regression_builder_mode
+      mapping: mode
+  contract: default
+- id: log-suite
+  module:
+    name: logger
+    config:
+      level: info
+      event: regression_suite
+      mapping: { suite: path.parent.name, path: path }
+  contract: default
+
 logging:
   handlers:
-  - path: log/summary.py
-    name: FileSummaryProcessor
+  - path: log/regression_summary.py
+    name: FileRegressionSummaryProcessor
     config:
       out: "{graph}/summary.log"
-  - path: log/summary.py
-    name: ConsoleSummaryProcessor
+  - path: log/regression_summary.py
+    name: ConsoleRegressionSummaryProcessor
 
 edges:
 # ---- CLI edges (subcommand options) ----
@@ -157,6 +183,7 @@ edges:
 - { src: { cli: start_level, type: int,  default: 0,      flags: ["--start-level", "-s"] }, dst: { node: filter,          port: start_level } }
 - { src: { cli: builder_mode, type: str, default: "reg", flags: ["--builder-mode", "-M"] }, dst: { node: cc-build,        port: builder_mode } }
 - { src: { cli: builder_mode, type: str, default: "reg", flags: ["--builder-mode", "-M"] }, dst: { node: sim-build,       port: builder_mode } }
+- { src: { cli: builder_mode, type: str, default: "reg", flags: ["--builder-mode", "-M"] }, dst: { node: log-builder-mode, port: value } }
 - { src: { cli: early_stop,  type: str,  default: "post", flags: ["--early-stop", "-E"] }, dst: { node: gate-pre,        port: early_stop } }
 - { src: { cli: early_stop,  type: str,  default: "post", flags: ["--early-stop", "-E"] }, dst: { node: gate-comp,       port: early_stop } }
 - { src: { cli: early_stop,  type: str,  default: "post", flags: ["--early-stop", "-E"] }, dst: { node: gate-sim,        port: early_stop } }
@@ -267,3 +294,6 @@ edges:
 - { src: { node: route-post, port: uvm_proc },   dst: { node: parse-uvm-log, port: proc } }
 - { src: { node: route-post, port: plain_test }, dst: { node: parse-log, port: test } }
 - { src: { node: route-post, port: plain_proc }, dst: { node: parse-log, port: proc } }
+# Summary metadata
+- { src: { node: resolve-builder }, dst: { node: log-builder, port: value } }
+- { src: { node: parse-suite }, dst: { node: log-suite, port: value } }

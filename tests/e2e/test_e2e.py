@@ -353,6 +353,16 @@ def _run_regression(args):
 	return _run_rc(["regression", *args], cwd=_FIXTURE_PROJ)
 
 
+def regression_rows(stdout):
+	"""Return {test_name: (suite_path, verdict, desc)} from the regression summary table in stdout (rtl_buddy's `<suite path> <test> <result> <desc>` rows)."""
+	result = {}
+	for line in _strip_ansi(stdout).splitlines():
+		m = re.match(r"^(\S+)\s+(\S+)\s+(PASS|FAIL|NA|SKIP)\s+(.*?)\s*$", line)
+		if m:
+			result[m.group(2)] = (m.group(1), m.group(3), m.group(4))
+	return result
+
+
 def test_regression_no_args_prints_help():
 	"""rtl-comrade regression with no arguments prints the subcommand help and exits 0 (subcommands with parameters are no_args_is_help)."""
 	result = _run_regression([])
@@ -376,10 +386,10 @@ def test_regression_level_zero_run(args):
 	assert result.returncode == 0, (
 		f"regression {args} exited {result.returncode}; stderr: {result.stderr[-2000:]}"
 	)
-	vs = _verdicts(result.stdout)
-	assert vs["basic"][0] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
-	assert vs["extra"] == ("SKIP", "lvl 1000 > cmd end_level 0"), f"Expected extra skipped by end level; stdout: {result.stdout}"
-	assert [ name for name, (verdict, _) in vs.items() if verdict != "SKIP" ] == ["basic"], f"Only basic should run; stdout: {result.stdout}"
+	rows = regression_rows(result.stdout)
+	assert rows["basic"][1] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
+	assert rows["extra"][1:] == ("SKIP", "lvl 1000 > cmd end_level 0"), f"Expected extra skipped by end level; stdout: {result.stdout}"
+	assert [ name for name, (_, verdict, _) in rows.items() if verdict != "SKIP" ] == ["basic"], f"Only basic should run; stdout: {result.stdout}"
 	for stem in ("basic.compile.log", "basic.log", "basic.err", "basic.randseed"):
 		assert (_SANDBOX / "logs" / stem).exists(), f"Missing artifact: verif/sandbox/logs/{stem}"
 
@@ -390,9 +400,9 @@ def test_regression_reg_level_filter():
 	assert result.returncode == 0, (
 		f"regression -l 1 exited {result.returncode}; stderr: {result.stderr[-2000:]}"
 	)
-	vs = _verdicts(result.stdout)
-	assert vs["basic"][0] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
-	assert vs["extra"] == ("SKIP", "lvl 1000 > cmd end_level 1"), f"Expected extra skipped by end level 1; stdout: {result.stdout}"
+	rows = regression_rows(result.stdout)
+	assert rows["basic"][1] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
+	assert rows["extra"][1:] == ("SKIP", "lvl 1000 > cmd end_level 1"), f"Expected extra skipped by end level 1; stdout: {result.stdout}"
 
 
 def test_regression_start_level_filter():
@@ -401,9 +411,9 @@ def test_regression_start_level_filter():
 	assert result.returncode == 0, (
 		f"regression -s 2 exited {result.returncode}; stderr: {result.stderr[-2000:]}"
 	)
-	vs = _verdicts(result.stdout)
-	assert vs["basic"] == ("SKIP", "lvl 0 < cmd start_level 2"), f"Expected basic skipped by start level; stdout: {result.stdout}"
-	assert all(verdict == "SKIP" for verdict, _ in vs.values()), f"No test should run; stdout: {result.stdout}"
+	rows = regression_rows(result.stdout)
+	assert rows["basic"][1:] == ("SKIP", "lvl 0 < cmd start_level 2"), f"Expected basic skipped by start level; stdout: {result.stdout}"
+	assert all(verdict == "SKIP" for _, verdict, _ in rows.values()), f"No test should run; stdout: {result.stdout}"
 
 
 @pytest.mark.parametrize("args,dumps", [
@@ -417,8 +427,29 @@ def test_regression_builder_mode(args, dumps):
 	assert result.returncode == 0, (
 		f"regression {args} exited {result.returncode}; stderr: {result.stderr[-2000:]}"
 	)
-	assert _verdicts(result.stdout)["basic"][0] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
+	assert regression_rows(result.stdout)["basic"][1] == "PASS", f"Expected PASS for basic; stdout: {result.stdout}"
 	assert (_SANDBOX / "dump.fst").exists() == dumps
+
+
+def test_regression_summary_table():
+	"""rtl-comrade regression -l 0 prints rtl_buddy's regression table: the title, the builder/mode line, and the basic PASS row under the resolved suite config path."""
+	result = _run_regression(["-l", "0"])
+	assert result.returncode == 0, (
+		f"regression -l 0 exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	out = _strip_ansi(result.stdout)
+	assert "Regression Results Summary" in out, f"No regression summary title; stdout: {result.stdout}"
+	assert "Builder: verilator, Builder Mode: reg" in out, f"No builder/mode line; stdout: {result.stdout}"
+	assert regression_rows(result.stdout)["basic"][:2] == (str((_SANDBOX / "tests.yaml").resolve()), "PASS"), f"Expected basic PASS under the sandbox suite path; stdout: {result.stdout}"
+
+
+def test_regression_summary_builder_mode():
+	"""rtl-comrade regression -l 0 -M debug reports the selected builder mode in the summary header."""
+	result = _run_regression(["-l", "0", "-M", "debug"])
+	assert result.returncode == 0, (
+		f"regression -l 0 -M debug exited {result.returncode}; stderr: {result.stderr[-2000:]}"
+	)
+	assert "Builder: verilator, Builder Mode: debug" in _strip_ansi(result.stdout), f"Header should read Builder Mode: debug; stdout: {result.stdout}"
 
 
 # ---------------------------------------------------------------------------

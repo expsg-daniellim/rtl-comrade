@@ -67,6 +67,10 @@ rtl_buddy's `force_symlink` does a non-atomic `os.remove` + `os.symlink` (`tools
 
 rtl_buddy's `do_rand_test` (`rtl_buddy.py:243`) does not validate `rnd_cnt`: a value below 1 yields an empty `run_ids` list and crashes downstream with an `IndexError`. rtl-comrade's `derive-randtest-runs` rejects `rnd_cnt < 1` with `log.fatal("invalid_rnd_cnt")` when no replay index is given.
 
+### Regression summary suite column shows the resolved suite config path
+
+rtl_buddy's regression summary prints each suite as the reg config directory joined with the unnormalised `test-configs` entry (e.g. `<reg dir>/../verif/sandbox/tests.yaml`). rtl-comrade's regression summary processors (`graphs/log/regression_summary.py`) print the resolved suite config path `parse-suite-config` produces (e.g. `<project>/verif/sandbox/tests.yaml`).
+
 ---
 
 ## Fixed-simv concurrency hole (deferred)

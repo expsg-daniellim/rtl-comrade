@@ -159,14 +159,23 @@ def test_regression_graph_constructs(logging_handler):
 
 
 def test_regression_graph_node_delta(logging_handler):
-	"""regression.yaml swaps seed-mode, work-dir, and ensure-logs for the suite pipeline nodes and drops list mode; every other test.yaml node carries over."""
+	"""regression.yaml swaps seed-mode, work-dir, and ensure-logs for the suite pipeline nodes, drops list mode, and adds the summary-metadata loggers; every other test.yaml node carries over."""
 	removed = { "seed-mode", "route-list", "list-names", "work-dir", "ensure-logs" }
-	added = { "resolve-reg-path", "parse-reg", "const-seed-mode", "extract-dir", "extract-dir-post" }
+	added = { "resolve-reg-path", "parse-reg", "const-seed-mode", "extract-dir", "extract-dir-post", "log-builder", "log-builder-mode", "log-suite" }
 	test_ids = { n.id for n in GraphConfig.from_file(_GRAPH_PATH).nodes }
 	regression_ids = { n.id for n in GraphConfig.from_file(_REGRESSION_GRAPH_PATH).nodes }
 	assert added <= regression_ids
 	assert not regression_ids & removed
 	assert regression_ids == (test_ids - removed) | added
+	assert not logging_handler.failure
+
+
+def test_regression_graph_summary_wiring(logging_handler):
+	"""regression.yaml has the three summary-metadata logger nodes and routes its logging block to the regression summary processors."""
+	config = GraphConfig.from_file(_REGRESSION_GRAPH_PATH)
+	modules = { n.id: n.module.name for n in config.nodes }
+	assert all(modules[node] == "logger" for node in ("log-builder", "log-builder-mode", "log-suite"))
+	assert [ (h.path, h.name) for h in config.logging.handlers ] == [(Path("log/regression_summary.py"), "FileRegressionSummaryProcessor"), (Path("log/regression_summary.py"), "ConsoleRegressionSummaryProcessor")]
 	assert not logging_handler.failure
 
 

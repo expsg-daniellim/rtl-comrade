@@ -103,6 +103,13 @@ flowchart TD
 
   git_status["git-status"] gs1@-. "log git_state (→ console)" .-> GS(["console"])
 
+  resolve_builder s1@-->|"value:RtlBuilderConfig"| log_builder["log-builder<br/>(logger, regression_builder)"]
+  c_builder_mode s2@-->|"value:str"| log_builder_mode["log-builder-mode<br/>(logger, regression_builder_mode)"]
+  parse_suite s3@-->|"value:SuiteConfig"| log_suite["log-suite<br/>(logger, regression_suite)"]
+  log_builder s4@-. "log regression_builder" .-> SUM(["regression summary processors"])
+  log_builder_mode s5@-. "log regression_builder_mode" .-> SUM
+  log_suite s6@-. "log regression_suite" .-> SUM
+
   classDef fanout fill:#e6f2ff,stroke:#1f6feb;
   classDef join fill:#fff3cd,stroke:#bf8700;
   classDef cli fill:#eef7ee,stroke:#2da44e;
@@ -110,7 +117,7 @@ flowchart TD
   class select,sweep,runs fanout;
   class load_model,fl_model_root,fl_model,fl_tb,fl_merge,fl_norm,fl_dedup,fl_path,filelist,cc_build,cc_run,cc_int,seed,sim_build,randseed,link_latest,sim_int,gate_comp,gate_sim,route_post,parse_log,parse_uvm join;
   class c_reg_config,c_reg_level,c_start_level,c_logs_dir,c_builder,c_builder_mode,c_early_stop cli;
-  class resolve_reg,parse_reg,parse_suite,const_seed,extract_dir,extract_dir_post,cc_run delta;
+  class resolve_reg,parse_reg,parse_suite,const_seed,extract_dir,extract_dir_post,cc_run,log_builder,log_builder_mode,log_suite delta;
 
   classDef mainEdge stroke:#1f6feb,stroke-width:2px;
   classDef cfgEdge stroke:#bf8700,stroke-width:1.5px;
@@ -123,5 +130,5 @@ flowchart TD
   class e1,e2,u1,u2 envEdge;
   class g5,g6,g7,g8,g9,g10 cliEdge;
   class gs1 gitEdge;
-  class d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,d16,d17,d18,d19,g1,g2,g3,g4,g4b deltaEdge;
+  class d1,d2,d3,d4,d5,d6,d7,d8,d9,d10,d11,d12,d13,d14,d15,d16,d17,d18,d19,g1,g2,g3,g4,g4b,s1,s2,s3,s4,s5,s6 deltaEdge;
 ```
